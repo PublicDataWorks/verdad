@@ -1,0 +1,8 @@
+# Use the official Prefect image as a parent image
+FROM prefecthq/prefect:2-python3.9
+
+# Expose the Prefect API port
+EXPOSE 4200
+
+# Start the Prefect server
+CMD ["prefect", "server", "start"]

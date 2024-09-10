@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+    verdad:
+        container_name: verdad_backend
+        build:
+            context: .
+            dockerfile: Dockerfile
+        env_file:
+            - .env
+        depends_on:
+            - prefect
+
+    prefect:
+        container_name: prefect_server
+        build:
+            context: .
+            dockerfile: Dockerfile.prefect
+        ports:
+            - "4200:4200"
+        environment:
+            - PREFECT_SERVER_API_HOST=0.0.0.0
+            - PREFECT_SERVER_API_PORT=4200
+        volumes:
+            - prefect_data:/root/.prefect
+
+volumes:
+    prefect_data:
