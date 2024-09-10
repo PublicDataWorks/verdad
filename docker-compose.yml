@@ -8,6 +8,8 @@ services:
             dockerfile: Dockerfile
         env_file:
             - .env
+        environment:
+            - PREFECT_API_URL=http://prefect:4200/api
         depends_on:
             - prefect
 

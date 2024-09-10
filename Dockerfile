@@ -19,4 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 80
 
 # Run main.py when the container launches
-CMD ["python", "src/main.py"]
+# RUN python src/main.py
+
+# Keep the container running with an infinite loop
+CMD ["sh", "-c", "while true; do sleep 1; done"]
