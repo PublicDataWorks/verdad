@@ -10,6 +10,7 @@ COPY . /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install any needed packages specified in requirements.txt
@@ -18,8 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Make port 80 available to the world outside this container
 EXPOSE 80
 
-# Run main.py when the container launches
-# RUN python src/main.py
+# Make sure the entrypoint script is executable
+RUN chmod +x /app/scripts/trigger_main_script.sh
 
-# Keep the container running with an infinite loop
-CMD ["sh", "-c", "while true; do sleep 1; done"]
+# Set the entrypoint script
+ENTRYPOINT ["/app/scripts/trigger_main_script.sh"]

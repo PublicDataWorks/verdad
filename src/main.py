@@ -1,11 +1,9 @@
-import json
 import os
-import subprocess
 import time
 import hashlib
-from prefect import flow, task
 import requests
 import boto3
+from prefect import flow, serve, task
 
 from ffmpeg import FFmpeg
 from dotenv import load_dotenv
@@ -28,71 +26,46 @@ s3_client = boto3.client(
 
 
 @task(log_prints=True)
-def capture_audio_stream(url, duration_seconds, output_file):
+def capture_audio_stream(url, duration_seconds):
     try:
+        # Create the output filename using the timestamp and hash
+        start_time = time.time()
+        timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(start_time))
+        output_file = f"radio_{get_url_hash(url)}_{timestamp}.mp3"
+
         response = requests.get(url, stream=True, timeout=20)
         if response.status_code != 200:
             print(f"Failed to connect to the audio stream ${url}. Status code: {response.status_code}")
-            return None, None
+            return None
 
         # Use ffmpeg to capture audio
         FFmpeg().option("y").input(url, t=duration_seconds).output(output_file).execute()
 
-        # Extract metadata to a file
-        metadata_file = save_metadata(output_file)
-        return output_file, metadata_file
+        return output_file
 
     except Exception as e:
         # TODO: Handle retry with Prefect
         print(f"Failed to capture audio stream ${url}: {e}")
-        return None, None
-
-
-def save_metadata(audio_file):
-    try:
-        # Construct the ffprobe command
-        command = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", audio_file]
-
-        # Run the ffprobe command
-        output = subprocess.check_output(command).decode("utf-8")
-
-        # Parse the JSON output
-        metadata = json.loads(output)
-        metadata_file = audio_file.replace(".mp3", "-metadata.txt")
-
-        # Save metadata to a text file
-        with open(metadata_file, "w") as f:
-            json.dump(metadata, f, indent=4)
-
-        return metadata_file
-
-    except Exception as e:
-        print(f"Failed to extract metadata of the file ${audio_file}: {e}")
         return None
 
 
 @task(log_prints=True)
-def upload_files_to_r2(url_hash, timestamp, metadata_file, audio_file, transcription_file):
-    # Upload metadata
-    upload_to_r2_and_clean_up(url_hash, timestamp, metadata_file)
-
-    # Upload audio file
-    upload_to_r2_and_clean_up(url_hash, timestamp, audio_file)
-
-    # Upload transcription file
-    upload_to_r2_and_clean_up(url_hash, timestamp, transcription_file)
+def upload_files_to_r2(url, audio_file, transcription_file):
+    upload_to_r2_and_clean_up(url, audio_file)
+    upload_to_r2_and_clean_up(url, transcription_file)
 
 
-def upload_to_r2_and_clean_up(url_hash, timestamp, file_path):
+def upload_to_r2_and_clean_up(url, file_path):
     object_name = os.path.basename(file_path)
 
     try:
-        destination_path = f"radio_{url_hash}/{timestamp}/{object_name}"
+        url_hash = get_url_hash(url)
+        destination_path = f"radio_{url_hash}/{object_name}"
         s3_client.upload_file(file_path, R2_BUCKET_NAME, destination_path)
         print(f"File {file_path} uploaded to R2 as {destination_path}")
         os.remove(file_path)
     except NoCredentialsError:
-        print("R2 Credentials not available")
+        print("R2 Credentials was not set")
     except Exception as e:
         print(f"Error uploading to R2: {e}")
 
@@ -117,26 +90,69 @@ def transcribe_audio_file(audio_file):
 
 
 @flow(name="Audio Processing Pipeline")
-def audio_processing_pipeline(url, duration_seconds, repeat=False):
+def audio_processing_pipeline(url, duration_seconds, repeat):
     while True:
-        # Create the output filename using the timestamp and hash
-        start_time = time.time()
-        timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(start_time))
-        url_hash = hashlib.sha256(url.encode()).hexdigest()[-6:]  # Hash the URL and get the last 6 characters
-        output_file = f"radio_{url_hash}_{timestamp}.mp3"
-
-        audio_file, metadata_file = capture_audio_stream(url, duration_seconds, output_file)
+        audio_file = capture_audio_stream(url, duration_seconds)
         if audio_file:
             transcription_file = transcribe_audio_file(audio_file)
 
-        upload_files_to_r2(url_hash, timestamp, metadata_file, audio_file, transcription_file)
+        upload_files_to_r2(url, audio_file, transcription_file)
 
         # Stop the flow if it should not be repeated
         if not repeat:
             break
 
 
+def get_url_hash(url):
+    # Hash the URL and get the last 6 characters
+    return hashlib.sha256(url.encode()).hexdigest()[-6:]
+
+
 if __name__ == "__main__":
-    url = "https://securenetg.com/radio/8090/radio.aac"
-    duration_seconds = 60  # Duration for each audio segment
-    audio_processing_pipeline(url, duration_seconds, repeat=True)
+    radio_stations = [
+        {"code": "WLEL-FM 94.3 MHz", "url": "https://securenetg.com/radio/8090/radio.aac", "state": "Georgia"},
+        {"code": "WPHE-AM 690 kHz", "url": "https://sp.unoredcdn.net/8124/stream", "state": "Pennsylvania"},
+        {"code": "WLCH-FM 91.3 MHz", "url": "http://streaming.live365.com/a37354", "state": "Pennsylvania"},
+        {"code": "WSDS-AM 1480 kHz", "url": "https://s2.mexside.net/6022/stream", "state": "Michigan"},
+        {"code": "WOAP-AM 1080 kHz", "url": "http://sparktheo.com:8000/lapoderosa", "state": "Michigan"},
+        {"code": "WDTW-AM 1310 kHz", "url": "http://sh2.radioonlinehd.com:8050/stream", "state": "Michigan"},
+        {"code": "KYAR-FM 98.3 MHz", "url": "http://red-c.miriamtech.net:8000/KYAR", "state": "Texas"},
+        {"code": "KBNL-FM 89.9 MHz", "url": "http://wrn.streamguys1.com/kbnl", "state": "Texas"},
+        {"code": "KBIC-FM 105.7 MHz", "url": "http://shout2.brnstream.com:8006/;", "state": "Texas"},
+        {"code": "KABA-FM 90.3 MHz", "url": "https://radio.aleluya.cloud/radio/8000/stream", "state": "Texas"},
+        {"code": "WAXY-AM 790 kHz", "url": "http://stream.abacast.net/direct/audacy-waxyamaac-imc", "state": "Florida"},
+        {"code": "WLAZ-FM 89.1 MHz", "url": "https://sp.unoredcdn.net/8018/stream", "state": "Florida, Orlando"},
+        {
+            "code": "KENO-AM 1460 kHz",
+            "url": "https://23023.live.streamtheworld.com/KENOAMAAC_SC",
+            "state": "Nevada",
+        },
+        {"code": "KNNR-AM 1400 kHz", "url": "https://ice42.securenetsystems.net/KNNR", "state": "Nevada"},
+        {
+            "code": "KCKO-FM 107.9 MHz",
+            "url": "https://s5.mexside.net:8000/stream?type=http&nocache=3",
+            "state": "Arizona",
+        },
+        {"code": "KZLZ-FM 105.3 MHz", "url": "https://ice42.securenetsystems.net/KZLZ", "state": "Arizona"},
+        {
+            "code": "KCMT-FM 92.1 MHz",
+            "url": "https://23023.live.streamtheworld.com/KCMTFMAAC_SC",
+            "state": "Arizona",
+        },
+        {"code": "KRMC-FM 91.7 MHz", "url": "http://wrn.streamguys1.com/krmc", "state": "Arizona"},
+        {"code": "KNOG-FM 91.7 MHz", "url": "http://wrn.streamguys1.com/knog", "state": "Arizona"},
+        {"code": "KWST-AM 1430 kHz", "url": "https://s1.voscast.com:10601/xstream", "state": "Arizona"},
+    ]
+    duration_seconds = 60
+
+    all_deployments = []
+    for station in radio_stations:
+        deployment = audio_processing_pipeline.to_deployment(
+            f'{station["code"]}',
+            tags=[station["state"]],
+            work_pool_name="local",
+            parameters=dict(url=station["url"], duration_seconds=duration_seconds, repeat=False),
+        )
+        all_deployments.append(deployment)
+
+    serve(*all_deployments)

@@ -12,6 +12,8 @@ services:
             - PREFECT_API_URL=http://prefect:4200/api
         depends_on:
             - prefect
+        volumes:
+            - verdad_data:/root/.verdad
 
     prefect:
         container_name: prefect_server
@@ -27,4 +29,5 @@ services:
             - prefect_data:/root/.prefect
 
 volumes:
+    verdad_data:
     prefect_data:
