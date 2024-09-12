@@ -1,6 +1,7 @@
 import os
 import time
 import hashlib
+import prefect
 import requests
 import boto3
 from prefect import flow, serve, task
@@ -44,17 +45,11 @@ def capture_audio_stream(url, duration_seconds):
         return output_file
 
     except Exception as e:
-        # TODO: Handle retry with Prefect
         print(f"Failed to capture audio stream ${url}: {e}")
         return None
 
 
-@task(log_prints=True)
-def upload_files_to_r2(url, audio_file, transcription_file):
-    upload_to_r2_and_clean_up(url, audio_file)
-    upload_to_r2_and_clean_up(url, transcription_file)
-
-
+@task(log_prints=True, retries=3)
 def upload_to_r2_and_clean_up(url, file_path):
     object_name = os.path.basename(file_path)
 
@@ -67,7 +62,9 @@ def upload_to_r2_and_clean_up(url, file_path):
     except NoCredentialsError:
         print("R2 Credentials was not set")
     except Exception as e:
-        print(f"Error uploading to R2: {e}")
+        raise prefect.exceptions.RetryException(
+            message="Error uploading the file {object_name} to R2, retrying..."
+        ) from e
 
 
 @task(log_prints=True)
@@ -96,7 +93,10 @@ def audio_processing_pipeline(url, duration_seconds, repeat):
         if audio_file:
             transcription_file = transcribe_audio_file(audio_file)
 
-        upload_files_to_r2(url, audio_file, transcription_file)
+        if audio_file:
+            upload_to_r2_and_clean_up(url, audio_file)
+        if transcription_file:
+            upload_to_r2_and_clean_up(url, transcription_file)
 
         # Stop the flow if it should not be repeated
         if not repeat:
@@ -108,8 +108,8 @@ def get_url_hash(url):
     return hashlib.sha256(url.encode()).hexdigest()[-6:]
 
 
-if __name__ == "__main__":
-    radio_stations = [
+def fetch_radio_stations():
+    return [
         {"code": "WLEL-FM 94.3 MHz", "url": "https://securenetg.com/radio/8090/radio.aac", "state": "Georgia"},
         {"code": "WPHE-AM 690 kHz", "url": "https://sp.unoredcdn.net/8124/stream", "state": "Pennsylvania"},
         {"code": "WLCH-FM 91.3 MHz", "url": "http://streaming.live365.com/a37354", "state": "Pennsylvania"},
@@ -143,6 +143,10 @@ if __name__ == "__main__":
         {"code": "KNOG-FM 91.7 MHz", "url": "http://wrn.streamguys1.com/knog", "state": "Arizona"},
         {"code": "KWST-AM 1430 kHz", "url": "https://s1.voscast.com:10601/xstream", "state": "Arizona"},
     ]
+
+
+if __name__ == "__main__":
+    radio_stations = fetch_radio_stations()
     duration_seconds = 300
 
     all_deployments = []
