@@ -143,7 +143,7 @@ if __name__ == "__main__":
         {"code": "KNOG-FM 91.7 MHz", "url": "http://wrn.streamguys1.com/knog", "state": "Arizona"},
         {"code": "KWST-AM 1430 kHz", "url": "https://s1.voscast.com:10601/xstream", "state": "Arizona"},
     ]
-    duration_seconds = 60
+    duration_seconds = 300
 
     all_deployments = []
     for station in radio_stations:
