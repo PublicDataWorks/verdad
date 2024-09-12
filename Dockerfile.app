@@ -16,9 +16,6 @@ RUN apt-get update && apt-get install -y \
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Make port 80 available to the world outside this container
-EXPOSE 80
-
 # Make sure the entrypoint script is executable
 RUN chmod +x /app/scripts/trigger_main_script.sh
 

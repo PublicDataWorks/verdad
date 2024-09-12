@@ -13,9 +13,6 @@ from botocore.exceptions import NoCredentialsError
 
 load_dotenv()
 
-# Setup Open AI Client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 # Setup S3 Client
 R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL")
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
@@ -40,6 +37,7 @@ def capture_audio_stream(url, duration_seconds):
             return None
 
         # Use ffmpeg to capture audio
+        print(f"Start capturing audio from ${url} for {duration_seconds} seconds")
         FFmpeg().option("y").input(url, t=duration_seconds).output(output_file).execute()
 
         return output_file
@@ -72,6 +70,13 @@ def transcribe_audio_file(audio_file):
     # TODO: Use "Prompt parameter" to improve the reliability of Whisper
     # TODO: Post-process the transcription using LLMs
     # See more: https://platform.openai.com/docs/guides/speech-to-text/improving-reliability
+
+    if not os.getenv("OPENAI_API_KEY"):
+        print("Skipped audio transcription because open_ai key was not set!")
+        return None
+
+    # Setup Open AI Client
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     try:
         transcription = client.audio.transcriptions.create(

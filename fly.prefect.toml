@@ -1,0 +1,20 @@
+app = "prefect-staging"
+primary_region = "sea"
+
+[build]
+  dockerfile = "Dockerfile.prefect"
+
+[http_service]
+  internal_port = 4200
+  force_https = true
+  auto_stop_machines = true
+  min_machines_running = 1
+
+[env]
+  PREFECT_SERVER_API_HOST = "0.0.0.0"
+  PREFECT_SERVER_API_PORT = "4200"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

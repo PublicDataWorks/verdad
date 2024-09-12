@@ -1,0 +1,20 @@
+app = 'verdad-staging'
+primary_region = 'sea'
+
+[build]
+  dockerfile = "Dockerfile.app"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[env]
+  PREFECT_API_URL = "https://prefect-staging.fly.dev/api"
+
+[[vm]]
+  memory = '4gb'
+  cpu_kind = 'shared'
+  cpus = 8

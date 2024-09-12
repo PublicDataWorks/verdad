@@ -1,17 +1,15 @@
 # Use the official Prefect image as a parent image
 FROM prefecthq/prefect:3-latest
 
-# Create a Prefect work pool
-RUN prefect work-pool create "local" --type process
-
-# Expose the Prefect API port
-EXPOSE 4200
-
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the scripts folder contents into the container at /app
-COPY scripts /app
+# Set environment variables
+ENV PREFECT_SERVER_API_HOST=0.0.0.0
+ENV PREFECT_SERVER_API_PORT=4200
+
+# Copy the start_prefect_server.sh script into the container at /app
+COPY scripts/start_prefect_server.sh /app
 
 # Make sure the entrypoint script is executable
 RUN chmod +x /app/start_prefect_server.sh
