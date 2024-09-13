@@ -159,13 +159,13 @@ if __name__ == "__main__":
     duration_seconds = 300  # Default to 5 minutes
     audio_birate = 64000  # Default to 64kbps bitrate
     audio_channels = 1  # Default to single channel (mono audio)
+    concurrency_limit = 100
 
     all_deployments = []
     for station in radio_stations:
         deployment = audio_processing_pipeline.to_deployment(
             f'{station["code"]}',
             tags=[station["state"]],
-            work_pool_name="local",
             parameters=dict(
                 url=station["url"],
                 duration_seconds=duration_seconds,
@@ -176,4 +176,4 @@ if __name__ == "__main__":
         )
         all_deployments.append(deployment)
 
-    serve(*all_deployments)
+    serve(*all_deployments, limit=concurrency_limit)
