@@ -15,6 +15,6 @@ primary_region = 'sea'
   PREFECT_API_URL = "https://prefect-staging.fly.dev/api"
 
 [[vm]]
-  memory = '2gb'
+  memory = '4gb'
   cpu_kind = 'shared'
-  cpus = 4
+  cpus = 8
