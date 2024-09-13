@@ -24,7 +24,7 @@ s3_client = boto3.client(
 
 
 @task(log_prints=True)
-def capture_audio_stream(url, duration_seconds):
+def capture_audio_stream(url, duration_seconds, audio_birate, audio_channels):
     try:
         # Create the output filename using the timestamp and hash
         start_time = time.time()
@@ -38,7 +38,9 @@ def capture_audio_stream(url, duration_seconds):
 
         # Use ffmpeg to capture audio
         print(f"Start capturing audio from ${url} for {duration_seconds} seconds")
-        FFmpeg().option("y").input(url, t=duration_seconds).output(output_file).execute()
+        FFmpeg().option("y").input(url, t=duration_seconds).output(
+            output_file, ab=audio_birate, ac=audio_channels
+        ).execute()
 
         return output_file
 
@@ -92,9 +94,11 @@ def transcribe_audio_file(audio_file):
 
 
 @flow(name="Audio Processing Pipeline")
-def audio_processing_pipeline(url, duration_seconds, repeat):
+def audio_processing_pipeline(url, duration_seconds, audio_birate, audio_channels, repeat):
     while True:
-        audio_file = capture_audio_stream(url, duration_seconds)
+        audio_file = capture_audio_stream(url, duration_seconds, audio_birate, audio_channels)
+        transcription_file = None
+
         if audio_file:
             transcription_file = transcribe_audio_file(audio_file)
 
@@ -152,7 +156,9 @@ def fetch_radio_stations():
 
 if __name__ == "__main__":
     radio_stations = fetch_radio_stations()
-    duration_seconds = 300
+    duration_seconds = 300  # Default to 5 minutes
+    audio_birate = 64000  # Default to 64kbps bitrate
+    audio_channels = 1  # Default to single channel (mono audio)
 
     all_deployments = []
     for station in radio_stations:
@@ -160,7 +166,13 @@ if __name__ == "__main__":
             f'{station["code"]}',
             tags=[station["state"]],
             work_pool_name="local",
-            parameters=dict(url=station["url"], duration_seconds=duration_seconds, repeat=False),
+            parameters=dict(
+                url=station["url"],
+                duration_seconds=duration_seconds,
+                repeat=True,
+                audio_birate=audio_birate,
+                audio_channels=audio_channels,
+            ),
         )
         all_deployments.append(deployment)
 
