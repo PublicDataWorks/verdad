@@ -156,7 +156,7 @@ def fetch_radio_stations():
 
 if __name__ == "__main__":
     radio_stations = fetch_radio_stations()
-    duration_seconds = 300  # Default to 5 minutes
+    duration_seconds = 1200  # Default to 20 minutes
     audio_birate = 64000  # Default to 64kbps bitrate
     audio_channels = 1  # Default to single channel (mono audio)
     concurrency_limit = 100
