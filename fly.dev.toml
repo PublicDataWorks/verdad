@@ -1,0 +1,12 @@
+app = "verdad-dev"
+
+[build]
+  dockerfile = "Dockerfile.dev"
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 2
+
+[scale]
+  count = 1

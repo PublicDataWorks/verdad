@@ -1,0 +1,33 @@
+# Start from the Selenium standalone Chrome image
+FROM selenium/standalone-chrome:latest
+
+# Avoid prompts from apt-get
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update and install necessary packages
+RUN sudo apt-get update && sudo apt-get install -y \
+    git \
+    build-essential \
+    python3 \
+    python3-pip \
+    python3-venv \
+    && sudo apt-get clean \
+    && sudo rm -rf /var/lib/apt/lists/*
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Create a virtual environment
+RUN python3 -m venv /app/venv
+
+# Activate the virtual environment and install dependencies
+COPY requirements.txt .
+RUN . /app/venv/bin/activate && \
+    pip3 install --no-cache-dir -r requirements.txt
+
+# Copy the Python and bash script into the container
+COPY src/start_radio.py .
+COPY scripts/start_radio.sh .
+
+# Make the bash script executable
+RUN sudo chmod +x /app/start_radio.sh
