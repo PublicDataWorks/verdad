@@ -38,7 +38,7 @@ def main():
         print("Attempting to play audio...")
         driver.execute_script('document.querySelector("#video").play()')
 
-        time.sleep(2)
+        time.sleep(5)
         # Check if audio is playing
         if is_audio_playing(driver):
             print("Audio is playing (currentTime is increasing)")
@@ -49,9 +49,9 @@ def main():
         while True:
             time.sleep(5)
             if is_audio_playing(driver):
-                print("Audio is still playing")
+                print("Audio is playing")
             else:
-                print("Audio has stopped playing")
+                print("Audio is not playing")
 
     except KeyboardInterrupt:
         print("\nPlayback stopped by user.")
