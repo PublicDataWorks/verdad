@@ -1,4 +1,5 @@
 app = "verdad-dev"
+primary_region = "sea"
 
 [build]
   dockerfile = "Dockerfile.dev"
@@ -6,10 +7,17 @@ app = "verdad-dev"
 [env]
   PREFECT_API_URL = "https://prefect-staging.fly.dev/api"
 
+[[processes]]
+  name = "radio_vov1"
+
+[[processes]]
+  name = "radio_dn_rtv"
+
 [[vm]]
-  memory = '1gb'
-  cpu_kind = 'shared'
-  cpus = 2
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
 
 [scale]
-  count = 1
+  radio_vov1 = 1
+  radio_dn_rtv = 1

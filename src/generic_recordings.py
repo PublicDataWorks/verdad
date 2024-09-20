@@ -102,25 +102,30 @@ def get_url_hash(url):
 
 
 if __name__ == "__main__":
-    radio_stations = [Vov1(), DnRtv()]
+    process_group = os.environ.get("FLY_PROCESS_GROUP")
+    print(f"======== Starting {process_group} ========")
+
+    match process_group:
+        case "radio_vov1":
+            station = Vov1()
+        case "radio_dn_rtv":
+            station = DnRtv()
+        case _:
+            raise Exception("Invalid process group")
+
     duration_seconds = 1800  # Default to 30 minutes
     audio_birate = 64000  # Default to 64kbps bitrate
     audio_channels = 1  # Default to single channel (mono audio)
-    concurrency_limit = 100
 
-    all_deployments = []
-    for station in radio_stations:
-        deployment = generic_audio_processing_pipeline.to_deployment(
-            f"{station.code}",
-            tags=[station.state],
-            parameters=dict(
-                station_code=station.code,
-                duration_seconds=duration_seconds,
-                repeat=True,
-                audio_birate=audio_birate,
-                audio_channels=audio_channels,
-            ),
-        )
-        all_deployments.append(deployment)
-
-    serve(*all_deployments, limit=concurrency_limit)
+    deployment = generic_audio_processing_pipeline.to_deployment(
+        f"{station.code}",
+        tags=[station.state, "Generic"],
+        parameters=dict(
+            station_code=station.code,
+            duration_seconds=duration_seconds,
+            repeat=True,
+            audio_birate=audio_birate,
+            audio_channels=audio_channels,
+        ),
+    )
+    serve(deployment)
