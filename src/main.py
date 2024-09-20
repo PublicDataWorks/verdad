@@ -2,7 +2,6 @@ import os
 import time
 import hashlib
 import prefect
-import requests
 import boto3
 from prefect import flow, serve, task
 
@@ -30,11 +29,6 @@ def capture_audio_stream(url, duration_seconds, audio_birate, audio_channels):
         start_time = time.time()
         timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(start_time))
         output_file = f"radio_{get_url_hash(url)}_{timestamp}.mp3"
-
-        response = requests.get(url, stream=True, timeout=20)
-        if response.status_code != 200:
-            print(f"Failed to connect to the audio stream ${url}. Status code: {response.status_code}")
-            return None
 
         # Use ffmpeg to capture audio
         print(f"Start capturing audio from ${url} for {duration_seconds} seconds")
@@ -156,7 +150,7 @@ def fetch_radio_stations():
 
 if __name__ == "__main__":
     radio_stations = fetch_radio_stations()
-    duration_seconds = 1200  # Default to 20 minutes
+    duration_seconds = 1800  # Default to 30 minutes
     audio_birate = 64000  # Default to 64kbps bitrate
     audio_channels = 1  # Default to single channel (mono audio)
     concurrency_limit = 100

@@ -3,6 +3,9 @@ app = "verdad-dev"
 [build]
   dockerfile = "Dockerfile.dev"
 
+[env]
+  PREFECT_API_URL = "https://prefect-staging.fly.dev/api"
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
