@@ -19,7 +19,6 @@ class RadioStation:
         self.driver = None
         self.sink_module = None
         self.source_module = None
-        self.process_id = None
 
     def start_playing(self):
         raise NotImplementedError("Subclasses must implement this method")
@@ -80,8 +79,6 @@ class RadioStation:
 
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
-        self.process_id = self.driver.service.process.pid
-        print(f"Chrome process ID: {self.process_id}")
 
         print(f"Launching url {self.url}")
         self.driver.get(self.url)
@@ -94,36 +91,6 @@ class RadioStation:
         self.execute_command(["pactl", "list", "short", "sources"])
         print("PulseAudio sink inputs:")
         self.execute_command(["pactl", "list", "sink-inputs"])
-
-        self.route_chrome_audio()
-
-    def route_chrome_audio(self):
-        try:
-            # Get all sink inputs
-            sink_inputs = subprocess.check_output(["pactl", "list", "sink-inputs"], text=True)
-            sink_input_blocks = sink_inputs.split("\n\n")
-
-            for block in sink_input_blocks:
-                if 'application.name = "Google Chrome"' in block:
-                    sink_input_id = re.search(r"Sink Input #(\d+)", block)
-                    process_id = re.search(r"application.process.id = \"(\d+)\"", block)
-
-                    if sink_input_id and process_id:
-                        sink_input_id = sink_input_id.group(1)
-                        process_id = process_id.group(1)
-
-                        if process_id == str(self.process_id):
-                            subprocess.run(["pactl", "move-sink-input", sink_input_id, self.sink_name], check=True)
-                            print(
-                                f"Moved Chrome audio (sink input {sink_input_id}, process {process_id}) to {self.sink_name} for {self.url}"
-                            )
-                            return
-
-            print(f"No matching Chrome audio stream found for {self.url} (process ID: {self.process_id})")
-        except subprocess.CalledProcessError as e:
-            print(f"Error listing or moving sink inputs: {e}")
-        except Exception as e:
-            print(f"Unexpected error when handling sink inputs: {e}")
 
     def execute_command(self, command):
         try:
