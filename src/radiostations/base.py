@@ -1,6 +1,7 @@
 import re
 import subprocess
 import time
+from prefect import task
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -23,6 +24,7 @@ class RadioStation:
     def start_playing(self):
         raise NotImplementedError("Subclasses must implement this method")
 
+    @task(log_prints=True)
     def setup_virtual_audio(self):
         self.ensure_pulseaudio_running()
 
@@ -68,6 +70,7 @@ class RadioStation:
             print(f"Error setting up virtual audio: {e}")
             raise e
 
+    @task(log_prints=True)
     def start_browser(self):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
@@ -76,6 +79,9 @@ class RadioStation:
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--use-pulse-audio")
         chrome_options.add_argument("--autoplay-policy=no-user-gesture-required")
+        chrome_options.add_argument(
+            "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1"
+        )
 
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=chrome_options)

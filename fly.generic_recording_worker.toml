@@ -1,0 +1,21 @@
+app = 'generic-recording-worker'
+primary_region = 'sea'
+
+[build]
+  dockerfile = 'Dockerfile.generic_recording_worker'
+
+[env]
+  PREFECT_API_URL = 'https://prefect-staging.fly.dev/api'
+
+[processes]
+  radio_dn_rtv = ''
+  radio_vov1 = ''
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[scale]
+  radio_vov1 = 1
+  radio_dn_rtv = 1

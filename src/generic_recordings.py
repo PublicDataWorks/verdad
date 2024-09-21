@@ -26,9 +26,6 @@ s3_client = boto3.client(
 @task(log_prints=True)
 def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels):
     try:
-        station.setup_virtual_audio()
-        station.start_browser()
-
         if station.is_audio_playing():
             print(f"Audio is properly set up and playing for {station.code}")
         else:
@@ -49,10 +46,6 @@ def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels
     except Exception as e:
         print(f"Failed to capture audio stream ${station.url}: {e}")
         return None
-    finally:
-        print("Stopping the stream and cleaning up...")
-        station.stop()
-        print("Cleanup finished")
 
 
 @task(log_prints=True, retries=3)
@@ -71,13 +64,6 @@ def upload_to_r2_and_clean_up(url, file_path):
 
 @flow(name="Generic Audio Processing Pipeline")
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
-    # TODO
-    # 1. Don't repeat the full flow, just repeat the recording part with ffmpeg. For now, the "repeat" doesn't work yet
-    # 2. Split the capture_audio tasks into smaller tasks with retry mechanism
-    # 3. Periodically check if the playback is still running or not, and restart it when neccessary (please also check for the volume to ensure its accuracy)
-    # 4. Fix the problems in Prefect server logs
-    # 5. Continue to write selenium script for other radio stations
-
     RADIO_STATIONS = {
         Vov1.code: Vov1,
         DnRtv.code: DnRtv,
@@ -85,7 +71,11 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
     # Reconstruct the radion station object based on the station code
     station = RADIO_STATIONS.get(station_code, lambda: None)()
 
+    station.setup_virtual_audio()
+    station.start_browser()
+
     while True:
+        # TODO Periodically check if the playback is still running or not, and restart it when neccessary (please also check for the volume to ensure its accuracy)
         audio_file = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
 
         if audio_file:
@@ -94,6 +84,10 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
         # Stop the flow if it should not be repeated
         if not repeat:
             break
+
+    print("Stopping the radio station and cleaning up...")
+    station.stop()
+    print("Cleanup finished")
 
 
 def get_url_hash(url):
