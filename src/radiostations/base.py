@@ -16,14 +16,14 @@ class RadioStation:
     class Config:
         arbitrary_types_allowed = True
 
-    def __init__(self, url, sink_name, source_name, play_button_selector, video_element_selector)):
+    def __init__(self, url, sink_name, source_name, play_button_selector, video_element_selector):
         self.url = url
         self.sink_name = sink_name
         self.source_name = source_name
         self.driver = None
         self.sink_module = None
         self.source_module = None
-        
+
         self.play_button_selector = play_button_selector
         self.video_element_selector = video_element_selector
 
