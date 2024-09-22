@@ -8,11 +8,14 @@ from prefect import flow, serve, task
 from ffmpeg import FFmpeg
 from botocore.exceptions import NoCredentialsError
 
+from radiostations.kisf import Kisf
+from radiostations.krgt import Krgt
 from radiostations.wbzy import Wbzy
 from radiostations.wbzw import Wbzw
 from radiostations.wrum import Wrum
 from radiostations.wrum_hd2 import WrumHd2
 from radiostations.wumr import Wumr
+from radiostations.wztu import Wztu
 
 load_dotenv()
 
@@ -68,11 +71,14 @@ def upload_to_r2_and_clean_up(url, file_path):
 @flow(name="Generic Audio Processing Pipeline", log_prints=True)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
     RADIO_STATIONS = {
-        Wbzy.code: Wbzy,
+        Kisf.code: Kisf,
+        Krgt.code: Krgt,
         Wbzw.code: Wbzw,
-        Wumr.code: Wumr,
+        Wbzy.code: Wbzy,
+        WrumHd2.code: WrumHd2,
         Wrum.code: Wrum,
-        WrumHd2.code: WrumHd2
+        Wumr.code: Wumr,
+        Wztu.code: Wztu,
     }
     # Reconstruct the radion station object based on the station code
     station = RADIO_STATIONS.get(station_code, lambda: None)()
@@ -106,16 +112,22 @@ if __name__ == "__main__":
     print(f"======== Starting {process_group} ========")
 
     match process_group:
-        case "radio_wbzy":
-            station = Wbzy()
+        case "radio_kisf":
+            station = Kisf()
+        case "radio_krgt":
+            station = Krgt()
         case "radio_wbzw":
             station = Wbzw()
-        case "radio_wumr":
-            station = Wumr()
-        case "radio_wrum":
-            station = Wrum()
+        case "radio_wbzy":
+            station = Wbzy()
         case "radio_wrum_hd2":
             station = WrumHd2()
+        case "radio_wrum":
+            station = Wrum()
+        case "radio_wumr":
+            station = Wumr()
+        case "radio_wztu":
+            station = Wztu()
         case _:
             raise Exception("Invalid process group")
 
