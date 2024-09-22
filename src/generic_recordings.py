@@ -8,8 +8,13 @@ from prefect import flow, serve, task
 from ffmpeg import FFmpeg
 from botocore.exceptions import NoCredentialsError
 
+from radiostations.k229db import K229db
+from radiostations.kfue import Kfue
+from radiostations.khot import Khot
 from radiostations.kisf import Kisf
+from radiostations.kmma import Kmma
 from radiostations.krgt import Krgt
+from radiostations.rumba_4451 import Rumba4451
 from radiostations.wbzy import Wbzy
 from radiostations.wbzw import Wbzw
 from radiostations.wrum import Wrum
@@ -71,8 +76,13 @@ def upload_to_r2_and_clean_up(url, file_path):
 @flow(name="Generic Audio Processing Pipeline", log_prints=True)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
     RADIO_STATIONS = {
+        K229db.code: K229db,
+        Kfue.code: Kfue,
+        Khot.code: Khot,
         Kisf.code: Kisf,
+        Kmma.code: Kmma,
         Krgt.code: Krgt,
+        Rumba4451.code: Rumba4451,
         Wbzw.code: Wbzw,
         Wbzy.code: Wbzy,
         WrumHd2.code: WrumHd2,
@@ -112,10 +122,20 @@ if __name__ == "__main__":
     print(f"======== Starting {process_group} ========")
 
     match process_group:
+        case "radio_k229db":
+            station = K229db()
+        case "radio_kfue":
+            station = Kfue()
+        case "radio_khot":
+            station = Khot()
         case "radio_kisf":
             station = Kisf()
+        case "radio_kmma":
+            station = Kmma()
         case "radio_krgt":
             station = Krgt()
+        case "radio_rumba_4451":
+            station = Rumba4451()
         case "radio_wbzw":
             station = Wbzw()
         case "radio_wbzy":

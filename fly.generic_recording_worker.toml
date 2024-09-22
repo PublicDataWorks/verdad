@@ -8,8 +8,13 @@ primary_region = 'sea'
   PREFECT_API_URL = 'https://prefect-staging.fly.dev/api'
 
 [processes]
+  radio_k229db = ''
+  radio_kfue = ''
+  radio_khot = ''
   radio_kisf = ''
+  radio_kmma = ''
   radio_krgt = ''
+  radio_rumba_4451 = ''
   radio_wbzw = ''
   radio_wbzy = ''
   radio_wrum_hd2 = ''
@@ -23,8 +28,13 @@ primary_region = 'sea'
   cpus = 1
 
 [scale]
+  radio_k229db = ''
+  radio_kfue = ''
+  radio_khot = ''
   radio_kisf = 1
+  radio_kmma = ''
   radio_krgt = 1
+  radio_rumba_4451 = ''
   radio_wbzw = 1
   radio_wbzy = 1
   radio_wrum_hd2 = 1
