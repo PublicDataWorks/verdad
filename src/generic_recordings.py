@@ -8,8 +8,8 @@ from prefect import flow, serve, task
 from ffmpeg import FFmpeg
 from botocore.exceptions import NoCredentialsError
 
-from radiostations.dn_rtv import DnRtv
-from radiostations.vov1 import Vov1
+from radiostations.wbzy import Wbzy
+from radiostations.wbzw import Wbzw
 
 load_dotenv()
 
@@ -62,11 +62,11 @@ def upload_to_r2_and_clean_up(url, file_path):
         print("R2 Credentials was not set")
 
 
-@flow(name="Generic Audio Processing Pipeline")
+@flow(name="Generic Audio Processing Pipeline", log_prints=True)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
     RADIO_STATIONS = {
-        Vov1.code: Vov1,
-        DnRtv.code: DnRtv,
+        Wbzy.code: Wbzy,
+        Wbzw.code: Wbzw,
     }
     # Reconstruct the radion station object based on the station code
     station = RADIO_STATIONS.get(station_code, lambda: None)()
@@ -100,10 +100,10 @@ if __name__ == "__main__":
     print(f"======== Starting {process_group} ========")
 
     match process_group:
-        case "radio_vov1":
-            station = Vov1()
-        case "radio_dn_rtv":
-            station = DnRtv()
+        case "radio_wbzy":
+            station = Wbzy()
+        case "radio_wbzw":
+            station = Wbzw()
         case _:
             raise Exception("Invalid process group")
 

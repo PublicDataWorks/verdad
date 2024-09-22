@@ -5,6 +5,9 @@ from prefect import task
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 
 
@@ -13,16 +16,16 @@ class RadioStation:
     class Config:
         arbitrary_types_allowed = True
 
-    def __init__(self, url, sink_name, source_name):
+    def __init__(self, url, sink_name, source_name, play_button_selector, video_element_selector)):
         self.url = url
         self.sink_name = sink_name
         self.source_name = source_name
         self.driver = None
         self.sink_module = None
         self.source_module = None
-
-    def start_playing(self):
-        raise NotImplementedError("Subclasses must implement this method")
+        
+        self.play_button_selector = play_button_selector
+        self.video_element_selector = video_element_selector
 
     @task(log_prints=True)
     def setup_virtual_audio(self):
@@ -98,6 +101,38 @@ class RadioStation:
         print("PulseAudio sink inputs:")
         self.execute_command(["pactl", "list", "sink-inputs"])
 
+    def start_playing(self):
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, self.play_button_selector))
+        )
+        print(f"Play button found on {self.url}")
+        time.sleep(2)
+
+        print("Click on the Play button")
+        play_button = self.driver.find_element(By.CSS_SELECTOR, self.play_button_selector)
+        self.driver.execute_script("arguments[0].click();", play_button)
+
+        # Wait for a moment to let the audio start
+        print("Wait a bit...")
+        time.sleep(10)
+
+        # Detailed audio checks
+        video_element = self.driver.find_element(By.CSS_SELECTOR, self.video_element_selector)
+        is_playing = self.driver.execute_script(
+            "return !arguments[0].paused && !arguments[0].ended && arguments[0].currentTime > 0;", video_element
+        )
+        current_time = self.driver.execute_script("return arguments[0].currentTime;", video_element)
+        duration = self.driver.execute_script("return arguments[0].duration;", video_element)
+        is_muted = self.driver.execute_script("return arguments[0].muted;", video_element)
+        volume = self.driver.execute_script("return arguments[0].volume;", video_element)
+
+        print(
+            f"Is audio playing: {is_playing}. Current time: {current_time}. Duration: {duration}. Volume: {volume}. Muted: {is_muted}"
+        )
+
+        if not is_playing:
+            raise Exception(f"Failed to start audio for {self.url}")
+
     def execute_command(self, command):
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
@@ -128,6 +163,7 @@ class RadioStation:
             print(f"Error checking audio status: {e}")
             return False
 
+    @task(log_prints=True)
     def stop(self):
         if self.driver:
             self.driver.quit()

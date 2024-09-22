@@ -15,6 +15,6 @@ primary_region = "sea"
   PREFECT_SERVER_API_PORT = "4200"
 
 [[vm]]
-  memory = "1gb"
+  memory = "2gb"
   cpu_kind = "shared"
   cpus = 4
