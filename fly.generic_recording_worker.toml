@@ -10,6 +10,9 @@ primary_region = 'sea'
 [processes]
   radio_wbzy = ''
   radio_wbzw = ''
+  radio_wumr = ''
+  radio_wrum = ''
+  radio_wrum_hd2 = ''
 
 [[vm]]
   memory = '1gb'
@@ -19,3 +22,6 @@ primary_region = 'sea'
 [scale]
   radio_wbzy = 1
   radio_wbzw = 1
+  radio_wumr = 1
+  radio_wrum = 1
+  radio_wrum_hd2 = 1

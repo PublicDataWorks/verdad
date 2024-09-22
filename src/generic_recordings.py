@@ -10,6 +10,9 @@ from botocore.exceptions import NoCredentialsError
 
 from radiostations.wbzy import Wbzy
 from radiostations.wbzw import Wbzw
+from radiostations.wrum import Wrum
+from radiostations.wrum_hd2 import WrumHd2
+from radiostations.wumr import Wumr
 
 load_dotenv()
 
@@ -67,6 +70,9 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
     RADIO_STATIONS = {
         Wbzy.code: Wbzy,
         Wbzw.code: Wbzw,
+        Wumr.code: Wumr,
+        Wrum.code: Wrum,
+        WrumHd2.code: WrumHd2
     }
     # Reconstruct the radion station object based on the station code
     station = RADIO_STATIONS.get(station_code, lambda: None)()
@@ -104,6 +110,12 @@ if __name__ == "__main__":
             station = Wbzy()
         case "radio_wbzw":
             station = Wbzw()
+        case "radio_wumr":
+            station = Wumr()
+        case "radio_wrum":
+            station = Wrum()
+        case "radio_wrum_hd2":
+            station = WrumHd2()
         case _:
             raise Exception("Invalid process group")
 

@@ -106,7 +106,7 @@ class RadioStation:
             EC.presence_of_element_located((By.CSS_SELECTOR, self.play_button_selector))
         )
         print(f"Play button found on {self.url}")
-        time.sleep(2)
+        time.sleep(5)
 
         print("Click on the Play button")
         play_button = self.driver.find_element(By.CSS_SELECTOR, self.play_button_selector)
@@ -114,10 +114,15 @@ class RadioStation:
 
         # Wait for a moment to let the audio start
         print("Wait a bit...")
-        time.sleep(10)
+        time.sleep(15)
 
         # Detailed audio checks
-        video_element = self.driver.find_element(By.CSS_SELECTOR, self.video_element_selector)
+        try:
+            video_element = self.driver.find_element(By.CSS_SELECTOR, self.video_element_selector)
+        except Exception:
+            print("Video element was not found. Skipped audio checks.")
+            return
+
         is_playing = self.driver.execute_script(
             "return !arguments[0].paused && !arguments[0].ended && arguments[0].currentTime > 0;", video_element
         )
