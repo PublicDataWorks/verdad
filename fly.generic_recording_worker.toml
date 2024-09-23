@@ -28,13 +28,13 @@ primary_region = 'sea'
   cpus = 1
 
 [scale]
-  radio_k229db = ''
-  radio_kfue = ''
-  radio_khot = ''
+  radio_k229db = 1
+  radio_kfue = 1
+  radio_khot = 1
   radio_kisf = 1
-  radio_kmma = ''
+  radio_kmma = 1
   radio_krgt = 1
-  radio_rumba_4451 = ''
+  radio_rumba_4451 = 1
   radio_wbzw = 1
   radio_wbzy = 1
   radio_wrum_hd2 = 1

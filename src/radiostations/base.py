@@ -110,7 +110,7 @@ class RadioStation:
 
         print("Click on the Play button")
         play_button = self.driver.find_element(By.CSS_SELECTOR, self.play_button_selector)
-        self.driver.execute_script("arguments[0].click();", play_button)
+        play_button.click()
 
         # Wait for a moment to let the audio start
         print("Wait a bit...")

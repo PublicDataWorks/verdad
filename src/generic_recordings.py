@@ -17,6 +17,7 @@ from radiostations.krgt import Krgt
 from radiostations.rumba_4451 import Rumba4451
 from radiostations.wbzy import Wbzy
 from radiostations.wbzw import Wbzw
+from radiostations.wfag_lp import WfagLp
 from radiostations.wrum import Wrum
 from radiostations.wrum_hd2 import WrumHd2
 from radiostations.wumr import Wumr
@@ -89,6 +90,7 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
         Wrum.code: Wrum,
         Wumr.code: Wumr,
         Wztu.code: Wztu,
+        WfagLp.code: WfagLp
     }
     # Reconstruct the radion station object based on the station code
     station = RADIO_STATIONS.get(station_code, lambda: None)()
@@ -97,7 +99,9 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
     station.start_browser()
 
     while True:
-        # TODO Periodically check if the playback is still running or not, and restart it when neccessary (please also check for the volume to ensure its accuracy)
+        if not station.is_audio_playing():
+            station.start_playing()
+
         audio_file = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
 
         if audio_file:
@@ -148,6 +152,8 @@ if __name__ == "__main__":
             station = Wumr()
         case "radio_wztu":
             station = Wztu()
+        case "radio_wfag_lp":
+            station=WfagLp()
         case _:
             raise Exception("Invalid process group")
 
