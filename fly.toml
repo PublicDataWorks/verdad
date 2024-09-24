@@ -2,7 +2,7 @@ app = 'recording-worker'
 primary_region = 'sea'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = "Dockerfile.recording_worker"
 
 [http_service]
   internal_port = 80
