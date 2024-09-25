@@ -1,0 +1,53 @@
+# Start from the latest Ubuntu image
+FROM ubuntu:latest
+
+# Avoid prompts from apt-get
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update and install necessary packages
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    pulseaudio \
+    pulseaudio-utils \
+    ffmpeg \
+    build-essential \
+    python3 \
+    python3-pip \
+    python3-venv \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Google Chrome
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the current directory contents into the container at /app
+COPY . /app
+
+# Create a virtual environment
+RUN python3 -m venv /app/venv
+
+# Activate the virtual environment and install dependencies
+RUN . /app/venv/bin/activate && \
+    pip3 install --no-cache-dir -r requirements.txt
+
+# Make the bash script executable
+RUN chmod +x /app/scripts/generic_recordings.sh
+
+# Set environment variable for headless Chrome
+ENV CHROME_BIN=/usr/bin/google-chrome-stable
+ENV CHROME_PATH=/usr/bin/google-chrome-stable
+
+# Set display port to avoid crash
+ENV DISPLAY=:99
+
+# Set the entrypoint script
+ENTRYPOINT ["/app/scripts/generic_recordings.sh"]

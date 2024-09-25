@@ -1,0 +1,19 @@
+app = 'verdad-dev'
+primary_region = 'sea'
+
+[build]
+  dockerfile = 'Dockerfile.generic_recording_worker'
+
+[env]
+  PREFECT_API_URL = 'https://prefect-staging.fly.dev/api'
+
+[processes]
+  radio_wfag_lp = ''
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[scale]
+  radio_wfag_lp = 1
