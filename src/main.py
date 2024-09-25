@@ -233,6 +233,12 @@ def fetch_radio_stations():
             "state": "Arizona",
             "tags": [],
         },
+        {
+            "code": "WLMV-AM 1480 kHz",
+            "url": "https://14223.live.streamtheworld.com/WLMVAMAAC_SC",
+            "state": "Wisconsin",
+            "tags": [],
+        },
         # ===============================================================
         # iHeart Radio Stations
         # ===============================================================
