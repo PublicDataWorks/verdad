@@ -91,7 +91,7 @@ if __name__ == "__main__":
     for station in radio_stations:
         deployment = audio_processing_pipeline.to_deployment(
             f'{station["code"]}',
-            tags=[station["state"]],
+            tags=[station["state"], get_url_hash(station["url"])],
             parameters=dict(
                 url=station["url"],
                 duration_seconds=duration_seconds,

@@ -119,19 +119,9 @@ def fetch_radio_stations():
             "state": "Arizona",
         },
         {
-            "code": "KISF-FM 103.5 MHz",
-            "url": "http://lmn.streamguys1.com/kisffm/playlist.m3u8?key=a1e751202157c8d037a4f453698087f605c937356359a6774ea3fcd2e53d04e4&aw_0_1st.playerId=iheart",
-            "state": "Nevada",
-        },
-        {
             "code": "KMMA-FM 97.1 MHz",
             "url": "http://stream.revma.ihrhls.com/zc69/hls.m3u8",
             "state": "Arizona",
-        },
-        {
-            "code": "KRGT-FM 99.3 MHz",
-            "url": "http://lmn.streamguys1.com/krgtfm/playlist.m3u8?key=a1e751202157c8d037a4f453698087f605c937356359a6774ea3fcd2e53d04e4&aw_0_1st.playerId=iheart",
-            "state": "Nevada",
         },
         {
             "code": "RUMBA 4451",
