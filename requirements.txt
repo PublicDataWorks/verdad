@@ -4,9 +4,9 @@ python-dotenv==1.0.1
 black==24.8.0
 flake8==7.1.1
 isort==5.13.2
-openai==1.44.0
 prefect==3.0.1
 boto3==1.35.15
 selenium==4.24.0
 webdriver-manager==4.0.2
+google-generativeai==0.8.2
 
