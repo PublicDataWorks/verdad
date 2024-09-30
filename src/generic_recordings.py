@@ -85,10 +85,9 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
         # If memory usage is above 95%, restart the browser
         if memory_usage > 95:
             print("Memory usage is high. Restarting browser...")
-            station.stop()
+            station.stop(unload_modules=False)
             time.sleep(5)  # Wait for browser to fully close
             station.start_browser()
-            print("Browser restarted.")
 
         if not station.is_audio_playing():
             station.start_playing()

@@ -169,11 +169,11 @@ class RadioStation:
             return False
 
     @task(log_prints=True)
-    def stop(self):
+    def stop(self, unload_modules=True):
         if self.driver:
             self.driver.quit()
 
-        if self.sink_module:
+        if self.sink_module and unload_modules:
             try:
                 # Check if the sink module exists before unloading
                 result = subprocess.run(
@@ -188,7 +188,7 @@ class RadioStation:
             except subprocess.CalledProcessError as e:
                 print(f"Error checking or unloading sink module {self.sink_module}: {e}")
 
-        if self.source_module:
+        if self.source_module and unload_modules:
             try:
                 # Check if the source module exists before unloading
                 result = subprocess.run(
