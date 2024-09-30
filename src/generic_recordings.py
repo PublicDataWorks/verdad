@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from prefect import flow, serve, task
 from ffmpeg import FFmpeg
 from botocore.exceptions import NoCredentialsError
+import psutil
 
 from radiostations.khot import Khot
 from radiostations.kisf import Kisf
@@ -77,6 +78,18 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
     station.start_browser()
 
     while True:
+        # Check current memory usage
+        memory_usage = psutil.virtual_memory().percent
+        print(f"Current memory usage: {memory_usage}%")
+
+        # If memory usage is above 95%, restart the browser
+        if memory_usage > 95:
+            print("Memory usage is high. Restarting browser...")
+            station.stop()
+            time.sleep(5)  # Wait for browser to fully close
+            station.start_browser()
+            print("Browser restarted.")
+
         if not station.is_audio_playing():
             station.start_playing()
 
@@ -119,7 +132,7 @@ if __name__ == "__main__":
 
     deployment = generic_audio_processing_pipeline.to_deployment(
         f"{station.code}",
-        tags=[station.state, "Generic"],
+        tags=[station.state, get_url_hash(station.url), "Generic"],
         parameters=dict(
             station_code=station.code,
             duration_seconds=duration_seconds,
