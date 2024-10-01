@@ -158,4 +158,17 @@ def fetch_radio_stations():
             "url": "http://stream.revma.ihrhls.com/zc577/hls.m3u8",
             "state": "Florida",
         },
+        # ===============================================================
+        # Arabic language radio stations
+        # ===============================================================
+        {
+            "code": "MCD",
+            "url": "https://montecarlodoualiya128k.ice.infomaniak.ch/mc-doualiya.mp3",
+            "state": "International",
+        },
+        {
+            "code": "2MORO 1620 AM",
+            "url": "https://streaming.2me.com.au/2me",
+            "state": "Sydney",
+        },
     ]
