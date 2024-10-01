@@ -8,10 +8,14 @@ from prefect import flow, serve, task
 from ffmpeg import FFmpeg
 from dotenv import load_dotenv
 from botocore.exceptions import NoCredentialsError
+import sentry_sdk
 
 from utils import fetch_radio_stations
 
 load_dotenv()
+
+# Setup Sentry
+sentry_sdk.init(dsn=os.getenv("SENTRY_DSN"))
 
 # Setup S3 Client
 R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL")
