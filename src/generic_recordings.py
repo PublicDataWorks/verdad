@@ -88,6 +88,7 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
             station.stop(unload_modules=False)
             time.sleep(5)  # Wait for browser to fully close
             station.start_browser()
+            print(f"Current memory usage: {psutil.virtual_memory().percent}%")
 
         if not station.is_audio_playing():
             station.start_playing()
