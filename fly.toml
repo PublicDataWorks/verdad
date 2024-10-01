@@ -12,7 +12,7 @@ primary_region = 'sea'
   processes = ['app']
 
 [env]
-  PREFECT_API_URL = "https://prefect-staging.fly.dev/api"
+  PREFECT_API_URL = "https://prefect.fly.dev/api"
 
 [[vm]]
   memory = '8gb'

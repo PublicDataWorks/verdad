@@ -5,7 +5,7 @@ primary_region = 'sea'
   dockerfile = 'Dockerfile.generic_recording_worker'
 
 [env]
-  PREFECT_API_URL = 'https://prefect-staging.fly.dev/api'
+  PREFECT_API_URL = 'https://prefect.fly.dev/api'
 
 [processes]
   radio_wfag_lp = ''

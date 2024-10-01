@@ -1,4 +1,4 @@
-app = "prefect-staging"
+app = "prefect"
 primary_region = "sea"
 
 [build]
