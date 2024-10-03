@@ -167,13 +167,13 @@ def fetch_radio_stations():
             "state": "International",
         },
         {
-            "code": "2MORO 1620 AM",
-            "url": "https://streaming.2me.com.au/2me",
-            "state": "Sydney",
-        },
-        {
             "code": "WMUZ-AM 1200 kHz",
             "url": "https://ais-sa8.cdnstream1.com/prhwjmv4dpl/ct8wcmajf2n",
-            "state": "Michigan, Taylor",
+            "state": "Michigan",
+        },
+        {
+            "code": "WNZK-AM 680 kHz",
+            "url": "http://wnzk.birach.com:9000/stream",
+            "state": "Michigan",
         },
     ]
