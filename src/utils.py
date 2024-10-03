@@ -171,4 +171,9 @@ def fetch_radio_stations():
             "url": "https://streaming.2me.com.au/2me",
             "state": "Sydney",
         },
+        {
+            "code": "WMUZ-AM 1200 kHz",
+            "url": "https://ais-sa8.cdnstream1.com/prhwjmv4dpl/ct8wcmajf2n",
+            "state": "Michigan, Taylor",
+        },
     ]
