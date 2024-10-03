@@ -60,10 +60,6 @@ def upload_to_r2_and_clean_up(url, file_path):
         os.remove(file_path)
     except NoCredentialsError:
         print("R2 Credentials was not set")
-    except Exception as e:
-        raise prefect.exceptions.RetryException(
-            message="Error uploading the file {object_name} to R2, retrying..."
-        ) from e
 
 
 @flow(name="Audio Processing Pipeline")
@@ -82,7 +78,6 @@ def audio_processing_pipeline(url, duration_seconds, audio_birate, audio_channel
 def get_url_hash(url):
     # Hash the URL and get the last 6 characters
     return hashlib.sha256(url.encode()).hexdigest()[-6:]
-
 
 if __name__ == "__main__":
     radio_stations = fetch_radio_stations()
