@@ -1,0 +1,152 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "Stage 2 Disinformation Analysis Output Schema"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "DisinformationAnalysisOutput": {
+        "type": "object",
+        "required": [
+          "snippet_id",
+          "metadata",
+          "transcription",
+          "translation",
+          "title",
+          "summary",
+          "explanation",
+          "disinformation_categories",
+          "language_details",
+          "context",
+          "confidence_scores",
+          "emotional_tone"
+        ],
+        "properties": {
+          "snippet_id": {
+            "type": "string",
+            "description": "Unique identifier for the snippet."
+          },
+          "metadata": {
+            "type": "object",
+            "required": [
+              "radio_station_name",
+              "radio_station_code",
+              "location",
+              "broadcast_date",
+              "broadcast_time",
+              "day_of_week",
+              "local_time_zone",
+              "start_time",
+              "end_time"
+            ],
+            "properties": {
+              "radio_station_name": { "type": "string" },
+              "radio_station_code": { "type": "string" },
+              "location": {
+                "type": "object",
+                "required": ["state", "city"],
+                "properties": {
+                  "state": { "type": "string" },
+                  "city": { "type": "string" }
+                }
+              },
+              "broadcast_date": { "type": "string", "format": "date" },
+              "broadcast_time": {
+                "type": "string",
+                "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$"
+              },
+              "day_of_week": { "type": "string" },
+              "local_time_zone": { "type": "string" },
+              "start_time": {
+                "type": "string",
+                "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
+                "description": "Timestamp where the snippet begins."
+              },
+              "end_time": {
+                "type": "string",
+                "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
+                "description": "Timestamp where the snippet ends."
+              }
+            }
+          },
+          "transcription": {
+            "type": "string",
+            "description": "Transcription of the snippet in the original language."
+          },
+          "translation": {
+            "type": "string",
+            "description": "Translation of the transcription into English."
+          },
+          "title": {
+            "type": "string",
+            "description": "Descriptive title of the snippet."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Objective summary of the snippet."
+          },
+          "explanation": {
+            "type": "string",
+            "description": "Detailed explanation of why the snippet constitutes disinformation."
+          },
+          "disinformation_categories": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "language_details": {
+            "type": "object",
+            "required": ["primary_language", "dialect", "register"],
+            "properties": {
+              "primary_language": { "type": "string" },
+              "dialect": { "type": "string" },
+              "register": { "type": "string" }
+            }
+          },
+          "context": {
+            "type": "object",
+            "required": ["before", "after"],
+            "properties": {
+              "before": {
+                "type": "string",
+                "description": "Up to 100 words before the snippet."
+              },
+              "after": {
+                "type": "string",
+                "description": "Up to 100 words after the snippet."
+              }
+            }
+          },
+          "confidence_scores": {
+            "type": "object",
+            "required": ["overall", "categories"],
+            "properties": {
+              "overall": { "type": "integer", "minimum": 0, "maximum": 100 },
+              "categories": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              }
+            }
+          },
+          "emotional_tone": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["emotion", "intensity", "explanation"],
+              "properties": {
+                "emotion": { "type": "string" },
+                "intensity": { "type": "integer", "minimum": 0, "maximum": 100 },
+                "explanation": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
