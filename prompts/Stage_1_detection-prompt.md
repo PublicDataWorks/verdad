@@ -1,4 +1,3 @@
-
 Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. Ensure that your output adheres to the JSON schema provided.
 
 # Overview
