@@ -2,7 +2,6 @@ import os
 import time
 import hashlib
 import boto3
-import prefect
 from prefect import flow, serve, task
 
 from ffmpeg import FFmpeg
@@ -78,6 +77,7 @@ def audio_processing_pipeline(url, duration_seconds, audio_birate, audio_channel
 def get_url_hash(url):
     # Hash the URL and get the last 6 characters
     return hashlib.sha256(url.encode()).hexdigest()[-6:]
+
 
 if __name__ == "__main__":
     radio_stations = fetch_radio_stations()

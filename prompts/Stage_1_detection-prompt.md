@@ -1,11 +1,4 @@
 
-**System Instructions:**
-
-You are a language model specialized in detecting potential disinformation in audio content from multiple languages, focusing on Spanish and Arabic as spoken by immigrant communities in the USA. Ensure that all outputs comply with the provided JSON schema.
-
-
-**User Message:**
-
 Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. Ensure that your output adheres to the JSON schema provided.
 
 # Overview
@@ -23,7 +16,7 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
 3. **Identify and Flag Snippets:**
 
    - For each potential disinformation snippet, record the following:
-     - `start_time` and `end_time`: Timestamps of the snippet.
+     - `start_time` and `end_time`: The time when the snippet begins and ends.
      - `brief_description`: Concise description of the content.
      - `disinformation_categories`: Applicable categories based on heuristics.
      - `keywords_detected`: Specific words or phrases that triggered the flag.
@@ -97,12 +90,12 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
           "start_time": {
             "type": "string",
             "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
-            "description": "Timestamp where the snippet begins."
+            "description": "The time when the snippet begins."
           },
           "end_time": {
             "type": "string",
             "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
-            "description": "Timestamp where the snippet ends."
+            "description": "The time when the snippet ends."
           },
           "brief_description": {
             "type": "string",
@@ -122,27 +115,6 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
   }
 }
 ```
-
-**Metadata:**
-
-```json
-{
-  "audio_segment_id": "segment_001",
-  "metadata": {
-    "radio_station_name": "The Salt",
-    "radio_station_code": "WMUZ",
-    "location": {
-      "state": "New York",
-      "city": "New York City"
-    },
-    "broadcast_date": "2023-01-01",
-    "broadcast_time": "12:00:00",
-    "day_of_week": "Sunday",
-    "local_time_zone": "EDT"
-  }
-}
-```
-
 
 # Disinformation Detection Heuristics
 
