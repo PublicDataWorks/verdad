@@ -7,11 +7,7 @@ load_dotenv()
 
 def main():
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
-    if not gemini_key:
-        print("[Error] Google Gemini API key was not set!")
-        return
-
-    stage_1 = Stage1(
+    response = Stage1.run(
         gemini_key=gemini_key,
         audio_file="sample_audio.mp3",
         metadata={
@@ -24,7 +20,7 @@ def main():
             "local_time_zone": "EDT",
         },
     )
-    stage_1.run()
+    print(response)
 
 
 if __name__ == "__main__":

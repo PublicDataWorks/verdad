@@ -10,47 +10,41 @@ from constants import (
 
 class Stage1:
 
-    gemini_key: str
-    audio_file: str
-    metadata: dict
-    user_prompt: str
-
     MODEL = "gemini-1.5-flash-002"
     SYSTEM_INSTRUCTION = get_system_instruction_for_stage_1()
     USER_PROMPT = get_user_prompt_for_stage_1()
     OUTPUT_SCHEMA = get_output_schema_for_stage_1()
 
-    def __init__(self, gemini_key, audio_file, metadata):
-        self.gemini_key = gemini_key
-        self.audio_file = audio_file
-        self.metadata = metadata
-        self.user_prompt = (
-            f"{self.USER_PROMPT}\nHere is the metadata of the attached audio clip:\n{json.dumps(metadata, indent=2)}"
-        )
+    @classmethod
+    def run(cls, gemini_key, audio_file, metadata):
+        if not gemini_key:
+            raise ValueError("Google Gemini API key was not set!")
 
-    def run(self):
-        genai.configure(api_key=self.gemini_key)
+        genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name=self.MODEL,
-            system_instruction=self.SYSTEM_INSTRUCTION,
+            model_name=cls.MODEL,
+            system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 
         # Upload the audio file and wait for it to finish processing
-        audio_file = genai.upload_file(self.audio_file)
+        audio_file = genai.upload_file(audio_file)
         while audio_file.state.name == "PROCESSING":
             print("Processing the uploaded audio file...")
             time.sleep(1)
             audio_file = genai.get_file(audio_file.name)
 
+        # Prepare the user prompt
+        user_prompt = (
+            f"{cls.USER_PROMPT}\nHere is the metadata of the attached audio clip:\n{json.dumps(metadata, indent=2)}"
+        )
+
         try:
             result = model.generate_content(
-                [audio_file, self.user_prompt],
+                [audio_file, user_prompt],
                 generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json", response_schema=self.OUTPUT_SCHEMA
+                    response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA
                 ),
             )
-            print(result.text)
-        except Exception as e:
-            print(str(e))
+            return result.text
         finally:
             audio_file.delete()
