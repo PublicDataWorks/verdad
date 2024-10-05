@@ -5,6 +5,7 @@ import boto3
 
 from dotenv import load_dotenv
 from prefect import flow, serve, task
+from prefect.task_runners import ConcurrentTaskRunner
 from ffmpeg import FFmpeg
 from botocore.exceptions import NoCredentialsError
 import psutil
@@ -68,7 +69,7 @@ def upload_to_r2_and_clean_up(url, file_path):
         print("R2 Credentials was not set")
 
 
-@flow(name="Generic Audio Processing Pipeline", log_prints=True)
+@flow(name="Generic Audio Processing Pipeline", log_prints=True, task_runner=ConcurrentTaskRunner)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
     RADIO_STATIONS = {
         Khot.code: Khot,

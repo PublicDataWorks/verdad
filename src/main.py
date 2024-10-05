@@ -3,6 +3,7 @@ import time
 import hashlib
 import boto3
 from prefect import flow, serve, task
+from prefect.task_runners import ConcurrentTaskRunner
 
 from ffmpeg import FFmpeg
 from dotenv import load_dotenv
@@ -61,7 +62,7 @@ def upload_to_r2_and_clean_up(url, file_path):
         print("R2 Credentials was not set")
 
 
-@flow(name="Audio Processing Pipeline")
+@flow(name="Audio Processing Pipeline", log_prints=True, task_runner=ConcurrentTaskRunner)
 def audio_processing_pipeline(url, duration_seconds, audio_birate, audio_channels, repeat):
     while True:
         audio_file = capture_audio_stream(url, duration_seconds, audio_birate, audio_channels)
