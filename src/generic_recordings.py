@@ -135,9 +135,8 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
 
         if output and output["file_name"]:
             uploaded_path = upload_to_r2_and_clean_up(station.url, output["file_name"])
-
-        if uploaded_path:
-            insert_recorded_audio_file_into_database(output, uploaded_path)
+            if uploaded_path:
+                insert_recorded_audio_file_into_database(output, uploaded_path)
 
         # Stop the flow if it should not be repeated
         if not repeat:

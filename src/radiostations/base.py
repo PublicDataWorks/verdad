@@ -114,7 +114,7 @@ class RadioStation:
 
         # Wait for a moment to let the audio start
         print("Wait a bit...")
-        time.sleep(15)
+        time.sleep(18)
 
         # Detailed audio checks
         try:
