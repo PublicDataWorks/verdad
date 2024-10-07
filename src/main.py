@@ -75,7 +75,7 @@ def upload_to_r2_and_clean_up(url, file_path):
 
 @task(log_prints=True)
 def get_metadata(file, station, start_time):
-    file_size_in_mb = os.path.getsize(file) / (1024 * 1024)
+    file_size = os.path.getsize(file)
     return {
         "file_name": file,
         "radio_station_name": station["name"],
@@ -83,7 +83,7 @@ def get_metadata(file, station, start_time):
         "location_state": station["state"],
         "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(start_time)),
         "recording_day_of_week": datetime.fromtimestamp(start_time).strftime("%A"),
-        "file_size_mb": round(file_size_in_mb, 4),
+        "file_size": file_size,
     }
 
 
@@ -96,7 +96,7 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
         recorded_at=metadata["recorded_at"],
         recording_day_of_week=metadata["recording_day_of_week"],
         file_path=uploaded_path,
-        file_size=metadata["file_size_mb"],
+        file_size=metadata["file_size"],
     )
 
 
