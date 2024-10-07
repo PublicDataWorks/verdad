@@ -7,13 +7,7 @@ primary_region = 'sea'
 [env]
   PREFECT_API_URL = 'https://prefect.fly.dev/api'
 
-[processes]
-  radio_khot = ''
-
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-
-[scale]
-  radio_khot = 1
