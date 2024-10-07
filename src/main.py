@@ -110,7 +110,7 @@ def audio_processing_pipeline(url, duration_seconds, audio_birate, audio_channel
     while True:
         output = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
 
-        if output["file_name"]:
+        if output and output["file_name"]:
             uploaded_path = upload_to_r2_and_clean_up(station["url"], output["file_name"])
 
         if uploaded_path:
