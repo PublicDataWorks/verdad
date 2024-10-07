@@ -5,6 +5,7 @@ class Kisf(RadioStation):
 
     code = "KISF-FM 103.5 MHz"
     state = "Nevada"
+    name = "ZonaMX"
 
     def __init__(self):
         super().__init__(

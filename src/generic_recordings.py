@@ -3,6 +3,7 @@ import os
 import time
 import boto3
 
+from datetime import datetime
 from dotenv import load_dotenv
 from prefect import flow, serve, task
 from prefect.task_runners import ConcurrentTaskRunner
@@ -11,6 +12,7 @@ from botocore.exceptions import NoCredentialsError
 import psutil
 import sentry_sdk
 
+from processing_pipeline.supabase_utils import SupabaseClient
 from radiostations.khot import Khot
 from radiostations.kisf import Kisf
 from radiostations.krgt import Krgt
@@ -28,6 +30,11 @@ R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
 s3_client = boto3.client(
     "s3", endpoint_url=R2_ENDPOINT_URL, aws_access_key_id=R2_ACCESS_KEY_ID, aws_secret_access_key=R2_SECRET_ACCESS_KEY
 )
+
+# Setup Supabase client
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase_client = SupabaseClient(SUPABASE_URL, SUPABASE_KEY)
 
 
 @task(log_prints=True)
@@ -48,12 +55,24 @@ def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels
             output_file, ab=audio_birate, ac=audio_channels, acodec="libmp3lame"
         ).execute()
 
-        return output_file
+        return get_metadata(output_file, station, start_time)
 
     except Exception as e:
         print(f"Failed to capture audio stream ${station.url}: {e}")
         return None
 
+@task(log_prints=True)
+def get_metadata(file, station, start_time):
+    file_size_in_mb = os.path.getsize(file) / (1024 * 1024)
+    return {
+        "file_name": file,
+        "radio_station_name": station.name,
+        "radio_station_code": station.code,
+        "location_state": station.state,
+        "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(start_time)),
+        "recording_day_of_week": datetime.fromtimestamp(start_time).strftime("%A"),
+        "file_size_mb": round(file_size_in_mb, 4)
+    }
 
 @task(log_prints=True, retries=3)
 def upload_to_r2_and_clean_up(url, file_path):
@@ -65,9 +84,23 @@ def upload_to_r2_and_clean_up(url, file_path):
         s3_client.upload_file(file_path, R2_BUCKET_NAME, destination_path)
         print(f"File {file_path} uploaded to R2 as {destination_path}")
         os.remove(file_path)
+        return destination_path
     except NoCredentialsError:
         print("R2 Credentials was not set")
+        return None
 
+
+@task(log_prints=True, retries=3)
+def insert_recorded_audio_file_into_database(metadata, uploaded_path):
+    supabase_client.insert_audio_file(
+        radio_station_name=metadata["radio_station_name"],
+        radio_station_code=metadata["radio_station_code"],
+        location_state=metadata["location_state"],
+        recorded_at=metadata["recorded_at"],
+        recording_day_of_week=metadata["recording_day_of_week"],
+        file_path=uploaded_path,
+        file_size=metadata["file_size_mb"],
+    )
 
 @flow(name="Generic Audio Processing Pipeline", log_prints=True, task_runner=ConcurrentTaskRunner)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
@@ -98,10 +131,13 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
         if not station.is_audio_playing():
             station.start_playing()
 
-        audio_file = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
+        output = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
 
-        if audio_file:
-            upload_to_r2_and_clean_up(station.url, audio_file)
+        if output["file_name"]:
+            uploaded_path = upload_to_r2_and_clean_up(station.url, output["file_name"])
+
+        if uploaded_path:
+            insert_recorded_audio_file_into_database(output, uploaded_path)
 
         # Stop the flow if it should not be repeated
         if not repeat:

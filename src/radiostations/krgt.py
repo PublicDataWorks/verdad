@@ -5,6 +5,7 @@ class Krgt(RadioStation):
 
     code = "KRGT-FM 99.3 MHz"
     state = "Nevada"
+    name = "Rumba Hits caliente"
 
     def __init__(self):
         super().__init__(

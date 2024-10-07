@@ -5,6 +5,7 @@ class Khot(RadioStation):
 
     code = "KHOT-FM 105.9 MHz"
     state = "Arizona"
+    name = "Que Buena"
 
     def __init__(self):
         super().__init__(
