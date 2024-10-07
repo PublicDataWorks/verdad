@@ -59,6 +59,7 @@ def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels
 
     except Exception as e:
         print(f"Failed to capture audio stream ${station.url}: {e}")
+        # TODO: Sleep for 10 seconds before returning
         return None
 
 @task(log_prints=True)
