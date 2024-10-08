@@ -10,64 +10,9 @@
       "DisinformationDetectionOutput": {
         "type": "object",
         "required": [
-          "audio_segment_id",
-          "metadata",
           "flagged_snippets"
         ],
         "properties": {
-          "audio_segment_id": {
-            "type": "string",
-            "description": "Unique identifier for the audio segment."
-          },
-          "metadata": {
-            "type": "object",
-            "required": [
-              "radio_station_name",
-              "radio_station_code",
-              "location",
-              "broadcast_date",
-              "broadcast_time",
-              "day_of_week",
-              "local_time_zone"
-            ],
-            "properties": {
-              "radio_station_name": {
-                "type": "string"
-              },
-              "radio_station_code": {
-                "type": "string"
-              },
-              "location": {
-                "type": "object",
-                "required": [
-                  "state",
-                  "city"
-                ],
-                "properties": {
-                  "state": {
-                    "type": "string"
-                  },
-                  "city": {
-                    "type": "string"
-                  }
-                }
-              },
-              "broadcast_date": {
-                "type": "string",
-                "description": "Broadcast date in YYYY-MM-DD format."
-              },
-              "broadcast_time": {
-                "type": "string",
-                "description": "Broadcast time in HH:MM:SS format."
-              },
-              "day_of_week": {
-                "type": "string"
-              },
-              "local_time_zone": {
-                "type": "string"
-              }
-            }
-          },
           "flagged_snippets": {
             "type": "array",
             "items": {

@@ -29,88 +29,52 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
 ```json
 {
   "type": "object",
-  "required": ["audio_segment_id", "metadata", "flagged_snippets"],
+  "required": ["flagged_snippets"],
   "properties": {
-    "audio_segment_id": {
-      "type": "string",
-      "description": "Unique identifier for the audio segment."
-    },
-    "metadata": {
-      "type": "object",
-      "required": [
-        "radio_station_name",
-        "radio_station_code",
-        "location",
-        "broadcast_date",
-        "broadcast_time",
-        "day_of_week",
-        "local_time_zone"
-      ],
-      "properties": {
-        "radio_station_name": { "type": "string" },
-        "radio_station_code": { "type": "string" },
-        "location": {
-          "type": "object",
-          "required": ["state", "city"],
-          "properties": {
-            "state": { "type": "string" },
-            "city": { "type": "string" }
+      "flagged_snippets": {
+          "type": "array",
+          "items": {
+              "type": "object",
+              "required": [
+                  "snippet_id",
+                  "start_time",
+                  "end_time",
+                  "brief_description",
+                  "disinformation_categories",
+                  "keywords_detected"
+              ],
+              "properties": {
+                  "snippet_id": {
+                      "type": "string",
+                      "description": "Unique identifier for the snippet."
+                  },
+                  "start_time": {
+                      "type": "string",
+                      "description": "The time when the snippet begins in HH:MM:SS format."
+                  },
+                  "end_time": {
+                      "type": "string",
+                      "description": "The time when the snippet ends in HH:MM:SS format."
+                  },
+                  "brief_description": {
+                      "type": "string",
+                      "description": "Concise description of the snippet."
+                  },
+                  "disinformation_categories": {
+                      "type": "array",
+                      "items": {
+                          "type": "string"
+                      }
+                  },
+                  "keywords_detected": {
+                      "type": "array",
+                      "items": {
+                          "type": "string"
+                      }
+                  }
+              }
           }
-        },
-        "broadcast_date": {
-          "type": "string",
-          "format": "date"
-        },
-        "broadcast_time": {
-          "type": "string",
-          "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$"
-        },
-        "day_of_week": { "type": "string" },
-        "local_time_zone": { "type": "string" }
       }
-    },
-    "flagged_snippets": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "snippet_id",
-          "start_time",
-          "end_time",
-          "brief_description",
-          "disinformation_categories",
-          "keywords_detected"
-        ],
-        "properties": {
-          "snippet_id": {
-            "type": "string",
-            "description": "Unique identifier for the snippet."
-          },
-          "start_time": {
-            "type": "string",
-            "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
-            "description": "The time when the snippet begins."
-          },
-          "end_time": {
-            "type": "string",
-            "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
-            "description": "The time when the snippet ends."
-          },
-          "brief_description": {
-            "type": "string",
-            "description": "Concise description of the snippet."
-          },
-          "disinformation_categories": {
-            "type": "array",
-            "items": { "type": "string" }
-          },
-          "keywords_detected": {
-            "type": "array",
-            "items": { "type": "string" }
-          }
-        }
-      }
-    }
   }
 }
 ```
@@ -691,19 +655,6 @@ By meticulously following these instructions and applying the heuristics across 
 
 ```json
 {
-  "audio_segment_id": "segment_001",
-  "metadata": {
-    "radio_station_name": "Radio Comunidad",
-    "radio_station_code": "RCOM",
-    "location": {
-      "state": "California",
-      "city": "Los Angeles"
-    },
-    "broadcast_date": "2023-11-25",
-    "broadcast_time": "14:00:00",
-    "day_of_week": "Saturday",
-    "local_time_zone": "PST"
-  },
   "flagged_snippets": [
     {
       "snippet_id": "snippet_abc123",
