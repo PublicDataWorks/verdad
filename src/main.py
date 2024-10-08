@@ -102,7 +102,7 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
     )
 
 
-@flow(name="Audio Processing Pipeline", log_prints=True, task_runner=ConcurrentTaskRunner)
+@flow(name="Audio Recording", log_prints=True, task_runner=ConcurrentTaskRunner)
 def audio_processing_pipeline(url, duration_seconds, audio_birate, audio_channels, repeat):
     # Reconstruct the radio station from the URL
     station = reconstruct_radio_station(url)

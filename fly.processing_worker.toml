@@ -1,0 +1,19 @@
+app = 'processing-worker'
+primary_region = 'sea'
+
+[build]
+  dockerfile = 'Dockerfile.processing_worker'
+
+[env]
+  PREFECT_API_URL = 'https://prefect.fly.dev/api'
+
+[processes]
+  stage_1 = ''
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[scale]
+  stage_1 = 1

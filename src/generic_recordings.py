@@ -103,7 +103,7 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
         file_size=metadata["file_size"],
     )
 
-@flow(name="Generic Audio Processing Pipeline", log_prints=True, task_runner=ConcurrentTaskRunner)
+@flow(name="Generic Audio Recording", log_prints=True, task_runner=ConcurrentTaskRunner)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
     RADIO_STATIONS = {
         Khot.code: Khot,
