@@ -54,8 +54,8 @@ def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels
 
     except Exception as e:
         print(f"Failed to capture audio stream ${url}: {e}")
-        print("Sleep for 15 seconds before returning")
-        time.sleep(15)
+        print("Sleep for 30 seconds before returning")
+        time.sleep(30)
         return None
 
 

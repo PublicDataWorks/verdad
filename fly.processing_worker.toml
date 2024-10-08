@@ -8,12 +8,16 @@ primary_region = 'sea'
   PREFECT_API_URL = 'https://prefect.fly.dev/api'
 
 [processes]
-  stage_1 = ''
+  initial_disinformation_detection = ''
+  audio_clipping = ''
+  in_depth_analysis = ''
 
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
-  cpus = 1
+  cpus = 4
 
 [scale]
-  stage_1 = 1
+  initial_disinformation_detection = 1
+  audio_clipping = 1
+  in_depth_analysis = 1

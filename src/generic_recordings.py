@@ -59,8 +59,9 @@ def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels
 
     except Exception as e:
         print(f"Failed to capture audio stream ${station.url}: {e}")
-        # TODO: Sleep for 15 seconds before returning
+        # TODO: Sleep for 30 seconds before returning
         return None
+
 
 @task(log_prints=True)
 def get_metadata(file, station, start_time):
@@ -74,6 +75,7 @@ def get_metadata(file, station, start_time):
         "recording_day_of_week": datetime.fromtimestamp(start_time).strftime("%A"),
         "file_size": file_size
     }
+
 
 @task(log_prints=True, retries=3)
 def upload_to_r2_and_clean_up(url, file_path):
@@ -102,6 +104,7 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
         file_path=uploaded_path,
         file_size=metadata["file_size"],
     )
+
 
 @flow(name="Generic Audio Recording", log_prints=True, task_runner=ConcurrentTaskRunner)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):

@@ -8,9 +8,26 @@ class SupabaseClient:
             supabase_key,
         )
 
-    def get_audio_files(self, order="created_at.desc", select="*", limit=20):
-        table_name = "audio_files"
-        response = self.client.table(table_name).select(select).order(order).limit(limit).execute()
+    def get_audio_files(self, status, order="created_at.asc", select="*", limit=1):
+        response = (
+            self.client.table("audio_files").select(select).eq("status", status).order(order).limit(limit).execute()
+        )
+        return response.data
+
+    def get_audio_file_by_id(self, id, select="*"):
+        response = self.client.table("audio_files").select(select).eq("id", id).execute()
+        return response.data[0] if response.data else None
+
+    def set_audio_file_status(self, id, status, error_message=None):
+        if error_message:
+            response = (
+                self.client.table("audio_files")
+                .update({"status": status, "error_message": error_message})
+                .eq("id", id)
+                .execute()
+            )
+        else:
+            response = self.client.table("audio_files").update({"status": status}).eq("id", id).execute()
         return response.data
 
     def insert_audio_file(
@@ -23,9 +40,8 @@ class SupabaseClient:
         file_path,
         file_size,
     ):
-        table_name = "audio_files"
         response = (
-            self.client.table(table_name)
+            self.client.table("audio_files")
             .insert(
                 {
                     "radio_station_name": radio_station_name,
@@ -37,6 +53,14 @@ class SupabaseClient:
                     "file_size": file_size,
                 }
             )
+            .execute()
+        )
+        return response.data
+
+    def insert_stage_1_llm_response(self, audio_file_id, response_json):
+        response = (
+            self.client.table("stage_1_llm_responses")
+            .insert({"audio_file": audio_file_id, "content": response_json})
             .execute()
         )
         return response.data
