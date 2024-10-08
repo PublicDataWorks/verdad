@@ -2,8 +2,7 @@ import os
 from dotenv import load_dotenv
 import sentry_sdk
 import boto3
-from processing_pipeline.supabase_utils import SupabaseClient
-from stage_1 import Stage1
+from supabase_utils import SupabaseClient
 
 load_dotenv()
 
