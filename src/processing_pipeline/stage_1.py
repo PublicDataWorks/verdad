@@ -8,7 +8,7 @@ from constants import (
 )
 
 
-class Stage1:
+class Stage1Executor:
 
     MODEL = "gemini-1.5-flash-002"
     SYSTEM_INSTRUCTION = get_system_instruction_for_stage_1()

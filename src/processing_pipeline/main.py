@@ -6,7 +6,7 @@ from prefect import flow, serve, task
 from prefect.task_runners import ConcurrentTaskRunner
 import sentry_sdk
 import boto3
-from stage_1 import Stage1
+from stage_1 import Stage1Executor
 from supabase_utils import SupabaseClient
 
 load_dotenv()
@@ -56,7 +56,7 @@ def insert_response_into_stage_1_llm_responses_table_in_supabase(response_json, 
 def process_audio_file(audio_file, local_file):
     try:
         print(f"Processing audio file: {local_file}")
-        response = Stage1.run(
+        response = Stage1Executor.run(
             gemini_key=GEMINI_KEY,
             audio_file=local_file,
             metadata={
@@ -83,17 +83,16 @@ def process_audio_file(audio_file, local_file):
         print(f"Failed to process audio file {local_file}: {e}")
         supabase_client.set_audio_file_status(audio_file["id"], "Error", str(e))
 
-@flow(name="Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
+@flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
 def initial_disinformation_detection(repeat):
     # TODO: Retry failed audio files (Error)
-    # TODO: Ensure there're no pending audio files (Processing)
 
     while True:
         audio_file = fetch_a_new_audio_file_from_supabase()
         if audio_file:
             # Immediately set the audio file to Processing, so that other workers don't pick it up
             supabase_client.set_audio_file_status(audio_file["id"], "Processing")
-            
+
             print("Found a new audio file:")
             print(json.dumps(audio_file, indent=2))
 
