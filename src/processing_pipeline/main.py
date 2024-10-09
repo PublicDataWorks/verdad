@@ -34,15 +34,12 @@ supabase_client = SupabaseClient(SUPABASE_URL, SUPABASE_KEY)
 
 @task(log_prints=True, retries=3)
 def fetch_a_new_audio_file_from_supabase():
-    audio_file = None
     response = supabase_client.get_audio_files(status="New", limit=1)
     if response:
-        audio_file = response[0]
-        print("Found a new audio file:")
-        print(json.dumps(audio_file, indent=2))
+        return response[0]
     else:
         print("No new audio files found")
-    return audio_file
+        return None
 
 
 @task(log_prints=True, retries=3)
@@ -59,8 +56,6 @@ def insert_response_into_stage_1_llm_responses_table_in_supabase(response_json, 
 def process_audio_file(audio_file, local_file):
     try:
         print(f"Processing audio file: {local_file}")
-        supabase_client.set_audio_file_status(audio_file["id"], "Processing")
-
         response = Stage1.run(
             gemini_key=GEMINI_KEY,
             audio_file=local_file,
@@ -96,6 +91,12 @@ def initial_disinformation_detection(repeat):
     while True:
         audio_file = fetch_a_new_audio_file_from_supabase()
         if audio_file:
+            # Immediately set the audio file to Processing, so that other workers don't pick it up
+            supabase_client.set_audio_file_status(audio_file["id"], "Processing")
+            
+            print("Found a new audio file:")
+            print(json.dumps(audio_file, indent=2))
+
             local_file = download_audio_file_from_s3(audio_file["file_path"])
 
             # Process the audio file
@@ -117,7 +118,7 @@ if __name__ == "__main__":
     match process_group:
         case "initial_disinformation_detection":
             deployment = initial_disinformation_detection.to_deployment(
-                name="Initial Disinformation Detection",
+                name="Stage 1",
                 concurrency_limit=10,  # TODO: Each deployment run should be separated by 5 seconds
                 parameters=dict(repeat=True),
             )
