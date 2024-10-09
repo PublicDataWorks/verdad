@@ -32,11 +32,11 @@
                 },
                 "start_time": {
                   "type": "string",
-                  "description": "The time when the snippet begins in HH:MM:SS format."
+                  "description": "The timestamp when the snippet begins, in HH:MM:SS format, relative to the start of the audio clip."
                 },
                 "end_time": {
                   "type": "string",
-                  "description": "The time when the snippet ends in HH:MM:SS format."
+                  "description": "The timestamp when the snippet ends, in HH:MM:SS format, relative to the start of the audio clip."
                 },
                 "brief_description": {
                   "type": "string",

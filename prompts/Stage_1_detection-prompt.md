@@ -15,7 +15,7 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
 3. **Identify and Flag Snippets:**
 
    - For each potential disinformation snippet, record the following:
-     - `start_time` and `end_time`: The time when the snippet begins and ends.
+     - `start_time` and `end_time`: The timestamps indicating when the snippet begins and ends, respectively. Both are formatted as HH:MM:SS and are relative to the beginning of the provided audio clip.
      - `brief_description`: Concise description of the content.
      - `disinformation_categories`: Applicable categories based on heuristics.
      - `keywords_detected`: Specific words or phrases that triggered the flag.
@@ -50,11 +50,11 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
                   },
                   "start_time": {
                       "type": "string",
-                      "description": "The time when the snippet begins in HH:MM:SS format."
+                      "description": "The timestamp when the snippet begins, in HH:MM:SS format, relative to the start of the audio clip."
                   },
                   "end_time": {
                       "type": "string",
-                      "description": "The time when the snippet ends in HH:MM:SS format."
+                      "description": "The timestamp when the snippet ends, in HH:MM:SS format, relative to the start of the audio clip."
                   },
                   "brief_description": {
                       "type": "string",
