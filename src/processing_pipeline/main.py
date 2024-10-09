@@ -15,7 +15,7 @@ if __name__ == "__main__":
         case "initial_disinformation_detection":
             deployment = initial_disinformation_detection.to_deployment(
                 name="Stage 1",
-                concurrency_limit=10,  # TODO: Each deployment run should be separated by 5 seconds
+                concurrency_limit=5,
                 parameters=dict(repeat=True),
             )
             serve(deployment)

@@ -104,8 +104,13 @@ def initial_disinformation_detection(repeat):
         if not repeat:
             break
 
-        print("Sleep for 5 seconds before the next iteration")
-        time.sleep(5)
+        if audio_file:
+            sleep_time = 2
+        else:
+            sleep_time = 30
+
+        print(f"Sleep for {sleep_time} seconds before the next iteration")
+        time.sleep(sleep_time)
 
 class Stage1Executor:
 
