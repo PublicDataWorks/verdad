@@ -40,7 +40,7 @@ RUN . /app/venv/bin/activate && \
     pip3 install --no-cache-dir -r requirements.txt
 
 # Make the bash script executable
-RUN chmod +x /app/scripts/generic_recordings.sh
+RUN chmod +x /app/scripts/generic_recording.sh
 
 # Set environment variable for headless Chrome
 ENV CHROME_BIN=/usr/bin/google-chrome-stable
@@ -50,4 +50,4 @@ ENV CHROME_PATH=/usr/bin/google-chrome-stable
 ENV DISPLAY=:99
 
 # Set the entrypoint script
-ENTRYPOINT ["/app/scripts/generic_recordings.sh"]
+ENTRYPOINT ["/app/scripts/generic_recording.sh"]

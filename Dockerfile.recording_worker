@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Make sure the entrypoint script is executable
-RUN chmod +x /app/scripts/trigger_main_script.sh
+RUN chmod +x /app/scripts/recording.sh
 
 # Set the entrypoint script
-ENTRYPOINT ["/app/scripts/trigger_main_script.sh"]
+ENTRYPOINT ["/app/scripts/recording.sh"]

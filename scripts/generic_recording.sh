@@ -5,4 +5,4 @@ set -e
 source /app/venv/bin/activate
 
 # Run the Python script
-python /app/src/generic_recordings.py
+python /app/src/generic_recording.py

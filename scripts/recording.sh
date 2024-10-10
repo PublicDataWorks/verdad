@@ -21,5 +21,5 @@ while ! check_prefect_server; do
 done
 echo "Prefect server is up and running!"
 
-# Trigger the main script
-python src/main.py
+# Trigger the recording script
+python src/recording.py
