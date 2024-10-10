@@ -5,12 +5,13 @@ import json
 import boto3
 from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
-from supabase_utils import SupabaseClient
-from constants import (
+from .supabase_utils import SupabaseClient
+from .constants import (
     get_system_instruction_for_stage_1,
     get_output_schema_for_stage_1,
     get_user_prompt_for_stage_1,
 )
+
 
 @task(log_prints=True, retries=3)
 def fetch_a_new_audio_file_from_supabase(supabase_client):
@@ -24,13 +25,19 @@ def fetch_a_new_audio_file_from_supabase(supabase_client):
 
 @task(log_prints=True, retries=3)
 def download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
+    return __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path)
+
+
+def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
     file_name = os.path.basename(file_path)
     s3_client.download_file(r2_bucket_name, file_path, file_name)
     return file_name
 
+
 @task(log_prints=True, retries=3)
 def insert_response_into_stage_1_llm_responses_table_in_supabase(supabase_client, response_json, audio_file_id):
     supabase_client.insert_stage_1_llm_response(audio_file_id, response_json)
+
 
 @task(log_prints=True)
 def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
@@ -51,7 +58,9 @@ def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
 
         # Check if the response is a valid JSON
         response_json = json.loads(response)
-        print(f"Response: ======================================\n{json.dumps(response, indent=2)}\n================================================")
+        print(
+            f"Response: ======================================\n{json.dumps(response_json, indent=2)}\n================================================"
+        )
 
         # Insert the response into the stage_1_llm_responses table in Supabase
         insert_response_into_stage_1_llm_responses_table_in_supabase(supabase_client, response_json, audio_file["id"])
@@ -63,6 +72,7 @@ def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
         print(f"Failed to process audio file {local_file}: {e}")
         supabase_client.set_audio_file_status(audio_file["id"], "Error", str(e))
 
+
 @flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
 def initial_disinformation_detection(repeat):
     # Setup S3 Client
@@ -71,20 +81,17 @@ def initial_disinformation_detection(repeat):
         "s3",
         endpoint_url=os.getenv("R2_ENDPOINT_URL"),
         aws_access_key_id=os.getenv("R2_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY")
+        aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
     )
 
     # Setup Gemini Key
     GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
 
     # Setup Supabase client
-    supabase_client = SupabaseClient(
-        supabase_url=os.getenv("SUPABASE_URL"),
-        supabase_key=os.getenv("SUPABASE_KEY")
-    )
+    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
     while True:
-        audio_file = fetch_a_new_audio_file_from_supabase(supabase_client) # TODO: Retry failed audio files (Error)
+        audio_file = fetch_a_new_audio_file_from_supabase(supabase_client)  # TODO: Retry failed audio files (Error)
         if audio_file:
             # Immediately set the audio file to Processing, so that other workers don't pick it up
             supabase_client.set_audio_file_status(audio_file["id"], "Processing")
@@ -111,6 +118,7 @@ def initial_disinformation_detection(repeat):
 
         print(f"Sleep for {sleep_time} seconds before the next iteration")
         time.sleep(sleep_time)
+
 
 class Stage1Executor:
 
