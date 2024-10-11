@@ -177,3 +177,7 @@ site
 # Windows
 **/Thumbs.db
 fly.toml
+
+# Audio files
+*.aac
+*.mp3
