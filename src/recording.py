@@ -8,7 +8,6 @@ from prefect.task_runners import ConcurrentTaskRunner
 
 from ffmpeg import FFmpeg
 from dotenv import load_dotenv
-from botocore.exceptions import NoCredentialsError
 import sentry_sdk
 
 from processing_pipeline.supabase_utils import SupabaseClient
@@ -62,17 +61,12 @@ def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels
 @task(log_prints=True, retries=3)
 def upload_to_r2_and_clean_up(url, file_path):
     object_name = os.path.basename(file_path)
-
-    try:
-        url_hash = get_url_hash(url)
-        destination_path = f"radio_{url_hash}/{object_name}"
-        s3_client.upload_file(file_path, R2_BUCKET_NAME, destination_path)
-        print(f"File {file_path} uploaded to R2 as {destination_path}")
-        os.remove(file_path)
-        return destination_path
-    except NoCredentialsError:
-        print("R2 Credentials was not set")
-        return None
+    url_hash = get_url_hash(url)
+    destination_path = f"radio_{url_hash}/{object_name}"
+    s3_client.upload_file(file_path, R2_BUCKET_NAME, destination_path)
+    print(f"File {file_path} uploaded to R2 as {destination_path}")
+    os.remove(file_path)
+    return destination_path
 
 
 @task(log_prints=True)
@@ -114,9 +108,7 @@ def audio_processing_pipeline(url, duration_seconds, audio_birate, audio_channel
 
         if output and output["file_name"]:
             uploaded_path = upload_to_r2_and_clean_up(station["url"], output["file_name"])
-
-            if uploaded_path:
-                insert_recorded_audio_file_into_database(output, uploaded_path)
+            insert_recorded_audio_file_into_database(output, uploaded_path)
 
         # Stop the flow if it should not be repeated
         if not repeat:

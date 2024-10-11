@@ -14,6 +14,17 @@ class SupabaseClient:
         )
         return response.data
 
+    def get_stage_1_llm_responses(self, status, order="created_at.asc", select="*", limit=1):
+        response = (
+            self.client.table("stage_1_llm_responses")
+            .select(select)
+            .eq("status", status)
+            .order(order)
+            .limit(limit)
+            .execute()
+        )
+        return response.data
+
     def get_audio_file_by_id(self, id, select="*"):
         response = self.client.table("audio_files").select(select).eq("id", id).execute()
         return response.data[0] if response.data else None
@@ -28,6 +39,18 @@ class SupabaseClient:
             )
         else:
             response = self.client.table("audio_files").update({"status": status}).eq("id", id).execute()
+        return response.data
+
+    def set_stage_1_llm_response_status(self, id, status, error_message=None):
+        if error_message:
+            response = (
+                self.client.table("stage_1_llm_responses")
+                .update({"status": status, "error_message": error_message})
+                .eq("id", id)
+                .execute()
+            )
+        else:
+            response = self.client.table("stage_1_llm_responses").update({"status": status}).eq("id", id).execute()
         return response.data
 
     def insert_audio_file(
@@ -61,6 +84,25 @@ class SupabaseClient:
         response = (
             self.client.table("stage_1_llm_responses")
             .insert({"audio_file": audio_file_id, "content": response_json})
+            .execute()
+        )
+        return response.data
+
+    def insert_snippet(
+        self,
+        audio_file_id,
+        file_path,
+        file_size,
+    ):
+        response = (
+            self.client.table("snippets")
+            .insert(
+                {
+                    "audio_file": audio_file_id,
+                    "file_path": file_path,
+                    "file_size": file_size,
+                }
+            )
             .execute()
         )
         return response.data

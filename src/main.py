@@ -27,8 +27,9 @@ GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
 # Setup Supabase client
 supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
-if __name__ == "__main__":
-    audio_file = supabase_client.get_audio_file_by_id("92c25040-3d6d-40e0-b6b9-eb6497cb2dcb")
+
+def process_audio_file(audio_file_id):
+    audio_file = supabase_client.get_audio_file_by_id(audio_file_id)
     print(json.dumps(audio_file, indent=2))
 
     # Download the audio file
@@ -53,3 +54,7 @@ if __name__ == "__main__":
 
     # Delete the downloaded audio file
     os.remove(local_file)
+
+
+if __name__ == "__main__":
+    process_audio_file("92c25040-3d6d-40e0-b6b9-eb6497cb2dcb")
