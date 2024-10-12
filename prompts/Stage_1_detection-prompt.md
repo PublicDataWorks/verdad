@@ -15,7 +15,8 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
 3. **Identify and Flag Snippets:**
 
    - For each potential disinformation snippet, record the following:
-     - `start_time` and `end_time`: The timestamps indicating when the snippet begins and ends, respectively. Both are formatted as HH:MM:SS and are relative to the beginning of the provided audio clip.
+     - `start_time`: The number of seconds from the start of the audio clip to the start of the snippet.
+     - `length`: The length of the snippet in seconds.
      - `brief_description`: Concise description of the content.
      - `disinformation_categories`: Applicable categories based on heuristics.
      - `keywords_detected`: Specific words or phrases that triggered the flag.
@@ -36,25 +37,20 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
           "items": {
               "type": "object",
               "required": [
-                  "snippet_id",
                   "start_time",
-                  "end_time",
+                  "length",
                   "brief_description",
                   "disinformation_categories",
                   "keywords_detected"
               ],
               "properties": {
-                  "snippet_id": {
-                      "type": "string",
-                      "description": "Unique identifier for the snippet."
-                  },
                   "start_time": {
-                      "type": "string",
-                      "description": "The timestamp when the snippet begins, in HH:MM:SS format, relative to the start of the audio clip."
+                      "type": "integer",
+                      "description": "The number of seconds from the start of the audio clip to the start of the snippet."
                   },
-                  "end_time": {
-                      "type": "string",
-                      "description": "The timestamp when the snippet ends, in HH:MM:SS format, relative to the start of the audio clip."
+                  "length": {
+                      "type": "integer",
+                      "description": "The length of the snippet in seconds."
                   },
                   "brief_description": {
                       "type": "string",
@@ -657,17 +653,15 @@ By meticulously following these instructions and applying the heuristics across 
 {
   "flagged_snippets": [
     {
-      "snippet_id": "snippet_abc123",
-      "start_time": "00:05:30",
-      "end_time": "00:06:15",
+      "start_time": 330,
+      "length": 75,
       "brief_description": "Speaker claims that vaccines contain microchips for mind control.",
       "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"],
       "keywords_detected": ["microchips en vacunas", "control mental"]
     },
     {
-      "snippet_id": "snippet_def456",
-      "start_time": "00:12:45",
-      "end_time": "00:13:30",
+      "start_time": 765,
+      "length": 45,
       "brief_description": "Discussion about illegal immigrants causing economic problems.",
       "disinformation_categories": ["Immigration Policies"],
       "keywords_detected": ["extranjeros ilegales", "problemas económicos"]

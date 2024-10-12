@@ -1,64 +1,45 @@
 {
-  "openapi": "3.0.0",
-  "info": {
-    "version": "1.0.0",
-    "title": "Disinformation Detection Output Schema"
-  },
-  "paths": {},
-  "components": {
-    "schemas": {
-      "DisinformationDetectionOutput": {
-        "type": "object",
-        "required": [
-          "flagged_snippets"
-        ],
-        "properties": {
-          "flagged_snippets": {
+    "type": "object",
+    "required": ["flagged_snippets"],
+    "properties": {
+        "flagged_snippets": {
             "type": "array",
             "items": {
-              "type": "object",
-              "required": [
-                "snippet_id",
-                "start_time",
-                "end_time",
-                "brief_description",
-                "disinformation_categories",
-                "keywords_detected"
-              ],
-              "properties": {
-                "snippet_id": {
-                  "type": "string",
-                  "description": "Unique identifier for the snippet."
-                },
-                "start_time": {
-                  "type": "string",
-                  "description": "The timestamp when the snippet begins, in HH:MM:SS format, relative to the start of the audio clip."
-                },
-                "end_time": {
-                  "type": "string",
-                  "description": "The timestamp when the snippet ends, in HH:MM:SS format, relative to the start of the audio clip."
-                },
-                "brief_description": {
-                  "type": "string",
-                  "description": "Concise description of the snippet."
-                },
-                "disinformation_categories": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "keywords_detected": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
+                "type": "object",
+                "required": [
+                    "start_time",
+                    "length",
+                    "brief_description",
+                    "disinformation_categories",
+                    "keywords_detected"
+                ],
+                "properties": {
+                    "start_time": {
+                        "type": "integer",
+                        "description": "The number of seconds from the start of the audio clip to the start of the snippet."
+                    },
+                    "length": {
+                        "type": "integer",
+                        "description": "The length of the snippet in seconds."
+                    },
+                    "brief_description": {
+                        "type": "string",
+                        "description": "Concise description of the snippet."
+                    },
+                    "disinformation_categories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "keywords_detected": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
                 }
-              }
             }
-          }
         }
-      }
     }
-  }
 }
