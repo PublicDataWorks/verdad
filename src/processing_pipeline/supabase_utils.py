@@ -84,10 +84,17 @@ class SupabaseClient:
         )
         return response.data
 
-    def insert_stage_1_llm_response(self, audio_file_id, response_json):
+    def insert_stage_1_llm_response(self, audio_file_id, flash_response, pro_response, status):
         response = (
             self.client.table("stage_1_llm_responses")
-            .insert({"audio_file": audio_file_id, "content": response_json})
+            .insert(
+                {
+                    "audio_file": audio_file_id,
+                    "flash_1.5_002": flash_response,
+                    "pro_1.5_002": pro_response,
+                    "status": status,
+                }
+            )
             .execute()
         )
         return response.data

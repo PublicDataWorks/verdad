@@ -35,16 +35,19 @@ def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
 
 
 @task(log_prints=True, retries=3)
-def insert_response_into_stage_1_llm_responses_table_in_supabase(supabase_client, response_json, audio_file_id):
-    supabase_client.insert_stage_1_llm_response(audio_file_id, response_json)
+def insert_response_into_stage_1_llm_responses_table_in_supabase(
+    supabase_client, audio_file_id, flash_response, pro_response, status
+):
+    supabase_client.insert_stage_1_llm_response(audio_file_id, flash_response, pro_response, status)
 
 
 @task(log_prints=True)
 def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
     try:
-        print(f"Processing audio file: {local_file}")
-        response = Stage1Executor.run(
+        print(f"Processing audio file: {local_file} with Gemini Flash 1.5-002")
+        flash_response = Stage1Executor.run(
             gemini_key=gemini_key,
+            model_name="gemini-1.5-flash-002",
             audio_file=local_file,
             metadata={
                 "radio_station_name": audio_file["radio_station_name"],
@@ -57,13 +60,41 @@ def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
         )
 
         # Check if the response is a valid JSON
-        response_json = json.loads(response)
+        flash_response = json.loads(flash_response)
         print(
-            f"Response: ======================================\n{json.dumps(response_json, indent=2)}\n================================================"
+            f"Gemini Flash 1.5-002 Response: ======================================\n{json.dumps(flash_response, indent=2)}\n================================================"
         )
 
-        # Insert the response into the stage_1_llm_responses table in Supabase
-        insert_response_into_stage_1_llm_responses_table_in_supabase(supabase_client, response_json, audio_file["id"])
+        flagged_snippets = flash_response["flagged_snippets"]
+        if len(flagged_snippets) == 0:
+            print("No flagged snippets found, marking the response as processed")
+            insert_response_into_stage_1_llm_responses_table_in_supabase(
+                supabase_client, audio_file["id"], flash_response, None, "Processed"
+            )
+        else:
+            print(f"Processing audio file: {local_file} with Gemini Pro 1.5-002")
+            pro_response = Stage1Executor.run(
+                gemini_key=gemini_key,
+                model_name="gemini-1.5-pro-002",
+                audio_file=local_file,
+                metadata={
+                    "radio_station_name": audio_file["radio_station_name"],
+                    "radio_station_code": audio_file["radio_station_code"],
+                    "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
+                    "recorded_at": audio_file["recorded_at"],
+                    "recording_day_of_week": audio_file["recording_day_of_week"],
+                    "time_zone": "UTC",
+                },
+            )
+
+            pro_response = json.loads(pro_response)
+            print(
+                f"Gemini Pro 1.5-002 Response: ======================================\n{json.dumps(pro_response, indent=2)}\n================================================"
+            )
+
+            insert_response_into_stage_1_llm_responses_table_in_supabase(
+                supabase_client, audio_file["id"], flash_response, pro_response, "New"
+            )
 
         print(f"Processing completed for {local_file}")
         supabase_client.set_audio_file_status(audio_file["id"], "Processed")
@@ -122,19 +153,18 @@ def initial_disinformation_detection(repeat):
 
 class Stage1Executor:
 
-    MODEL = "gemini-1.5-flash-002"
     SYSTEM_INSTRUCTION = get_system_instruction_for_stage_1()
     USER_PROMPT = get_user_prompt_for_stage_1()
     OUTPUT_SCHEMA = get_output_schema_for_stage_1()
 
     @classmethod
-    def run(cls, gemini_key, audio_file, metadata):
+    def run(cls, gemini_key, model_name, audio_file, metadata):
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name=cls.MODEL,
+            model_name=model_name,
             system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 
