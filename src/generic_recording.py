@@ -133,7 +133,10 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
             print(f"Current memory usage: {psutil.virtual_memory().percent}%")
 
         if not station.is_audio_playing():
-            station.start_playing()
+            print("Playback stopped playing for some reason. Restarting browser...")
+            station.stop(unload_modules=False)
+            time.sleep(5)  # Wait for browser to fully close
+            station.start_browser()
 
         output = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
 
