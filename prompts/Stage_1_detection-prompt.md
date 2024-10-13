@@ -17,11 +17,12 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
    - For each potential disinformation snippet, record the following:
      - `start_time`: The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip.
      - `end_time`: The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip.
+     - `offset`: The number of seconds from the start of the audio clip to the start of the snippet.
      - `brief_description`: Concise description of the content.
      - `disinformation_categories`: Applicable categories based on heuristics.
      - `keywords_detected`: Specific words or phrases that triggered the flag.
     
-   - **Ensure that `start_time` and `end_time` are accurate and reflect the true timing of the snippets within the audio. Double-check these values to avoid discrepancies.**
+   - **Ensure that `start_time`, `end_time`, and `offset` are accurate and reflect the true timing of the snippets within the audio. Double-check these values to avoid discrepancies.**
 
 4. **Assemble Structured Output:**
 
@@ -41,6 +42,7 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
               "required": [
                   "start_time",
                   "end_time",
+                  "offset",
                   "brief_description",
                   "disinformation_categories",
                   "keywords_detected"
@@ -53,6 +55,10 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
                   "end_time": {
                       "type": "string",
                       "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
+                  },
+                  "offset": {
+                      "type": "integer",
+                      "description": "The number of seconds from the start of the audio clip to the start of the snippet."
                   },
                   "brief_description": {
                       "type": "string",
@@ -645,7 +651,7 @@ Disinformation involving extreme portrayals of political groups or figures, attr
 
 ## Final Notes
 
-By meticulously following these instructions and applying the heuristics across all disinformation categories, you will effectively identify potential disinformation in the audio segments. Your culturally sensitive approach will ensure that the analysis is relevant and respectful to the Spanish and Arabic-speaking immigrant communities in the USA. Please ensure that the `start_time` and `end_time` fields are as accurate as possible. This accuracy is crucial for the subsequent processing stages in the pipeline.
+By meticulously following these instructions and applying the heuristics across all disinformation categories, you will effectively identify potential disinformation in the audio segments. Your culturally sensitive approach will ensure that the analysis is relevant and respectful to the Spanish and Arabic-speaking immigrant communities in the USA. Please ensure that the `start_time`, `end_time` and `offset` fields are as accurate as possible. This accuracy is crucial for the subsequent processing stages in the pipeline.
 
 ---
 
@@ -657,6 +663,7 @@ By meticulously following these instructions and applying the heuristics across 
     {
       "start_time": "05:30",
       "end_time": "07:15",
+      "offset": 330,
       "brief_description": "Speaker claims that vaccines contain microchips for mind control.",
       "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"],
       "keywords_detected": ["microchips en vacunas", "control mental"]
@@ -664,6 +671,7 @@ By meticulously following these instructions and applying the heuristics across 
     {
       "start_time": "07:15",
       "end_time": "08:00",
+      "offset": 435,
       "brief_description": "Discussion about illegal immigrants causing economic problems.",
       "disinformation_categories": ["Immigration Policies"],
       "keywords_detected": ["extranjeros ilegales", "problemas económicos"]
@@ -680,4 +688,4 @@ This example illustrates how to structure the output for the flagged snippets, i
 
 # Instructions
 
-Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. **Ensure that the `start_time` and `end_time` fields are determined with high accuracy**, as these values are critical for further processing in the pipeline.
+Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. **Ensure that the `start_time`, `end_time` and `offset` fields are determined with high accuracy**, as these values are critical for further processing in the pipeline.
