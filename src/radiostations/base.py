@@ -101,6 +101,7 @@ class RadioStation:
         print("PulseAudio sink inputs:")
         self.execute_command(["pactl", "list", "sink-inputs"])
 
+    @task(log_prints=True, retries=2, retry_delay_seconds=5)
     def start_playing(self):
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, self.play_button_selector))
