@@ -8,19 +8,19 @@
                 "type": "object",
                 "required": [
                     "start_time",
-                    "length",
+                    "end_time",
                     "brief_description",
                     "disinformation_categories",
                     "keywords_detected"
                 ],
                 "properties": {
                     "start_time": {
-                        "type": "integer",
-                        "description": "The number of seconds from the start of the audio clip to the start of the snippet."
+                        "type": "string",
+                        "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
                     },
-                    "length": {
-                        "type": "integer",
-                        "description": "The length of the snippet in seconds."
+                    "end_time": {
+                        "type": "string",
+                        "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
                     },
                     "brief_description": {
                         "type": "string",

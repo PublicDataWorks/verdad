@@ -1,4 +1,4 @@
-Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. Ensure that your output adheres to the JSON schema provided.
+Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. **Accurately determine the `start_time` and `end_time` for each flagged snippet**, as these values are critical for further processing in the pipeline. Ensure that your output adheres strictly to the provided JSON schema.
 
 # Overview
 
@@ -15,11 +15,13 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
 3. **Identify and Flag Snippets:**
 
    - For each potential disinformation snippet, record the following:
-     - `start_time`: The number of seconds from the start of the audio clip to the start of the snippet.
-     - `length`: The length of the snippet in seconds.
+     - `start_time`: The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip.
+     - `end_time`: The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip.
      - `brief_description`: Concise description of the content.
      - `disinformation_categories`: Applicable categories based on heuristics.
      - `keywords_detected`: Specific words or phrases that triggered the flag.
+    
+   - **Ensure that `start_time` and `end_time` are accurate and reflect the true timing of the snippets within the audio. Double-check these values to avoid discrepancies.**
 
 4. **Assemble Structured Output:**
 
@@ -38,19 +40,19 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
               "type": "object",
               "required": [
                   "start_time",
-                  "length",
+                  "end_time",
                   "brief_description",
                   "disinformation_categories",
                   "keywords_detected"
               ],
               "properties": {
                   "start_time": {
-                      "type": "integer",
-                      "description": "The number of seconds from the start of the audio clip to the start of the snippet."
+                      "type": "string",
+                      "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
                   },
-                  "length": {
-                      "type": "integer",
-                      "description": "The length of the snippet in seconds."
+                  "end_time": {
+                      "type": "string",
+                      "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
                   },
                   "brief_description": {
                       "type": "string",
@@ -643,7 +645,7 @@ Disinformation involving extreme portrayals of political groups or figures, attr
 
 ## Final Notes
 
-By meticulously following these instructions and applying the heuristics across all disinformation categories, you will effectively identify potential disinformation in the audio segments. Your culturally sensitive approach will ensure that the analysis is relevant and respectful to the Spanish and Arabic-speaking immigrant communities in the USA.
+By meticulously following these instructions and applying the heuristics across all disinformation categories, you will effectively identify potential disinformation in the audio segments. Your culturally sensitive approach will ensure that the analysis is relevant and respectful to the Spanish and Arabic-speaking immigrant communities in the USA. Please ensure that the `start_time` and `end_time` fields are as accurate as possible. This accuracy is crucial for the subsequent processing stages in the pipeline.
 
 ---
 
@@ -653,15 +655,15 @@ By meticulously following these instructions and applying the heuristics across 
 {
   "flagged_snippets": [
     {
-      "start_time": 330,
-      "length": 75,
+      "start_time": "05:30",
+      "end_time": "07:15",
       "brief_description": "Speaker claims that vaccines contain microchips for mind control.",
       "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"],
       "keywords_detected": ["microchips en vacunas", "control mental"]
     },
     {
-      "start_time": 765,
-      "length": 45,
+      "start_time": "07:15",
+      "end_time": "08:00",
       "brief_description": "Discussion about illegal immigrants causing economic problems.",
       "disinformation_categories": ["Immigration Policies"],
       "keywords_detected": ["extranjeros ilegales", "problemas económicos"]
@@ -678,4 +680,4 @@ This example illustrates how to structure the output for the flagged snippets, i
 
 # Instructions
 
-Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. Ensure that your output adheres to the JSON schema provided.
+Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. **Ensure that the `start_time` and `end_time` fields are determined with high accuracy**, as these values are critical for further processing in the pipeline.

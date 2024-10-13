@@ -61,9 +61,7 @@ def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
 
         # Check if the response is a valid JSON
         flash_response = json.loads(flash_response)
-        print(
-            f"Gemini Flash 1.5-002 Response: ======================================\n{json.dumps(flash_response, indent=2)}\n================================================"
-        )
+        print(f"Gemini Flash 1.5-002 Response:\n{json.dumps(flash_response, indent=2)}\n")
 
         flagged_snippets = flash_response["flagged_snippets"]
         if len(flagged_snippets) == 0:
@@ -88,9 +86,7 @@ def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
             )
 
             pro_response = json.loads(pro_response)
-            print(
-                f"Gemini Pro 1.5-002 Response: ======================================\n{json.dumps(pro_response, indent=2)}\n================================================"
-            )
+            print(f"Gemini Pro 1.5-002 Response:\n{json.dumps(pro_response, indent=2)}\n")
 
             insert_response_into_stage_1_llm_responses_table_in_supabase(
                 supabase_client, audio_file["id"], flash_response, pro_response, "New"
