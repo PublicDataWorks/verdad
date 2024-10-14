@@ -7,6 +7,7 @@ WORKDIR /app
 # Set environment variables
 ENV PREFECT_SERVER_API_HOST=0.0.0.0
 ENV PREFECT_SERVER_API_PORT=4200
+ENV PREFECT_API_URL="https://prefect.fly.dev/api"
 
 # Copy the start_prefect_server.sh script into the container at /app
 COPY scripts/start_prefect_server.sh /app

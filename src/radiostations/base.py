@@ -73,7 +73,8 @@ class RadioStation:
             print(f"Error setting up virtual audio: {e}")
             raise e
 
-    @task(log_prints=True)
+    # TODO: Before retry, must kill browser process
+    @task(log_prints=True, retries=10)
     def start_browser(self):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
@@ -92,7 +93,13 @@ class RadioStation:
         print(f"Launching url {self.url}")
         self.driver.get(self.url)
 
-        self.start_playing()
+        try:
+            self.start_playing()
+        except Exception as e:
+            print(f"{e}. Restarting browser and trying again...")
+            self.driver.quit()
+            self.driver = None
+            raise e
 
         print("PulseAudio sinks:")
         self.execute_command(["pactl", "list", "short", "sinks"])
