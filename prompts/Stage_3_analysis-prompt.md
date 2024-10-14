@@ -1,6 +1,6 @@
 # **Task Overview**
 
-You are provided with audio clips containing potential disinformation snippets that have been flagged by the Stage 1 LLM. Your tasks are:
+You are provided with an audio clip containing a potential disinformation snippet that has been flagged by the Stage 1 LLM. Your tasks are:
 
 1. **Transcribe** the audio in the original language, capturing all spoken words, including colloquialisms, idioms, and fillers.
 2. **Translate** the transcription into English, preserving meaning, context, and cultural nuances.
@@ -31,7 +31,7 @@ For each snippet, perform the following steps:
 
 ##### **A. Review Snippet Metadata**
 
-- Utilize the metadata provided (snippet_id, timestamps, categories, keywords, etc.).
+- Utilize the metadata provided (disinformation categories, keywords, etc.) from Stage 1 of the analysis.
 - Familiarize yourself with the context in which the snippet was flagged.
 
 ##### **B. Categorization**
@@ -82,7 +82,6 @@ For each snippet, perform the following steps:
 
 - **Context:**
   - Include up to 100 words preceding and following the snippet if available.
-  - Discuss how the snippet fits within the broader conversation.
 
 ##### **H. Confidence Scores**
 
@@ -115,181 +114,126 @@ Below is the OpenAPI JSON schema defining the expected output format. Ensure you
 
 ```json
 {
-  "openapi": "3.0.0",
-  "info": {
-    "version": "1.0.0",
-    "title": "Stage 2 Disinformation Analysis Output Schema"
-  },
-  "paths": {},
-  "components": {
-    "schemas": {
-      "DisinformationAnalysisOutput": {
-        "type": "object",
-        "required": [
-          "snippet_id",
-          "metadata",
-          "transcription",
-          "translation",
-          "title",
-          "summary",
-          "explanation",
-          "disinformation_categories",
-          "language_details",
-          "context",
-          "confidence_scores",
-          "emotional_tone"
-        ],
-        "properties": {
-          "snippet_id": {
+    "type": "object",
+    "required": [
+        "start_time",
+        "end_time",
+        "seconds_count_before_snippet",
+        "transcription",
+        "translation",
+        "title",
+        "summary",
+        "explanation",
+        "disinformation_categories",
+        "keywords_detected",
+        "language",
+        "context",
+        "confidence_scores",
+        "emotional_tone"
+    ],
+    "properties": {
+        "start_time": {
             "type": "string",
-            "description": "Unique identifier for the snippet."
-          },
-          "metadata": {
-            "type": "object",
-            "required": [
-              "radio_station_name",
-              "radio_station_code",
-              "location",
-              "broadcast_date",
-              "broadcast_time",
-              "day_of_week",
-              "local_time_zone",
-              "start_time",
-              "end_time"
-            ],
-            "properties": {
-              "radio_station_name": { "type": "string" },
-              "radio_station_code": { "type": "string" },
-              "location": {
-                "type": "object",
-                "required": ["state", "city"],
-                "properties": {
-                  "state": { "type": "string" },
-                  "city": { "type": "string" }
-                }
-              },
-              "broadcast_date": { "type": "string", "format": "date" },
-              "broadcast_time": {
-                "type": "string",
-                "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$"
-              },
-              "day_of_week": { "type": "string" },
-              "local_time_zone": { "type": "string" },
-              "start_time": {
-                "type": "string",
-                "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
-                "description": "Timestamp where the snippet begins."
-              },
-              "end_time": {
-                "type": "string",
-                "pattern": "^([01]?\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
-                "description": "Timestamp where the snippet ends."
-              }
-            }
-          },
-          "transcription": {
+            "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
+        },
+        "end_time": {
+            "type": "string",
+            "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
+        },
+        "seconds_count_before_snippet": {
+            "type": "integer",
+            "description": "The cumulative number of seconds from the beginning of the audio clip up to the start of the snippet."
+        },
+        "transcription": {
             "type": "string",
             "description": "Transcription of the snippet in the original language."
-          },
-          "translation": {
+        },
+        "translation": {
             "type": "string",
             "description": "Translation of the transcription into English."
-          },
-          "title": {
+        },
+        "title": {
             "type": "string",
             "description": "Descriptive title of the snippet."
-          },
-          "summary": {
+        },
+        "summary": {
             "type": "string",
             "description": "Objective summary of the snippet."
-          },
-          "explanation": {
+        },
+        "explanation": {
             "type": "string",
             "description": "Detailed explanation of why the snippet constitutes disinformation."
-          },
-          "disinformation_categories": {
+        },
+        "disinformation_categories": {
             "type": "array",
-            "items": { "type": "string" }
-          },
-          "language_details": {
+            "items": { "type": "string" },
+            "description": "Disinformation categories that the snippet belongs to, based on the heuristics provided."
+        },
+        "keywords_detected": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Specific words or phrases that triggered the flag."
+        },
+        "language": {
             "type": "object",
             "required": ["primary_language", "dialect", "register"],
             "properties": {
-              "primary_language": { "type": "string" },
-              "dialect": { "type": "string" },
-              "register": { "type": "string" }
+                "primary_language": { "type": "string" },
+                "dialect": { "type": "string" },
+                "register": { "type": "string" }
             }
-          },
-          "context": {
+        },
+        "context": {
             "type": "object",
             "required": ["before", "after"],
             "properties": {
-              "before": {
-                "type": "string",
-                "description": "Up to 100 words before the snippet."
-              },
-              "after": {
-                "type": "string",
-                "description": "Up to 100 words after the snippet."
-              }
+                "before": {
+                    "type": "string",
+                    "description": "Up to 100 words before the snippet."
+                },
+                "after": {
+                    "type": "string",
+                    "description": "Up to 100 words after the snippet."
+                }
             }
-          },
-          "confidence_scores": {
+        },
+        "confidence_scores": {
             "type": "object",
             "required": ["overall", "categories"],
             "properties": {
-              "overall": { "type": "integer", "minimum": 0, "maximum": 100 },
-              "categories": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "maximum": 100
+                "overall": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Overall confidence score of the analysis, ranging from 0 to 100."
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["category", "score"],
+                        "properties": {
+                            "category": { "type": "string" },
+                            "score": { "type": "integer", "minimum": 0, "maximum": 100 }
+                        },
+                        "description": "Confidence score for each category, ranging from 0 to 100."
+                    }
                 }
-              }
             }
-          },
-          "emotional_tone": {
+        },
+        "emotional_tone": {
             "type": "array",
             "items": {
-              "type": "object",
-              "required": ["emotion", "intensity", "explanation"],
-              "properties": {
-                "emotion": { "type": "string" },
-                "intensity": { "type": "integer", "minimum": 0, "maximum": 100 },
-                "explanation": { "type": "string" }
-              }
+                "type": "object",
+                "required": ["emotion", "intensity", "explanation"],
+                "properties": {
+                    "emotion": { "type": "string" },
+                    "intensity": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "explanation": { "type": "string" }
+                }
             }
-          }
         }
-      }
     }
-  }
-}
-```
-
----
-
-### **Metadata**
-
-Please use the following metadata for the snippet:
-
-```json
-{
-  "metadata": {
-    "radio_station_name": "<Radio Station Name>",
-    "radio_station_code": "<Station Code>",
-    "location": {
-      "state": "<State>",
-      "city": "<City>"
-    },
-    "broadcast_date": "<YYYY-MM-DD>",
-    "broadcast_time": "<HH:MM:SS>",
-    "day_of_week": "<Day>",
-    "local_time_zone": "<Time Zone>",
-    "start_time": "<HH:MM:SS>",
-    "end_time": "<HH:MM:SS>"
-  }
 }
 ```
 
@@ -957,28 +901,17 @@ Below is an example of the expected output, conforming to the OpenAPI JSON schem
 
 ```json
 {
-  "snippet_id": "123e4567-e89b-12d3-a456-426614174000",
-  "metadata": {
-    "radio_station_name": "La Voz Inmigrante",
-    "radio_station_code": "LVI",
-    "location": {
-      "state": "California",
-      "city": "Los Angeles"
-    },
-    "broadcast_date": "2023-11-15",
-    "broadcast_time": "08:30:00",
-    "day_of_week": "Wednesday",
-    "local_time_zone": "PST",
-    "start_time": "00:15:30",
-    "end_time": "00:16:10"
-  },
+  "start_time": "02:30",
+  "end_time": "03:10",
+  "seconds_count_before_snippet": 150,
   "transcription": "Dicen que el gobierno quiere controlar nuestras mentes con las vacunas. Es por eso que están empujando tanto la vacunación obligatoria.",
   "translation": "They say the government wants to control our minds with the vaccines. That's why they are pushing mandatory vaccination so hard.",
   "title": "Government Mind Control via Vaccines",
   "summary": "The speaker suggests that the government intends to control people's minds through vaccines, which is why there is a strong push for mandatory vaccination.",
   "explanation": "This snippet falls under the 'COVID-19 and Vaccination' disinformation category. It propagates the unfounded conspiracy theory that vaccines are a means of mind control by the government. Such claims can increase vaccine hesitancy and undermine public health efforts. The emotional tone conveys fear and distrust towards governmental initiatives.",
   "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"],
-  "language_details": {
+  "keywords_detected": ["vaccines", "mandatory vaccination", "government wants to control our minds"],
+  "language": {
     "primary_language": "Spanish",
     "dialect": "Mexican Spanish",
     "register": "Informal"
@@ -989,10 +922,16 @@ Below is an example of the expected output, conforming to the OpenAPI JSON schem
   },
   "confidence_scores": {
     "overall": 95,
-    "categories": {
-      "COVID-19 and Vaccination": 98,
-      "Conspiracy Theories": 90
-    }
+    "categories": [
+      {
+        "category": "COVID-19 and Vaccination",
+        "score": 98
+      },
+      {
+        "category": "Conspiracy Theories",
+        "score": 90
+      }
+    ]
   },
   "emotional_tone": [
     {
@@ -1017,9 +956,3 @@ By following these instructions and listening closely using the detailed heurist
 
 # Instructions
 Please proceed to listen to the audio file provided and analyze the content based on the detailed heuristics and guidelines provided. Your task is to fill out the JSON template with the relevant information based on your analysis of the audio content.
-You are provided with audio clips containing potential disinformation snippets that have been flagged by the Stage 1 LLM. Your tasks are:
-
-1. **Transcribe** the audio in the original language, capturing all spoken words, including colloquialisms, idioms, and fillers.
-2. **Translate** the transcription into English, preserving meaning, context, and cultural nuances.
-3. **Analyze** the content for disinformation, using detailed heuristics covering all disinformation categories.
-4. **Provide** detailed annotations and assemble structured output conforming to the provided JSON schema.

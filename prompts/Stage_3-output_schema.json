@@ -1,0 +1,122 @@
+{
+    "type": "object",
+    "required": [
+        "start_time",
+        "end_time",
+        "seconds_count_before_snippet",
+        "transcription",
+        "translation",
+        "title",
+        "summary",
+        "explanation",
+        "disinformation_categories",
+        "keywords_detected",
+        "language",
+        "context",
+        "confidence_scores",
+        "emotional_tone"
+    ],
+    "properties": {
+        "start_time": {
+            "type": "string",
+            "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
+        },
+        "end_time": {
+            "type": "string",
+            "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
+        },
+        "seconds_count_before_snippet": {
+            "type": "integer",
+            "description": "The cumulative number of seconds from the beginning of the audio clip up to the start of the snippet."
+        },
+        "transcription": {
+            "type": "string",
+            "description": "Transcription of the snippet in the original language."
+        },
+        "translation": {
+            "type": "string",
+            "description": "Translation of the transcription into English."
+        },
+        "title": {
+            "type": "string",
+            "description": "Descriptive title of the snippet."
+        },
+        "summary": {
+            "type": "string",
+            "description": "Objective summary of the snippet."
+        },
+        "explanation": {
+            "type": "string",
+            "description": "Detailed explanation of why the snippet constitutes disinformation."
+        },
+        "disinformation_categories": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Disinformation categories that the snippet belongs to, based on the heuristics provided."
+        },
+        "keywords_detected": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Specific words or phrases that triggered the flag."
+        },
+        "language": {
+            "type": "object",
+            "required": ["primary_language", "dialect", "register"],
+            "properties": {
+                "primary_language": { "type": "string" },
+                "dialect": { "type": "string" },
+                "register": { "type": "string" }
+            }
+        },
+        "context": {
+            "type": "object",
+            "required": ["before", "after"],
+            "properties": {
+                "before": {
+                    "type": "string",
+                    "description": "Up to 100 words before the snippet."
+                },
+                "after": {
+                    "type": "string",
+                    "description": "Up to 100 words after the snippet."
+                }
+            }
+        },
+        "confidence_scores": {
+            "type": "object",
+            "required": ["overall", "categories"],
+            "properties": {
+                "overall": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Overall confidence score of the analysis, ranging from 0 to 100."
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["category", "score"],
+                        "properties": {
+                            "category": { "type": "string" },
+                            "score": { "type": "integer", "minimum": 0, "maximum": 100 }
+                        },
+                        "description": "Confidence score for each category, ranging from 0 to 100."
+                    }
+                }
+            }
+        },
+        "emotional_tone": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["emotion", "intensity", "explanation"],
+                "properties": {
+                    "emotion": { "type": "string" },
+                    "intensity": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "explanation": { "type": "string" }
+                }
+            }
+        }
+    }
+}
