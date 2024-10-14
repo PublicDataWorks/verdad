@@ -9,7 +9,8 @@
                 "required": [
                     "start_time",
                     "end_time",
-                    "offset",
+                    "seconds_count_before_snippet",
+                    "token_count_before_snippet",
                     "brief_description",
                     "disinformation_categories",
                     "keywords_detected"
@@ -23,9 +24,13 @@
                         "type": "string",
                         "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
                     },
-                    "offset": {
+                    "seconds_count_before_snippet": {
                         "type": "integer",
-                        "description": "The number of seconds from the start of the audio clip to the start of the snippet."
+                        "description": "The cumulative number of seconds from the beginning of the audio clip up to the start of the snippet."
+                    },
+                    "token_count_before_snippet": {
+                        "type": "integer",
+                        "description": "The cumulative number of language model (LLM) tokens processed from the beginning of the audio clip up to the start of the snippet."
                     },
                     "brief_description": {
                         "type": "string",
