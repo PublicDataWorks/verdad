@@ -117,6 +117,7 @@ class SupabaseClient:
 
     def insert_snippet(
         self,
+        uuid,
         audio_file_id,
         stage_1_llm_response_id,
         file_path,
@@ -126,6 +127,7 @@ class SupabaseClient:
             self.client.table("snippets")
             .insert(
                 {
+                    "id": uuid,
                     "audio_file": audio_file_id,
                     "stage_1_llm_response": stage_1_llm_response_id,
                     "file_path": file_path,
