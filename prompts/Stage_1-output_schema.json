@@ -7,15 +7,19 @@
             "items": {
                 "type": "object",
                 "required": [
+                    "uuid",
                     "start_time",
                     "end_time",
                     "seconds_count_before_snippet",
-                    "token_count_before_snippet",
                     "brief_description",
                     "disinformation_categories",
                     "keywords_detected"
                 ],
                 "properties": {
+                    "uuid": {
+                        "type": "string",
+                        "description": "Unique identifier for the snippet."
+                    },
                     "start_time": {
                         "type": "string",
                         "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
@@ -27,10 +31,6 @@
                     "seconds_count_before_snippet": {
                         "type": "integer",
                         "description": "The cumulative number of seconds from the beginning of the audio clip up to the start of the snippet."
-                    },
-                    "token_count_before_snippet": {
-                        "type": "integer",
-                        "description": "The cumulative number of language model (LLM) tokens processed from the beginning of the audio clip up to the start of the snippet."
                     },
                     "brief_description": {
                         "type": "string",
