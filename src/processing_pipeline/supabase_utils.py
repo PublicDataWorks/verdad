@@ -138,6 +138,18 @@ class SupabaseClient:
         )
         return response.data
 
+    def ensure_time_format(self, time_str):
+        # Ensure time_str is in the format "HH:MM:SS", in other words, it should have 2 colons
+        match time_str.count(":"):
+            case 0:
+                return "00:00:" + time_str
+            case 1:
+                return "00:" + time_str
+            case 2:
+                return time_str
+            case _:
+                raise ValueError("Invalid time format. Expected format: 'HH:MM:SS'")
+
     def update_snippet(
         self,
         id,
@@ -156,9 +168,8 @@ class SupabaseClient:
         context,
         status,
     ):
-        # Ensure start_time and end_time are in the format "HH:MM:SS", in other words, it should have 2 colons
-        if start_time.count(":") != 2 or end_time.count(":") != 2:
-            raise ValueError("Invalid time format. Expected format: 'HH:MM:SS'")
+        start_time = self.ensure_time_format(start_time)
+        end_time = self.ensure_time_format(end_time)
 
         response = (
             self.client.table("snippets")
@@ -204,6 +215,7 @@ class SupabaseClient:
                     "emotional_tone": None,
                     "context": None,
                     "status": "New",
+                    "error_message": None,
                 }
             )
             .eq("id", id)
