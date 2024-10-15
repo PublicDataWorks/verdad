@@ -88,8 +88,6 @@
             "properties": {
                 "overall": {
                     "type": "integer",
-                    "minimum": 0,
-                    "maximum": 100,
                     "description": "Overall confidence score of the analysis, ranging from 0 to 100."
                 },
                 "categories": {
@@ -99,7 +97,7 @@
                         "required": ["category", "score"],
                         "properties": {
                             "category": { "type": "string" },
-                            "score": { "type": "integer", "minimum": 0, "maximum": 100 }
+                            "score": { "type": "integer" }
                         },
                         "description": "Confidence score for each category, ranging from 0 to 100."
                     }
@@ -113,7 +111,10 @@
                 "required": ["emotion", "intensity", "explanation"],
                 "properties": {
                     "emotion": { "type": "string" },
-                    "intensity": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "intensity": {
+                        "type": "integer",
+                        "description": "Intensity of the emotion, ranging from 0 to 100."
+                    },
                     "explanation": { "type": "string" }
                 }
             }

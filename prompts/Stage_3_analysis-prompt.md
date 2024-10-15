@@ -203,8 +203,6 @@ Below is the OpenAPI JSON schema defining the expected output format. Ensure you
             "properties": {
                 "overall": {
                     "type": "integer",
-                    "minimum": 0,
-                    "maximum": 100,
                     "description": "Overall confidence score of the analysis, ranging from 0 to 100."
                 },
                 "categories": {
@@ -214,7 +212,7 @@ Below is the OpenAPI JSON schema defining the expected output format. Ensure you
                         "required": ["category", "score"],
                         "properties": {
                             "category": { "type": "string" },
-                            "score": { "type": "integer", "minimum": 0, "maximum": 100 }
+                            "score": { "type": "integer" }
                         },
                         "description": "Confidence score for each category, ranging from 0 to 100."
                     }
@@ -228,7 +226,10 @@ Below is the OpenAPI JSON schema defining the expected output format. Ensure you
                 "required": ["emotion", "intensity", "explanation"],
                 "properties": {
                     "emotion": { "type": "string" },
-                    "intensity": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    "intensity": {
+                        "type": "integer",
+                        "description": "Intensity of the emotion, ranging from 0 to 100."
+                    },
                     "explanation": { "type": "string" }
                 }
             }
