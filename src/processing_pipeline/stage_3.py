@@ -90,6 +90,8 @@ def get_metadata(snippet):
     audio_file["time_zone"] = "UTC"
     metadata["additional_info"] = audio_file
 
+    del metadata["start_time"]
+    del metadata["end_time"]
     del metadata["seconds_count_before_snippet"]
     return metadata
 
