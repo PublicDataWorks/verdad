@@ -97,15 +97,17 @@ def extract_snippet_clip(input_file, output_file, formatted_start_time, formatte
 
 
 @task(log_prints=True, retries=3)
-def insert_new_snippet_to_snippets_table_in_supabase(supabase_client, audio_file_id, file_path, file_size):
-    supabase_client.insert_snippet(audio_file_id, file_path, file_size)
+def insert_new_snippet_to_snippets_table_in_supabase(
+    supabase_client, audio_file_id, stage_1_llm_response_id, file_path, file_size
+):
+    supabase_client.insert_snippet(audio_file_id, stage_1_llm_response_id, file_path, file_size)
 
 
 @task(log_prints=True)
 def process_llm_response(supabase_client, llm_response, local_file, s3_client, r2_bucket_name, context_seconds):
     try:
         print(f"Processing llm response {llm_response['id']}")
-        flagged_snippets = llm_response["content"]["flagged_snippets"]
+        flagged_snippets = llm_response["pro_1.5_002"]["flagged_snippets"]
         for snippet in flagged_snippets:
             start_time = snippet["start_time"]
             end_time = snippet["end_time"]
@@ -118,7 +120,7 @@ def process_llm_response(supabase_client, llm_response, local_file, s3_client, r
 
             uploaded_path = upload_to_r2_and_clean_up(s3_client, r2_bucket_name, folder_name, output_file)
             insert_new_snippet_to_snippets_table_in_supabase(
-                supabase_client, llm_response["audio_file"]["id"], uploaded_path, file_size
+                supabase_client, llm_response["audio_file"]["id"], llm_response["id"], uploaded_path, file_size
             )
 
         print(f"Processing completed for llm response {llm_response['id']}")
