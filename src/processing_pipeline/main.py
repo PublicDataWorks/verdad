@@ -4,6 +4,7 @@ from prefect import serve
 import sentry_sdk
 from stage_1 import initial_disinformation_detection
 from stage_2 import audio_clipping
+from stage_3 import in_depth_analysis
 load_dotenv()
 
 # Setup Sentry
@@ -27,6 +28,11 @@ if __name__ == "__main__":
             )
             serve(deployment)
         case "in_depth_analysis":
-            pass
+            deployment = in_depth_analysis.to_deployment(
+                name="Stage 3: In-Depth Analysis",
+                concurrency_limit=5,
+                parameters=dict(repeat=True),
+            )
+            serve(deployment)
         case _:
             raise ValueError(f"Invalid process group: {process_group}")

@@ -16,7 +16,11 @@ from constants import (
 
 @task(log_prints=True, retries=3)
 def fetch_a_new_snippet_from_supabase(supabase_client):
-    response = supabase_client.get_snippets(status="New", limit=1)
+    response = supabase_client.get_snippets(
+        status="New",
+        limit=1,
+        select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("pro_1.5_002")',
+    )
     if response:
         return response[0]
     else:
@@ -74,55 +78,55 @@ def update_snippet_in_supabase(
 
 
 @task(log_prints=True)
+def get_metadata(snippet):
+    snippet_uuid = snippet["id"]
+    flagged_snippets = snippet["stage_1_llm_response"]["pro_1.5_002"]["flagged_snippets"]
+    metadata = {}
+    for flagged_snippet in flagged_snippets:
+        if flagged_snippet["uuid"] == snippet_uuid:
+            metadata = flagged_snippet
+
+    audio_file = snippet["audio_file"]
+    audio_file["time_zone"] = "UTC"
+    metadata["additional_info"] = audio_file
+
+    del metadata["seconds_count_before_snippet"]
+    return metadata
+
+
+@task(log_prints=True)
 def process_snippet(supabase_client, snippet, local_file, gemini_key):
     try:
         print(f"Processing snippet: {local_file} with Gemini Pro 1.5-002")
-        # flash_response = Stage3Executor.run(
-        #     gemini_key=gemini_key,
-        #     model_name="gemini-1.5-pro-002",
-        #     audio_file=local_file,
-        #     metadata={
-        #         "radio_station_name": audio_file["radio_station_name"],
-        #         "radio_station_code": audio_file["radio_station_code"],
-        #         "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-        #         "recorded_at": audio_file["recorded_at"],
-        #         "recording_day_of_week": audio_file["recording_day_of_week"],
-        #         "time_zone": "UTC",
-        #     },
-        # )
 
-        # # Check if the response is a valid JSON
-        # flash_response = json.loads(flash_response)
-        # print(f"Gemini Flash 1.5-002 Response:\n{json.dumps(flash_response, indent=2)}\n")
+        metadata = get_metadata(snippet)
+        print(f"Metadata:\n{json.dumps(metadata, indent=2)}")
 
-        # flagged_snippets = flash_response["flagged_snippets"]
-        # if len(flagged_snippets) == 0:
-        #     print("No flagged snippets found, marking the response as processed")
-        #     insert_response_into_stage_1_llm_responses_table_in_supabase(
-        #         supabase_client, audio_file["id"], flash_response, None, "Processed"
-        #     )
-        # else:
-        #     print(f"Processing audio file: {local_file} with Gemini Pro 1.5-002")
-        #     pro_response = Stage1Executor.run(
-        #         gemini_key=gemini_key,
-        #         model_name="gemini-1.5-pro-002",
-        #         audio_file=local_file,
-        #         metadata={
-        #             "radio_station_name": audio_file["radio_station_name"],
-        #             "radio_station_code": audio_file["radio_station_code"],
-        #             "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-        #             "recorded_at": audio_file["recorded_at"],
-        #             "recording_day_of_week": audio_file["recording_day_of_week"],
-        #             "time_zone": "UTC",
-        #         },
-        #     )
+        pro_response = Stage3Executor.run(
+            gemini_key=gemini_key, model_name="gemini-1.5-pro-002", audio_file=local_file, metadata=metadata
+        )
 
-        #     pro_response = json.loads(pro_response)
-        #     print(f"Gemini Pro 1.5-002 Response:\n{json.dumps(pro_response, indent=2)}\n")
+        pro_response = json.loads(pro_response)
+        print(f"Gemini Pro 1.5-002 Response:\n{json.dumps(pro_response, indent=2)}\n")
 
-        #     insert_response_into_stage_1_llm_responses_table_in_supabase(
-        #         supabase_client, audio_file["id"], flash_response, pro_response, "New"
-        #     )
+        update_snippet_in_supabase(
+            supabase_client=supabase_client,
+            snippet_id=snippet["id"],
+            start_time=pro_response["start_time"],
+            end_time=pro_response["end_time"],
+            transcription=pro_response["transcription"],
+            translation=pro_response["translation"],
+            title=pro_response["title"],
+            summary=pro_response["summary"],
+            explanation=pro_response["explanation"],
+            disinformation_categories=pro_response["disinformation_categories"],
+            keywords_detected=pro_response["keywords_detected"],
+            language=pro_response["language"],
+            confidence_scores=pro_response["confidence_scores"],
+            emotional_tone=pro_response["emotional_tone"],
+            context=pro_response["context"],
+            status="Processed",
+        )
 
         print(f"Processing completed for {local_file}")
 
