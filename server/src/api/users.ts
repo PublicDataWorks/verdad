@@ -30,26 +30,27 @@ export const getUsersByEmails = async (req: Request, res: Response, next: NextFu
             return;
         }
 
-        const { emails } = req.body;
+        const { userIds } = req.body;
 
-        if (!Array.isArray(emails) || emails.length === 0) {
-            res.status(400).json({ error: 'Invalid or empty email array' });
+        if (!Array.isArray(userIds) || userIds.length === 0) {
+            res.status(400).json({ error: 'Invalid or empty userIds array' });
             return;
         }
 
         const { data, error: supabaseError } = await supabase
             .from('profiles')
             .select('name, email, avatar_url')
-            .in('email', emails);
+            .in('email', userIds);
 
         if (supabaseError) {
             throw supabaseError;
         }
+        const emptyUser = { name: "", email: "", avatar_url: "" };
 
-        // Sort the data to match the order of input emails
-        const sortedData = emails.map(email =>
-            data.find(user => user.email === email)
-        ).filter(Boolean);
+        // Sort the data to match the order of input userIds
+        const sortedData = userIds.map(userId =>
+            data.find(user => user.email === userId) || { ...emptyUser, email: userId }
+        );
 
         res.status(200).json(sortedData);
     } catch (error) {
@@ -78,7 +79,7 @@ export const searchUsers = async (req: Request, res: Response, next: NextFunctio
 
         let query = supabase
             .from('profiles')
-            .select('name');
+            .select('email');
 
         if (text && typeof text === 'string') {
             query = query.or(`name.ilike.%${text}%,email.ilike.%${text}%`);
@@ -90,7 +91,9 @@ export const searchUsers = async (req: Request, res: Response, next: NextFunctio
             throw supabaseError;
         }
 
-        res.status(200).json(data);
+        const emails = data.map(profile => profile.email);
+
+        res.status(200).json(emails);
     } catch (error) {
         next(error);
     }
