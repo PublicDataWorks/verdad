@@ -45,12 +45,16 @@ export const getUsersByEmails = async (req: Request, res: Response, next: NextFu
         if (supabaseError) {
             throw supabaseError;
         }
-        const emptyUser = { name: "", email: "", avatar_url: "" };
+        const emptyUser = { name: "", email: "", avatar: "" };
 
         // Sort the data to match the order of input userIds
-        const sortedData = userIds.map(userId =>
-            data.find(user => user.email === userId) || { ...emptyUser, email: userId }
-        );
+        const sortedData = userIds.map(userId => {
+            const user = data.find(u => u.email === userId);
+            if (user) {
+                return { ...user, avatar: user.avatar_url };
+            }
+            return { ...emptyUser, email: userId };
+        });
 
         res.status(200).json(sortedData);
     } catch (error) {
