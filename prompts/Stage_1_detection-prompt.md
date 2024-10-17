@@ -1,10 +1,10 @@
-Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. **Accurately determine the `start_time` and `end_time` for each flagged snippet**, as these values are critical for further processing in the pipeline. Ensure that your output adheres strictly to the provided JSON schema.
+Please analyze the provided timestamped transcription for potential disinformation. Use the provided heuristics to identify and flag any disinformation snippets. **Determine the `start_time` and `end_time` of each flagged snippet based on the timestamps in the transcription**. Ensure that your output adheres strictly to the provided JSON schema.
 
 # Overview
 
-1. **Audio Analysis:**
+1. **Transcription Analysis:**
 
-   - Listen attentively to the entire audio segment.
+   - Carefully read the entire timestamped transcription.
    - Focus on content that may contain disinformation according to the heuristics provided.
 
 2. **Disinformation Detection:**
@@ -16,14 +16,13 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
 
    - For each potential disinformation snippet, record the following:
      - `uuid`: Generate a unique identifier for the snippet. For example, "012a7b5f-1ab5-4bf9-bdfa-2f20f76bba48"
-     - `start_time`: The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip.
-     - `end_time`: The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip.
-     - `seconds_count_before_snippet`: The cumulative number of seconds from the beginning of the audio clip up to the start of the snippet.
+     - `start_time`: The timestamp when the snippet begins, in MM:SS format, based on the provided transcription.
+     - `end_time`: The timestamp when the snippet ends, in MM:SS format, based on the provided transcription.
      - `brief_description`: Concise description of the content.
      - `disinformation_categories`: Applicable categories based on heuristics.
      - `keywords_detected`: Specific words or phrases that triggered the flag.
     
-   - **Ensure that `start_time`, `end_time` and `seconds_count_before_snippet` are accurate and reflect the true timing of the snippets within the audio. Double-check these values to avoid discrepancies.**
+   - **Ensure that `start_time` and `end_time` are accurate and correspond to those provided in the transcription. Double-check these values to avoid discrepancies.**
 
 4. **Assemble Structured Output:**
 
@@ -44,7 +43,6 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
                   "uuid",
                   "start_time",
                   "end_time",
-                  "seconds_count_before_snippet",
                   "brief_description",
                   "disinformation_categories",
                   "keywords_detected"
@@ -61,10 +59,6 @@ Please analyze the attached audio clip for potential disinformation. Ignore any 
                   "end_time": {
                       "type": "string",
                       "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
-                  },
-                  "seconds_count_before_snippet": {
-                      "type": "integer",
-                      "description": "The cumulative number of seconds from the beginning of the audio clip up to the start of the snippet."
                   },
                   "brief_description": {
                       "type": "string",
@@ -650,14 +644,13 @@ Disinformation involving extreme portrayals of political groups or figures, attr
 
 - **Maximize Reliability**: Carefully apply the heuristics to ensure accurate identification of potential disinformation.
 - **Cultural Sensitivity**: Be mindful of cultural nuances and avoid stereotypes or generalizations.
-- **No Transcriptions Needed**: Do not transcribe the audio; focus on identifying and flagging potential disinformation.
-- **Efficiency**: Ignore music content, commercials, or background noise that does not contain relevant speech.
+- **Efficiency**: Focus on relevant content that may contain disinformation according to the heuristics provided.
 
 ---
 
 ## Final Notes
 
-By meticulously following these instructions and applying the heuristics across all disinformation categories, you will effectively identify potential disinformation in the audio segments. Your culturally sensitive approach will ensure that the analysis is relevant and respectful to the Spanish and Arabic-speaking immigrant communities in the USA. Please ensure that the `start_time`, `end_time` and `seconds_count_before_snippet` fields are as accurate as possible. This accuracy is crucial for the subsequent processing stages in the pipeline.
+By meticulously following these instructions and applying the heuristics across all disinformation categories, you will effectively identify potential disinformation in the provided transcription. Your culturally sensitive approach will ensure that the analysis is relevant and respectful to the Spanish and Arabic-speaking immigrant communities in the USA. Please ensure that the `start_time` and `end_time` fields are accurate and correspond to those in the transcription. This accuracy is crucial for the subsequent processing stages in the pipeline.
 
 ---
 
@@ -670,7 +663,6 @@ By meticulously following these instructions and applying the heuristics across 
       "uuid": "010a11ca-eb94-4f78-92b3-d83374cbd062",
       "start_time": "05:30",
       "end_time": "07:15",
-      "seconds_count_before_snippet": 330,
       "brief_description": "Speaker claims that vaccines contain microchips for mind control.",
       "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"],
       "keywords_detected": ["microchips en vacunas", "control mental"]
@@ -679,7 +671,6 @@ By meticulously following these instructions and applying the heuristics across 
       "uuid": "014190f3-0550-4173-9389-6e8fe2dd5ce7",
       "start_time": "07:15",
       "end_time": "08:00",
-      "seconds_count_before_snippet": 435,
       "brief_description": "Discussion about illegal immigrants causing economic problems.",
       "disinformation_categories": ["Immigration Policies"],
       "keywords_detected": ["extranjeros ilegales", "problemas económicos"]
@@ -688,12 +679,10 @@ By meticulously following these instructions and applying the heuristics across 
 }
 ```
 
----
-
-This example illustrates how to structure the output for the flagged snippets, including all required information without transcribing the audio. Use this as a guide for formatting your outputs while ensuring compliance with all instructions and policies.
+This example illustrates how to structure the output for the flagged snippets. Use this as a guide for formatting your outputs while ensuring compliance with all instructions and policies.
 
 ---
 
 # Instructions
 
-Please analyze the attached audio clip for potential disinformation. Ignore any music content and focus on the spoken content. Use the provided heuristics to identify and flag any disinformation snippets. **Ensure that the `start_time`, `end_time` and `seconds_count_before_snippet` fields are determined with high accuracy**, as these values are critical for further processing in the pipeline.
+Please analyze the provided timestamped transcription for potential disinformation. Use the provided heuristics to identify and flag any disinformation snippets. Ensure that the `start_time` and `end_time` fields are accurate and correspond to those in the transcription. This accuracy is crucial for the subsequent processing stages in the pipeline. If the transcription only includes `start_time` for each segment, use the `start_time` of the next segment as the `end_time` of the current segment.

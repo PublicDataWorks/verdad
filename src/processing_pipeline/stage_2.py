@@ -107,7 +107,7 @@ def insert_new_snippet_to_snippets_table_in_supabase(
 def process_llm_response(supabase_client, llm_response, local_file, s3_client, r2_bucket_name, context_seconds):
     try:
         print(f"Processing llm response {llm_response['id']}")
-        flagged_snippets = llm_response["pro_1.5_002"]["flagged_snippets"]
+        flagged_snippets = llm_response["gemini_1.5_pro_002"]["flagged_snippets"]
         for snippet in flagged_snippets:
             uuid = snippet["uuid"]
             start_time = snippet["start_time"]

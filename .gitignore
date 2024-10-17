@@ -135,6 +135,9 @@ credentials.json
 *.aac
 *.mp3
 
+# Transcription files
+sample_audio.txt
+
 # Spyder project settings
 .spyderproject
 .spyproject

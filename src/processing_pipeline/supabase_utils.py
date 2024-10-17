@@ -98,19 +98,30 @@ class SupabaseClient:
             )
             .execute()
         )
-        return response.data
+        return response.data[0]
 
-    def insert_stage_1_llm_response(self, audio_file_id, flash_response, pro_response, status):
+    def insert_stage_1_llm_response(self, audio_file_id, openai_response):
         response = (
             self.client.table("stage_1_llm_responses")
             .insert(
                 {
                     "audio_file": audio_file_id,
-                    "flash_1.5_002": flash_response,
-                    "pro_1.5_002": pro_response,
-                    "status": status,
+                    "openai_whisper_1": openai_response,
                 }
             )
+            .execute()
+        )
+        return response.data[0]
+
+    def update_stage_1_llm_response(self, id, flash_response, pro_response, status):
+        response = (
+            self.client.table("stage_1_llm_responses")
+            .update({
+                "gemini_1.5_flash_002": flash_response,
+                "gemini_1.5_pro_002": pro_response,
+                "status": status,
+            })
+            .eq("id", id)
             .execute()
         )
         return response.data

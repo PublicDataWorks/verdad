@@ -10,7 +10,6 @@
                     "uuid",
                     "start_time",
                     "end_time",
-                    "seconds_count_before_snippet",
                     "brief_description",
                     "disinformation_categories",
                     "keywords_detected"
@@ -27,10 +26,6 @@
                     "end_time": {
                         "type": "string",
                         "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
-                    },
-                    "seconds_count_before_snippet": {
-                        "type": "integer",
-                        "description": "The cumulative number of seconds from the beginning of the audio clip up to the start of the snippet."
                     },
                     "brief_description": {
                         "type": "string",

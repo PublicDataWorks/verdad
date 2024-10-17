@@ -3,6 +3,7 @@ import time
 import google.generativeai as genai
 import json
 import boto3
+from openai import OpenAI
 from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
 from supabase_utils import SupabaseClient
@@ -35,61 +36,115 @@ def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
 
 
 @task(log_prints=True, retries=3)
-def insert_response_into_stage_1_llm_responses_table_in_supabase(
-    supabase_client, audio_file_id, flash_response, pro_response, status
+def insert_stage_1_llm_response_in_supabase(
+    supabase_client, audio_file_id, openai_response
 ):
-    supabase_client.insert_stage_1_llm_response(audio_file_id, flash_response, pro_response, status)
+    return supabase_client.insert_stage_1_llm_response(audio_file_id, openai_response)
+
+
+@task(log_prints=True, retries=3)
+def update_stage_1_llm_response_in_supabase(
+    supabase_client, id, flash_response, pro_response, status
+):
+    supabase_client.update_stage_1_llm_response(id, flash_response, pro_response, status)
+
+
+@task(log_prints=True)
+def transcribe_audio_file(audio_file):
+    return __transcribe_audio_file(audio_file)
+
+
+def __transcribe_audio_file(audio_file):
+    # TODO: Use "Prompt parameter" to improve the reliability of Whisper
+    # TODO: Post-process the transcription using LLMs
+    # TODO: Ask Whisper to include punctuation and filter words in the transcript
+    # See more: https://platform.openai.com/docs/guides/speech-to-text/improving-reliability
+
+    if not os.getenv("OPENAI_API_KEY"):
+        raise ValueError("OpenAI API key was not set!")
+
+    # Setup Open AI Client
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    # Transcribe the audio file
+    response = client.audio.transcriptions.create(
+        model="whisper-1",
+        file=open(audio_file, "rb"),
+        response_format="verbose_json",
+        timestamp_granularities=["segment"]
+    )
+
+    # Format the transcription ouput
+    timestamped_transcription = ""
+    for segment in response.segments:
+        # Calculate minutes and seconds from segment start time
+        minutes = int(segment.start) // 60
+        seconds = int(segment.start) % 60
+        # Format start time as "MM:SS"
+        start_time = f"{minutes:02d}:{seconds:02d}"
+        timestamped_transcription += f"[{start_time}] {segment.text}\n"
+
+    return {
+        "language": response.language,
+        "duration": int(response.duration),
+        "transcription": response.text,
+        "timestamped_transcription": timestamped_transcription,
+    }
 
 
 @task(log_prints=True)
 def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
     try:
-        print(f"Processing audio file: {local_file} with Gemini Flash 1.5-002")
+        print(f"Transcribing audio file: {local_file} with OpenAI Whisper 1")
+        openai_response = transcribe_audio_file(local_file)
+
+        # Insert a new stage_1_llm_response with OpenAI Whisper 1 response
+        llm_response = insert_stage_1_llm_response_in_supabase(supabase_client, audio_file["id"], openai_response)
+
+        # Get metadata of the transcription and the transcription itself
+        metadata={
+            "radio_station_name": audio_file["radio_station_name"],
+            "radio_station_code": audio_file["radio_station_code"],
+            "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
+            "recorded_at": audio_file["recorded_at"],
+            "recording_day_of_week": audio_file["recording_day_of_week"],
+            "time_zone": "UTC",
+        }
+        timestamped_transcription = openai_response["timestamped_transcription"]
+
+        print(f"Processing audio file: {local_file} with Gemini 1.5 Flash 002")
         flash_response = Stage1Executor.run(
             gemini_key=gemini_key,
             model_name="gemini-1.5-flash-002",
-            audio_file=local_file,
-            metadata={
-                "radio_station_name": audio_file["radio_station_name"],
-                "radio_station_code": audio_file["radio_station_code"],
-                "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-                "recorded_at": audio_file["recorded_at"],
-                "recording_day_of_week": audio_file["recording_day_of_week"],
-                "time_zone": "UTC",
-            },
+            timestamped_transcription=timestamped_transcription,
+            metadata=metadata,
         )
 
         # Check if the response is a valid JSON
         flash_response = json.loads(flash_response)
-        print(f"Gemini Flash 1.5-002 Response:\n{json.dumps(flash_response, indent=2)}\n")
+        print(f"Gemini 1.5 Flash 002 Response:\n{json.dumps(flash_response, indent=2)}\n")
 
         flagged_snippets = flash_response["flagged_snippets"]
         if len(flagged_snippets) == 0:
             print("No flagged snippets found, marking the response as processed")
-            insert_response_into_stage_1_llm_responses_table_in_supabase(
-                supabase_client, audio_file["id"], flash_response, None, "Processed"
+            update_stage_1_llm_response_in_supabase(
+                supabase_client, llm_response["id"], flash_response, None, "Processed"
             )
         else:
-            print(f"Processing audio file: {local_file} with Gemini Pro 1.5-002")
+            print(f"Processing audio file: {local_file} with Gemini 1.5 Pro 002")
             pro_response = Stage1Executor.run(
                 gemini_key=gemini_key,
                 model_name="gemini-1.5-pro-002",
-                audio_file=local_file,
-                metadata={
-                    "radio_station_name": audio_file["radio_station_name"],
-                    "radio_station_code": audio_file["radio_station_code"],
-                    "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-                    "recorded_at": audio_file["recorded_at"],
-                    "recording_day_of_week": audio_file["recording_day_of_week"],
-                    "time_zone": "UTC",
-                },
+                timestamped_transcription=timestamped_transcription,
+                metadata=metadata,
             )
 
+            # Check if the response is a valid JSON
             pro_response = json.loads(pro_response)
-            print(f"Gemini Pro 1.5-002 Response:\n{json.dumps(pro_response, indent=2)}\n")
+            print(f"Gemini 1.5 Pro 002 Response:\n{json.dumps(pro_response, indent=2)}\n")
 
-            insert_response_into_stage_1_llm_responses_table_in_supabase(
-                supabase_client, audio_file["id"], flash_response, pro_response, "New"
+            update_stage_1_llm_response_in_supabase(
+                supabase_client, llm_response["id"], flash_response, pro_response, "New"
             )
 
         print(f"Processing completed for {local_file}")
@@ -154,7 +209,7 @@ class Stage1Executor:
     OUTPUT_SCHEMA = get_output_schema_for_stage_1()
 
     @classmethod
-    def run(cls, gemini_key, model_name, audio_file, metadata):
+    def run(cls, gemini_key, model_name, timestamped_transcription, metadata):
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
@@ -164,25 +219,16 @@ class Stage1Executor:
             system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 
-        # Upload the audio file and wait for it to finish processing
-        audio_file = genai.upload_file(audio_file)
-        while audio_file.state.name == "PROCESSING":
-            print("Processing the uploaded audio file...")
-            time.sleep(1)
-            audio_file = genai.get_file(audio_file.name)
-
         # Prepare the user prompt
         user_prompt = (
-            f"{cls.USER_PROMPT}\nHere is the metadata of the attached audio clip:\n{json.dumps(metadata, indent=2)}"
+            f"{cls.USER_PROMPT}\n\nHere is the metadata of the transcription:\n\n{json.dumps(metadata, indent=2)}\n\n"
+            f"Here is the transcription:\n\n{timestamped_transcription}"
         )
 
-        try:
-            result = model.generate_content(
-                [audio_file, user_prompt],
-                generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA
-                ),
-            )
-            return result.text
-        finally:
-            audio_file.delete()
+        result = model.generate_content(
+            [user_prompt],
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA
+            ),
+        )
+        return result.text
