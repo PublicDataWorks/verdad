@@ -113,12 +113,11 @@ class SupabaseClient:
         )
         return response.data[0]
 
-    def update_stage_1_llm_response(self, id, flash_response, pro_response, status):
+    def update_stage_1_llm_response(self, id, flash_response, status):
         response = (
             self.client.table("stage_1_llm_responses")
             .update({
                 "gemini_1.5_flash_002": flash_response,
-                "gemini_1.5_pro_002": pro_response,
                 "status": status,
             })
             .eq("id", id)

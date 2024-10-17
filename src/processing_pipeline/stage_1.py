@@ -43,10 +43,8 @@ def insert_stage_1_llm_response_in_supabase(
 
 
 @task(log_prints=True, retries=3)
-def update_stage_1_llm_response_in_supabase(
-    supabase_client, id, flash_response, pro_response, status
-):
-    supabase_client.update_stage_1_llm_response(id, flash_response, pro_response, status)
+def update_stage_1_llm_response_in_supabase(supabase_client, id, flash_response, status):
+    supabase_client.update_stage_1_llm_response(id, flash_response, status)
 
 
 @task(log_prints=True)
@@ -128,23 +126,11 @@ def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
         if len(flagged_snippets) == 0:
             print("No flagged snippets found, marking the response as processed")
             update_stage_1_llm_response_in_supabase(
-                supabase_client, llm_response["id"], flash_response, None, "Processed"
+                supabase_client, llm_response["id"], flash_response, "Processed"
             )
         else:
-            print(f"Processing audio file: {local_file} with Gemini 1.5 Pro 002")
-            pro_response = Stage1Executor.run(
-                gemini_key=gemini_key,
-                model_name="gemini-1.5-pro-002",
-                timestamped_transcription=timestamped_transcription,
-                metadata=metadata,
-            )
-
-            # Check if the response is a valid JSON
-            pro_response = json.loads(pro_response)
-            print(f"Gemini 1.5 Pro 002 Response:\n{json.dumps(pro_response, indent=2)}\n")
-
             update_stage_1_llm_response_in_supabase(
-                supabase_client, llm_response["id"], flash_response, pro_response, "New"
+                supabase_client, llm_response["id"], flash_response, "New"
             )
 
         print(f"Processing completed for {local_file}")
