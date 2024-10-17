@@ -18,7 +18,7 @@ Please analyze the provided timestamped transcription for potential disinformati
      - `uuid`: Generate a unique identifier for the snippet. For example, "012a7b5f-1ab5-4bf9-bdfa-2f20f76bba48"
      - `start_time`: The timestamp when the snippet begins, in MM:SS format, based on the provided transcription.
      - `end_time`: The timestamp when the snippet ends, in MM:SS format, based on the provided transcription.
-     - `transcription`: Transcription of the snippet in the original language.
+     - `transcription`: Transcription of the snippet (without timestamps).
      - `explanation`: Explanation of why this snippet was flagged (in English).
      - `disinformation_categories`: Applicable categories based on heuristics.
      - `keywords_detected`: Specific words or phrases that triggered the flag.
@@ -64,7 +64,7 @@ Please analyze the provided timestamped transcription for potential disinformati
                     },
                     "transcription": {
                         "type": "string",
-                        "description": "Transcription of the snippet in the original language."
+                        "description": "Transcription of the snippet (without timestamps)."
                     },
                     "explanation": {
                         "type": "string",

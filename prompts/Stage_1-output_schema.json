@@ -30,7 +30,7 @@
                     },
                     "transcription": {
                         "type": "string",
-                        "description": "Transcription of the snippet in the original language."
+                        "description": "Transcription of the snippet (without timestamps)."
                     },
                     "explanation": {
                         "type": "string",
