@@ -68,39 +68,66 @@ def extract_snippet_clip(input_file, output_file, formatted_start_time, formatte
     audio = AudioSegment.from_mp3(input_file)
 
     # Convert formatted time strings (HH:MM:SS) to seconds
-    start_time_seconds = convert_formatted_time_str_to_seconds(formatted_start_time)
-    end_time_seconds = convert_formatted_time_str_to_seconds(formatted_end_time)
+    start_time = convert_formatted_time_str_to_seconds(formatted_start_time)
+    end_time = convert_formatted_time_str_to_seconds(formatted_end_time)
 
     # Ensure start_time and end_time are within the audio duration
     duration = len(audio) / 1000  # Duration in seconds
-    if start_time_seconds < 0 or end_time_seconds > duration:
-        raise ValueError(
-            f"start_time_seconds and end_time_seconds must be within the audio duration of {duration} seconds."
-        )
-    if start_time_seconds >= end_time_seconds:
-        raise ValueError("start_time_seconds must be less than end_time_seconds.")
+    if start_time < 0 or end_time > duration:
+        raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
+    if start_time >= end_time:
+        raise ValueError("start_time must be less than end_time.")
 
     # Include surrounding context to the snippet
-    start_time_seconds = max(0, start_time_seconds - context_seconds)
-    end_time_seconds = min(duration, end_time_seconds + context_seconds)
-
-    # Convert times to milliseconds
-    start_ms = start_time_seconds * 1000
-    end_ms = end_time_seconds * 1000
+    new_start_time = max(0, start_time - context_seconds)
+    new_end_time = min(duration, end_time + context_seconds)
 
     # Slice the audio segment
-    subclip = audio[start_ms:end_ms]
+    subclip = audio[(new_start_time * 1000) : (new_end_time * 1000)]
 
     # Export the subclip
     subclip.export(output_file, format="mp3")
     print(f"Snippet clip is extracted successfully: {output_file}")
 
+    # Calculate the duration of the snippet clip (in seconds)
+    snippet_duration = new_end_time - new_start_time
+    print(f"Snippet clip duration: {snippet_duration} seconds")
+
+    # Calculate the start and end time of the snippet within the snippet clip
+    snippet_start_time = start_time - new_start_time
+    snippet_end_time = snippet_start_time + snippet_duration
+
+    # Format snippet start/end times
+    formatted_snippet_start_time = f"{(snippet_start_time // 60):02}:{(snippet_start_time % 60):02}"
+    formatted_snippet_end_time = f"{(snippet_end_time // 60):02}:{(snippet_end_time % 60):02}"
+    print(f"Snippet clip start_time: {formatted_snippet_start_time}")
+    print(f"Snippet clip end_time: {formatted_snippet_end_time}")
+
+    return snippet_duration, formatted_snippet_start_time, formatted_snippet_end_time
+
 
 @task(log_prints=True, retries=3)
 def insert_new_snippet_to_snippets_table_in_supabase(
-    supabase_client, snippet_uuid, audio_file_id, stage_1_llm_response_id, file_path, file_size
+    supabase_client,
+    snippet_uuid,
+    audio_file_id,
+    stage_1_llm_response_id,
+    file_path,
+    file_size,
+    duration,
+    start_time,
+    end_time,
 ):
-    supabase_client.insert_snippet(snippet_uuid, audio_file_id, stage_1_llm_response_id, file_path, file_size)
+    supabase_client.insert_snippet(
+        uuid=snippet_uuid,
+        audio_file_id=audio_file_id,
+        stage_1_llm_response_id=stage_1_llm_response_id,
+        file_path=file_path,
+        file_size=file_size,
+        duration=duration,
+        start_time=start_time,
+        end_time=end_time,
+    )
 
 
 @task(log_prints=True)
@@ -116,12 +143,22 @@ def process_llm_response(supabase_client, llm_response, local_file, s3_client, r
             parts = local_file.split("_")
             folder_name = f"{parts[0]}_{parts[1]}"
 
-            extract_snippet_clip(local_file, output_file, start_time, end_time, context_seconds)
+            snippet_duration, snippet_start_time, snippet_end_time = extract_snippet_clip(
+                local_file, output_file, start_time, end_time, context_seconds
+            )
             file_size = os.path.getsize(output_file)
 
             uploaded_path = upload_to_r2_and_clean_up(s3_client, r2_bucket_name, folder_name, output_file)
             insert_new_snippet_to_snippets_table_in_supabase(
-                supabase_client, uuid, llm_response["audio_file"]["id"], llm_response["id"], uploaded_path, file_size
+                supabase_client=supabase_client,
+                snippet_uuid=uuid,
+                audio_file_id=llm_response["audio_file"]["id"],
+                stage_1_llm_response_id=llm_response["id"],
+                file_path=uploaded_path,
+                file_size=file_size,
+                duration=snippet_duration,
+                start_time=snippet_start_time,
+                end_time=snippet_end_time,
             )
 
         print(f"Processing completed for llm response {llm_response['id']}")

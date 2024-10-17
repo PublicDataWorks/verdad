@@ -132,7 +132,13 @@ class SupabaseClient:
         stage_1_llm_response_id,
         file_path,
         file_size,
+        duration,
+        start_time,
+        end_time,
     ):
+        start_time = self.ensure_time_format(start_time)
+        end_time = self.ensure_time_format(end_time)
+
         response = (
             self.client.table("snippets")
             .insert(
@@ -142,6 +148,9 @@ class SupabaseClient:
                     "stage_1_llm_response": stage_1_llm_response_id,
                     "file_path": file_path,
                     "file_size": file_size,
+                    "duration": duration,
+                    "start_time": start_time,
+                    "end_time": end_time,
                 }
             )
             .execute()
