@@ -18,7 +18,8 @@ Please analyze the provided timestamped transcription for potential disinformati
      - `uuid`: Generate a unique identifier for the snippet. For example, "012a7b5f-1ab5-4bf9-bdfa-2f20f76bba48"
      - `start_time`: The timestamp when the snippet begins, in MM:SS format, based on the provided transcription.
      - `end_time`: The timestamp when the snippet ends, in MM:SS format, based on the provided transcription.
-     - `brief_description`: Concise description of the content.
+     - `transcription`: Transcription of the snippet in the original language.
+     - `explanation`: Explanation of why this snippet was flagged (in English).
      - `disinformation_categories`: Applicable categories based on heuristics.
      - `keywords_detected`: Specific words or phrases that triggered the flag.
     
@@ -32,54 +33,59 @@ Please analyze the provided timestamped transcription for potential disinformati
 
 ```json
 {
-  "type": "object",
-  "required": ["flagged_snippets"],
-  "properties": {
-      "flagged_snippets": {
-          "type": "array",
-          "items": {
-              "type": "object",
-              "required": [
-                  "uuid",
-                  "start_time",
-                  "end_time",
-                  "brief_description",
-                  "disinformation_categories",
-                  "keywords_detected"
-              ],
-              "properties": {
-                  "uuid": {
-                      "type": "string",
-                      "description": "Unique identifier for the snippet."
-                  },
-                  "start_time": {
-                      "type": "string",
-                      "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
-                  },
-                  "end_time": {
-                      "type": "string",
-                      "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
-                  },
-                  "brief_description": {
-                      "type": "string",
-                      "description": "Concise description of the snippet."
-                  },
-                  "disinformation_categories": {
-                      "type": "array",
-                      "items": {
-                          "type": "string"
-                      }
-                  },
-                  "keywords_detected": {
-                      "type": "array",
-                      "items": {
-                          "type": "string"
-                      }
-                  }
-              }
-          }
-      }
-  }
+    "type": "object",
+    "required": ["flagged_snippets"],
+    "properties": {
+        "flagged_snippets": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "uuid",
+                    "start_time",
+                    "end_time",
+                    "transcription",
+                    "explanation",
+                    "disinformation_categories",
+                    "keywords_detected"
+                ],
+                "properties": {
+                    "uuid": {
+                        "type": "string",
+                        "description": "Unique identifier for the snippet."
+                    },
+                    "start_time": {
+                        "type": "string",
+                        "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
+                    },
+                    "end_time": {
+                        "type": "string",
+                        "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
+                    },
+                    "transcription": {
+                        "type": "string",
+                        "description": "Transcription of the snippet in the original language."
+                    },
+                    "explanation": {
+                        "type": "string",
+                        "description": "Explain why this snippet was flagged (in English)."
+                    },
+                    "disinformation_categories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "keywords_detected": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 ```
 
@@ -663,15 +669,17 @@ By meticulously following these instructions and applying the heuristics across 
       "uuid": "010a11ca-eb94-4f78-92b3-d83374cbd062",
       "start_time": "05:30",
       "end_time": "07:15",
-      "brief_description": "Speaker claims that vaccines contain microchips for mind control.",
+      "transcription": "La 'plandemia' es una excusa para controlarnos con 'microchips en vacunas'.",
+      "explanation": "The speaker claims that the pandemic is a planned event used to control the population by implanting microchips through vaccines. This promotes unfounded conspiracy theories about COVID-19 and vaccination.",
       "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"],
-      "keywords_detected": ["microchips en vacunas", "control mental"]
+      "keywords_detected": ["plandemia", "microchips en vacunas"]
     },
     {
       "uuid": "014190f3-0550-4173-9389-6e8fe2dd5ce7",
       "start_time": "07:15",
       "end_time": "08:00",
-      "brief_description": "Discussion about illegal immigrants causing economic problems.",
+      "transcription": "Los 'extranjeros ilegales' están causando problemas económicos en nuestro país.",
+      "explanation": "The speaker asserts that illegal immigrants are causing economic problems in the country, depicting immigrants as a burden without providing evidence. This aligns with disinformation regarding immigration policies.",
       "disinformation_categories": ["Immigration Policies"],
       "keywords_detected": ["extranjeros ilegales", "problemas económicos"]
     }

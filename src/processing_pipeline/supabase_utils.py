@@ -136,6 +136,7 @@ class SupabaseClient:
         start_time,
         end_time,
     ):
+        duration = self.ensure_time_format(duration)
         start_time = self.ensure_time_format(start_time)
         end_time = self.ensure_time_format(end_time)
 

@@ -10,7 +10,8 @@
                     "uuid",
                     "start_time",
                     "end_time",
-                    "brief_description",
+                    "transcription",
+                    "explanation",
                     "disinformation_categories",
                     "keywords_detected"
                 ],
@@ -27,9 +28,13 @@
                         "type": "string",
                         "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
                     },
-                    "brief_description": {
+                    "transcription": {
                         "type": "string",
-                        "description": "Concise description of the snippet."
+                        "description": "Transcription of the snippet in the original language."
+                    },
+                    "explanation": {
+                        "type": "string",
+                        "description": "Explain why this snippet was flagged (in English)."
                     },
                     "disinformation_categories": {
                         "type": "array",
