@@ -91,19 +91,22 @@ def extract_snippet_clip(input_file, output_file, formatted_start_time, formatte
 
     # Calculate the duration of the snippet clip (in seconds)
     snippet_duration = new_end_time - new_start_time
-    print(f"Snippet clip duration: {snippet_duration} seconds")
 
     # Calculate the start and end time of the snippet within the snippet clip
     snippet_start_time = start_time - new_start_time
-    snippet_end_time = snippet_start_time + snippet_duration
+    snippet_end_time = snippet_start_time + (end_time - start_time)
 
-    # Format snippet start/end times
+    # Format snippet duration and start/end times
+    formatted_snippet_duration = f"{(snippet_duration // 60):02}:{(snippet_duration % 60):02}"
     formatted_snippet_start_time = f"{(snippet_start_time // 60):02}:{(snippet_start_time % 60):02}"
     formatted_snippet_end_time = f"{(snippet_end_time // 60):02}:{(snippet_end_time % 60):02}"
-    print(f"Snippet clip start_time: {formatted_snippet_start_time}")
-    print(f"Snippet clip end_time: {formatted_snippet_end_time}")
+    print(
+        f"Snippet clip duration: {formatted_snippet_duration}\n"
+        f"Snippet clip start_time: {formatted_snippet_start_time}\n"
+        f"Snippet clip end_time: {formatted_snippet_end_time}\n"
+    )
 
-    return snippet_duration, formatted_snippet_start_time, formatted_snippet_end_time
+    return formatted_snippet_duration, formatted_snippet_start_time, formatted_snippet_end_time
 
 
 @task(log_prints=True, retries=3)
