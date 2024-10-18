@@ -24,7 +24,7 @@ if __name__ == "__main__":
             deployment = audio_clipping.to_deployment(
                 name="Stage 2: Audio Clipping",
                 concurrency_limit=5,
-                parameters=dict(context_seconds=30, repeat=True),
+                parameters=dict(context_seconds=15, repeat=True),
             )
             serve(deployment)
         case "in_depth_analysis":

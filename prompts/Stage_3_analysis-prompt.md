@@ -1,9 +1,23 @@
 # **Task Overview**
 
-You are provided with an audio clip containing a potential disinformation snippet that has been flagged by the Stage 1 LLM. Your tasks are:
+You are provided with an audio clip containing a potential disinformation snippet that has been flagged by Stage 1 of an audio processing pipeline.
+The audio clip contains 3 parts:
+- The part before the snippet
+- The detected snippet
+- The part after the snippet
 
-1. **Transcribe** the audio in the original language, capturing all spoken words, including colloquialisms, idioms, and fillers.
-2. **Translate** the transcription into English, preserving meaning, context, and cultural nuances.
+You are also provided with the metadata of the audio clip, which contains:
+- `duration`: the duration of the entire audio clip, in MM:SS format
+- `start_time`: the start time of the snippet within the audio clip, in MM:SS format
+- `end_time`: the end time of the snippet within the audio clip, in MM:SS format
+- `explanation`: the explanation of why the snippet was flagged as disinformation
+- `transcription`: the transcription of the snippet within the audio clip
+  - Note that this is not the transcription of the entire audio clip
+
+Your tasks are:
+
+1. **Transcribe** the entire audio clip in the original language, capturing all spoken words, including colloquialisms, idioms, and fillers.
+2. **Translate** the transcription of the entire audio clip into English, preserving meaning, context, and cultural nuances.
 3. **Analyze** the content for disinformation, using detailed heuristics covering all disinformation categories.
 4. **Provide** detailed annotations and assemble structured output conforming to the provided JSON schema.
 
@@ -15,6 +29,7 @@ You are provided with an audio clip containing a potential disinformation snippe
   - Accurately transcribe the audio clip in the original language.
   - Include all spoken words, fillers, slang, colloquialisms, and any code-switching instances.
   - Pay attention to dialects and regional variations common among immigrant communities.
+  - Do your best to capture the speech accurately, and flag any unintelligible portions with [inaudible].
 
 - **Translation:**
   - Translate the transcription into English.
@@ -27,11 +42,11 @@ You are provided with an audio clip containing a potential disinformation snippe
 
 #### **2. Detailed Analysis**
 
-For each snippet, perform the following steps:
+Perform the following steps:
 
 ##### **A. Review Snippet Metadata**
 
-- Utilize the metadata provided (disinformation categories, keywords, etc.) from Stage 1 of the analysis.
+- Utilize the metadata provided (disinformation categories, keywords, transcription, etc.) from Stage 1 of the analysis.
 - Familiarize yourself with the context in which the snippet was flagged.
 
 ##### **B. Categorization**
@@ -81,7 +96,9 @@ For each snippet, perform the following steps:
 ##### **G. Contextual Information**
 
 - **Context:**
-  - Include up to 100 words preceding and following the snippet if available.
+  - Based on the snippet transcription from the provided metadata and your transcription of the entire audio clip, you should be able to determine the surrounding context of the snippet, which includes:
+    - The part before the snippet
+    - The part after the snippet
 
 ##### **H. Confidence Scores**
 
@@ -110,15 +127,12 @@ Organize all the information into a structured output conforming to the provided
 
 ### **JSON Schema**
 
-Below is the OpenAPI JSON schema defining the expected output format. Ensure your output strictly adheres to this schema.
+Ensure your output strictly adheres to this schema.
 
 ```json
 {
     "type": "object",
     "required": [
-        "start_time",
-        "end_time",
-        "seconds_count_before_snippet",
         "transcription",
         "translation",
         "title",
@@ -132,21 +146,9 @@ Below is the OpenAPI JSON schema defining the expected output format. Ensure you
         "emotional_tone"
     ],
     "properties": {
-        "start_time": {
-            "type": "string",
-            "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
-        },
-        "end_time": {
-            "type": "string",
-            "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
-        },
-        "seconds_count_before_snippet": {
-            "type": "integer",
-            "description": "The cumulative number of seconds from the beginning of the audio clip up to the start of the snippet."
-        },
         "transcription": {
             "type": "string",
-            "description": "Transcription of the snippet in the original language."
+            "description": "Transcription of the entire audio clip in the original language."
         },
         "translation": {
             "type": "string",
@@ -189,11 +191,11 @@ Below is the OpenAPI JSON schema defining the expected output format. Ensure you
             "properties": {
                 "before": {
                     "type": "string",
-                    "description": "Up to 100 words before the snippet."
+                    "description": "Part of the audio clip transcription that precedes the snippet."
                 },
                 "after": {
                     "type": "string",
-                    "description": "Up to 100 words after the snippet."
+                    "description": "Part of the audio clip transcription that follows the snippet."
                 }
             }
         },
@@ -902,9 +904,6 @@ Below is an example of the expected output, conforming to the OpenAPI JSON schem
 
 ```json
 {
-  "start_time": "02:30",
-  "end_time": "03:10",
-  "seconds_count_before_snippet": 150,
   "transcription": "Dicen que el gobierno quiere controlar nuestras mentes con las vacunas. Es por eso que están empujando tanto la vacunación obligatoria.",
   "translation": "They say the government wants to control our minds with the vaccines. That's why they are pushing mandatory vaccination so hard.",
   "title": "Government Mind Control via Vaccines",

@@ -173,8 +173,6 @@ class SupabaseClient:
     def update_snippet(
         self,
         id,
-        start_time,
-        end_time,
         transcription,
         translation,
         title,
@@ -188,15 +186,10 @@ class SupabaseClient:
         context,
         status,
     ):
-        start_time = self.ensure_time_format(start_time)
-        end_time = self.ensure_time_format(end_time)
-
         response = (
             self.client.table("snippets")
             .update(
                 {
-                    "start_time": start_time,
-                    "end_time": end_time,
                     "transcription": transcription,
                     "translation": translation,
                     "title": title,

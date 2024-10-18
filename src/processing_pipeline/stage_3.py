@@ -16,6 +16,10 @@ from constants import (
 
 @task(log_prints=True, retries=3)
 def fetch_a_new_snippet_from_supabase(supabase_client):
+    return __fetch_a_new_snippet_from_supabase(supabase_client)
+
+
+def __fetch_a_new_snippet_from_supabase(supabase_client):
     response = supabase_client.get_snippets(
         status="New",
         limit=1,
@@ -43,8 +47,6 @@ def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
 def update_snippet_in_supabase(
     supabase_client,
     snippet_id,
-    start_time,
-    end_time,
     transcription,
     translation,
     title,
@@ -60,8 +62,6 @@ def update_snippet_in_supabase(
 ):
     supabase_client.update_snippet(
         id=snippet_id,
-        start_time=start_time,
-        end_time=end_time,
         transcription=transcription,
         translation=translation,
         title=title,
@@ -79,6 +79,10 @@ def update_snippet_in_supabase(
 
 @task(log_prints=True)
 def get_metadata(snippet):
+    return __get_metadata(snippet)
+
+
+def __get_metadata(snippet):
     snippet_uuid = snippet["id"]
     flagged_snippets = snippet["stage_1_llm_response"]["gemini_1.5_flash_002"]["flagged_snippets"]
     metadata = {}
@@ -92,7 +96,11 @@ def get_metadata(snippet):
 
     del metadata["start_time"]
     del metadata["end_time"]
-    del metadata["seconds_count_before_snippet"]
+
+    metadata["start_time"] = snippet["start_time"].split(":", 1)[1]
+    metadata["end_time"] = snippet["end_time"].split(":", 1)[1]
+    metadata["duration"] = snippet["duration"].split(":", 1)[1]
+
     return metadata
 
 
@@ -114,8 +122,6 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
         update_snippet_in_supabase(
             supabase_client=supabase_client,
             snippet_id=snippet["id"],
-            start_time=pro_response["start_time"],
-            end_time=pro_response["end_time"],
             transcription=pro_response["transcription"],
             translation=pro_response["translation"],
             title=pro_response["title"],
