@@ -214,8 +214,6 @@ class SupabaseClient:
             self.client.table("snippets")
             .update(
                 {
-                    "start_time": None,
-                    "end_time": None,
                     "transcription": None,
                     "translation": None,
                     "title": None,
