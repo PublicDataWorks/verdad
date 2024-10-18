@@ -36,9 +36,7 @@ def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
 
 
 @task(log_prints=True, retries=3)
-def insert_stage_1_llm_response_in_supabase(
-    supabase_client, audio_file_id, openai_response
-):
+def insert_stage_1_llm_response_in_supabase(supabase_client, audio_file_id, openai_response):
     return supabase_client.insert_stage_1_llm_response(audio_file_id, openai_response)
 
 
@@ -69,7 +67,7 @@ def __transcribe_audio_file(audio_file):
         model="whisper-1",
         file=open(audio_file, "rb"),
         response_format="verbose_json",
-        timestamp_granularities=["segment"]
+        timestamp_granularities=["segment"],
     )
 
     # Format the transcription ouput
@@ -100,7 +98,7 @@ def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
         llm_response = insert_stage_1_llm_response_in_supabase(supabase_client, audio_file["id"], openai_response)
 
         # Get metadata of the transcription and the transcription itself
-        metadata={
+        metadata = {
             "radio_station_name": audio_file["radio_station_name"],
             "radio_station_code": audio_file["radio_station_code"],
             "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
@@ -125,13 +123,9 @@ def process_audio_file(supabase_client, audio_file, local_file, gemini_key):
         flagged_snippets = flash_response["flagged_snippets"]
         if len(flagged_snippets) == 0:
             print("No flagged snippets found, marking the response as processed")
-            update_stage_1_llm_response_in_supabase(
-                supabase_client, llm_response["id"], flash_response, "Processed"
-            )
+            update_stage_1_llm_response_in_supabase(supabase_client, llm_response["id"], flash_response, "Processed")
         else:
-            update_stage_1_llm_response_in_supabase(
-                supabase_client, llm_response["id"], flash_response, "New"
-            )
+            update_stage_1_llm_response_in_supabase(supabase_client, llm_response["id"], flash_response, "New")
 
         print(f"Processing completed for {local_file}")
         supabase_client.set_audio_file_status(audio_file["id"], "Processed")
