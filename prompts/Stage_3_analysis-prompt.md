@@ -187,7 +187,7 @@ Ensure your output strictly adheres to this schema.
         },
         "context": {
             "type": "object",
-            "required": ["before", "after"],
+            "required": ["before", "after", "main"],
             "properties": {
                 "before": {
                     "type": "string",
@@ -196,6 +196,10 @@ Ensure your output strictly adheres to this schema.
                 "after": {
                     "type": "string",
                     "description": "Part of the audio clip transcription that follows the snippet."
+                },
+                "main": {
+                    "type": "string",
+                    "description": "The transcription of the snippet itself."
                 }
             }
         },
@@ -904,28 +908,29 @@ Below is an example of the expected output, conforming to the OpenAPI JSON schem
 
 ```json
 {
-  "transcription": "Dicen que el gobierno quiere controlar nuestras mentes con las vacunas. Es por eso que están empujando tanto la vacunación obligatoria.",
-  "translation": "They say the government wants to control our minds with the vaccines. That's why they are pushing mandatory vaccination so hard.",
-  "title": "Government Mind Control via Vaccines",
-  "summary": "The speaker suggests that the government intends to control people's minds through vaccines, which is why there is a strong push for mandatory vaccination.",
-  "explanation": "This snippet falls under the 'COVID-19 and Vaccination' disinformation category. It propagates the unfounded conspiracy theory that vaccines are a means of mind control by the government. Such claims can increase vaccine hesitancy and undermine public health efforts. The emotional tone conveys fear and distrust towards governmental initiatives.",
+  "transcription": "Estamos viviendo tiempos difíciles, y hay muchas cosas que no nos dicen. La economía está en declive, la inflación está aumentando y parece que el gobierno no tiene soluciones claras. Además, hay un debate constante sobre las vacunas obligatorias. Dicen que el gobierno quiere controlar nuestras mentes con las vacunas. Es por eso que están empujando tanto la vacunación obligatoria. Por eso debemos informarnos y proteger a nuestras familias.",
+  "translation": "We are living in difficult times, and there are many things they're not telling us. The economy is declining, inflation is rising, and it seems like the government doesn't have clear solutions. Additionally, there's a constant debate about mandatory vaccinations. They say the government wants to control our minds with vaccines. That's why they are pushing mandatory vaccination so hard. That's why we need to inform ourselves and protect our families.",
+  "title": "Government Control Through Mandatory Vaccinations",
+  "summary": "The speaker discusses the current economic struggles and rising inflation, expressing skepticism towards the government's lack of clear solutions. They highlight a contentious debate on mandatory vaccinations, suggesting that the government aims to control people's minds through vaccines, thereby advocating for self-education and family protection.",
+  "explanation": "This snippet falls under the 'COVID-19 and Vaccination' and 'Conspiracy Theories' disinformation categories. It propagates the unfounded conspiracy theory that vaccines are a means for the government to control individuals' minds, which can fuel vaccine hesitancy and erode trust in public health measures. The emotional tone conveys fear and distrust towards governmental initiatives, potentially influencing community behavior adversely.",
   "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"],
-  "keywords_detected": ["vaccines", "mandatory vaccination", "government wants to control our minds"],
+  "keywords_detected": ["vaccines", "mandatory vaccination", "government control our minds", "inform ourselves", "protect our families"],
   "language": {
     "primary_language": "Spanish",
     "dialect": "Mexican Spanish",
     "register": "Informal"
   },
   "context": {
-    "before": "Estamos viviendo tiempos difíciles, y hay muchas cosas que no nos dicen.",
-    "after": "Por eso debemos informarnos y proteger a nuestras familias."
+    "before": "Estamos viviendo tiempos difíciles, y hay muchas cosas que no nos dicen. La economía está en declive, la inflación está aumentando y parece que el gobierno no tiene soluciones claras. Además, hay un debate constante sobre las vacunas obligatorias.",
+    "after": "Por eso debemos informarnos y proteger a nuestras familias.",
+    "main": "Dicen que el gobierno quiere controlar nuestras mentes con las vacunas. Es por eso que están empujando tanto la vacunación obligatoria."
   },
   "confidence_scores": {
-    "overall": 95,
+    "overall": 92,
     "categories": [
       {
         "category": "COVID-19 and Vaccination",
-        "score": 98
+        "score": 95
       },
       {
         "category": "Conspiracy Theories",
@@ -936,13 +941,18 @@ Below is an example of the expected output, conforming to the OpenAPI JSON schem
   "emotional_tone": [
     {
       "emotion": "Fear",
-      "intensity": 85,
-      "explanation": "The speaker expresses fear about government control through vaccines."
+      "intensity": 80,
+      "explanation": "The speaker expresses fear about government manipulation through vaccines."
     },
     {
       "emotion": "Distrust",
-      "intensity": 90,
-      "explanation": "There is a strong sense of distrust towards governmental actions."
+      "intensity": 85,
+      "explanation": "There is a strong sense of distrust towards governmental actions and policies."
+    },
+    {
+      "emotion": "Concern",
+      "intensity": 75,
+      "explanation": "The speaker is concerned about the economic situation and the impact of mandatory vaccinations on personal freedoms."
     }
   ]
 }
