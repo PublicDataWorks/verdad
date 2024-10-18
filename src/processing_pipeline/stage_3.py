@@ -104,6 +104,12 @@ def __get_metadata(snippet):
     return metadata
 
 
+@task(log_prints=True, retries=3)
+def create_new_label_and_assign_to_snippet(supabase_client, snippet_id, label_text):
+    label = supabase_client.create_new_label(label_text)
+    supabase_client.assign_label_to_snippet(label_id=label["id"], snippet_id=snippet_id)
+
+
 @task(log_prints=True)
 def process_snippet(supabase_client, snippet, local_file, gemini_key):
     try:
@@ -135,6 +141,10 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
             context=pro_response["context"],
             status="Processed",
         )
+
+        # Create new labels based on the response and assign them to the snippet
+        for category in pro_response["disinformation_categories"]:
+            create_new_label_and_assign_to_snippet(supabase_client, snippet["id"], category)
 
         print(f"Processing completed for {local_file}")
 

@@ -246,3 +246,30 @@ class SupabaseClient:
                 "is_ai_suggested": True,
             }).execute()
             return response.data[0]
+
+    def assign_label_to_snippet(self, label_id, snippet_id):
+        # Check if the label is already assigned to the snippet
+        existing_snippet_label = self.client.table("snippet_labels").select("*").eq("label", label_id).eq("snippet", snippet_id).execute()
+        if existing_snippet_label.data:
+            print(f"Label {label_id} already assigned to snippet {snippet_id}")
+            return existing_snippet_label.data[0]
+        else:
+            response = (
+                self.client.table("snippet_labels")
+                .insert({
+                    "label": label_id,
+                    "snippet": snippet_id,
+                })
+                .execute()
+            )
+            return response.data[0]
+
+    # TODO: Develop methods for the Frontend
+    def get_labels_assigned_to_a_snippet(self, snippet_id):
+        response = (
+            self.client.table("snippet_labels")
+            .select("label(id, text, created_by, is_ai_suggested)")
+            .eq("snippet", snippet_id)
+            .execute()
+        )
+        return response.data
