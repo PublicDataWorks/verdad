@@ -185,6 +185,3 @@ cython_debug/
 
 # Windows
 Thumbs.db
-
-# Supabase temporary files
-.temp/
