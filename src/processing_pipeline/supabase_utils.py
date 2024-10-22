@@ -284,3 +284,7 @@ class SupabaseClient:
     def get_all_labels(self):
         result = self.client.table("labels").select("*").execute()
         return result.data
+
+    def toggle_upvote_label(self, snippet_id, label_text):
+        result = self.client.rpc('toggle_upvote_label', {'snippet_id': snippet_id, 'label_text': label_text}).execute()
+        return result.data
