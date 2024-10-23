@@ -55,19 +55,31 @@
         },
         "context": {
             "type": "object",
-            "required": ["before", "after", "main"],
+            "required": ["before", "before_en", "after", "after_en", "main", "main_en"],
             "properties": {
                 "before": {
                     "type": "string",
                     "description": "Part of the audio clip transcription that precedes the snippet."
                 },
+                "before_en": {
+                    "type": "string",
+                    "description": "Translation of the `before` part into English."
+                },
                 "after": {
                     "type": "string",
                     "description": "Part of the audio clip transcription that follows the snippet."
                 },
+                "after_en": {
+                    "type": "string",
+                    "description": "Translation of the `after` part into English."
+                },
                 "main": {
                     "type": "string",
                     "description": "The transcription of the snippet itself."
+                },
+                "main_en": {
+                    "type": "string",
+                    "description": "Translation of the `main` part into English."
                 }
             }
         },

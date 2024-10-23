@@ -99,6 +99,10 @@ Perform the following steps:
   - Based on the snippet transcription from the provided metadata and your transcription of the entire audio clip, you should be able to determine the surrounding context of the snippet, which includes:
     - The part before the snippet
     - The part after the snippet
+    - The snippet itself
+
+- **Context in English:**
+  - Translate the three parts of the context into English.
 
 ##### **H. Confidence Scores**
 
@@ -187,19 +191,31 @@ Ensure your output strictly adheres to this schema.
         },
         "context": {
             "type": "object",
-            "required": ["before", "after", "main"],
+            "required": ["before", "before_en", "after", "after_en", "main", "main_en"],
             "properties": {
                 "before": {
                     "type": "string",
                     "description": "Part of the audio clip transcription that precedes the snippet."
                 },
+                "before_en": {
+                    "type": "string",
+                    "description": "Translation of the `before` part into English."
+                },
                 "after": {
                     "type": "string",
                     "description": "Part of the audio clip transcription that follows the snippet."
                 },
+                "after_en": {
+                    "type": "string",
+                    "description": "Translation of the `after` part into English."
+                },
                 "main": {
                     "type": "string",
                     "description": "The transcription of the snippet itself."
+                },
+                "main_en": {
+                    "type": "string",
+                    "description": "Translation of the `main` part into English."
                 }
             }
         },
@@ -922,8 +938,11 @@ Below is an example of the expected output, conforming to the OpenAPI JSON schem
   },
   "context": {
     "before": "Estamos viviendo tiempos difíciles, y hay muchas cosas que no nos dicen. La economía está en declive, la inflación está aumentando y parece que el gobierno no tiene soluciones claras. Además, hay un debate constante sobre las vacunas obligatorias.",
+    "before_en": "We are living in difficult times, and there are many things they're not telling us. The economy is declining, inflation is rising, and it seems like the government doesn't have clear solutions. Additionally, there's a constant debate about mandatory vaccinations.",
     "after": "Por eso debemos informarnos y proteger a nuestras familias.",
-    "main": "Dicen que el gobierno quiere controlar nuestras mentes con las vacunas. Es por eso que están empujando tanto la vacunación obligatoria."
+    "after_en": "That's why we need to inform ourselves and protect our families.",
+    "main": "Dicen que el gobierno quiere controlar nuestras mentes con las vacunas. Es por eso que están empujando tanto la vacunación obligatoria.",
+    "main_en": "They say the government wants to control our minds with vaccines. That's why they are pushing mandatory vaccination so hard."
   },
   "confidence_scores": {
     "overall": 92,
