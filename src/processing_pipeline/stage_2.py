@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import os
 import time
 import json
@@ -10,7 +11,9 @@ from supabase_utils import SupabaseClient
 
 @task(log_prints=True, retries=3)
 def fetch_a_new_stage_1_llm_response_from_supabase(supabase_client):
-    response = supabase_client.get_stage_1_llm_responses(status="New", select="*, audio_file(id, file_path)", limit=1)
+    response = supabase_client.get_stage_1_llm_responses(
+        status="New", select="*, audio_file(id, file_path, recorded_at)", limit=1
+    )
     if response:
         return response[0]
     else:
@@ -60,7 +63,9 @@ def convert_formatted_time_str_to_seconds(time_str):
 
 
 @task(log_prints=True)
-def extract_snippet_clip(input_file, output_file, formatted_start_time, formatted_end_time, context_seconds):
+def extract_snippet_clip(
+    input_file, output_file, formatted_start_time, formatted_end_time, context_seconds, formatted_recorded_at
+):
     if not os.path.isfile(input_file):
         raise FileNotFoundError(f"Audio file {input_file} does not exist.")
 
@@ -96,17 +101,31 @@ def extract_snippet_clip(input_file, output_file, formatted_start_time, formatte
     snippet_start_time = start_time - new_start_time
     snippet_end_time = snippet_start_time + (end_time - start_time)
 
-    # Format snippet duration and start/end times
+    # Calculate the snippet recorded_at
+    # snippet_recorded_at = full length audio_file's recorded_at + snippet clip's start_time (in seconds) OR
+    # snippet_recorded_at = formatted_recorded_at + new_start_time
+    snippet_recorded_at = datetime.strptime(formatted_recorded_at, "%Y-%m-%d %H:%M:%S%z") + timedelta(
+        seconds=new_start_time
+    )
+
+    # Format snippet duration, recorded_at, start and end times
     formatted_snippet_duration = f"{(snippet_duration // 60):02}:{(snippet_duration % 60):02}"
     formatted_snippet_start_time = f"{(snippet_start_time // 60):02}:{(snippet_start_time % 60):02}"
     formatted_snippet_end_time = f"{(snippet_end_time // 60):02}:{(snippet_end_time % 60):02}"
+    formatted_snippet_recorded_at = snippet_recorded_at.strftime("%Y-%m-%d %H:%M:%S%z")
     print(
         f"Snippet clip duration: {formatted_snippet_duration}\n"
         f"Snippet clip start_time: {formatted_snippet_start_time}\n"
         f"Snippet clip end_time: {formatted_snippet_end_time}\n"
+        f"Snippet recorded_at: {formatted_snippet_recorded_at}\n"
     )
 
-    return formatted_snippet_duration, formatted_snippet_start_time, formatted_snippet_end_time
+    return (
+        formatted_snippet_duration,
+        formatted_snippet_start_time,
+        formatted_snippet_end_time,
+        formatted_snippet_recorded_at,
+    )
 
 
 @task(log_prints=True, retries=3)
@@ -117,6 +136,7 @@ def insert_new_snippet_to_snippets_table_in_supabase(
     stage_1_llm_response_id,
     file_path,
     file_size,
+    recorded_at,
     duration,
     start_time,
     end_time,
@@ -127,6 +147,7 @@ def insert_new_snippet_to_snippets_table_in_supabase(
         stage_1_llm_response_id=stage_1_llm_response_id,
         file_path=file_path,
         file_size=file_size,
+        recorded_at=recorded_at,
         duration=duration,
         start_time=start_time,
         end_time=end_time,
@@ -146,8 +167,13 @@ def process_llm_response(supabase_client, llm_response, local_file, s3_client, r
             parts = local_file.split("_")
             folder_name = f"{parts[0]}_{parts[1]}"
 
-            snippet_duration, snippet_start_time, snippet_end_time = extract_snippet_clip(
-                local_file, output_file, start_time, end_time, context_seconds
+            snippet_duration, snippet_start_time, snippet_end_time, snippet_recorded_at = extract_snippet_clip(
+                local_file,
+                output_file,
+                start_time,
+                end_time,
+                context_seconds,
+                llm_response["audio_file"]["recorded_at"],
             )
             file_size = os.path.getsize(output_file)
 
@@ -159,6 +185,7 @@ def process_llm_response(supabase_client, llm_response, local_file, s3_client, r
                 stage_1_llm_response_id=llm_response["id"],
                 file_path=uploaded_path,
                 file_size=file_size,
+                recorded_at=snippet_recorded_at,
                 duration=snippet_duration,
                 start_time=snippet_start_time,
                 end_time=snippet_end_time,
