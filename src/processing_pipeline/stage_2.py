@@ -112,7 +112,7 @@ def extract_snippet_clip(
     formatted_snippet_duration = f"{(snippet_duration // 60):02}:{(snippet_duration % 60):02}"
     formatted_snippet_start_time = f"{(snippet_start_time // 60):02}:{(snippet_start_time % 60):02}"
     formatted_snippet_end_time = f"{(snippet_end_time // 60):02}:{(snippet_end_time % 60):02}"
-    formatted_snippet_recorded_at = snippet_recorded_at.isoformat() + "Z"
+    formatted_snippet_recorded_at = snippet_recorded_at.isoformat()
     print(
         f"Snippet clip duration: {formatted_snippet_duration}\n"
         f"Snippet clip start_time: {formatted_snippet_start_time}\n"
