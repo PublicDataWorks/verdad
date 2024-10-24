@@ -104,7 +104,7 @@ def extract_snippet_clip(
     # Calculate the snippet recorded_at
     # snippet_recorded_at = full length audio_file's recorded_at + snippet clip's start_time (in seconds) OR
     # snippet_recorded_at = formatted_recorded_at + new_start_time
-    snippet_recorded_at = datetime.strptime(formatted_recorded_at, "%Y-%m-%d %H:%M:%S") + timedelta(
+    snippet_recorded_at = datetime.fromisoformat(formatted_recorded_at.replace("Z", "+00:00")) + timedelta(
         seconds=new_start_time
     )
 
@@ -112,7 +112,7 @@ def extract_snippet_clip(
     formatted_snippet_duration = f"{(snippet_duration // 60):02}:{(snippet_duration % 60):02}"
     formatted_snippet_start_time = f"{(snippet_start_time // 60):02}:{(snippet_start_time % 60):02}"
     formatted_snippet_end_time = f"{(snippet_end_time // 60):02}:{(snippet_end_time % 60):02}"
-    formatted_snippet_recorded_at = snippet_recorded_at.strftime("%Y-%m-%d %H:%M:%S")
+    formatted_snippet_recorded_at = snippet_recorded_at.isoformat() + "Z"
     print(
         f"Snippet clip duration: {formatted_snippet_duration}\n"
         f"Snippet clip start_time: {formatted_snippet_start_time}\n"
