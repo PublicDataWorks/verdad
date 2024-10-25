@@ -16,6 +16,11 @@ BEGIN
         RAISE EXCEPTION 'Only logged-in users can call this function';
     END IF;
 
+    -- Check minimum password length
+    IF LENGTH(password) < 6 THEN
+        RAISE EXCEPTION 'Password must be at least 6 characters long';
+    END IF;
+
     -- Create the metadata JSON object
     metadata := jsonb_build_object(
         'first_name', first_name,
