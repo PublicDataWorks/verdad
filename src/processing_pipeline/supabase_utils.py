@@ -265,28 +265,3 @@ class SupabaseClient:
                 .execute()
             )
             return response.data[0]
-
-    # TODO: Develop methods for the Frontend
-    def get_snippet_labels(self, snippet_id):
-        result = self.client.rpc('get_snippet_labels', {'snippet_id': snippet_id}).execute()
-        return result.data
-
-    def upvote_label(self, snippet_id, label_text):
-        result = self.client.rpc('upvote_label', {'snippet_id': snippet_id, 'label_text': label_text}).execute()
-        return result.data
-
-    def undo_upvote_label(self, snippet_id, label_text):
-        result = self.client.rpc('undo_upvote_label', {'snippet_id': snippet_id, 'label_text': label_text}).execute()
-        return result.data
-
-    def create_apply_and_upvote_label(self, snippet_id, label_text):
-        result = self.client.rpc('create_apply_and_upvote_label', {'snippet_id': snippet_id, 'label_text': label_text}).execute()
-        return result.data
-
-    def get_all_labels(self):
-        result = self.client.table("labels").select("*").execute()
-        return result.data
-
-    def toggle_upvote_label(self, snippet_id, label_text):
-        result = self.client.rpc('toggle_upvote_label', {'snippet_id': snippet_id, 'label_text': label_text}).execute()
-        return result.data
