@@ -10,7 +10,7 @@ from supabase_utils import SupabaseClient
 from constants import (
     get_system_instruction_for_stage_1,
     get_output_schema_for_stage_1,
-    get_user_prompt_for_stage_1,
+    get_detection_prompt_for_stage_1,
 )
 
 
@@ -185,7 +185,7 @@ def initial_disinformation_detection(repeat):
 class Stage1Executor:
 
     SYSTEM_INSTRUCTION = get_system_instruction_for_stage_1()
-    USER_PROMPT = get_user_prompt_for_stage_1()
+    DETECTION_PROMPT = get_detection_prompt_for_stage_1()
     OUTPUT_SCHEMA = get_output_schema_for_stage_1()
 
     @classmethod
@@ -201,7 +201,7 @@ class Stage1Executor:
 
         # Prepare the user prompt
         user_prompt = (
-            f"{cls.USER_PROMPT}\n\nHere is the metadata of the transcription:\n\n{json.dumps(metadata, indent=2)}\n\n"
+            f"{cls.DETECTION_PROMPT}\n\nHere is the metadata of the transcription:\n\n{json.dumps(metadata, indent=2)}\n\n"
             f"Here is the transcription:\n\n{timestamped_transcription}"
         )
 

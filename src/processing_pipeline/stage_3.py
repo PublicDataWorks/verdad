@@ -23,7 +23,7 @@ def __fetch_a_new_snippet_from_supabase(supabase_client):
     response = supabase_client.get_snippets(
         status="New",
         limit=1,
-        select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("gemini_1.5_flash_002")',
+        select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("detection_result")',
     )
     if response:
         return response[0]
@@ -84,7 +84,7 @@ def get_metadata(snippet):
 
 def __get_metadata(snippet):
     snippet_uuid = snippet["id"]
-    flagged_snippets = snippet["stage_1_llm_response"]["gemini_1.5_flash_002"]["flagged_snippets"]
+    flagged_snippets = snippet["stage_1_llm_response"]["detection_result"]["flagged_snippets"]
     metadata = {}
     for flagged_snippet in flagged_snippets:
         if flagged_snippet["uuid"] == snippet_uuid:

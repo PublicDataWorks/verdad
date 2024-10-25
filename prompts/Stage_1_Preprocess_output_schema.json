@@ -1,0 +1,29 @@
+{
+    "type": "object",
+    "required": ["flagged_snippets"],
+    "properties": {
+        "flagged_snippets": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["transcription", "explanation", "disinformation_categories"],
+                "properties": {
+                    "transcription": {
+                        "type": "string",
+                        "description": "Transcription of the snippet."
+                    },
+                    "explanation": {
+                        "type": "string",
+                        "description": "Explain why this snippet was flagged (in English)."
+                    },
+                    "disinformation_categories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

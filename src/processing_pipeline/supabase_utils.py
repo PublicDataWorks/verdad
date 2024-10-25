@@ -106,7 +106,7 @@ class SupabaseClient:
             .insert(
                 {
                     "audio_file": audio_file_id,
-                    "openai_whisper_1": openai_response,
+                    "timestamped_transcription": openai_response,
                 }
             )
             .execute()
@@ -117,7 +117,7 @@ class SupabaseClient:
         response = (
             self.client.table("stage_1_llm_responses")
             .update({
-                "gemini_1.5_flash_002": flash_response,
+                "detection_result": flash_response,
                 "status": status,
             })
             .eq("id", id)
