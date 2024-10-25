@@ -100,30 +100,30 @@ class SupabaseClient:
         )
         return response.data[0]
 
-    def insert_stage_1_llm_response(self, audio_file_id, openai_response):
+    def insert_stage_1_llm_response(
+        self,
+        audio_file_id,
+        initial_transcription,
+        initial_detection_result,
+        openai_response,
+        detection_result,
+        status,
+    ):
         response = (
             self.client.table("stage_1_llm_responses")
             .insert(
                 {
                     "audio_file": audio_file_id,
+                    "initial_transcription": initial_transcription,
+                    "initial_detection_result": initial_detection_result,
                     "timestamped_transcription": openai_response,
+                    "detection_result": detection_result,
+                    "status": status
                 }
             )
             .execute()
         )
         return response.data[0]
-
-    def update_stage_1_llm_response(self, id, flash_response, status):
-        response = (
-            self.client.table("stage_1_llm_responses")
-            .update({
-                "detection_result": flash_response,
-                "status": status,
-            })
-            .eq("id", id)
-            .execute()
-        )
-        return response.data
 
     def insert_snippet(
         self,
