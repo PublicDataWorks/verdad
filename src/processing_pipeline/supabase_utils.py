@@ -8,7 +8,7 @@ class SupabaseClient:
             supabase_key,
         )
 
-    def get_audio_files(self, status, order="created_at.asc", select="*", limit=1):
+    def get_audio_files(self, status, order="created_at.desc", select="*", limit=1):
         response = (
             self.client.table("audio_files").select(select).eq("status", status).order(order).limit(limit).execute()
         )
