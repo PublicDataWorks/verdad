@@ -221,9 +221,7 @@ def audio_clipping(context_seconds, repeat):
         if llm_response:
             # Immediately set the llm response to Processing, so that other workers don't pick it up
             supabase_client.set_stage_1_llm_response_status(llm_response["id"], "Processing")
-
-            print("Found a new stage-1 LLM response:")
-            print(json.dumps(llm_response, indent=2))
+            print(f"Found a new stage-1 LLM response: {llm_response['id']}")
 
             local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, llm_response["audio_file"]["file_path"])
 

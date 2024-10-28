@@ -175,9 +175,7 @@ def in_depth_analysis(repeat):
         if snippet:
             # Immediately set the snippet to Processing, so that other workers don't pick it up
             supabase_client.set_snippet_status(snippet["id"], "Processing")
-
-            print("Found a new snippet:")
-            print(json.dumps(snippet, indent=2))
+            print(f"Found a new snippet: {snippet['id']}")
 
             local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
