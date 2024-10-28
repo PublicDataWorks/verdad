@@ -98,7 +98,7 @@ def initial_disinformation_detection_with_gemini_1_5_flash_002(initial_transcrip
 def disinformation_detection_with_gemini_1_5_flash_002(timestamped_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1Executor.run(
-        gemni_key=gemini_key,
+        gemini_key=gemini_key,
         timestamped_transcription=timestamped_transcription,
         metadata=metadata,
     )
