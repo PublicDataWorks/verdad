@@ -240,7 +240,7 @@ def audio_clipping(context_seconds, repeat):
         if llm_response:
             sleep_time = 2
         else:
-            sleep_time = 30
+            sleep_time = 60
 
         print(f"Sleep for {sleep_time} seconds before the next iteration")
         time.sleep(sleep_time)

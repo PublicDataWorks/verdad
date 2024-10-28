@@ -105,6 +105,26 @@ def disinformation_detection_with_gemini_1_5_flash_002(timestamped_transcription
     return json.loads(response)
 
 
+@task(log_prints=True, retries=3)
+def insert_stage_1_llm_response(
+    supabase_client,
+    audio_file_id,
+    initial_transcription,
+    initial_detection_result,
+    openai_response,
+    detection_result,
+    status,
+):
+    supabase_client.insert_stage_1_llm_response(
+        audio_file_id=audio_file_id,
+        initial_transcription=initial_transcription,
+        initial_detection_result=initial_detection_result,
+        openai_response=openai_response,
+        detection_result=detection_result,
+        status=status,
+    )
+
+
 @task(log_prints=True)
 def process_audio_file(supabase_client, audio_file, local_file):
     try:
@@ -133,7 +153,8 @@ def process_audio_file(supabase_client, audio_file, local_file):
             print(
                 "No flagged snippets found during the initial detection, inserting the llm response with status 'Processed'"
             )
-            supabase_client.insert_stage_1_llm_response(
+            insert_stage_1_llm_response(
+                supabase_client=supabase_client,
                 audio_file_id=audio_file["id"],
                 initial_transcription=initial_transcription,
                 initial_detection_result=initial_detection_result,
@@ -155,7 +176,8 @@ def process_audio_file(supabase_client, audio_file, local_file):
 
             if len(flagged_snippets) == 0:
                 "No flagged snippets found, inserting the llm response with status 'Processed'"
-                supabase_client.insert_stage_1_llm_response(
+                insert_stage_1_llm_response(
+                    supabase_client=supabase_client,
                     audio_file_id=audio_file["id"],
                     initial_transcription=initial_transcription,
                     initial_detection_result=initial_detection_result,
@@ -165,7 +187,8 @@ def process_audio_file(supabase_client, audio_file, local_file):
                 )
             else:
                 "Flagged snippets found, inserting the llm response with status 'New'"
-                supabase_client.insert_stage_1_llm_response(
+                insert_stage_1_llm_response(
+                    supabase_client=supabase_client,
                     audio_file_id=audio_file["id"],
                     initial_transcription=initial_transcription,
                     initial_detection_result=initial_detection_result,
@@ -217,7 +240,7 @@ def initial_disinformation_detection(repeat):
         if audio_file:
             sleep_time = 2
         else:
-            sleep_time = 30
+            sleep_time = 60
 
         print(f"Sleep for {sleep_time} seconds before the next iteration")
         time.sleep(sleep_time)
