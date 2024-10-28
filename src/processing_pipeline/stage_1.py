@@ -38,7 +38,7 @@ def __download_audio_file_from_s3(s3_client, file_path):
 
 
 @task(log_prints=True)
-def transcribe_audio_file_with_gemini_1_5_flash_002(audio_file, gemini_key):
+def transcribe_audio_file_with_gemini_1_5_flash_002(audio_file):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1PreprocessTranscriptionExecutor.run(audio_file, gemini_key)
     return json.loads(response)
