@@ -40,6 +40,7 @@ BEGIN
             s.explanation,
             s.confidence_scores,
             s.context,
+            (get_snippet_labels(s.id) -> 'labels') AS labels,
             jsonb_build_object(
                 'id', a.id,
                 'radio_station_name', a.radio_station_name,

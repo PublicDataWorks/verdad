@@ -36,7 +36,8 @@ BEGIN
             ELSE false
         END,
         'status', s.status,
-        'error_message', s.error_message
+        'error_message', s.error_message,
+        'labels', get_snippet_labels(s.id) -> 'labels'
     ) INTO result
     FROM snippets s
     LEFT JOIN user_star_snippets us ON s.id = us.snippet AND us."user" = current_user_id
