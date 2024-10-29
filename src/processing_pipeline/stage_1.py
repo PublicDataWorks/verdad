@@ -97,10 +97,11 @@ def initial_disinformation_detection_with_gemini_1_5_flash_002(initial_transcrip
 
 
 @task(log_prints=True)
-def disinformation_detection_with_gemini_1_5_pro_002(timestamped_transcription, metadata):
+def disinformation_detection_with_gemini_1_5_pro_002(raw_transcription, timestamped_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1Executor.run(
         gemini_key=gemini_key,
+        raw_transcription=raw_transcription,
         timestamped_transcription=timestamped_transcription,
         metadata=metadata,
     )
@@ -177,6 +178,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
 
             print("Processing the timestamped transcription (from Whisper) with Gemini 1.5 Pro 002")
             detection_result = disinformation_detection_with_gemini_1_5_pro_002(
+                raw_transcription=openai_response["transcription"],
                 timestamped_transcription=openai_response["timestamped_transcription"],
                 metadata=metadata,
             )
@@ -263,7 +265,7 @@ class Stage1Executor:
     OUTPUT_SCHEMA = get_output_schema_for_stage_1()
 
     @classmethod
-    def run(cls, gemini_key, timestamped_transcription, metadata):
+    def run(cls, gemini_key, raw_transcription, timestamped_transcription, metadata):
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
@@ -276,7 +278,8 @@ class Stage1Executor:
         # Prepare the user prompt
         user_prompt = (
             f"{cls.DETECTION_PROMPT}\n\nHere is the metadata of the transcription:\n\n{json.dumps(metadata, indent=2)}\n\n"
-            f"Here is the timestamped transcription:\n\n{timestamped_transcription}\n"
+            f"Here is the raw transcription (without timestamps):\n\n```Raw Transcription\n{raw_transcription}\n```\n\n"
+            f"Here is the timestamped transcription:\n\n```Timestamped Transcription\n{timestamped_transcription}\n```\n"
         )
 
         result = model.generate_content(

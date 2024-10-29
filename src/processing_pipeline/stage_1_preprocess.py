@@ -72,7 +72,7 @@ class Stage1PreprocessDetectionExecutor:
         # Prepare the user prompt
         user_prompt = (
             f"{cls.DETECTION_PROMPT}\n\nHere is the metadata of the transcription:\n\n{json.dumps(metadata, indent=2)}\n\n"
-            f"Here is the transcription:\n\n{transcription}\n"
+            f"Here is the transcription:\n\n{transcription}"
         )
 
         result = model.generate_content(
