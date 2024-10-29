@@ -15,7 +15,6 @@ Please analyze the provided timestamped transcription for potential disinformati
 3. **Identify and Flag Snippets:**
 
    - For each potential disinformation snippet, record the following:
-     - `uuid`: Generate a unique identifier for the snippet. For example, "012a7b5f-1ab5-4bf9-bdfa-2f20f76bba48"
      - `start_time`: The timestamp when the snippet begins, in MM:SS format, based on the provided transcription.
      - `end_time`: The timestamp when the snippet ends, in MM:SS format, based on the provided transcription.
      - `transcription`: Transcription of the snippet (without timestamps).
@@ -41,7 +40,6 @@ Please analyze the provided timestamped transcription for potential disinformati
             "items": {
                 "type": "object",
                 "required": [
-                    "uuid",
                     "start_time",
                     "end_time",
                     "transcription",
@@ -50,10 +48,6 @@ Please analyze the provided timestamped transcription for potential disinformati
                     "keywords_detected"
                 ],
                 "properties": {
-                    "uuid": {
-                        "type": "string",
-                        "description": "Unique identifier for the snippet."
-                    },
                     "start_time": {
                         "type": "string",
                         "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
@@ -666,7 +660,6 @@ By meticulously following these instructions and applying the heuristics across 
 {
   "flagged_snippets": [
     {
-      "uuid": "010a11ca-eb94-4f78-92b3-d83374cbd062",
       "start_time": "05:30",
       "end_time": "07:15",
       "transcription": "La 'plandemia' es una excusa para controlarnos con 'microchips en vacunas'.",
@@ -675,7 +668,6 @@ By meticulously following these instructions and applying the heuristics across 
       "keywords_detected": ["plandemia", "microchips en vacunas"]
     },
     {
-      "uuid": "014190f3-0550-4173-9389-6e8fe2dd5ce7",
       "start_time": "07:15",
       "end_time": "08:00",
       "transcription": "Los 'extranjeros ilegales' están causando problemas económicos en nuestro país.",

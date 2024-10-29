@@ -3,6 +3,7 @@ import time
 import google.generativeai as genai
 import json
 import boto3
+import uuid
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from openai import OpenAI
 from prefect import flow, task
@@ -104,7 +105,14 @@ def disinformation_detection_with_gemini_1_5_pro_002(raw_transcription, timestam
         timestamped_transcription=timestamped_transcription,
         metadata=metadata,
     )
-    return json.loads(response)
+    json_response = json.loads(response)
+    flagged_snippets = json_response["flagged_snippets"]
+
+    # Generate a uuid for each flagged snippet
+    for snippet in flagged_snippets:
+        snippet["uuid"] = str(uuid.uuid4())
+
+    return json_response
 
 
 @task(log_prints=True, retries=3)

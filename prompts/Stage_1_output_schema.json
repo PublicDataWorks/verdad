@@ -7,7 +7,6 @@
             "items": {
                 "type": "object",
                 "required": [
-                    "uuid",
                     "start_time",
                     "end_time",
                     "transcription",
@@ -16,10 +15,6 @@
                     "keywords_detected"
                 ],
                 "properties": {
-                    "uuid": {
-                        "type": "string",
-                        "description": "Unique identifier for the snippet."
-                    },
                     "start_time": {
                         "type": "string",
                         "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
