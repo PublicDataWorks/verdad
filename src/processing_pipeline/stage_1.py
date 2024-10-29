@@ -3,6 +3,7 @@ import time
 import google.generativeai as genai
 import json
 import boto3
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from openai import OpenAI
 from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
@@ -274,5 +275,11 @@ class Stage1Executor:
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA
             ),
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            },
         )
         return result.text

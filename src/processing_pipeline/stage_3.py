@@ -7,6 +7,7 @@ import boto3
 from prefect import task, flow
 from prefect.task_runners import ConcurrentTaskRunner
 from supabase_utils import SupabaseClient
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from constants import (
     get_system_instruction_for_stage_3,
     get_output_schema_for_stage_3,
@@ -233,6 +234,12 @@ class Stage3Executor:
                 generation_config=genai.GenerationConfig(
                     response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA
                 ),
+                safety_settings={
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                },
             )
             return result.text
         finally:

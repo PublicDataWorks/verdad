@@ -1,6 +1,7 @@
 import json
 import time
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from constants import (
     get_transcription_prompt_for_stage_1_preprocess,
     get_system_instruction_for_stage_1_preprocess,
@@ -39,6 +40,12 @@ class Stage1PreprocessTranscriptionExecutor:
                 generation_config=genai.GenerationConfig(
                     response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA
                 ),
+                safety_settings={
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                },
             )
             return result.text
         finally:
@@ -73,5 +80,11 @@ class Stage1PreprocessDetectionExecutor:
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA
             ),
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            },
         )
         return result.text
