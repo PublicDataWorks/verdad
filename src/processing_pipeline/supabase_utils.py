@@ -186,6 +186,7 @@ class SupabaseClient:
         confidence_scores,
         emotional_tone,
         context,
+        political_leaning,
         status,
     ):
         response = (
@@ -203,6 +204,7 @@ class SupabaseClient:
                     "confidence_scores": confidence_scores,
                     "emotional_tone": emotional_tone,
                     "context": context,
+                    "political_leaning": political_leaning,
                     "status": status,
                 }
             )
@@ -227,6 +229,7 @@ class SupabaseClient:
                     "confidence_scores": None,
                     "emotional_tone": None,
                     "context": None,
+                    "political_leaning": None,
                     "status": "New",
                     "error_message": None,
                 }

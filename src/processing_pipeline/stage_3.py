@@ -59,6 +59,7 @@ def update_snippet_in_supabase(
     confidence_scores,
     emotional_tone,
     context,
+    political_leaning,
     status,
 ):
     supabase_client.update_snippet(
@@ -74,6 +75,7 @@ def update_snippet_in_supabase(
         confidence_scores=confidence_scores,
         emotional_tone=emotional_tone,
         context=context,
+        political_leaning=political_leaning,
         status=status,
     )
 
@@ -147,6 +149,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
             confidence_scores=pro_response["confidence_scores"],
             emotional_tone=pro_response["emotional_tone"],
             context=pro_response["context"],
+            political_leaning=pro_response["political_leaning"],
             status="Processed",
         )
 
