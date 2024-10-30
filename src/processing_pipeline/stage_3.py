@@ -106,9 +106,17 @@ def __get_metadata(snippet):
 
 
 @task(log_prints=True, retries=3)
-def create_new_label_and_assign_to_snippet(supabase_client, snippet_id, label_text):
-    label = supabase_client.create_new_label(label_text)
-    supabase_client.assign_label_to_snippet(label_id=label["id"], snippet_id=snippet_id)
+def create_new_label_and_assign_to_snippet(supabase_client, snippet_id, label):
+    english_label_text = label["english"]
+    spanish_label_text = label["spanish"]
+
+    # Create the labels
+    english_label = supabase_client.create_new_label(english_label_text)
+    spanish_label = supabase_client.create_new_label(spanish_label_text)
+
+    # Assign the labels to the snippet
+    supabase_client.assign_label_to_snippet(label_id=english_label["id"], snippet_id=snippet_id)
+    supabase_client.assign_label_to_snippet(label_id=spanish_label["id"], snippet_id=snippet_id)
 
 
 @task(log_prints=True)
@@ -124,7 +132,6 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
         )
 
         pro_response = json.loads(pro_response)
-        print(f"Gemini Pro 1.5-002 Response:\n{json.dumps(pro_response, indent=2)}\n")
 
         update_snippet_in_supabase(
             supabase_client=supabase_client,
@@ -225,7 +232,7 @@ class Stage3Executor:
 
         # Prepare the user prompt
         user_prompt = (
-            f"{cls.USER_PROMPT}\nHere is the metadata of the attached audio clip:\n{json.dumps(metadata, indent=2)}"
+            f"{cls.USER_PROMPT}\n\nHere is the metadata of the attached audio clip:\n{json.dumps(metadata, indent=2)}"
         )
 
         try:

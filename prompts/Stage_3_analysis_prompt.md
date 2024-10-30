@@ -68,7 +68,7 @@ Perform the following steps:
 ##### **D. Summary and Explanation**
 
 - **Summary:**
-  - Write an objective summary of the snippet in English.
+  - Write an objective summary of the snippet in both English and Spanish.
   - Highlight the main points discussed.
 
 - **Explanation:**
@@ -91,7 +91,7 @@ Perform the following steps:
 
 ##### **F. Title Creation**
 
-- Create a descriptive and concise title for the snippet that encapsulates its essence.
+- Create a descriptive and concise title for the snippet that encapsulates its essence (in both English and Spanish).
 
 ##### **G. Contextual Information**
 
@@ -116,12 +116,13 @@ Perform the following steps:
 
 - **Identified Emotions:**
   - List any emotions expressed in the snippet (e.g., anger, fear, joy, sadness, surprise, disgust, contempt).
+  - Provide the emotions in both English and Spanish.
 
 - **Intensity:**
   - Score the intensity of each emotion on a scale from 0 to 100.
 
 - **Explanation:**
-  - Briefly explain how the emotional tone contributes to the message and its potential impact.
+  - Briefly explain how the emotional tone contributes to the message and its potential impact (in both English and Spanish).
 
 #### **3. Assemble Structured Output**
 
@@ -159,26 +160,72 @@ Ensure your output strictly adheres to this schema.
             "description": "Translation of the transcription into English."
         },
         "title": {
-            "type": "string",
+            "type": "object",
+            "required": ["spanish", "english"],
+            "properties": {
+                "spanish": {
+                    "type": "string",
+                    "description": "Title of the snippet in Spanish."
+                },
+                "english": {
+                    "type": "string",
+                    "description": "Title of the snippet in English."
+                }
+            },
             "description": "Descriptive title of the snippet."
         },
         "summary": {
-            "type": "string",
+            "type": "object",
+            "required": ["spanish", "english"],
+            "properties": {
+                "spanish": {
+                    "type": "string",
+                    "description": "Summary of the snippet in Spanish."
+                },
+                "english": {
+                    "type": "string",
+                    "description": "Summary of the snippet in English."
+                }
+            },
             "description": "Objective summary of the snippet."
         },
         "explanation": {
-            "type": "string",
+            "type": "object",
+            "required": ["spanish", "english"],
+            "properties": {
+                "spanish": {
+                    "type": "string",
+                    "description": "Explanation in Spanish."
+                },
+                "english": {
+                    "type": "string",
+                    "description": "Explanation in English."
+                }
+            },
             "description": "Detailed explanation of why the snippet constitutes disinformation."
         },
         "disinformation_categories": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+                "type": "object",
+                "required": ["spanish", "english"],
+                "properties": {
+                    "spanish": {
+                        "type": "string",
+                        "description": "Disinformation category in Spanish."
+                    },
+                    "english": {
+                        "type": "string",
+                        "description": "Disinformation category in English, which should be based on the heuristics provided."
+                    }
+                }
+            },
             "description": "Disinformation categories that the snippet belongs to, based on the heuristics provided."
         },
         "keywords_detected": {
             "type": "array",
             "items": { "type": "string" },
-            "description": "Specific words or phrases that triggered the flag."
+            "description": "Specific words or phrases that triggered the flag, in original language."
         },
         "language": {
             "type": "object",
@@ -236,7 +283,7 @@ Ensure your output strictly adheres to this schema.
                             "category": { "type": "string" },
                             "score": { "type": "integer" }
                         },
-                        "description": "Confidence score for each category, ranging from 0 to 100."
+                        "description": "Confidence score for each category (in both English and Spanish), ranging from 0 to 100."
                     }
                 }
             }
@@ -247,12 +294,26 @@ Ensure your output strictly adheres to this schema.
                 "type": "object",
                 "required": ["emotion", "intensity", "explanation"],
                 "properties": {
-                    "emotion": { "type": "string" },
+                    "emotion": {
+                        "type": "object",
+                        "required": ["spanish", "english"],
+                        "properties": {
+                            "spanish": { "type": "string" },
+                            "english": { "type": "string" }
+                        }
+                    },
                     "intensity": {
                         "type": "integer",
                         "description": "Intensity of the emotion, ranging from 0 to 100."
                     },
-                    "explanation": { "type": "string" }
+                    "explanation": {
+                        "type": "object",
+                        "required": ["spanish", "english"],
+                        "properties": {
+                            "spanish": { "type": "string" },
+                            "english": { "type": "string" }
+                        }
+                    }
                 }
             }
         }
@@ -926,11 +987,35 @@ Below is an example of the expected output, conforming to the OpenAPI JSON schem
 {
   "transcription": "Estamos viviendo tiempos difíciles, y hay muchas cosas que no nos dicen. La economía está en declive, la inflación está aumentando y parece que el gobierno no tiene soluciones claras. Además, hay un debate constante sobre las vacunas obligatorias. Dicen que el gobierno quiere controlar nuestras mentes con las vacunas. Es por eso que están empujando tanto la vacunación obligatoria. Por eso debemos informarnos y proteger a nuestras familias.",
   "translation": "We are living in difficult times, and there are many things they're not telling us. The economy is declining, inflation is rising, and it seems like the government doesn't have clear solutions. Additionally, there's a constant debate about mandatory vaccinations. They say the government wants to control our minds with vaccines. That's why they are pushing mandatory vaccination so hard. That's why we need to inform ourselves and protect our families.",
-  "title": "Government Control Through Mandatory Vaccinations",
-  "summary": "The speaker discusses the current economic struggles and rising inflation, expressing skepticism towards the government's lack of clear solutions. They highlight a contentious debate on mandatory vaccinations, suggesting that the government aims to control people's minds through vaccines, thereby advocating for self-education and family protection.",
-  "explanation": "This snippet falls under the 'COVID-19 and Vaccination' and 'Conspiracy Theories' disinformation categories. It propagates the unfounded conspiracy theory that vaccines are a means for the government to control individuals' minds, which can fuel vaccine hesitancy and erode trust in public health measures. The emotional tone conveys fear and distrust towards governmental initiatives, potentially influencing community behavior adversely.",
-  "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"],
-  "keywords_detected": ["vaccines", "mandatory vaccination", "government control our minds", "inform ourselves", "protect our families"],
+  "title": {
+    "spanish": "El control del gobierno a través de las vacunaciones obligatorias",
+    "english": "Government Control Through Mandatory Vaccinations"
+  },
+  "summary": {
+    "spanish": "El orador discute las dificultades económicas actuales y el aumento de la inflación, expresando escepticismo hacia la falta de soluciones claras por parte del gobierno. Destaca un debate contencioso sobre las vacunaciones obligatorias, sugiriendo que el gobierno pretende controlar las mentes de las personas a través de las vacunas, abogando así por la autoeducación y la protección de la familia.",
+    "english": "The speaker discusses the current economic struggles and rising inflation, expressing skepticism towards the government's lack of clear solutions. They highlight a contentious debate on mandatory vaccinations, suggesting that the government aims to control people's minds through vaccines, thereby advocating for self-education and family protection."
+  },
+  "explanation": {
+    "spanish": "Este fragmento cae bajo las categorías de desinformación de \"COVID-19 y vacunación\" y \"Teorías de conspiración\". Propaga la teoría de conspiración infundada de que las vacunas son un medio para que el gobierno controle las mentes de los individuos, lo que puede alimentar la reticencia a las vacunas y erosionar la confianza en las medidas de salud pública. El tono emocional transmite miedo y desconfianza hacia las iniciativas gubernamentales, lo que podría influir negativamente en el comportamiento de la comunidad.",
+    "english": "This snippet falls under the 'COVID-19 and Vaccination' and 'Conspiracy Theories' disinformation categories. It propagates the unfounded conspiracy theory that vaccines are a means for the government to control individuals' minds, which can fuel vaccine hesitancy and erode trust in public health measures. The emotional tone conveys fear and distrust towards governmental initiatives, potentially influencing community behavior adversely."
+  },
+  "disinformation_categories": [
+    {
+      "spanish": "COVID-19 y vacunación",
+      "english": "COVID-19 and Vaccination"
+    },
+    {
+      "spanish": "Teorías de conspiración",
+      "english": "Conspiracy Theories"
+    }
+  ],
+  "keywords_detected": [
+    "vacunas",
+    "vacunación obligatoria",
+    "controlar nuestras mentes",
+    "informarnos",
+    "proteger a nuestras familias"
+  ],
   "language": {
     "primary_language": "Spanish",
     "dialect": "Mexican Spanish",
@@ -959,19 +1044,37 @@ Below is an example of the expected output, conforming to the OpenAPI JSON schem
   },
   "emotional_tone": [
     {
-      "emotion": "Fear",
+      "emotion": {
+        "spanish": "Miedo",
+        "english": "Fear"
+      },
       "intensity": 80,
-      "explanation": "The speaker expresses fear about government manipulation through vaccines."
+      "explanation": {
+        "spanish": "El orador expresa miedo sobre la manipulación del gobierno a través de las vacunas.",
+        "english": "The speaker expresses fear about government manipulation through vaccines."
+      }
     },
     {
-      "emotion": "Distrust",
+      "emotion": {
+        "spanish": "Desconfianza",
+        "english": "Distrust"
+      },
       "intensity": 85,
-      "explanation": "There is a strong sense of distrust towards governmental actions and policies."
+      "explanation": {
+        "spanish": "Hay un fuerte sentido de desconfianza hacia las acciones y políticas gubernamentales.",
+        "english": "There is a strong sense of distrust towards governmental actions and policies."
+      }
     },
     {
-      "emotion": "Concern",
+      "emotion": {
+        "spanish": "Preocupación",
+        "english": "Concern"
+      },
       "intensity": 75,
-      "explanation": "The speaker is concerned about the economic situation and the impact of mandatory vaccinations on personal freedoms."
+      "explanation": {
+        "spanish": "El orador está preocupado por la situación económica y el impacto de las vacunaciones obligatorias en las libertades personales.",
+        "english": "The speaker is concerned about the economic situation and the impact of mandatory vaccinations on personal freedoms."
+      }
     }
   ]
 }

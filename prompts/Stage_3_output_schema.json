@@ -23,26 +23,72 @@
             "description": "Translation of the transcription into English."
         },
         "title": {
-            "type": "string",
+            "type": "object",
+            "required": ["spanish", "english"],
+            "properties": {
+                "spanish": {
+                    "type": "string",
+                    "description": "Title of the snippet in Spanish."
+                },
+                "english": {
+                    "type": "string",
+                    "description": "Title of the snippet in English."
+                }
+            },
             "description": "Descriptive title of the snippet."
         },
         "summary": {
-            "type": "string",
+            "type": "object",
+            "required": ["spanish", "english"],
+            "properties": {
+                "spanish": {
+                    "type": "string",
+                    "description": "Summary of the snippet in Spanish."
+                },
+                "english": {
+                    "type": "string",
+                    "description": "Summary of the snippet in English."
+                }
+            },
             "description": "Objective summary of the snippet."
         },
         "explanation": {
-            "type": "string",
+            "type": "object",
+            "required": ["spanish", "english"],
+            "properties": {
+                "spanish": {
+                    "type": "string",
+                    "description": "Explanation in Spanish."
+                },
+                "english": {
+                    "type": "string",
+                    "description": "Explanation in English."
+                }
+            },
             "description": "Detailed explanation of why the snippet constitutes disinformation."
         },
         "disinformation_categories": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+                "type": "object",
+                "required": ["spanish", "english"],
+                "properties": {
+                    "spanish": {
+                        "type": "string",
+                        "description": "Disinformation category in Spanish."
+                    },
+                    "english": {
+                        "type": "string",
+                        "description": "Disinformation category in English, which should be based on the heuristics provided."
+                    }
+                }
+            },
             "description": "Disinformation categories that the snippet belongs to, based on the heuristics provided."
         },
         "keywords_detected": {
             "type": "array",
             "items": { "type": "string" },
-            "description": "Specific words or phrases that triggered the flag."
+            "description": "Specific words or phrases that triggered the flag, in original language."
         },
         "language": {
             "type": "object",
@@ -100,7 +146,7 @@
                             "category": { "type": "string" },
                             "score": { "type": "integer" }
                         },
-                        "description": "Confidence score for each category, ranging from 0 to 100."
+                        "description": "Confidence score for each category (in both English and Spanish), ranging from 0 to 100."
                     }
                 }
             }
@@ -111,12 +157,26 @@
                 "type": "object",
                 "required": ["emotion", "intensity", "explanation"],
                 "properties": {
-                    "emotion": { "type": "string" },
+                    "emotion": {
+                        "type": "object",
+                        "required": ["spanish", "english"],
+                        "properties": {
+                            "spanish": { "type": "string" },
+                            "english": { "type": "string" }
+                        }
+                    },
                     "intensity": {
                         "type": "integer",
                         "description": "Intensity of the emotion, ranging from 0 to 100."
                     },
-                    "explanation": { "type": "string" }
+                    "explanation": {
+                        "type": "object",
+                        "required": ["spanish", "english"],
+                        "properties": {
+                            "spanish": { "type": "string" },
+                            "english": { "type": "string" }
+                        }
+                    }
                 }
             }
         }
