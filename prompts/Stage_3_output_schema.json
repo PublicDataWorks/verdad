@@ -88,8 +88,8 @@
         },
         "keywords_detected": {
             "type": "array",
-            "items": { 
-                "type": "string" 
+            "items": {
+                "type": "string"
             },
             "description": "Specific words or phrases that triggered the flag, in original language."
         },
@@ -97,15 +97,15 @@
             "type": "object",
             "required": ["primary_language", "dialect", "register"],
             "properties": {
-                "primary_language": { 
+                "primary_language": {
                     "type": "string",
                     "description": "Primary language of the audio (e.g., Spanish, Arabic)."
                 },
-                "dialect": { 
+                "dialect": {
                     "type": "string",
                     "description": "Specific dialect or regional variation."
                 },
-                "register": { 
+                "register": {
                     "type": "string",
                     "description": "Language register (formal, informal, colloquial, slang)."
                 }
@@ -147,9 +147,7 @@
             "properties": {
                 "overall": {
                     "type": "integer",
-                    "minimum": 0,
-                    "maximum": 100,
-                    "description": "Overall confidence score of the analysis."
+                    "description": "Overall confidence score of the analysis, ranging from 0 to 100."
                 },
                 "categories": {
                     "type": "array",
@@ -157,15 +155,13 @@
                         "type": "object",
                         "required": ["category", "score"],
                         "properties": {
-                            "category": { 
+                            "category": {
                                 "type": "string",
                                 "description": "Name of the disinformation category."
                             },
-                            "score": { 
+                            "score": {
                                 "type": "integer",
-                                "minimum": 0,
-                                "maximum": 100,
-                                "description": "Confidence score for this category."
+                                "description": "Confidence score for this category, ranging from 0 to 100."
                             }
                         }
                     }
@@ -188,9 +184,7 @@
                     },
                     "intensity": {
                         "type": "integer",
-                        "minimum": 0,
-                        "maximum": 100,
-                        "description": "Intensity of the emotion."
+                        "description": "Intensity of the emotion, ranging from 0 to 100."
                     },
                     "explanation": {
                         "type": "object",
@@ -209,19 +203,17 @@
             "properties": {
                 "score": {
                     "type": "number",
-                    "minimum": -1.0,
-                    "maximum": 1.0,
-                    "description": "Political leaning score where -1.0 is extremely left-leaning and +1.0 is extremely right-leaning."
+                    "description": "Political leaning score, ranging from -1.0 to 1.0, where -1.0 is extremely left-leaning and 1.0 is extremely right-leaning."
                 },
                 "explanation": {
                     "type": "object",
                     "required": ["spanish", "english"],
                     "properties": {
-                        "spanish": { 
+                        "spanish": {
                             "type": "string",
                             "description": "Evidence-based explanation of the political leaning score in Spanish."
                         },
-                        "english": { 
+                        "english": {
                             "type": "string",
                             "description": "Evidence-based explanation of the political leaning score in English."
                         }
