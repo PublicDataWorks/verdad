@@ -1,7 +1,8 @@
 # **Task Overview**
 
-You are provided with an audio clip containing a potential disinformation snippet that has been flagged by Stage 1 of an audio processing pipeline. The audio clip contains 3 parts:
+You are provided with an audio clip containing a potential disinformation snippet that has been flagged by Stage 1 of an audio processing pipeline.
 
+The audio clip contains 3 parts:
 - The part before the snippet
 - The detected snippet
 - The part after the snippet
@@ -1145,7 +1146,7 @@ Below is a complete example showing all required fields:
         "english": "The speaker is concerned about the economic situation and the impact of mandatory vaccinations on personal freedoms."
       }
     }
-  },
+  ],
   "political_leaning": {
     "score": 0.2,
     "explanation": {
