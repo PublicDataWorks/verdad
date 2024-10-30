@@ -112,13 +112,11 @@ def create_new_label_and_assign_to_snippet(supabase_client, snippet_id, label):
     english_label_text = label["english"]
     spanish_label_text = label["spanish"]
 
-    # Create the labels
-    english_label = supabase_client.create_new_label(english_label_text)
-    spanish_label = supabase_client.create_new_label(spanish_label_text)
+    # Create the label
+    label = supabase_client.create_new_label(english_label_text, spanish_label_text)
 
-    # Assign the labels to the snippet
-    supabase_client.assign_label_to_snippet(label_id=english_label["id"], snippet_id=snippet_id)
-    supabase_client.assign_label_to_snippet(label_id=spanish_label["id"], snippet_id=snippet_id)
+    # Assign the label to the snippet
+    supabase_client.assign_label_to_snippet(label_id=label["id"], snippet_id=snippet_id)
 
 
 @task(log_prints=True)

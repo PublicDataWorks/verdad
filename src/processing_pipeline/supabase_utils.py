@@ -239,15 +239,22 @@ class SupabaseClient:
         )
         return response.data
 
-    def create_new_label(self, label_text):
+    def create_new_label(self, text, text_spanish):
         # Check if the label with the same text already exists
-        existing_label = self.client.table("labels").select("*").eq("text", label_text).execute()
+        existing_label = (
+            self.client.table("labels")
+            .select("*")
+            .eq("text", text)
+            .execute()
+        )
+
         if existing_label.data:
-            print(f"Label '{label_text}' already exists")
+            print(f"Label '{text}' already exists")
             return existing_label.data[0]
         else:
             response = self.client.table("labels").insert({
-                "text": label_text,
+                "text": text,
+                "text_spanish": text_spanish,
                 "is_ai_suggested": True,
             }).execute()
             return response.data[0]
