@@ -30,6 +30,7 @@ BEGIN
         'summary', s.summary,
         'explanation', s.explanation,
         'confidence_scores', s.confidence_scores,
+        'language', s.language,
         'context', s.context,
         'starred_by_user', CASE
             WHEN us.id IS NOT NULL THEN true

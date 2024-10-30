@@ -39,6 +39,7 @@ BEGIN
             s.summary,
             s.explanation,
             s.confidence_scores,
+            s.language,
             s.context,
             (get_snippet_labels(s.id) -> 'labels') AS labels,
             jsonb_build_object(
