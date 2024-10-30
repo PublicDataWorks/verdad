@@ -11,7 +11,8 @@
         "language",
         "context",
         "confidence_scores",
-        "emotional_tone"
+        "emotional_tone",
+        "political_leaning"
     ],
     "properties": {
         "transcription": {
@@ -79,24 +80,35 @@
                     },
                     "english": {
                         "type": "string",
-                        "description": "Disinformation category in English, which should be based on the heuristics provided."
+                        "description": "Disinformation category in English."
                     }
                 }
             },
-            "description": "Disinformation categories that the snippet belongs to, based on the heuristics provided."
+            "description": "Disinformation categories that the snippet belongs to."
         },
         "keywords_detected": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": { 
+                "type": "string" 
+            },
             "description": "Specific words or phrases that triggered the flag, in original language."
         },
         "language": {
             "type": "object",
             "required": ["primary_language", "dialect", "register"],
             "properties": {
-                "primary_language": { "type": "string" },
-                "dialect": { "type": "string" },
-                "register": { "type": "string" }
+                "primary_language": { 
+                    "type": "string",
+                    "description": "Primary language of the audio (e.g., Spanish, Arabic)."
+                },
+                "dialect": { 
+                    "type": "string",
+                    "description": "Specific dialect or regional variation."
+                },
+                "register": { 
+                    "type": "string",
+                    "description": "Language register (formal, informal, colloquial, slang)."
+                }
             }
         },
         "context": {
@@ -135,7 +147,9 @@
             "properties": {
                 "overall": {
                     "type": "integer",
-                    "description": "Overall confidence score of the analysis, ranging from 0 to 100."
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Overall confidence score of the analysis."
                 },
                 "categories": {
                     "type": "array",
@@ -143,10 +157,17 @@
                         "type": "object",
                         "required": ["category", "score"],
                         "properties": {
-                            "category": { "type": "string" },
-                            "score": { "type": "integer" }
-                        },
-                        "description": "Confidence score for each category (in both English and Spanish), ranging from 0 to 100."
+                            "category": { 
+                                "type": "string",
+                                "description": "Name of the disinformation category."
+                            },
+                            "score": { 
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 100,
+                                "description": "Confidence score for this category."
+                            }
+                        }
                     }
                 }
             }
@@ -167,7 +188,9 @@
                     },
                     "intensity": {
                         "type": "integer",
-                        "description": "Intensity of the emotion, ranging from 0 to 100."
+                        "minimum": 0,
+                        "maximum": 100,
+                        "description": "Intensity of the emotion."
                     },
                     "explanation": {
                         "type": "object",
@@ -179,6 +202,33 @@
                     }
                 }
             }
+        },
+        "political_leaning": {
+            "type": "object",
+            "required": ["score", "explanation"],
+            "properties": {
+                "score": {
+                    "type": "number",
+                    "minimum": -1.0,
+                    "maximum": 1.0,
+                    "description": "Political leaning score where -1.0 is extremely left-leaning and +1.0 is extremely right-leaning."
+                },
+                "explanation": {
+                    "type": "object",
+                    "required": ["spanish", "english"],
+                    "properties": {
+                        "spanish": { 
+                            "type": "string",
+                            "description": "Evidence-based explanation of the political leaning score in Spanish."
+                        },
+                        "english": { 
+                            "type": "string",
+                            "description": "Evidence-based explanation of the political leaning score in English."
+                        }
+                    }
+                }
+            },
+            "description": "Assessment of political orientation based on observable content elements."
         }
     }
 }

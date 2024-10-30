@@ -1,25 +1,34 @@
 # **Task Overview**
 
-You are provided with an audio clip containing a potential disinformation snippet that has been flagged by Stage 1 of an audio processing pipeline.
-The audio clip contains 3 parts:
+You are provided with an audio clip containing a potential disinformation
+snippet that has been flagged by Stage 1 of an audio processing pipeline. The
+audio clip contains 3 parts:
+
 - The part before the snippet
 - The detected snippet
 - The part after the snippet
 
 You are also provided with the metadata of the audio clip, which contains:
+
 - `duration`: the duration of the entire audio clip, in MM:SS format
-- `start_time`: the start time of the snippet within the audio clip, in MM:SS format
+- `start_time`: the start time of the snippet within the audio clip, in MM:SS
+  format
 - `end_time`: the end time of the snippet within the audio clip, in MM:SS format
-- `explanation`: the explanation of why the snippet was flagged as disinformation
+- `explanation`: the explanation of why the snippet was flagged as
+  disinformation
 - `transcription`: the transcription of the snippet within the audio clip
   - Note that this is not the transcription of the entire audio clip
 
 Your tasks are:
 
-1. **Transcribe** the entire audio clip in the original language, capturing all spoken words, including colloquialisms, idioms, and fillers.
-2. **Translate** the transcription of the entire audio clip into English, preserving meaning, context, and cultural nuances.
-3. **Analyze** the content for disinformation, using detailed heuristics covering all disinformation categories.
-4. **Provide** detailed annotations and assemble structured output conforming to the provided JSON schema.
+1. **Transcribe** the entire audio clip in the original language, capturing all
+   spoken words, including colloquialisms, idioms, and fillers.
+2. **Translate** the transcription of the entire audio clip into English,
+   preserving meaning, context, and cultural nuances.
+3. **Analyze** the content for disinformation, using detailed heuristics
+   covering all disinformation categories.
+4. **Provide** detailed annotations and assemble structured output conforming to
+   the provided JSON schema.
 
 ## **Instructions**
 
@@ -27,17 +36,22 @@ Your tasks are:
 
 - **Transcription:**
   - Accurately transcribe the audio clip in the original language.
-  - Include all spoken words, fillers, slang, colloquialisms, and any code-switching instances.
-  - Pay attention to dialects and regional variations common among immigrant communities.
-  - Do your best to capture the speech accurately, and flag any unintelligible portions with [inaudible].
+  - Include all spoken words, fillers, slang, colloquialisms, and any
+    code-switching instances.
+  - Pay attention to dialects and regional variations common among immigrant
+    communities.
+  - Do your best to capture the speech accurately, and flag any unintelligible
+    portions with [inaudible].
 
 - **Translation:**
   - Translate the transcription into English.
-  - Preserve the original meaning, context, idiomatic expressions, and cultural references.
+  - Preserve the original meaning, context, idiomatic expressions, and cultural
+    references.
   - Ensure that nuances and subtleties are accurately conveyed.
 
 - **Capture Vocal Nuances:**
-  - Note vocal cues such as tone, pitch, pacing, emphasis, and emotional expressions that may influence the message.
+  - Note vocal cues such as tone, pitch, pacing, emphasis, and emotional
+    expressions that may influence the message.
   - These cues are critical for understanding intent and potential impact.
 
 #### **2. Detailed Analysis**
@@ -46,7 +60,8 @@ Perform the following steps:
 
 ##### **A. Review Snippet Metadata**
 
-- Utilize the metadata provided (disinformation categories, keywords, transcription, etc.) from Stage 1 of the analysis.
+- Utilize the metadata provided (disinformation categories, keywords,
+  transcription, etc.) from Stage 1 of the analysis.
 - Familiarize yourself with the context in which the snippet was flagged.
 
 ##### **B. Categorization**
@@ -72,8 +87,10 @@ Perform the following steps:
   - Highlight the main points discussed.
 
 - **Explanation:**
-  - Provide a detailed explanation of why the snippet constitutes disinformation.
-  - Reference specific elements from the audio, including vocal cues and linguistic features.
+  - Provide a detailed explanation of why the snippet constitutes
+    disinformation.
+  - Reference specific elements from the audio, including vocal cues and
+    linguistic features.
   - Use the detailed heuristics and examples to support your analysis.
   - Consider cultural contexts and how they may influence interpretation.
 
@@ -84,19 +101,23 @@ Perform the following steps:
   - Note any use of other languages (e.g., code-switching to English).
 
 - **Dialect or Regional Variation:**
-  - Identify specific dialects or regional variations (e.g., Mexican Spanish, Cuban Spanish, Levantine Arabic, Egyptian Arabic).
+  - Identify specific dialects or regional variations (e.g., Mexican Spanish,
+    Cuban Spanish, Levantine Arabic, Egyptian Arabic).
 
 - **Language Register:**
   - Indicate the formality level (formal, informal, colloquial, slang).
 
 ##### **F. Title Creation**
 
-- Create a descriptive and concise title for the snippet that encapsulates its essence (in both English and Spanish).
+- Create a descriptive and concise title for the snippet that encapsulates its
+  essence (in both English and Spanish).
 
 ##### **G. Contextual Information**
 
 - **Context:**
-  - Based on the snippet transcription from the provided metadata and your transcription of the entire audio clip, you should be able to determine the surrounding context of the snippet, which includes:
+  - Based on the snippet transcription from the provided metadata and your
+    transcription of the entire audio clip, you should be able to determine the
+    surrounding context of the snippet, which includes:
     - The part before the snippet
     - The part after the snippet
     - The snippet itself
@@ -107,26 +128,59 @@ Perform the following steps:
 ##### **H. Confidence Scores**
 
 - **Overall Confidence:**
-  - Assign a score from 0 to 100 indicating your confidence in the disinformation classification.
+  - Assign a score from 0 to 100 indicating your confidence in the
+    disinformation classification.
 
 - **Category Scores:**
-  - Provide individual confidence scores (0-100) for each disinformation category applied.
+  - Provide individual confidence scores (0-100) for each disinformation
+    category applied.
 
 ##### **I. Emotional Tone Analysis**
 
 - **Identified Emotions:**
-  - List any emotions expressed in the snippet (e.g., anger, fear, joy, sadness, surprise, disgust, contempt).
+  - List any emotions expressed in the snippet (e.g., anger, fear, joy, sadness,
+    surprise, disgust, contempt).
   - Provide the emotions in both English and Spanish.
 
 - **Intensity:**
   - Score the intensity of each emotion on a scale from 0 to 100.
 
 - **Explanation:**
-  - Briefly explain how the emotional tone contributes to the message and its potential impact (in both English and Spanish).
+  - Briefly explain how the emotional tone contributes to the message and its
+    potential impact (in both English and Spanish).
+
+##### **J. Political Spectrum Analysis**
+
+Analyze the content's political orientation on a scale from -1.0 (extremely
+left-leaning) to +1.0 (extremely right-leaning), where 0.0 represents
+politically neutral content.
+
+**Analysis Requirements:**
+
+1. Focus on Observable Elements:
+   - Explicit policy positions stated
+   - Specific arguments made
+   - Language and rhetoric used
+   - Sources or authorities cited
+   - Solutions proposed
+
+2. Evidence-Based Scoring:
+   - Score must be justified by direct references to the content
+   - Each claim in the explanation must cite specific elements from the snippet
+   - Acknowledge when content contains mixed or ambiguous political signals
+
+3. Explanation Format: "This content receives a score of [X] because it [cite
+   specific elements]. This is evidenced by [quote or describe specific
+   statements/arguments from the snippet]."
+
+Remember: The goal is to detect and measure political orientation based on the
+actual content, not to categorize or label the speech. Avoid inferring political
+leanings from adjacent topics or assumptions about the speaker.
 
 #### **3. Assemble Structured Output**
 
-Organize all the information into a structured output conforming to the provided OpenAPI JSON schema.
+Organize all the information into a structured output conforming to the provided
+OpenAPI JSON schema.
 
 ---
 
@@ -136,188 +190,223 @@ Ensure your output strictly adheres to this schema.
 
 ```json
 {
-    "type": "object",
-    "required": [
-        "transcription",
-        "translation",
-        "title",
-        "summary",
-        "explanation",
-        "disinformation_categories",
-        "keywords_detected",
-        "language",
-        "context",
-        "confidence_scores",
-        "emotional_tone"
-    ],
-    "properties": {
-        "transcription": {
-            "type": "string",
-            "description": "Transcription of the entire audio clip in the original language."
+  "type": "object",
+  "required": [
+    "transcription",
+    "translation",
+    "title",
+    "summary",
+    "explanation",
+    "disinformation_categories",
+    "keywords_detected",
+    "language",
+    "context",
+    "confidence_scores",
+    "emotional_tone",
+    "political_leaning"
+  ],
+  "properties": {
+    "transcription": {
+      "type": "string",
+      "description": "Transcription of the entire audio clip in the original language."
+    },
+    "translation": {
+      "type": "string",
+      "description": "Translation of the transcription into English."
+    },
+    "title": {
+      "type": "object",
+      "required": ["spanish", "english"],
+      "properties": {
+        "spanish": {
+          "type": "string",
+          "description": "Title of the snippet in Spanish."
         },
-        "translation": {
-            "type": "string",
-            "description": "Translation of the transcription into English."
+        "english": {
+          "type": "string",
+          "description": "Title of the snippet in English."
+        }
+      },
+      "description": "Descriptive title of the snippet."
+    },
+    "summary": {
+      "type": "object",
+      "required": ["spanish", "english"],
+      "properties": {
+        "spanish": {
+          "type": "string",
+          "description": "Summary of the snippet in Spanish."
         },
-        "title": {
+        "english": {
+          "type": "string",
+          "description": "Summary of the snippet in English."
+        }
+      },
+      "description": "Objective summary of the snippet."
+    },
+    "explanation": {
+      "type": "object",
+      "required": ["spanish", "english"],
+      "properties": {
+        "spanish": {
+          "type": "string",
+          "description": "Explanation in Spanish."
+        },
+        "english": {
+          "type": "string",
+          "description": "Explanation in English."
+        }
+      },
+      "description": "Detailed explanation of why the snippet constitutes disinformation."
+    },
+    "disinformation_categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["spanish", "english"],
+        "properties": {
+          "spanish": {
+            "type": "string",
+            "description": "Disinformation category in Spanish."
+          },
+          "english": {
+            "type": "string",
+            "description": "Disinformation category in English, which should be based on the heuristics provided."
+          }
+        }
+      },
+      "description": "Disinformation categories that the snippet belongs to, based on the heuristics provided."
+    },
+    "keywords_detected": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Specific words or phrases that triggered the flag, in original language."
+    },
+    "language": {
+      "type": "object",
+      "required": ["primary_language", "dialect", "register"],
+      "properties": {
+        "primary_language": { "type": "string" },
+        "dialect": { "type": "string" },
+        "register": { "type": "string" }
+      }
+    },
+    "context": {
+      "type": "object",
+      "required": [
+        "before",
+        "before_en",
+        "after",
+        "after_en",
+        "main",
+        "main_en"
+      ],
+      "properties": {
+        "before": {
+          "type": "string",
+          "description": "Part of the audio clip transcription that precedes the snippet."
+        },
+        "before_en": {
+          "type": "string",
+          "description": "Translation of the `before` part into English."
+        },
+        "after": {
+          "type": "string",
+          "description": "Part of the audio clip transcription that follows the snippet."
+        },
+        "after_en": {
+          "type": "string",
+          "description": "Translation of the `after` part into English."
+        },
+        "main": {
+          "type": "string",
+          "description": "The transcription of the snippet itself."
+        },
+        "main_en": {
+          "type": "string",
+          "description": "Translation of the `main` part into English."
+        }
+      }
+    },
+    "confidence_scores": {
+      "type": "object",
+      "required": ["overall", "categories"],
+      "properties": {
+        "overall": {
+          "type": "integer",
+          "description": "Overall confidence score of the analysis, ranging from 0 to 100."
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["category", "score"],
+            "properties": {
+              "category": { "type": "string" },
+              "score": { "type": "integer" }
+            },
+            "description": "Confidence score for each category (in both English and Spanish), ranging from 0 to 100."
+          }
+        }
+      }
+    },
+    "emotional_tone": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["emotion", "intensity", "explanation"],
+        "properties": {
+          "emotion": {
             "type": "object",
             "required": ["spanish", "english"],
             "properties": {
-                "spanish": {
-                    "type": "string",
-                    "description": "Title of the snippet in Spanish."
-                },
-                "english": {
-                    "type": "string",
-                    "description": "Title of the snippet in English."
-                }
-            },
-            "description": "Descriptive title of the snippet."
-        },
-        "summary": {
+              "spanish": { "type": "string" },
+              "english": { "type": "string" }
+            }
+          },
+          "intensity": {
+            "type": "integer",
+            "description": "Intensity of the emotion, ranging from 0 to 100."
+          },
+          "explanation": {
             "type": "object",
             "required": ["spanish", "english"],
             "properties": {
-                "spanish": {
-                    "type": "string",
-                    "description": "Summary of the snippet in Spanish."
-                },
-                "english": {
-                    "type": "string",
-                    "description": "Summary of the snippet in English."
-                }
-            },
-            "description": "Objective summary of the snippet."
+              "spanish": { "type": "string" },
+              "english": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "political_leaning": {
+      "type": "object",
+      "required": ["score", "explanation"],
+      "properties": {
+        "score": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0,
+          "description": "Political leaning score where -1.0 is extremely left-leaning and +1.0 is extremely right-leaning"
         },
         "explanation": {
-            "type": "object",
-            "required": ["spanish", "english"],
-            "properties": {
-                "spanish": {
-                    "type": "string",
-                    "description": "Explanation in Spanish."
-                },
-                "english": {
-                    "type": "string",
-                    "description": "Explanation in English."
-                }
+          "type": "object",
+          "required": ["spanish", "english"],
+          "properties": {
+            "spanish": {
+              "type": "string",
+              "description": "Evidence-based explanation of the political leaning score in Spanish."
             },
-            "description": "Detailed explanation of why the snippet constitutes disinformation."
-        },
-        "disinformation_categories": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["spanish", "english"],
-                "properties": {
-                    "spanish": {
-                        "type": "string",
-                        "description": "Disinformation category in Spanish."
-                    },
-                    "english": {
-                        "type": "string",
-                        "description": "Disinformation category in English, which should be based on the heuristics provided."
-                    }
-                }
-            },
-            "description": "Disinformation categories that the snippet belongs to, based on the heuristics provided."
-        },
-        "keywords_detected": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Specific words or phrases that triggered the flag, in original language."
-        },
-        "language": {
-            "type": "object",
-            "required": ["primary_language", "dialect", "register"],
-            "properties": {
-                "primary_language": { "type": "string" },
-                "dialect": { "type": "string" },
-                "register": { "type": "string" }
+            "english": {
+              "type": "string",
+              "description": "Evidence-based explanation of the political leaning score in English."
             }
-        },
-        "context": {
-            "type": "object",
-            "required": ["before", "before_en", "after", "after_en", "main", "main_en"],
-            "properties": {
-                "before": {
-                    "type": "string",
-                    "description": "Part of the audio clip transcription that precedes the snippet."
-                },
-                "before_en": {
-                    "type": "string",
-                    "description": "Translation of the `before` part into English."
-                },
-                "after": {
-                    "type": "string",
-                    "description": "Part of the audio clip transcription that follows the snippet."
-                },
-                "after_en": {
-                    "type": "string",
-                    "description": "Translation of the `after` part into English."
-                },
-                "main": {
-                    "type": "string",
-                    "description": "The transcription of the snippet itself."
-                },
-                "main_en": {
-                    "type": "string",
-                    "description": "Translation of the `main` part into English."
-                }
-            }
-        },
-        "confidence_scores": {
-            "type": "object",
-            "required": ["overall", "categories"],
-            "properties": {
-                "overall": {
-                    "type": "integer",
-                    "description": "Overall confidence score of the analysis, ranging from 0 to 100."
-                },
-                "categories": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "required": ["category", "score"],
-                        "properties": {
-                            "category": { "type": "string" },
-                            "score": { "type": "integer" }
-                        },
-                        "description": "Confidence score for each category (in both English and Spanish), ranging from 0 to 100."
-                    }
-                }
-            }
-        },
-        "emotional_tone": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["emotion", "intensity", "explanation"],
-                "properties": {
-                    "emotion": {
-                        "type": "object",
-                        "required": ["spanish", "english"],
-                        "properties": {
-                            "spanish": { "type": "string" },
-                            "english": { "type": "string" }
-                        }
-                    },
-                    "intensity": {
-                        "type": "integer",
-                        "description": "Intensity of the emotion, ranging from 0 to 100."
-                    },
-                    "explanation": {
-                        "type": "object",
-                        "required": ["spanish", "english"],
-                        "properties": {
-                            "spanish": { "type": "string" },
-                            "english": { "type": "string" }
-                        }
-                    }
-                }
-            }
+          }
         }
+      },
+      "description": "Assessment of political orientation based on observable content elements."
     }
+  }
 }
 ```
 
@@ -325,7 +414,9 @@ Ensure your output strictly adheres to this schema.
 
 ## Disinformation Detection Heuristics
 
-Below are detailed heuristics for each disinformation category, including nuanced descriptions and culturally relevant examples in **Spanish** and **Arabic**. Use these heuristics to guide your analysis.
+Below are detailed heuristics for each disinformation category, including
+nuanced descriptions and culturally relevant examples in **Spanish** and
+**Arabic**. Use these heuristics to guide your analysis.
 
 ---
 
@@ -333,7 +424,10 @@ Below are detailed heuristics for each disinformation category, including nuance
 
 **Description**:
 
-Disinformation that casts doubt on the legitimacy and fairness of electoral systems. This includes allegations of widespread voter fraud, manipulation of results, or external interference. Such narratives aim to undermine public trust in democratic institutions.
+Disinformation that casts doubt on the legitimacy and fairness of electoral
+systems. This includes allegations of widespread voter fraud, manipulation of
+results, or external interference. Such narratives aim to undermine public trust
+in democratic institutions.
 
 **Common Narratives**:
 
@@ -346,7 +440,8 @@ Disinformation that casts doubt on the legitimacy and fairness of electoral syst
 **Cultural/Regional Variations**:
 
 - **Spanish-Speaking Communities**:
-  - References to electoral issues in countries of origin, leading to skepticism about U.S. elections.
+  - References to electoral issues in countries of origin, leading to skepticism
+    about U.S. elections.
   - Use of expressions like **"elección amañada"** (rigged election).
 - **Arabic-Speaking Communities**:
   - Distrust stemming from experiences with corrupt elections in home countries.
@@ -360,8 +455,9 @@ Disinformation that casts doubt on the legitimacy and fairness of electoral syst
 
 **Examples**:
 
-- *Spanish*: "No confíes en el sistema; hubo 'fraude electoral' en las últimas elecciones."
-- *Arabic*: "لا تثقوا بالنظام؛ حدث 'تزوير في الأصوات' في الانتخابات الأخيرة."
+- _Spanish_: "No confíes en el sistema; hubo 'fraude electoral' en las últimas
+  elecciones."
+- _Arabic_: "لا تثقوا بالنظام؛ حدث 'تزوير في الأصوات' في الانتخابات الأخيرة."
 
 ---
 
@@ -369,7 +465,9 @@ Disinformation that casts doubt on the legitimacy and fairness of electoral syst
 
 **Description**:
 
-Narratives that portray immigrants, especially undocumented ones, as threats to national security, economy, or cultural identity. This includes exaggerated claims about crime rates, economic burdens, or cultural dilution.
+Narratives that portray immigrants, especially undocumented ones, as threats to
+national security, economy, or cultural identity. This includes exaggerated
+claims about crime rates, economic burdens, or cultural dilution.
 
 **Common Narratives**:
 
@@ -381,8 +479,10 @@ Narratives that portray immigrants, especially undocumented ones, as threats to 
 **Cultural/Regional Variations**:
 
 - **Spanish-Speaking Communities**:
-  - Internalized fears or concerns about immigration policies affecting their status.
-  - Discussions around **"la migra"** (immigration enforcement) and **"deportaciones"** (deportations).
+  - Internalized fears or concerns about immigration policies affecting their
+    status.
+  - Discussions around **"la migra"** (immigration enforcement) and
+    **"deportaciones"** (deportations).
 - **Arabic-Speaking Communities**:
   - Concerns about being targeted due to racial or religious profiling.
   - References to **"الإسلاموفوبيا"** (Islamophobia).
@@ -395,8 +495,8 @@ Narratives that portray immigrants, especially undocumented ones, as threats to 
 
 **Examples**:
 
-- *Spanish*: "Están llegando 'caravanas' que podrían traer problemas al país."
-- *Arabic*: "هناك 'تدفق للمهاجرين' قد يسبب مشكلات للبلاد."
+- _Spanish_: "Están llegando 'caravanas' que podrían traer problemas al país."
+- _Arabic_: "هناك ‘تدفق للمهاجرين’ قد يسبب مشكلات للبلاد"
 
 ---
 
@@ -404,7 +504,9 @@ Narratives that portray immigrants, especially undocumented ones, as threats to 
 
 **Description**:
 
-Disinformation that denies the existence or severity of COVID-19, promotes unproven cures, or spreads fear about vaccines. It often exploits uncertainties and fears to disseminate false information.
+Disinformation that denies the existence or severity of COVID-19, promotes
+unproven cures, or spreads fear about vaccines. It often exploits uncertainties
+and fears to disseminate false information.
 
 **Common Narratives**:
 
@@ -430,8 +532,8 @@ Disinformation that denies the existence or severity of COVID-19, promotes unpro
 
 **Examples**:
 
-- *Spanish*: "Escuché que la 'vacuna' puede alterar tu ADN."
-- *Arabic*: "سمعت أن 'اللقاح' قد يغير حمضك النووي."
+- _Spanish_: "Escuché que la 'vacuna' puede alterar tu ADN."
+- _Arabic_: "سمعت أن 'اللقاح' قد يغير حمضك النووي."
 
 ---
 
@@ -439,7 +541,9 @@ Disinformation that denies the existence or severity of COVID-19, promotes unpro
 
 **Description**:
 
-Disinformation that denies or minimizes human impact on climate change, often to oppose environmental regulations. It may discredit scientific consensus and promote fossil fuel interests.
+Disinformation that denies or minimizes human impact on climate change, often to
+oppose environmental regulations. It may discredit scientific consensus and
+promote fossil fuel interests.
 
 **Common Narratives**:
 
@@ -461,8 +565,8 @@ Disinformation that denies or minimizes human impact on climate change, often to
 
 **Examples**:
 
-- *Spanish*: "El 'cambio climático' es una mentira para controlarnos."
-- *Arabic*: "'تغير المناخ' كذبة للسيطرة علينا."
+- _Spanish_: "El 'cambio climático' es una mentira para controlarnos."
+- _Arabic_: "'تغير المناخ' كذبة للسيطرة علينا."
 
 ---
 
@@ -470,7 +574,9 @@ Disinformation that denies or minimizes human impact on climate change, often to
 
 **Description**:
 
-Disinformation that seeks to discredit LGBTQ+ rights movements by portraying them as threats to traditional values or children's safety. It includes misinformation about gender identity and sexual orientation.
+Disinformation that seeks to discredit LGBTQ+ rights movements by portraying
+them as threats to traditional values or children's safety. It includes
+misinformation about gender identity and sexual orientation.
 
 **Common Narratives**:
 
@@ -492,8 +598,8 @@ Disinformation that seeks to discredit LGBTQ+ rights movements by portraying the
 
 **Examples**:
 
-- *Spanish*: "No quiero que enseñen 'ideología de género' a mis hijos."
-- *Arabic*: "لا أريد أن يدرسوا 'الأفكار الغربية' لأطفالي."
+- _Spanish_: "No quiero que enseñen 'ideología de género' a mis hijos."
+- _Arabic_: "لا أريد أن يدرسوا 'الأفكار الغربية' لأطفالي."
 
 ---
 
@@ -501,7 +607,9 @@ Disinformation that seeks to discredit LGBTQ+ rights movements by portraying the
 
 **Description**:
 
-Disinformation that frames abortion as murder without acknowledging legal and ethical complexities. It may spread false claims about medical procedures and their prevalence.
+Disinformation that frames abortion as murder without acknowledging legal and
+ethical complexities. It may spread false claims about medical procedures and
+their prevalence.
 
 **Common Narratives**:
 
@@ -523,8 +631,8 @@ Disinformation that frames abortion as murder without acknowledging legal and et
 
 **Examples**:
 
-- *Spanish*: "El 'aborto' es un pecado imperdonable."
-- *Arabic*: "'الإجهاض' حرام ويجب منعه."
+- _Spanish_: "El 'aborto' es un pecado imperdonable."
+- _Arabic_: "'الإجهاض' حرام ويجب منعه."
 
 ---
 
@@ -532,7 +640,9 @@ Disinformation that frames abortion as murder without acknowledging legal and et
 
 **Description**:
 
-Disinformation that predicts economic disasters due to certain policies, often exaggerating or misrepresenting facts. It may instill fear about socialist agendas ruining the economy.
+Disinformation that predicts economic disasters due to certain policies, often
+exaggerating or misrepresenting facts. It may instill fear about socialist
+agendas ruining the economy.
 
 **Common Narratives**:
 
@@ -554,8 +664,9 @@ Disinformation that predicts economic disasters due to certain policies, often e
 
 **Examples**:
 
-- *Spanish*: "Nos dirigimos hacia una 'crisis como en Venezuela' si no cambiamos el rumbo."
-- *Arabic*: "سنتجه إلى 'أزمة اقتصادية' إذا استمر هذا الإنفاق الحكومي."
+- _Spanish_: "Nos dirigimos hacia una 'crisis como en Venezuela' si no cambiamos
+  el rumbo."
+- _Arabic_: "سنتجه إلى 'أزمة اقتصادية' إذا استمر هذا الإنفاق الحكومي."
 
 ---
 
@@ -563,7 +674,8 @@ Disinformation that predicts economic disasters due to certain policies, often e
 
 **Description**:
 
-Disinformation that promotes distrust of international cooperation, alleging that global entities control domestic affairs to the nation's detriment.
+Disinformation that promotes distrust of international cooperation, alleging
+that global entities control domestic affairs to the nation's detriment.
 
 **Common Narratives**:
 
@@ -585,8 +697,8 @@ Disinformation that promotes distrust of international cooperation, alleging tha
 
 **Examples**:
 
-- *Spanish*: "La 'ONU' quiere imponer sus reglas sobre nosotros."
-- *Arabic*: "'الأمم المتحدة' تريد فرض قوانينها علينا."
+- _Spanish_: "La 'ONU' quiere imponer sus reglas sobre nosotros."
+- _Arabic_: "'الأمم المتحدة' تريد فرض قوانينها علينا."
 
 ---
 
@@ -594,7 +706,8 @@ Disinformation that promotes distrust of international cooperation, alleging tha
 
 **Description**:
 
-Disinformation that asserts media outlets and tech companies suppress the truth and promote biased narratives, fostering distrust in credible sources.
+Disinformation that asserts media outlets and tech companies suppress the truth
+and promote biased narratives, fostering distrust in credible sources.
 
 **Common Narratives**:
 
@@ -616,8 +729,8 @@ Disinformation that asserts media outlets and tech companies suppress the truth 
 
 **Examples**:
 
-- *Spanish*: "No puedes confiar en los medios; todos mienten."
-- *Arabic*: "لا يمكنك الوثوق بالإعلام؛ كلهم يكذبون."
+- _Spanish_: "No puedes confiar en los medios; todos mienten."
+- _Arabic_: "لا يمكنك الوثوق بالإعلام؛ كلهم يكذبون."
 
 ---
 
@@ -625,7 +738,8 @@ Disinformation that asserts media outlets and tech companies suppress the truth 
 
 **Description**:
 
-Disinformation that exaggerates crime rates or portrays law enforcement reforms as threats to safety, often invoking fear to resist changes.
+Disinformation that exaggerates crime rates or portrays law enforcement reforms
+as threats to safety, often invoking fear to resist changes.
 
 **Common Narratives**:
 
@@ -647,8 +761,8 @@ Disinformation that exaggerates crime rates or portrays law enforcement reforms 
 
 **Examples**:
 
-- *Spanish*: "Sin la policía, nuestras comunidades serán inseguras."
-- *Arabic*: "بدون الشرطة، ستصبح مجتمعاتنا غير آمنة."
+- _Spanish_: "Sin la policía, nuestras comunidades serán inseguras."
+- _Arabic_: "بدون الشرطة، ستصبح مجتمعاتنا غير آمنة."
 
 ---
 
@@ -656,21 +770,27 @@ Disinformation that exaggerates crime rates or portrays law enforcement reforms 
 
 **Description**:
 
-Disinformation that portrays healthcare reforms as dangerous steps toward socialized medicine, often spreading fear about decreased quality of care or loss of personal freedoms. Misinformation may include false claims about medical procedures, healthcare policies, or intentions behind reforms.
+Disinformation that portrays healthcare reforms as dangerous steps toward
+socialized medicine, often spreading fear about decreased quality of care or
+loss of personal freedoms. Misinformation may include false claims about medical
+procedures, healthcare policies, or intentions behind reforms.
 
 **Common Narratives**:
 
-- Claiming that healthcare reforms will lead to **"socialized medicine"** that reduces quality.
+- Claiming that healthcare reforms will lead to **"socialized medicine"** that
+  reduces quality.
 - Warning about **"death panels"** deciding who receives care.
 - Alleging that the government will **"control your healthcare decisions"**.
 - Spreading fear about **"rationing of healthcare services"**.
-- Accusing pharmaceutical companies (**"Big Pharma"**) of hiding cures or exploiting patients.
+- Accusing pharmaceutical companies (**"Big Pharma"**) of hiding cures or
+  exploiting patients.
 
 **Cultural/Regional Variations**:
 
 - **Spanish-Speaking Communities**:
   - Concerns about accessibility and affordability of healthcare.
-  - Skepticism due to experiences with healthcare systems in countries of origin.
+  - Skepticism due to experiences with healthcare systems in countries of
+    origin.
 - **Arabic-Speaking Communities**:
   - Mistrust of government-run programs.
   - Reliance on community-based healthcare advice.
@@ -683,8 +803,10 @@ Disinformation that portrays healthcare reforms as dangerous steps toward social
 
 **Examples**:
 
-- *Spanish*: "Con la nueva reforma, habrá 'racionamiento de salud' y no podremos elegir a nuestros médicos."
-- *Arabic*: "مع هذا الإصلاح، سيكون هناك 'تقييد للخدمات الصحية' ولن نتمكن من اختيار أطبائنا."
+- _Spanish_: "Con la nueva reforma, habrá 'racionamiento de salud' y no podremos
+  elegir a nuestros médicos."
+- _Arabic_: "مع هذا الإصلاح، سيكون هناك 'تقييد للخدمات الصحية' ولن نتمكن من
+  اختيار أطبائنا."
 
 ---
 
@@ -692,7 +814,10 @@ Disinformation that portrays healthcare reforms as dangerous steps toward social
 
 **Description**:
 
-Disinformation that frames social progress as attacks on traditional values, often resisting changes in societal norms related to identity, religion, and patriotism. It can amplify divisions and foster hostility towards certain groups.
+Disinformation that frames social progress as attacks on traditional values,
+often resisting changes in societal norms related to identity, religion, and
+patriotism. It can amplify divisions and foster hostility towards certain
+groups.
 
 **Common Narratives**:
 
@@ -719,8 +844,9 @@ Disinformation that frames social progress as attacks on traditional values, oft
 
 **Examples**:
 
-- *Spanish*: "La 'corrección política' está destruyendo nuestra libertad de expresión."
-- *Arabic*: "إن 'الصوابية السياسية' تدمر حرية التعبير لدينا."
+- _Spanish_: "La 'corrección política' está destruyendo nuestra libertad de
+  expresión."
+- _Arabic_: "إن 'الصوابية السياسية' تدمر حرية التعبير لدينا."
 
 ---
 
@@ -730,7 +856,9 @@ Disinformation that frames social progress as attacks on traditional values, oft
 
 **Description**:
 
-Disinformation that justifies aggression by blaming external forces, spreads false narratives about events, or exaggerates threats to manipulate public opinion.
+Disinformation that justifies aggression by blaming external forces, spreads
+false narratives about events, or exaggerates threats to manipulate public
+opinion.
 
 **Common Narratives**:
 
@@ -753,19 +881,22 @@ Disinformation that justifies aggression by blaming external forces, spreads fal
 
 **Examples**:
 
-- *Spanish*: "La 'expansión de la OTAN' es la verdadera causa del conflicto en Ucrania."
-- *Arabic*: "إن 'توسع الناتو' هو السبب الحقيقي للصراع في أوكرانيا."
+- _Spanish_: "La 'expansión de la OTAN' es la verdadera causa del conflicto en
+  Ucrania."
+- _Arabic_: "إن 'توسع الناتو' هو السبب الحقيقي للصراع في أوكرانيا."
 
 #### **13.2 Israel-Palestine Conflict**
 
 **Description**:
 
-Disinformation that simplifies this complex conflict, taking sides without acknowledging historical and political nuances, potentially inflaming tensions.
+Disinformation that simplifies this complex conflict, taking sides without
+acknowledging historical and political nuances, potentially inflaming tensions.
 
 **Common Narratives**:
 
 - Labeling one side as solely responsible for the conflict.
-- Using emotionally charged terms like **"apartheid"** or **"terrorism"** without context.
+- Using emotionally charged terms like **"apartheid"** or **"terrorism"**
+  without context.
 - Ignoring efforts towards peace or coexistence.
 
 **Cultural/Regional Variations**:
@@ -782,14 +913,16 @@ Disinformation that simplifies this complex conflict, taking sides without ackno
 
 **Examples**:
 
-- *Spanish*: "El 'apartheid israelí' es una violación de derechos humanos."
-- *Arabic*: "إن 'الفصل العنصري الإسرائيلي' انتهاك لحقوق الإنسان."
+- _Spanish_: "El 'apartheid israelí' es una violación de derechos humanos."
+- _Arabic_: "إن 'الفصل العنصري الإسرائيلي' انتهاك لحقوق الإنسان."
 
 #### **13.3 China-US Relations**
 
 **Description**:
 
-Disinformation that fosters fear about China's global influence, often exaggerating threats to the economy and national security, without recognizing mutual dependencies.
+Disinformation that fosters fear about China's global influence, often
+exaggerating threats to the economy and national security, without recognizing
+mutual dependencies.
 
 **Common Narratives**:
 
@@ -811,8 +944,9 @@ Disinformation that fosters fear about China's global influence, often exaggerat
 
 **Examples**:
 
-- *Spanish*: "La 'guerra comercial' con China afecta nuestras industrias locales."
-- *Arabic*: "إن 'الحرب التجارية' مع الصين تؤثر على صناعاتنا المحلية."
+- _Spanish_: "La 'guerra comercial' con China afecta nuestras industrias
+  locales."
+- _Arabic_: "إن 'الحرب التجارية' مع الصين تؤثر على صناعاتنا المحلية."
 
 ---
 
@@ -820,7 +954,9 @@ Disinformation that fosters fear about China's global influence, often exaggerat
 
 **Description**:
 
-Disinformation involving unfounded claims about secret groups manipulating world events, offering simplistic explanations for complex problems, undermining trust in institutions.
+Disinformation involving unfounded claims about secret groups manipulating world
+events, offering simplistic explanations for complex problems, undermining trust
+in institutions.
 
 **Common Narratives**:
 
@@ -833,7 +969,8 @@ Disinformation involving unfounded claims about secret groups manipulating world
 - **Spanish-Speaking Communities**:
   - Conspiracies may intertwine with historical distrust of governments.
 - **Arabic-Speaking Communities**:
-  - Susceptibility to conspiracies due to political instability in home countries.
+  - Susceptibility to conspiracies due to political instability in home
+    countries.
 
 **Potential Legitimate Discussions**:
 
@@ -842,8 +979,8 @@ Disinformation involving unfounded claims about secret groups manipulating world
 
 **Examples**:
 
-- *Spanish*: "El 'estado profundo' está manipulando los eventos mundiales."
-- *Arabic*: "إن 'الدولة العميقة' تسيطر على الأحداث العالمية."
+- _Spanish_: "El 'estado profundo' está manipulando los eventos mundiales."
+- _Arabic_: "إن 'الدولة العميقة' تسيطر على الأحداث العالمية."
 
 ---
 
@@ -851,7 +988,8 @@ Disinformation involving unfounded claims about secret groups manipulating world
 
 **Description**:
 
-Disinformation alleging that the education system imposes biased ideologies, often attacking curricula that promote critical thinking on social issues.
+Disinformation alleging that the education system imposes biased ideologies,
+often attacking curricula that promote critical thinking on social issues.
 
 **Common Narratives**:
 
@@ -873,8 +1011,9 @@ Disinformation alleging that the education system imposes biased ideologies, oft
 
 **Examples**:
 
-- *Spanish*: "La 'teoría crítica de la raza' no debería enseñarse en las escuelas."
-- *Arabic*: "لا ينبغي تدريس 'النظرية العرقية النقدية' في المدارس."
+- _Spanish_: "La 'teoría crítica de la raza' no debería enseñarse en las
+  escuelas."
+- _Arabic_: "لا ينبغي تدريس 'النظرية العرقية النقدية' في المدارس."
 
 ---
 
@@ -882,7 +1021,9 @@ Disinformation alleging that the education system imposes biased ideologies, oft
 
 **Description**:
 
-Disinformation that spreads fear about technology infringing on privacy and security, often exaggerating risks and fostering distrust in technological advancements.
+Disinformation that spreads fear about technology infringing on privacy and
+security, often exaggerating risks and fostering distrust in technological
+advancements.
 
 **Common Narratives**:
 
@@ -893,7 +1034,8 @@ Disinformation that spreads fear about technology infringing on privacy and secu
 **Cultural/Regional Variations**:
 
 - **Spanish-Speaking Communities**:
-  - Concerns about data misuse due to language barriers in understanding privacy policies.
+  - Concerns about data misuse due to language barriers in understanding privacy
+    policies.
 - **Arabic-Speaking Communities**:
   - Mistrust of government surveillance due to experiences in home countries.
 
@@ -904,8 +1046,9 @@ Disinformation that spreads fear about technology infringing on privacy and secu
 
 **Examples**:
 
-- *Spanish*: "Las 'grandes tecnológicas' están recopilando nuestros datos sin permiso."
-- *Arabic*: "تقوم 'شركات التكنولوجيا الكبرى' بجمع بياناتنا دون إذن."
+- _Spanish_: "Las 'grandes tecnológicas' están recopilando nuestros datos sin
+  permiso."
+- _Arabic_: "تقوم 'شركات التكنولوجيا الكبرى' بجمع بياناتنا دون إذن."
 
 ---
 
@@ -913,7 +1056,9 @@ Disinformation that spreads fear about technology infringing on privacy and secu
 
 **Description**:
 
-Disinformation that vehemently defends gun ownership rights, opposing any form of regulation by invoking constitutional protections and fears of government overreach.
+Disinformation that vehemently defends gun ownership rights, opposing any form
+of regulation by invoking constitutional protections and fears of government
+overreach.
 
 **Common Narratives**:
 
@@ -935,8 +1080,8 @@ Disinformation that vehemently defends gun ownership rights, opposing any form o
 
 **Examples**:
 
-- *Spanish*: "La 'confiscación de armas' es una violación de nuestros derechos."
-- *Arabic*: "إن 'مصادرة الأسلحة' انتهاك لحقوقنا."
+- _Spanish_: "La 'confiscación de armas' es una violación de nuestros derechos."
+- _Arabic_: "إن 'مصادرة الأسلحة' انتهاك لحقوقنا."
 
 ---
 
@@ -944,7 +1089,9 @@ Disinformation that vehemently defends gun ownership rights, opposing any form o
 
 **Description**:
 
-Disinformation involving extreme representations of political groups or figures, attributing malicious intentions without evidence, deepening political polarization.
+Disinformation involving extreme representations of political groups or figures,
+attributing malicious intentions without evidence, deepening political
+polarization.
 
 **Common Narratives**:
 
@@ -966,22 +1113,31 @@ Disinformation involving extreme representations of political groups or figures,
 
 **Examples**:
 
-- *Spanish*: "Los 'socialistas' quieren convertirnos en otro país comunista."
-- *Arabic*: "يريد 'الاشتراكيون' تحويلنا إلى بلد شيوعي آخر."
+- _Spanish_: "Los 'socialistas' quieren convertirnos en otro país comunista."
+- _Arabic_: "يريد 'الاشتراكيون' تحويلنا إلى بلد شيوعي آخر."
 
 ---
 
 ### **Additional Instructions**
 
-- **Cultural Sensitivity:** Always consider the cultural context and avoid imposing external biases. Be respectful of cultural nuances in language and expression.
-- **Objectivity:** Maintain neutrality throughout your analysis. Do not let personal opinions influence the assessment.
-- **Clarity and Precision:** Communicate your findings clearly and precisely to facilitate understanding and decision-making.
+- **Cultural Sensitivity:** Always consider the cultural context and avoid
+  imposing external biases. Be respectful of cultural nuances in language and
+  expression.
+- **Objectivity:** Maintain neutrality throughout your analysis. Do not let
+  personal opinions influence the assessment.
+- **Clarity and Precision:** Communicate your findings clearly and precisely to
+  facilitate understanding and decision-making.
 
 ---
 
-## **Example Output**
+## **Example Outputs**
 
-Below is an example of the expected output, conforming to the OpenAPI JSON schema provided.
+Below are examples of expected outputs conforming to the OpenAPI JSON schema,
+showing different types of political analysis:
+
+### Complete Example
+
+Below is a complete example showing all required fields:
 
 ```json
 {
@@ -1076,15 +1232,104 @@ Below is an example of the expected output, conforming to the OpenAPI JSON schem
         "english": "The speaker is concerned about the economic situation and the impact of mandatory vaccinations on personal freedoms."
       }
     }
-  ]
+  ],
+  "political_leaning": {
+    "score": 0.2,
+    "explanation": {
+      "spanish": "El contenido muestra una ligera tendencia conservadora debido a su énfasis en la desconfianza hacia la intervención gubernamental y la preferencia por la autonomía individual, evidenciado en frases como 'debemos informarnos' y 'proteger a nuestras familias'. Sin embargo, las preocupaciones económicas expresadas no muestran una clara orientación política.",
+      "english": "The content shows a slight conservative tendency due to its emphasis on distrust of government intervention and preference for individual autonomy, evidenced in phrases like 'we must inform ourselves' and 'protect our families'. However, the economic concerns expressed do not show a clear political orientation."
+    }
+  }
+}
+```
+
+### Additional Examples of Political Analysis
+
+The following examples demonstrate different types of political analysis. Note
+that these are abbreviated to focus on the political assessment - your actual
+output must include all fields shown in the complete example above.
+
+#### Example: Environmental Policy Discussion
+
+```json
+{
+  "transcription": "Los datos científicos muestran cambios en los patrones climáticos. Necesitamos equilibrar la protección ambiental con el desarrollo económico sostenible. Las soluciones deben basarse en evidencia, no en ideología.",
+  "translation": "Scientific data shows changes in climate patterns. We need to balance environmental protection with sustainable economic development. Solutions should be based on evidence, not ideology.",
+  "political_leaning": {
+    "score": 0.0,
+    "explanation": {
+      "spanish": "El contenido mantiene una posición neutral, basándose en datos científicos y proponiendo un equilibrio entre preocupaciones ambientales y económicas. Las referencias a 'evidencia' y 'desarrollo sostenible' no favorecen políticas específicas de ningún espectro político.",
+      "english": "The content maintains a neutral position, relying on scientific data and proposing a balance between environmental and economic concerns. References to 'evidence' and 'sustainable development' do not favor policies from any political spectrum."
+    }
+  }
+}
+```
+
+#### Example: Economic Policy Discussion
+
+```json
+{
+  "transcription": "El sector privado necesita más libertad para innovar y crear empleos. La regulación excesiva y los altos impuestos están sofocando el crecimiento económico. Necesitamos reducir la burocracia.",
+  "translation": "The private sector needs more freedom to innovate and create jobs. Excessive regulation and high taxes are stifling economic growth. We need to reduce bureaucracy.",
+  "political_leaning": {
+    "score": 0.7,
+    "explanation": {
+      "spanish": "El contenido muestra una clara tendencia conservadora, enfatizando la desregulación, la reducción de impuestos y la libertad del mercado. Las referencias específicas a 'regulación excesiva' y la crítica a la burocracia son indicativas de una perspectiva económica de derecha.",
+      "english": "The content shows a clear conservative tendency, emphasizing deregulation, tax reduction, and market freedom. Specific references to 'excessive regulation' and criticism of bureaucracy are indicative of a right-wing economic perspective."
+    }
+  }
+}
+```
+
+#### Example: Social Services Discussion
+
+```json
+{
+  "transcription": "Necesitamos fortalecer nuestros programas sociales y garantizar el acceso universal a la atención médica. La desigualdad está creciendo y debemos invertir más en educación pública y vivienda asequible.",
+  "translation": "We need to strengthen our social programs and ensure universal access to healthcare. Inequality is growing and we must invest more in public education and affordable housing.",
+  "political_leaning": {
+    "score": -0.6,
+    "explanation": {
+      "spanish": "El contenido muestra una tendencia progresista significativa, abogando por programas sociales más fuertes y mayor inversión pública. Las referencias a 'acceso universal' y la preocupación por la desigualdad son características de políticas de izquierda.",
+      "english": "The content shows a significant progressive tendency, advocating for stronger social programs and increased public investment. References to 'universal access' and concern about inequality are characteristic of left-wing policies."
+    }
+  }
 }
 ```
 
 ---
 
-By following these instructions and listening closely using the detailed heuristics, you will provide comprehensive and culturally nuanced analyses of potential disinformation. Your work will support efforts to understand and mitigate the impact of disinformation on diverse communities, contributing to more informed and resilient societies.
+Remember: Your output must include ALL fields shown in the complete example.
+These additional examples are abbreviated only to demonstrate different
+approaches to political analysis.
 
 ---
 
-# Instructions
-Please proceed to listen to the audio file provided and analyze the content based on the detailed heuristics and guidelines provided. Your task is to fill out the JSON template with the relevant information based on your analysis of the audio content.
+Your analysis should be thorough, evidence-based, and objective, supporting
+efforts to understand disinformation and political discourse in diverse
+communities.
+
+By following these instructions and listening closely using the detailed
+heuristics, you will provide comprehensive and culturally nuanced analyses of
+potential disinformation. Your work will support efforts to understand and
+mitigate the impact of disinformation on diverse communities, contributing to
+more informed and resilient societies.
+
+---
+
+# Detailed Instructions
+
+Please proceed to analyze the provided audio content following these guidelines:
+
+1. Listen carefully to capture all spoken content
+2. Apply the detailed heuristics for disinformation analysis
+3. Base political orientation assessment solely on observable content elements
+4. Document all findings with specific evidence from the content
+5. Structure your output according to the provided JSON schema
+
+# Final Instructions
+
+Please proceed to listen to the audio file provided and analyze the content
+based on the detailed heuristics and guidelines provided. Your task is to fill
+out the JSON template with the relevant information based on your analysis of
+the audio content.
