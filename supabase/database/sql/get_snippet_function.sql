@@ -1,5 +1,8 @@
 CREATE
-OR REPLACE FUNCTION get_snippet (snippet_id UUID) RETURNS jsonb SECURITY DEFINER AS $$
+OR REPLACE FUNCTION get_snippet (
+  snippet_id UUID,
+  p_language TEXT DEFAULT 'english'
+) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
     current_user_id UUID;
     result jsonb;
@@ -26,9 +29,18 @@ BEGIN
         'end_time', s.end_time,
         'file_path', s.file_path,
         'file_size', s.file_size,
-        'title', s.title,
-        'summary', s.summary,
-        'explanation', s.explanation,
+        'title', CASE
+            WHEN p_language = 'spanish' THEN s.title ->> 'spanish'
+            ELSE s.title ->> 'english'
+        END,
+        'summary', CASE
+            WHEN p_language = 'spanish' THEN s.summary ->> 'spanish'
+            ELSE s.summary ->> 'english'
+        END,
+        'explanation', CASE
+            WHEN p_language = 'spanish' THEN s.explanation ->> 'spanish'
+            ELSE s.explanation ->> 'english'
+        END,
         'confidence_scores', s.confidence_scores,
         'language', s.language,
         'context', s.context,

@@ -1,7 +1,8 @@
 CREATE
 OR REPLACE FUNCTION get_snippets (
   page INTEGER DEFAULT 0,
-  page_size INTEGER DEFAULT 10
+  page_size INTEGER DEFAULT 10,
+  p_language TEXT DEFAULT 'english'
 ) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
     current_user_id UUID;
@@ -35,9 +36,18 @@ BEGIN
             s.end_time,
             s.file_path,
             s.file_size,
-            s.title,
-            s.summary,
-            s.explanation,
+            CASE
+                WHEN p_language = 'spanish' THEN s.title ->> 'spanish'
+                ELSE s.title ->> 'english'
+            END AS title,
+            CASE
+                WHEN p_language = 'spanish' THEN s.summary ->> 'spanish'
+                ELSE s.summary ->> 'english'
+            END AS summary,
+            CASE
+                WHEN p_language = 'spanish' THEN s.explanation ->> 'spanish'
+                ELSE s.explanation ->> 'english'
+            END AS explanation,
             s.confidence_scores,
             s.language,
             s.context,
