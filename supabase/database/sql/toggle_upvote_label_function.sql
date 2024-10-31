@@ -17,7 +17,7 @@ BEGIN
     SELECT l.id, l.is_ai_suggested
     INTO label_id, is_ai_suggested
     FROM public.labels l
-    WHERE l.text = label_text
+    WHERE l.text = label_text OR l.text_spanish = label_text
     LIMIT 1;
 
     IF label_id IS NULL THEN

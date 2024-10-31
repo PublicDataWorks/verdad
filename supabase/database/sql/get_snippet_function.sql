@@ -50,7 +50,7 @@ BEGIN
         END,
         'status', s.status,
         'error_message', s.error_message,
-        'labels', get_snippet_labels(s.id) -> 'labels'
+        'labels', get_snippet_labels(s.id, p_language) -> 'labels'
     ) INTO result
     FROM snippets s
     LEFT JOIN user_star_snippets us ON s.id = us.snippet AND us."user" = current_user_id

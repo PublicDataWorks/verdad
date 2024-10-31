@@ -51,7 +51,7 @@ BEGIN
             s.confidence_scores,
             s.language,
             s.context,
-            (get_snippet_labels(s.id) -> 'labels') AS labels,
+            (get_snippet_labels(s.id, p_language) -> 'labels') AS labels,
             jsonb_build_object(
                 'id', a.id,
                 'radio_station_name', a.radio_station_name,

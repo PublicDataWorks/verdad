@@ -1,5 +1,5 @@
 CREATE
-OR REPLACE FUNCTION get_snippet_labels (snippet_id UUID) RETURNS jsonb SECURITY DEFINER AS $$
+OR REPLACE FUNCTION get_snippet_labels (snippet_id UUID, p_language TEXT DEFAULT 'english') RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
     result jsonb;
     current_user_id UUID;
@@ -14,7 +14,10 @@ BEGIN
         'snippet_id', snippet_id,
         'labels', jsonb_agg(jsonb_build_object(
             'id', l.id,
-            'text', l.text,
+            'text', CASE
+                WHEN p_language = 'spanish' THEN l.text_spanish
+                ELSE l.text
+            END,
             'created_by', l.created_by,
             'is_ai_suggested', l.is_ai_suggested,
             'applied_by', sl.applied_by,
