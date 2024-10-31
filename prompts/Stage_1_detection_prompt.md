@@ -687,4 +687,6 @@ This example illustrates how to structure the output for the flagged snippets. U
 
 # Instructions
 
-Please analyze the provided timestamped transcription for potential disinformation. Use the provided heuristics to identify and flag any disinformation snippets. Ensure that the `start_time` and `end_time` fields are accurate and correspond to those in the transcription. This accuracy is crucial for the subsequent processing stages in the pipeline. If the transcription only includes `start_time` for each segment, use the `start_time` of the next segment as the `end_time` of the current segment.
+- Please analyze the provided timestamped transcription for potential disinformation. Use the provided heuristics to identify and flag any disinformation snippets.
+- Ensure that the `start_time` and `end_time` fields are accurate and correspond to those in the timestamped transcription.
+- Ensure that the `start_time` is always less than the `end_time`, and they are within the range of the timestamped transcription. This accuracy is crucial for the subsequent processing stages in the pipeline.
