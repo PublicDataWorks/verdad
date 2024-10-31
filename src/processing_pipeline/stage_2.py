@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 import os
 import time
-import json
 import boto3
 from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
@@ -64,7 +63,13 @@ def convert_formatted_time_str_to_seconds(time_str):
 
 @task(log_prints=True)
 def extract_snippet_clip(
-    input_file, output_file, formatted_start_time, formatted_end_time, context_seconds, formatted_recorded_at
+    input_file,
+    output_file,
+    formatted_start_time,
+    formatted_end_time,
+    context_before_seconds,
+    context_after_seconds,
+    formatted_recorded_at,
 ):
     if not os.path.isfile(input_file):
         raise FileNotFoundError(f"Audio file {input_file} does not exist.")
@@ -84,8 +89,8 @@ def extract_snippet_clip(
         raise ValueError("start_time must be less than end_time.")
 
     # Include surrounding context to the snippet
-    new_start_time = max(0, start_time - context_seconds)
-    new_end_time = min(duration, end_time + context_seconds)
+    new_start_time = max(0, start_time - context_before_seconds)
+    new_end_time = min(duration, end_time + context_after_seconds)
 
     # Slice the audio segment
     subclip = audio[(new_start_time * 1000) : (new_end_time * 1000)]
@@ -155,7 +160,15 @@ def insert_new_snippet_to_snippets_table_in_supabase(
 
 
 @task(log_prints=True)
-def process_llm_response(supabase_client, llm_response, local_file, s3_client, r2_bucket_name, context_seconds):
+def process_llm_response(
+    supabase_client,
+    llm_response,
+    local_file,
+    s3_client,
+    r2_bucket_name,
+    context_before_seconds,
+    context_after_seconds,
+):
     try:
         print(f"Processing llm response {llm_response['id']}")
         flagged_snippets = (llm_response["detection_result"] or {}).get("flagged_snippets", [])
@@ -172,7 +185,8 @@ def process_llm_response(supabase_client, llm_response, local_file, s3_client, r
                 output_file,
                 start_time,
                 end_time,
-                context_seconds,
+                context_before_seconds,
+                context_after_seconds,
                 llm_response["audio_file"]["recorded_at"],
             )
             file_size = os.path.getsize(output_file)
@@ -200,7 +214,7 @@ def process_llm_response(supabase_client, llm_response, local_file, s3_client, r
 
 
 @flow(name="Stage 2: Audio Clipping", log_prints=True, task_runner=ConcurrentTaskRunner)
-def audio_clipping(context_seconds, repeat):
+def audio_clipping(context_before_seconds, context_after_seconds, repeat):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
     s3_client = boto3.client(
@@ -226,7 +240,15 @@ def audio_clipping(context_seconds, repeat):
             local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, llm_response["audio_file"]["file_path"])
 
             # Process the stage-1 LLM response
-            process_llm_response(supabase_client, llm_response, local_file, s3_client, R2_BUCKET_NAME, context_seconds)
+            process_llm_response(
+                supabase_client,
+                llm_response,
+                local_file,
+                s3_client,
+                R2_BUCKET_NAME,
+                context_before_seconds,
+                context_after_seconds,
+            )
 
             print(f"Delete the downloaded audio file: {local_file}")
             os.remove(local_file)
