@@ -16,6 +16,16 @@ from constants import (
 
 
 @task(log_prints=True, retries=3)
+def fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id):
+    response = supabase_client.get_snippet_by_id(snippet_id)
+    if response:
+        return response
+    else:
+        print(f"Snippet with id {snippet_id} not found")
+        return None
+
+
+@task(log_prints=True, retries=3)
 def fetch_a_new_snippet_from_supabase(supabase_client):
     return __fetch_a_new_snippet_from_supabase(supabase_client)
 
@@ -163,7 +173,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
 
 
 @flow(name="Stage 3: In-depth Analysis", log_prints=True, task_runner=ConcurrentTaskRunner)
-def in_depth_analysis(repeat):
+def in_depth_analysis(snippet_id, repeat):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
     s3_client = boto3.client(
@@ -180,7 +190,11 @@ def in_depth_analysis(repeat):
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
     while True:
-        snippet = fetch_a_new_snippet_from_supabase(supabase_client)  # TODO: Retry failed snippets (status: Error)
+        if snippet_id:
+            snippet = fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id)
+        else:
+            snippet = fetch_a_new_snippet_from_supabase(supabase_client)  # TODO: Retry failed snippets (status: Error)
+
         if snippet:
             # Immediately set the snippet to Processing, so that other workers don't pick it up
             supabase_client.set_snippet_status(snippet["id"], "Processing")
@@ -194,8 +208,10 @@ def in_depth_analysis(repeat):
             print(f"Delete the downloaded snippet clip: {local_file}")
             os.remove(local_file)
 
-        # Stop the flow if it should not be repeated
-        if not repeat:
+        # Stop the flow if:
+        # 1. We're processing a specific snippet (snippet_id was provided), or
+        # 2. We're not meant to repeat the process (repeat=False)
+        if snippet_id or not repeat:
             break
 
         if snippet:

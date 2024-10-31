@@ -31,7 +31,7 @@ if __name__ == "__main__":
             deployment = in_depth_analysis.to_deployment(
                 name="Stage 3: In-Depth Analysis",
                 concurrency_limit=5,
-                parameters=dict(repeat=True),
+                parameters=dict(snippet_id=None, repeat=True),
             )
             serve(deployment)
         case _:
