@@ -15,14 +15,16 @@ Please analyze the provided timestamped transcription for potential disinformati
 3. **Identify and Flag Snippets:**
 
    - For each potential disinformation snippet, record the following:
-     - `start_time`: The timestamp when the snippet begins, in MM:SS format, based on the provided transcription.
-     - `end_time`: The timestamp when the snippet ends, in MM:SS format, based on the provided transcription.
+     - `start_time`: The timestamp when the snippet begins, in MM:SS format, based on the provided timestamped transcription.
+     - `end_time`: The timestamp when the snippet ends, in MM:SS format, based on the provided timestamped transcription.
      - `transcription`: Transcription of the snippet (without timestamps).
      - `explanation`: Explanation of why this snippet was flagged (in English).
      - `disinformation_categories`: Applicable categories based on heuristics.
      - `keywords_detected`: Specific words or phrases that triggered the flag.
     
-   - **Ensure that `start_time` and `end_time` are accurate and correspond to those provided in the transcription. Double-check these values to avoid discrepancies.**
+   - **Ensure that `start_time` and `end_time` are accurate and correspond to those provided in the timestamped transcription. Double-check these values to avoid discrepancies.**
+     - The `start_time` should be less than the `end_time`.
+     - Both `start_time` and `end_time` should be within the range of the timestamped transcription.
 
 4. **Assemble Structured Output:**
 

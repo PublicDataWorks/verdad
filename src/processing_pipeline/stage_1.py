@@ -228,7 +228,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
 
 
 @flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
-def initial_disinformation_detection(audio_file_id: str, repeat: bool):
+def initial_disinformation_detection(audio_file_id, repeat):
     # Setup S3 Client
     s3_client = boto3.client(
         "s3",
