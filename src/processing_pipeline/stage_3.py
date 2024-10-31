@@ -17,7 +17,10 @@ from constants import (
 
 @task(log_prints=True, retries=3)
 def fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id):
-    response = supabase_client.get_snippet_by_id(snippet_id)
+    response = supabase_client.get_snippet_by_id(
+        id=snippet_id,
+        select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("detection_result")',
+    )
     if response:
         return response
     else:
