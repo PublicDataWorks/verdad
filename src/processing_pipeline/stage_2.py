@@ -82,7 +82,7 @@ def extract_snippet_clip(
     end_time = convert_formatted_time_str_to_seconds(formatted_end_time)
 
     # Ensure start_time and end_time are within the audio duration
-    duration = len(audio) / 1000  # Duration in seconds
+    duration = int(len(audio) / 1000)  # Duration in seconds
     if start_time < 0 or end_time > duration:
         raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
     if start_time >= end_time:
