@@ -28,6 +28,16 @@ def fetch_a_new_audio_file_from_supabase(supabase_client):
 
 
 @task(log_prints=True, retries=3)
+def fetch_audio_file_by_id(supabase_client, audio_file_id):
+    response = supabase_client.get_audio_file_by_id(audio_file_id)
+    if response:
+        return response
+    else:
+        print(f"Audio file with id {audio_file_id} not found")
+        return None
+
+
+@task(log_prints=True, retries=3)
 def download_audio_file_from_s3(s3_client, file_path):
     return __download_audio_file_from_s3(s3_client, file_path)
 
@@ -218,7 +228,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
 
 
 @flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
-def initial_disinformation_detection(repeat):
+def initial_disinformation_detection(audio_file_id: str, repeat: bool):
     # Setup S3 Client
     s3_client = boto3.client(
         "s3",
@@ -231,7 +241,11 @@ def initial_disinformation_detection(repeat):
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
     while True:
-        audio_file = fetch_a_new_audio_file_from_supabase(supabase_client)  # TODO: Retry failed audio files (Error)
+        if audio_file_id:
+            audio_file = fetch_audio_file_by_id(supabase_client, audio_file_id)
+        else:
+            audio_file = fetch_a_new_audio_file_from_supabase(supabase_client)  # TODO: Retry failed audio files (Error)
+
         if audio_file:
             # Immediately set the audio file to Processing, so that other workers don't pick it up
             supabase_client.set_audio_file_status(audio_file["id"], "Processing")
@@ -245,8 +259,10 @@ def initial_disinformation_detection(repeat):
             print(f"Delete the downloaded audio file: {local_file}")
             os.remove(local_file)
 
-        # Stop the flow if it should not be repeated
-        if not repeat:
+        # Break the loop if:
+        # 1. We're processing a specific audio file (audio_file_id was provided), or
+        # 2. We're not meant to repeat the process (repeat=False)
+        if audio_file_id or not repeat:
             break
 
         if audio_file:

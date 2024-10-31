@@ -17,7 +17,7 @@ if __name__ == "__main__":
             deployment = initial_disinformation_detection.to_deployment(
                 name="Stage 1: Initial Disinformation Detection",
                 concurrency_limit=5,
-                parameters=dict(repeat=True),
+                parameters=dict(audio_file_id=None, repeat=True),
             )
             serve(deployment)
         case "audio_clipping":
