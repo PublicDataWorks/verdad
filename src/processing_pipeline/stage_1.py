@@ -100,7 +100,7 @@ def __transcribe_audio_file_with_open_ai_whisper_1(audio_file):
 
 
 @task(log_prints=True)
-def initial_disinformation_detection_with_gemini_1_5_flash_002(initial_transcription, metadata):
+def initial_disinformation_detection_with_gemini_1_5_pro_002(initial_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1PreprocessDetectionExecutor.run(gemini_key, initial_transcription, metadata)
     return json.loads(response)
@@ -161,8 +161,8 @@ def process_audio_file(supabase_client, audio_file, local_file):
             "time_zone": "UTC",
         }
 
-        # Detect disinformation from the initial transcription using Gemini 1.5 Flash 002
-        initial_detection_result = initial_disinformation_detection_with_gemini_1_5_flash_002(
+        # Detect disinformation from the initial transcription using Gemini 1.5 Pro 002
+        initial_detection_result = initial_disinformation_detection_with_gemini_1_5_pro_002(
             initial_transcription, metadata
         )
         print(f"Initial detection result:\n{json.dumps(initial_detection_result, indent=2)}\n")

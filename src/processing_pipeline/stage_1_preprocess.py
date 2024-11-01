@@ -65,7 +65,7 @@ class Stage1PreprocessDetectionExecutor:
 
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash-002",
+            model_name="gemini-1.5-pro-002",
             system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 
