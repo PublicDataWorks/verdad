@@ -160,6 +160,20 @@ def insert_new_snippet_to_snippets_table_in_supabase(
 
 
 @task(log_prints=True)
+def ensure_correct_timestamps(snippets):
+    for snippet in snippets:
+        start_time = snippet["start_time"]
+        end_time = snippet["end_time"]
+
+        # Convert formatted time strings (HH:MM:SS) to seconds
+        start_time = convert_formatted_time_str_to_seconds(start_time)
+        end_time = convert_formatted_time_str_to_seconds(end_time)
+
+        if start_time >= end_time:
+            raise ValueError("start_time must be less than end_time.")
+
+
+@task(log_prints=True)
 def process_llm_response(
     supabase_client,
     llm_response,
@@ -172,6 +186,8 @@ def process_llm_response(
     try:
         print(f"Processing llm response {llm_response['id']}")
         flagged_snippets = (llm_response["detection_result"] or {}).get("flagged_snippets", [])
+        ensure_correct_timestamps(flagged_snippets)
+
         for snippet in flagged_snippets:
             uuid = snippet["uuid"]
             start_time = snippet["start_time"]
