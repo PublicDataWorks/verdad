@@ -1,6 +1,6 @@
 # Verdad
 
-Verdad is a Python-based project that captures audio streams, extracts metadata, transcribes audio using OpenAI's Whisper model, and translates the transcription to English. The project leverages various libraries and tools such as `ffmpeg`, `requests`, `dotenv`, and `openai`.
+Verdad is a Python-based project that captures audio streams, then processes the audio through a multistage pipeline for detecting suspected "snippets" of mis/disinfo, transcribe audio to text-with-timestamps, generate a short audio clip for each snippet, performs an analysis and finally stores all the structured output in a postgres database. 
 
 ## Development Setup
 
