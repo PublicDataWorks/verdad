@@ -243,6 +243,15 @@ class SupabaseClient:
         )
         return response.data
 
+    def update_stage_1_llm_response(self, id, detection_result):
+        response = (
+            self.client.table("stage_1_llm_responses")
+            .update({"detection_result": detection_result})
+            .eq("id", id)
+            .execute()
+        )
+        return response.data
+
     def create_new_label(self, text, text_spanish):
         # Check if the label with the same text already exists
         existing_label = (
