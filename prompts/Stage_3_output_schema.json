@@ -133,7 +133,7 @@
                 },
                 "main": {
                     "type": "string",
-                    "description": "The transcription of the snippet itself."
+                    "description": "The transcription of the snippet itself. It should match with the transcription in the provided metadata."
                 },
                 "main_en": {
                     "type": "string",

@@ -107,6 +107,9 @@ Perform the following steps:
 - **Context in English:**
   - Translate the three parts of the context into English.
 
+- **Context Accuracy:**
+  - Ensure that the `main` part of the context matches with the transcription in the provided metadata.
+
 ##### **H. Confidence Scores**
 
 - **Overall Confidence:**
@@ -295,7 +298,7 @@ Ensure your output strictly adheres to this schema.
                 },
                 "main": {
                     "type": "string",
-                    "description": "The transcription of the snippet itself."
+                    "description": "The transcription of the snippet itself. It should match with the transcription in the provided metadata."
                 },
                 "main_en": {
                     "type": "string",
