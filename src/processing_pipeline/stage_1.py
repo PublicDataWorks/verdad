@@ -287,6 +287,10 @@ def initial_disinformation_detection(audio_file_id, repeat):
 
 @flow(name="Stage 1: Rerun the main detection phase", log_prints=True, task_runner=ConcurrentTaskRunner)
 def rerun_main_detection_phase(stage_1_llm_response_id):
+    if not stage_1_llm_response_id:
+        print("Stage 1 LLM response id was not provided!")
+        return
+
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
     stage_1_llm_response = fetch_stage_1_llm_response_by_id(supabase_client, stage_1_llm_response_id)
