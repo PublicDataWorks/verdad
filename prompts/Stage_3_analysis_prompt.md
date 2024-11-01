@@ -32,6 +32,7 @@ Your tasks are:
   - Include all spoken words, fillers, slang, colloquialisms, and any code-switching instances.
   - Pay attention to dialects and regional variations common among immigrant communities.
   - Do your best to capture the speech accurately, and flag any unintelligible portions with [inaudible].
+  - Your transcription should not contain any timestamps.
 
 - **Translation:**
   - Translate the transcription into English.
