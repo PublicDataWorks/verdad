@@ -13,7 +13,7 @@ BEGIN
         RAISE EXCEPTION 'Only logged-in users can call this function';
     END IF;
 
-    -- Return the specified snippet
+    -- Return the specified snippet, if its status is processed
     SELECT jsonb_build_object(
         'id', s.id,
         'recorded_at', s.recorded_at,
@@ -55,8 +55,9 @@ BEGIN
     FROM snippets s
     LEFT JOIN user_star_snippets us ON s.id = us.snippet AND us."user" = current_user_id
     LEFT JOIN audio_files a ON s.audio_file = a.id
-    WHERE s.id = snippet_id;
+    WHERE s.id = snippet_id AND s.status = 'Processed';
 
     RETURN COALESCE(result, '{}'::jsonb);
 END;
-$$ LANGUAGE plpgsql;
+$$
+LANGUAGE plpgsql;
