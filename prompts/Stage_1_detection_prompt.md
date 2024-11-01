@@ -23,7 +23,7 @@ Please analyze the provided timestamped transcription for potential disinformati
      - `keywords_detected`: Specific words or phrases that triggered the flag.
     
    - **Ensure that `start_time` and `end_time` are accurate and correspond to those provided in the timestamped transcription. Double-check these values to avoid discrepancies.**
-     - The `start_time` must always be less than the `end_time`.
+     - The `start_time` must always be less than the `end_time`. So if `start_time` is equal to `end_time`, please automatically set `end_time` to `start_time + 1 second`.
      - Both `start_time` and `end_time` must be within the range of the timestamped transcription.
 
 4. **Assemble Structured Output:**
@@ -689,5 +689,5 @@ This example illustrates how to structure the output for the flagged snippets. U
 
 - Please analyze the provided timestamped transcription for potential disinformation. Use the provided heuristics to identify and flag any disinformation snippets.
 - Ensure that the `start_time` and `end_time` fields are accurate and correspond to those in the timestamped transcription. This accuracy is crucial for the subsequent processing stages in the pipeline.
-  - The `start_time` must always be less than the `end_time`. So when `start_time` is equal to `end_time`, please automatically set `end_time` to `start_time + 1 second`.
+  - The `start_time` must always be less than the `end_time`. So if `start_time` is equal to `end_time`, please automatically set `end_time` to `start_time + 1 second`.
   - Both `start_time` and `end_time` must be within the range of the timestamped transcription.
