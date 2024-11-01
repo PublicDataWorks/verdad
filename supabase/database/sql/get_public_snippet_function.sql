@@ -17,7 +17,10 @@ BEGIN
         'end_time', s.end_time,
         'file_path', s.file_path,
         'file_size', s.file_size,
-        'language', s.language,
+        'language', CASE 
+                        WHEN s.language IS NULL THEN NULL 
+                        ELSE s.language ->> 'primary_language' 
+                    END,
         'context', s.context
     ) INTO result
     FROM snippets s
