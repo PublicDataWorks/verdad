@@ -286,46 +286,48 @@ def initial_disinformation_detection(audio_file_id, repeat):
 
 
 @flow(name="Stage 1: Rerun the main detection phase", log_prints=True, task_runner=ConcurrentTaskRunner)
-def rerun_main_detection_phase(stage_1_llm_response_id):
-    if not stage_1_llm_response_id:
-        print("Stage 1 LLM response id was not provided!")
+def rerun_main_detection_phase(stage_1_llm_response_ids):
+    if not stage_1_llm_response_ids:
+        print("No stage 1 llm response ids were provided!")
         return
 
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
-    stage_1_llm_response = fetch_stage_1_llm_response_by_id(supabase_client, stage_1_llm_response_id)
 
-    if stage_1_llm_response:
-        print(f"Found stage 1 llm response:\n{json.dumps(stage_1_llm_response, indent=2)}\n")
+    for id in stage_1_llm_response_ids:
+        stage_1_llm_response = fetch_stage_1_llm_response_by_id(supabase_client, id)
 
-        # Get metadata of the transcription
-        audio_file = stage_1_llm_response["audio_file"]
-        metadata = {
-            "radio_station_name": audio_file["radio_station_name"],
-            "radio_station_code": audio_file["radio_station_code"],
-            "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-            "recorded_at": audio_file["recorded_at"],
-            "recording_day_of_week": audio_file["recording_day_of_week"],
-            "time_zone": "UTC",
-        }
+        if stage_1_llm_response:
+            print(f"Found stage 1 llm response {id}")
 
-        initial_detection_result = stage_1_llm_response["initial_detection_result"]
-        flag_snippets = initial_detection_result["flagged_snippets"]
+            # Get metadata of the transcription
+            audio_file = stage_1_llm_response["audio_file"]
+            metadata = {
+                "radio_station_name": audio_file["radio_station_name"],
+                "radio_station_code": audio_file["radio_station_code"],
+                "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
+                "recorded_at": audio_file["recorded_at"],
+                "recording_day_of_week": audio_file["recording_day_of_week"],
+                "time_zone": "UTC",
+            }
 
-        if len(flag_snippets) == 0:
-            print("No flagged snippets found during the initial detection.")
-        else:
-            openai_response = stage_1_llm_response["openai_response"]
+            initial_detection_result = stage_1_llm_response["initial_detection_result"]
+            flag_snippets = initial_detection_result["flagged_snippets"]
 
-            print("Processing the timestamped transcription (from Whisper) with Gemini 1.5 Pro 002")
-            detection_result = disinformation_detection_with_gemini_1_5_pro_002(
-                timestamped_transcription=openai_response["timestamped_transcription"],
-                metadata=metadata,
-            )
-            print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
-            supabase_client.update_stage_1_llm_response(stage_1_llm_response_id, detection_result)
+            if len(flag_snippets) == 0:
+                print("No flagged snippets found during the initial detection.")
+            else:
+                openai_response = stage_1_llm_response["timestamped_transcription"]
 
-        print(f"Processing completed for stage 1 llm response {stage_1_llm_response_id}")
+                print("Processing the timestamped transcription (from Whisper) with Gemini 1.5 Pro 002")
+                detection_result = disinformation_detection_with_gemini_1_5_pro_002(
+                    timestamped_transcription=openai_response["timestamped_transcription"],
+                    metadata=metadata,
+                )
+                print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
+                supabase_client.update_stage_1_llm_response(id, detection_result)
+
+            print(f"Processing completed for stage 1 llm response {id}")
 
 
 class Stage1Executor:
