@@ -176,7 +176,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
 
 
 @flow(name="Stage 3: In-depth Analysis", log_prints=True, task_runner=ConcurrentTaskRunner)
-def in_depth_analysis(snippet_id, repeat):
+def in_depth_analysis(snippet_ids, repeat):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
     s3_client = boto3.client(
@@ -192,38 +192,46 @@ def in_depth_analysis(snippet_id, repeat):
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
-    while True:
-        if snippet_id:
-            snippet = fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id)
-        else:
+    if snippet_ids:
+        for id in snippet_ids:
+            snippet = fetch_a_specific_snippet_from_supabase(supabase_client, id)
+            if snippet:
+                print(f"Found the snippet: {snippet['id']}")
+                local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
+
+                # Process the snippet
+                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY)
+
+                print(f"Delete the downloaded snippet clip: {local_file}")
+                os.remove(local_file)
+    else:
+        while True:
             snippet = fetch_a_new_snippet_from_supabase(supabase_client)  # TODO: Retry failed snippets (status: Error)
 
-        if snippet:
-            # Immediately set the snippet to Processing, so that other workers don't pick it up
-            supabase_client.set_snippet_status(snippet["id"], "Processing")
-            print(f"Found a new snippet: {snippet['id']}")
+            if snippet:
+                # Immediately set the snippet to Processing, so that other workers don't pick it up
+                supabase_client.set_snippet_status(snippet["id"], "Processing")
+                print(f"Found a new snippet: {snippet['id']}")
 
-            local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
+                local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
-            # Process the snippet
-            process_snippet(supabase_client, snippet, local_file, GEMINI_KEY)
+                # Process the snippet
+                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY)
 
-            print(f"Delete the downloaded snippet clip: {local_file}")
-            os.remove(local_file)
+                print(f"Delete the downloaded snippet clip: {local_file}")
+                os.remove(local_file)
 
-        # Stop the flow if:
-        # 1. We're processing a specific snippet (snippet_id was provided), or
-        # 2. We're not meant to repeat the process (repeat=False)
-        if snippet_id or not repeat:
-            break
+            # Stop the flow if we're not meant to repeat the process
+            if not repeat:
+                break
 
-        if snippet:
-            sleep_time = 2
-        else:
-            sleep_time = 60
+            if snippet:
+                sleep_time = 2
+            else:
+                sleep_time = 60
 
-        print(f"Sleep for {sleep_time} seconds before the next iteration")
-        time.sleep(sleep_time)
+            print(f"Sleep for {sleep_time} seconds before the next iteration")
+            time.sleep(sleep_time)
 
 
 @task(log_prints=True, retries=3)
