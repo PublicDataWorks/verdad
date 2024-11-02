@@ -11,6 +11,7 @@ primary_region = 'sea'
   initial_disinformation_detection = ''
   audio_clipping = ''
   in_depth_analysis = ''
+  undo_audio_clipping = ''
   undo_in_depth_analysis = ''
 
 [[vm]]
@@ -20,7 +21,7 @@ primary_region = 'sea'
   cpus = 4
 
 [[vm]]
-  processes = ["undo_in_depth_analysis"]
+  processes = ["undo_audio_clipping", "undo_in_depth_analysis"]
   memory = '256mb'
   cpu_kind = 'shared'
   cpus = 1
@@ -29,4 +30,5 @@ primary_region = 'sea'
   initial_disinformation_detection = 1
   audio_clipping = 1
   in_depth_analysis = 1
+  undo_audio_clipping = 1
   undo_in_depth_analysis = 1

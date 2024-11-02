@@ -33,6 +33,10 @@ class SupabaseClient:
         response = self.client.table("snippets").select(select).eq("id", id).execute()
         return response.data[0] if response.data else None
 
+    def get_snippets_by_ids(self, ids, select="*"):
+        response = self.client.table("snippets").select(select).in_("id", ids).execute()
+        return response.data
+
     def get_audio_file_by_id(self, id, select="*"):
         response = self.client.table("audio_files").select(select).eq("id", id).execute()
         return response.data[0] if response.data else None
@@ -217,7 +221,7 @@ class SupabaseClient:
         )
         return response.data
 
-    def revert_snippet(self, id):
+    def reset_snippet(self, id):
         response = (
             self.client.table("snippets")
             .update(
@@ -243,10 +247,23 @@ class SupabaseClient:
         )
         return response.data
 
+    def delete_snippet(self, id):
+        response = self.client.table("snippets").delete().eq("id", id).execute()
+        return response.data
+
     def update_stage_1_llm_response(self, id, detection_result):
         response = (
             self.client.table("stage_1_llm_responses")
             .update({"detection_result": detection_result})
+            .eq("id", id)
+            .execute()
+        )
+        return response.data
+
+    def reset_stage_1_llm_response_status(self, id):
+        response = (
+            self.client.table("stage_1_llm_responses")
+            .update({"status": "New", "error_message": None})
             .eq("id", id)
             .execute()
         )

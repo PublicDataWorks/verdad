@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from prefect import serve
 import sentry_sdk
 from stage_1 import initial_disinformation_detection
-from stage_2 import audio_clipping
+from stage_2 import audio_clipping, undo_audio_clipping
 from stage_3 import in_depth_analysis, undo_stage_3
 load_dotenv()
 
@@ -25,6 +25,12 @@ if __name__ == "__main__":
                 name="Stage 2: Audio Clipping",
                 concurrency_limit=5,
                 parameters=dict(context_before_seconds=90, context_after_seconds=30, repeat=True),
+            )
+            serve(deployment)
+        case "undo_audio_clipping":
+            deployment = undo_audio_clipping.to_deployment(
+                name="Stage 2: Undo Audio Clipping",
+                parameters=dict(stage_1_llm_response_ids=[]),
             )
             serve(deployment)
         case "in_depth_analysis":
