@@ -285,7 +285,12 @@ def initial_disinformation_detection(audio_file_id, repeat):
         time.sleep(sleep_time)
 
 
-@flow(name="Stage 1: Rerun the main detection phase", log_prints=True, task_runner=ConcurrentTaskRunner)
+@task(log_prints=True, retries=3)
+def update_stage_1_llm_response_detection_result(supabase_client, id, detection_result):
+    supabase_client.update_stage_1_llm_response_detection_result(id, detection_result)
+
+
+@flow(name="Stage 1: Rerun Main Detection Phase", log_prints=True, task_runner=ConcurrentTaskRunner)
 def rerun_main_detection_phase(stage_1_llm_response_ids):
     if not stage_1_llm_response_ids:
         print("No stage 1 llm response ids were provided!")
@@ -311,11 +316,11 @@ def rerun_main_detection_phase(stage_1_llm_response_ids):
                 "time_zone": "UTC",
             }
 
-            initial_detection_result = stage_1_llm_response["initial_detection_result"]
-            flag_snippets = initial_detection_result["flagged_snippets"]
+            initial_detection_result = stage_1_llm_response["initial_detection_result"] or {}
+            flag_snippets = initial_detection_result.get("flagged_snippets", [])
 
             if len(flag_snippets) == 0:
-                print("No flagged snippets found during the initial detection.")
+                print("No flagged snippets found during the initial detection phase.")
             else:
                 openai_response = stage_1_llm_response["timestamped_transcription"]
 
@@ -325,7 +330,7 @@ def rerun_main_detection_phase(stage_1_llm_response_ids):
                     metadata=metadata,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
-                supabase_client.update_stage_1_llm_response(id, detection_result)
+                update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
 
             print(f"Processing completed for stage 1 llm response {id}")
 

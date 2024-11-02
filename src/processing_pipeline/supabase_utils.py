@@ -251,7 +251,7 @@ class SupabaseClient:
         response = self.client.table("snippets").delete().eq("id", id).execute()
         return response.data
 
-    def update_stage_1_llm_response(self, id, detection_result):
+    def update_stage_1_llm_response_detection_result(self, id, detection_result):
         response = (
             self.client.table("stage_1_llm_responses")
             .update({"detection_result": detection_result})
