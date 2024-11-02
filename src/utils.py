@@ -217,4 +217,10 @@ def fetch_radio_stations():
             "state": "Michigan",
             "name": "WNZK-AM",
         },
+        {
+            "code": "ARAB",
+            "url": "https://s3.radio.co/sc618789ff/listen",
+            "state": "Unknown",
+            "name": "US Arab Radio",
+        },
     ]
