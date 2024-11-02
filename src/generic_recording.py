@@ -16,6 +16,8 @@ from processing_pipeline.supabase_utils import SupabaseClient
 from radiostations.khot import Khot
 from radiostations.kisf import Kisf
 from radiostations.krgt import Krgt
+from radiostations.wado import Wado
+from radiostations.wkaq import Wkaq
 
 load_dotenv()
 
@@ -112,6 +114,8 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
         Khot.code: Khot,
         Kisf.code: Kisf,
         Krgt.code: Krgt,
+        Wkaq.code: Wkaq,
+        Wado.code: Wado,
     }
     # Reconstruct the radion station object based on the station code
     station = RADIO_STATIONS.get(station_code, lambda: None)()
@@ -170,6 +174,10 @@ if __name__ == "__main__":
             station = Kisf()
         case "radio_krgt":
             station = Krgt()
+        case "radio_wkaq":
+            station = Wkaq()
+        case "radio_wado":
+            station = Wado()
         case _:
             raise Exception("Invalid process group")
 

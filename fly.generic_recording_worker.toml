@@ -11,6 +11,8 @@ primary_region = 'sea'
   radio_khot = ''
   radio_kisf = ''
   radio_krgt = ''
+  radio_wkaq = ''
+  radio_wado = ''
 
 [[vm]]
   memory = '1gb'
@@ -21,3 +23,5 @@ primary_region = 'sea'
   radio_khot = 1
   radio_kisf = 1
   radio_krgt = 1
+  radio_wkaq = 1
+  radio_wado = 1

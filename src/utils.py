@@ -121,6 +121,18 @@ def fetch_radio_stations():
             "state": "Wisconsin",
             "name": "La Movida",
         },
+        {
+            "code": "WDJA-AM 1420 kHz",
+            "url": "https://radio.fiberstreams.com:2020/stream/8702",
+            "state": "Florida",
+            "name": "Radio Universo 1420",
+        },
+        {
+            "code": "WACC-AM 830 kHz",
+            "url": "https://streaming6.locucionar.com:24004/stream",
+            "state": "Florida",
+            "name": "Radio Paz",
+        },
         # ===============================================================
         # iHeart Radio Stations
         # ===============================================================
