@@ -196,6 +196,7 @@ def in_depth_analysis(snippet_ids, repeat):
         for id in snippet_ids:
             snippet = fetch_a_specific_snippet_from_supabase(supabase_client, id)
             if snippet:
+                supabase_client.set_snippet_status(snippet["id"], "Processing")
                 print(f"Found the snippet: {snippet['id']}")
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
