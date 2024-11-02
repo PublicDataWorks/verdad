@@ -4,7 +4,7 @@ from prefect import serve
 import sentry_sdk
 from stage_1 import initial_disinformation_detection
 from stage_2 import audio_clipping
-from stage_3 import in_depth_analysis
+from stage_3 import in_depth_analysis, undo_stage_3
 load_dotenv()
 
 # Setup Sentry
@@ -32,6 +32,12 @@ if __name__ == "__main__":
                 name="Stage 3: In-Depth Analysis",
                 concurrency_limit=5,
                 parameters=dict(snippet_id=None, repeat=True),
+            )
+            serve(deployment)
+        case "undo_in_depth_analysis":
+            deployment = undo_stage_3.to_deployment(
+                name="Stage 3: Undo In-Depth Analysis",
+                parameters=dict(snippet_ids=[]),
             )
             serve(deployment)
         case _:
