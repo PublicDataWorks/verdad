@@ -220,7 +220,7 @@ def fetch_radio_stations():
         {
             "code": "ARAB",
             "url": "https://s3.radio.co/sc618789ff/listen",
-            "state": "Unknown",
+            "state": "Michigan",
             "name": "US Arab Radio",
         },
     ]
