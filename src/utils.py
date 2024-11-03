@@ -197,7 +197,7 @@ def fetch_radio_stations():
             "name": "Z",
         },
         {
-            "code": "WRUM-FM HD2 - 97.1 FM",
+            "code": "WRUM HD2 - 97.1 FM",
             "url": "http://stream.revma.ihrhls.com/zc7155/hls.m3u8",
             "state": "Florida, Orlando",
             "name": "Mega",
