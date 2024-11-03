@@ -270,6 +270,7 @@ def initial_disinformation_detection(audio_file_id, limit):
             # Process the audio file
             process_audio_file(supabase_client, audio_file, local_file)
             processed_audio_files += 1
+            print(f"Processed {processed_audio_files}/{limit} audio files")
 
             print(f"Delete the downloaded audio file: {local_file}")
             os.remove(local_file)
