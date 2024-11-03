@@ -239,7 +239,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
 
 
 @flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
-def initial_disinformation_detection(audio_file_id, repeat):
+def initial_disinformation_detection(audio_file_id, limit):
     # Setup S3 Client
     s3_client = boto3.client(
         "s3",
@@ -250,6 +250,9 @@ def initial_disinformation_detection(audio_file_id, repeat):
 
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+
+    # Track the number of audio files processed
+    processed_audio_files = 0
 
     while True:
         if audio_file_id:
@@ -266,14 +269,15 @@ def initial_disinformation_detection(audio_file_id, repeat):
 
             # Process the audio file
             process_audio_file(supabase_client, audio_file, local_file)
+            processed_audio_files += 1
 
             print(f"Delete the downloaded audio file: {local_file}")
             os.remove(local_file)
 
         # Break the loop if:
         # 1. We're processing a specific audio file (audio_file_id was provided), or
-        # 2. We're not meant to repeat the process (repeat=False)
-        if audio_file_id or not repeat:
+        # 2. We've reached the limit of audio files to process
+        if audio_file_id or processed_audio_files >= limit:
             break
 
         if audio_file:
