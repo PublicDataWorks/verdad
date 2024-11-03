@@ -13,6 +13,7 @@ primary_region = 'sea'
   radio_krgt = ''
   radio_wkaq = ''
   radio_wado = ''
+  radio_waqi = ''
 
 [[vm]]
   memory = '1gb'
@@ -25,3 +26,4 @@ primary_region = 'sea'
   radio_krgt = 1
   radio_wkaq = 1
   radio_wado = 1
+  radio_waqi = 1

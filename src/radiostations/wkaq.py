@@ -3,7 +3,7 @@ from radiostations.base import RadioStation
 
 class Wkaq(RadioStation):
 
-    code = "WKAQ-AM 580 kHz"
+    code = "WKAQ - 580 AM"
     state = "Puerto Rico"
     name = "Analisis y Noticias"
 

@@ -3,7 +3,7 @@ from radiostations.base import RadioStation
 
 class Krgt(RadioStation):
 
-    code = "KRGT-FM 99.3 MHz"
+    code = "KRGT - 99.3 FM"
     state = "Nevada"
     name = "Rumba Hits caliente"
 

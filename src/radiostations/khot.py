@@ -3,7 +3,7 @@ from radiostations.base import RadioStation
 
 class Khot(RadioStation):
 
-    code = "KHOT-FM 105.9 MHz"
+    code = "KHOT - 105.9 FM"
     state = "Arizona"
     name = "Que Buena"
 

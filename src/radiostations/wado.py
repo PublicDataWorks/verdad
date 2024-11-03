@@ -3,7 +3,7 @@ from radiostations.base import RadioStation
 
 class Wado(RadioStation):
 
-    code = "WADO-AM 1280 kHz"
+    code = "WADO - 1280 AM"
     state = "New York"
     name = "La Campeona de Nueva York"
 

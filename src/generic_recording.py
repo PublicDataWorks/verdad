@@ -17,6 +17,7 @@ from radiostations.khot import Khot
 from radiostations.kisf import Kisf
 from radiostations.krgt import Krgt
 from radiostations.wado import Wado
+from radiostations.waqi import Waqi
 from radiostations.wkaq import Wkaq
 
 load_dotenv()
@@ -116,6 +117,7 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
         Krgt.code: Krgt,
         Wkaq.code: Wkaq,
         Wado.code: Wado,
+        Waqi.code: Waqi,
     }
     # Reconstruct the radion station object based on the station code
     station = RADIO_STATIONS.get(station_code, lambda: None)()
@@ -178,6 +180,8 @@ if __name__ == "__main__":
             station = Wkaq()
         case "radio_wado":
             station = Wado()
+        case "radio_waqi":
+            station = Waqi()
         case _:
             raise Exception("Invalid process group")
 

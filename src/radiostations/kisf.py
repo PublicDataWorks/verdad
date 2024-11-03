@@ -3,7 +3,7 @@ from radiostations.base import RadioStation
 
 class Kisf(RadioStation):
 
-    code = "KISF-FM 103.5 MHz"
+    code = "KISF - 103.5 FM"
     state = "Nevada"
     name = "ZonaMX"
 
