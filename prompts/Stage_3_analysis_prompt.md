@@ -1219,7 +1219,7 @@ Remember: Your output must include ALL fields shown in the complete example. The
 
 ---
 
-Your analysis should be thorough, evidence-based, and objective, supporting efforts to understand disinformation and political discourse in diverse communities.
+Your analysis should be thorough, evidence-based, and objective.
 
 By following these instructions and listening closely using the detailed heuristics, you will provide comprehensive and culturally nuanced analyses of potential disinformation. Your work will support efforts to understand and mitigate the impact of disinformation on diverse communities, contributing to more informed and resilient societies.
 
