@@ -85,8 +85,8 @@ def extract_snippet_clip(
     duration = int(len(audio) / 1000)  # Duration in seconds
     if start_time < 0 or end_time > duration:
         raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
-    if start_time >= end_time:
-        raise ValueError("start_time must be less than end_time.")
+    if start_time > end_time:
+        raise ValueError("start_time must be less than or equal to end_time.")
 
     # Include surrounding context to the snippet
     new_start_time = max(0, start_time - context_before_seconds)
@@ -169,8 +169,8 @@ def ensure_correct_timestamps(snippets):
         start_time = convert_formatted_time_str_to_seconds(start_time)
         end_time = convert_formatted_time_str_to_seconds(end_time)
 
-        if start_time >= end_time:
-            raise ValueError("start_time must be less than end_time.")
+        if start_time > end_time:
+            raise ValueError("start_time must be less than or equal to end_time.")
 
 
 @task(log_prints=True)
