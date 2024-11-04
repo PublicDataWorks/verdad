@@ -17,18 +17,7 @@ BEGIN
         RAISE EXCEPTION 'Only logged-in users can call this function';
     END IF;
 
-    -- Retrieve the total count of snippets whose status is 'Processed'
-    SELECT COUNT(*)
-    INTO total_count
-    FROM snippets s
-    WHERE s.status = 'Processed';
-
-    -- Calculate total pages
-    total_pages := CEIL(total_count::FLOAT / page_size);
-
-    -- Retrieve all snippets whose status is 'Processed' and paginate them
-    SELECT jsonb_agg(snippet_data) INTO result
-    FROM (
+    CREATE TEMP TABLE filtered_snippets AS
         SELECT
             s.id,
             s.recorded_at,
@@ -193,9 +182,25 @@ BEGIN
                 HAVING COUNT(DISTINCT sl.label) = jsonb_array_length(p_filter->'labels')
             )
         )
-        ORDER BY s.recorded_at DESC
-        LIMIT page_size OFFSET page * page_size
-    ) AS snippet_data;
+        ORDER BY s.recorded_at DESC;
+
+    -- Get total count
+    SELECT COUNT(*) INTO total_count
+    FROM filtered_snippets;
+
+    -- Get paginated results
+    SELECT jsonb_agg(fs.*) INTO result
+    FROM (
+        SELECT * FROM filtered_snippets
+        LIMIT page_size
+        OFFSET page * page_size
+    ) fs;
+
+    -- Clean up
+    DROP TABLE filtered_snippets;
+
+    -- Calculate total pages after getting the filtered count
+    total_pages := CEIL(total_count::FLOAT / page_size);
 
     RETURN jsonb_build_object(
         'num_of_snippets', COALESCE(jsonb_array_length(result), 0),
