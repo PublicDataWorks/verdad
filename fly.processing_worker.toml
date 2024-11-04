@@ -22,7 +22,13 @@ primary_region = 'sea'
   cpus = 4
 
 [[vm]]
-  processes = ["rerun_main_detection_phase", "undo_audio_clipping", "undo_in_depth_analysis"]
+  processes = ["rerun_main_detection_phase"]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[[vm]]
+  processes = ["undo_audio_clipping", "undo_in_depth_analysis"]
   memory = '256mb'
   cpu_kind = 'shared'
   cpus = 1

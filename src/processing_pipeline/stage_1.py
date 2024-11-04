@@ -119,6 +119,23 @@ def initial_disinformation_detection_with_gemini_1_5_pro_002(initial_transcripti
     return json.loads(response)
 
 
+# Supports "HH:MM:SS", "H:MM:SS", "MM:SS", "M:SS", etc.
+def convert_formatted_time_str_to_seconds(time_str):
+    parts = time_str.strip().split(":")
+    if len(parts) == 3:
+        hours, minutes, seconds = parts
+        total_seconds = float(hours) * 3600 + float(minutes) * 60 + float(seconds)
+    elif len(parts) == 2:
+        minutes, seconds = parts
+        total_seconds = float(minutes) * 60 + float(seconds)
+    elif len(parts) == 1:
+        total_seconds = float(parts[0])
+    else:
+        raise ValueError("Invalid time format. Expected formats like 'HH:MM:SS', 'MM:SS', or 'SS'.")
+
+    return int(round(total_seconds))
+
+
 @task(log_prints=True)
 def disinformation_detection_with_gemini_1_5_pro_002(timestamped_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
@@ -133,6 +150,14 @@ def disinformation_detection_with_gemini_1_5_pro_002(timestamped_transcription, 
     # Generate a uuid for each flagged snippet
     for snippet in flagged_snippets:
         snippet["uuid"] = str(uuid.uuid4())
+
+        # Ensure that the start time is not equal to the end time
+        start_time = convert_formatted_time_str_to_seconds(snippet["start_time"])
+        end_time = convert_formatted_time_str_to_seconds(snippet["end_time"])
+        if start_time == end_time:
+            start_time = start_time - 1
+            formatted_start_time = f"{(start_time // 60):02}:{(start_time % 60):02}"
+            snippet["start_time"] = formatted_start_time
 
     return json_response
 
