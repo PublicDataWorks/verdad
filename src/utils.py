@@ -69,7 +69,7 @@ def fetch_radio_stations():
         {
             "code": "WLAZ - 89.1 FM",
             "url": "https://sp.unoredcdn.net/8018/stream",
-            "state": "Florida, Orlando",
+            "state": "Florida",
             "name": "Pura Palabra Radio",
         },
         {
@@ -199,13 +199,13 @@ def fetch_radio_stations():
         {
             "code": "WRUM HD2 - 97.1 FM",
             "url": "http://stream.revma.ihrhls.com/zc7155/hls.m3u8",
-            "state": "Florida, Orlando",
+            "state": "Florida",
             "name": "Mega",
         },
         {
             "code": "WRUM - 100.3 FM",
             "url": "http://stream.revma.ihrhls.com/zc605/hls.m3u8",
-            "state": "Florida, Orlando",
+            "state": "Florida",
             "name": "Rumba",
         },
         {
