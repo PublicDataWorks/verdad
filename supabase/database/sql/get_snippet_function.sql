@@ -48,6 +48,7 @@ BEGIN
             WHEN us.id IS NOT NULL THEN true
             ELSE false
         END,
+        'political_leaning', s.political_leaning,
         'status', s.status,
         'error_message', s.error_message,
         'labels', get_snippet_labels(s.id, p_language) -> 'labels'
@@ -59,5 +60,4 @@ BEGIN
 
     RETURN COALESCE(result, '{}'::jsonb);
 END;
-$$
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
