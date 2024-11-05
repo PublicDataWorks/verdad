@@ -57,7 +57,7 @@ BEGIN
         FROM snippets s
         LEFT JOIN audio_files a ON s.audio_file = a.id
         LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
-        WHERE s.status = 'Processed'
+        WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (
             p_filter IS NULL OR
             NOT p_filter ? 'languages' OR
