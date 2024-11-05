@@ -16,7 +16,13 @@ primary_region = 'sea'
   undo_in_depth_analysis = ''
 
 [[vm]]
-  processes = ["initial_disinformation_detection", "audio_clipping", "in_depth_analysis"]
+  processes = ["initial_disinformation_detection"]
+  memory = '2gb'
+  cpu_kind = 'shared'
+  cpus = 4
+
+[[vm]]
+  processes = ["audio_clipping", "in_depth_analysis"]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 4
