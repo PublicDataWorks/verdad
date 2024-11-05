@@ -2,7 +2,6 @@ CREATE
 OR REPLACE FUNCTION setup_profile (
   first_name TEXT,
   last_name TEXT,
-  password TEXT,
   avatar_url TEXT
 ) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
@@ -14,11 +13,6 @@ BEGIN
     current_user_id := auth.uid();
     IF current_user_id IS NULL THEN
         RAISE EXCEPTION 'Only logged-in users can call this function';
-    END IF;
-
-    -- Check minimum password length
-    IF LENGTH(password) < 6 THEN
-        RAISE EXCEPTION 'Password must be at least 6 characters long';
     END IF;
 
     -- Create the metadata JSON object
@@ -36,7 +30,6 @@ BEGIN
     UPDATE auth.users
     SET
         raw_user_meta_data = metadata,
-        encrypted_password = crypt(password, gen_salt('bf')),
         updated_at = now() AT TIME ZONE 'utc'
     WHERE id = current_user_id;
 

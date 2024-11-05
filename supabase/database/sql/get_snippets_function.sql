@@ -1,5 +1,5 @@
 CREATE
-OR REPLACE FUNCTION get_snippets_temp (
+OR REPLACE FUNCTION get_snippets (
     page INTEGER DEFAULT 0,
     page_size INTEGER DEFAULT 10,
     p_language TEXT DEFAULT 'english',
@@ -178,8 +178,6 @@ BEGIN
                 AND sl.label IN (
                     SELECT (jsonb_array_elements_text(p_filter->'labels'))::UUID
                 )
-                GROUP BY sl.snippet
-                HAVING COUNT(DISTINCT sl.label) = jsonb_array_length(p_filter->'labels')
             )
         )
         ORDER BY s.recorded_at DESC;
