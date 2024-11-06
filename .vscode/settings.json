@@ -7,6 +7,10 @@
             "source.organizeImports": "always"
         }
     },
+    "[markdown]": {
+    "editor.wordWrap": "off",
+    "editor.wordWrapColumn": -1
+}
     "black-formatter.args": [
         "--line-length",
         "120",

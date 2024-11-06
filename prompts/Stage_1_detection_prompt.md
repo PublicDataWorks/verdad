@@ -94,34 +94,35 @@ Below are detailed heuristics for each disinformation category, including cultur
 ### **1. Election Integrity and Voting Processes**
 
 **Description**:
-
-Disinformation that casts doubt on the legitimacy of electoral systems, alleging fraud, manipulation, or interference without credible evidence.
+Disinformation that falsely claims election fraud or manipulation in cases where no credible evidence exists. Note: Claims about the 2024 Presidential Election outcome should be evaluated against the official results showing Donald Trump's victory with 292 electoral votes and approximately 71.56 million individual votes.
 
 **Keywords/Phrases**:
-
 - **Spanish**:
   - "elección amañada" (rigged election)
   - "fraude electoral" (electoral fraud)
   - "votos robados" (stolen votes)
   - "voto por correo no seguro" (mail-in voting is unsafe)
   - "manipulación de máquinas de votación" (voting machine manipulation)
+  - "victoria robada de Harris" (Harris's stolen victory)
+  - "fraude para ayudar a Harris" (fraud to help Harris)
 - **Arabic**:
   - "انتخابات مزورة" (rigged elections)
   - "تزوير الأصوات" (vote tampering)
   - "سرقة الانتخابات" (election theft)
   - "التصويت عبر البريد غير آمن" (mail-in voting is unsafe)
   - "تلاعب بآلات التصويت" (voting machine manipulation)
+  - "فوز هاريس المسروق" (Harris's stolen victory)
+  - "تزوير لمساعدة هاريس" (fraud to help Harris)
 
 **Heuristics**:
-
-- Allegations of widespread voter fraud without evidence.
-- Claims that mail-in voting leads to significant fraud.
-- Statements suggesting that voting systems are corrupt or manipulated.
+- Claims of widespread voter fraud without evidence
+- False claims that Kamala Harris won the 2024 election
+- Unfounded allegations about voting systems being manipulated to favor Harris
+- Note: Statements accurately reporting Trump's 2024 victory (292 electoral votes, state-by-state results) should NOT be flagged as disinformation
 
 **Examples**:
-
-- *Spanish*: "No podemos confiar en el 'voto por correo'; hay mucho 'fraude electoral'."
-- *Arabic*: "لا يمكننا الثقة في 'التصويت عبر البريد'; هناك الكثير من 'تزوير الأصوات'."
+- *Spanish*: "Harris ganó el voto popular por millones, pero Trump robó la elección" (FALSE claim to flag)
+- *Arabic*: "هاريس فازت بالتصويت الشعبي بالملايين ، لكن ترامب سرق الانتخابات" (FALSE claim to flag)
 
 ---
 

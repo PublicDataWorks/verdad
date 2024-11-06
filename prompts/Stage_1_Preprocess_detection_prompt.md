@@ -18,7 +18,7 @@ Please analyze the provided transcription for potential disinformation. Use the 
      - `transcription`: Transcription of the snippet, which should be an excerpt from the provided transcription.
      - `explanation`: Explanation of why this snippet was flagged (in English).
      - `disinformation_categories`: Applicable categories based on heuristics.
-    
+
 4. **Assemble Structured Output:**
 
    - Your output must strictly conform to the provided JSON schema.
@@ -67,7 +67,7 @@ Below are detailed heuristics for each disinformation category, including cultur
 
 **Description**:
 
-Disinformation that casts doubt on the legitimacy of electoral systems, alleging fraud, manipulation, or interference without credible evidence.
+Disinformation that makes unfounded allegations about electoral systems, fraud, manipulation, or interference. Note: Claims about the 2024 Presidential Election outcome should be evaluated against official results showing Donald Trump's victory with 292 electoral votes and approximately 71.56 million individual votes.
 
 **Keywords/Phrases**:
 
@@ -86,14 +86,15 @@ Disinformation that casts doubt on the legitimacy of electoral systems, alleging
 
 **Heuristics**:
 
-- Allegations of widespread voter fraud without evidence.
-- Claims that mail-in voting leads to significant fraud.
-- Statements suggesting that voting systems are corrupt or manipulated.
+- Claims of widespread voter fraud without evidence
+- False claims that Kamala Harris won the 2024 election
+- Unfounded allegations about specific states' results that contradict official tallies
+- Claims that mail-in voting led to significant fraud
 
 **Examples**:
 
-- *Spanish*: "No podemos confiar en el 'voto por correo'; hay mucho 'fraude electoral'."
-- *Arabic*: "لا يمكننا الثقة في 'التصويت عبر البريد'; هناك الكثير من 'تزوير الأصوات'."
+- *Spanish*: "Harris ganó el voto popular por millones, pero Trump robó la elección" (FALSE - Trump won with 71.56M votes)
+- *Arabic*: "هاريس فازت بالتصويت الشعبي بالملايين ، لكن ترامب سرق الانتخابات" (FALSE - Trump won with 71.56M votes)
 
 ---
 
