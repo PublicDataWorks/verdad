@@ -14,10 +14,10 @@ const liveblocks = new Liveblocks({
     secret: process.env.LIVEBLOCKS_SECRET_KEY as string,
 });
 
-const supabase = createClient(
-    process.env.SUPABASE_URL as string,
-    process.env.SUPABASE_SERVICE_ROLE_KEY as string
-);
+// const supabase = createClient(
+//     process.env.SUPABASE_URL as string,
+//     process.env.SUPABASE_SERVICE_ROLE_KEY as string
+// );
 
 export const handleWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -49,17 +49,17 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                 userId,
             });
 
-            const { data: userData, error: userError } = await supabase
-                .from('profiles')
-                .select('email, name')
-                .eq('email', userId)
-                .single();
+            // const { data: userData, error: userError } = await supabase
+            //     .from('auth.users')
+            //     .select('email')
+            //     .eq('email', userId)
+            //     .single();
 
-            if (userError || !userData) {
-                console.error('Error fetching user:', userError);
-                res.status(404).json({ error: 'User not found' });
-                return;
-            }
+            // if (userError || !userData) {
+            //     console.error('Error fetching user:', userError);
+            //     res.status(404).json({ error: 'User not found' });
+            //     return;
+            // }
 
             let notificationMessage = 'You have a new notification';
             let additionalContent = '';
@@ -89,11 +89,11 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                 <h1>New Notification from Verdad</h1>
                 <p>${notificationMessage}</p>
                 ${additionalContent}
-                <a href="https://verdad.app/room/${roomId}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">View in Verdad</a>
+                <a href="https://verdad.app/snippet/${roomId}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">View in Verdad</a>
             `;
 
             await sendEmail(
-                userData.email,
+                userId,
                 notificationMessage,
                 emailContent
             );
