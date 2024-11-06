@@ -17,26 +17,6 @@ BEGIN
         RAISE EXCEPTION 'Only logged-in users can call this function';
     END IF;
 
-    -- Create temporary table for snippet confidence levels
-    CREATE TEMP TABLE snippet_confidence_level AS
-    WITH ranked_snippets AS (
-        SELECT 
-            id,
-            (confidence_scores->>'overall')::float as confidence_score,
-            ntile(10) OVER (ORDER BY (confidence_scores->>'overall')::float DESC) as percentile
-        FROM snippets
-        WHERE status = 'Processed'
-    )
-    SELECT 
-        id as snippet_id,
-        CASE 
-            WHEN percentile <= 1 THEN 'high'      -- top 10%
-            WHEN percentile <= 5 THEN 'medium'    -- next 40%
-            ELSE 'low'                            -- bottom 50%
-        END as level
-    FROM ranked_snippets;
-
-
     CREATE TEMP TABLE filtered_snippets AS
         SELECT
             s.id,
@@ -47,7 +27,6 @@ BEGIN
             s.file_path,
             s.file_size,
             s.political_leaning,
-            scl.level as confidence_level,
             CASE
                 WHEN p_language = 'spanish' THEN s.title ->> 'spanish'
                 ELSE s.title ->> 'english'
@@ -78,7 +57,6 @@ BEGIN
         FROM snippets s
         LEFT JOIN audio_files a ON s.audio_file = a.id
         LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
-        LEFT JOIN snippet_confidence_level scl ON s.id = scl.snippet_id
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (
             p_filter IS NULL OR
@@ -218,7 +196,6 @@ BEGIN
 
     -- Clean up
     DROP TABLE filtered_snippets;
-    DROP TABLE snippet_confidence_level;
 
     -- Calculate total pages after getting the filtered count
     total_pages := CEIL(total_count::FLOAT / page_size);
