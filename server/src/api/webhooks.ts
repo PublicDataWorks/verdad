@@ -19,28 +19,10 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY as string
 );
 
-async function checkRoomAccess(userId: string, roomId: string): Promise<boolean> {
-    try {
-        const { data, error } = await supabase
-            .from('room_access')  // You'll need to create this table
-            .select('*')
-            .eq('user_id', userId)
-            .eq('room_id', roomId)
-            .single();
-
-        if (error || !data) {
-            return false;
-        }
-        return true;
-    } catch {
-        return false;
-    }
-}
-
 export const handleWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const rawBody = JSON.stringify(req.body);
-        
+
         let event;
         try {
             event = webhookHandler.verifyRequest({
@@ -59,14 +41,6 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
             if (!userId || !roomId || !inboxNotificationId) {
                 console.error('Missing required data in webhook event');
                 res.status(400).json({ error: 'Missing required data' });
-                return;
-            }
-
-            // Check if user has access to the room
-            const hasAccess = await checkRoomAccess(userId, roomId);
-            if (!hasAccess) {
-                console.log(`User ${userId} doesn't have access to room ${roomId}`);
-                res.status(200).json({ message: 'User does not have access to room' });
                 return;
             }
 
