@@ -33,6 +33,10 @@ class SupabaseClient:
         response = self.client.table("snippets").select(select).eq("id", id).execute()
         return response.data[0] if response.data else None
 
+    def get_snippet_status(self, id):
+        response = self.client.table("snippets").select("status").eq("id", id).execute()
+        return response.data[0]["status"] if response.data else None
+
     def get_snippets_by_ids(self, ids, select="*"):
         response = self.client.table("snippets").select(select).in_("id", ids).execute()
         return response.data
@@ -44,6 +48,10 @@ class SupabaseClient:
     def get_stage_1_llm_response_by_id(self, id, select="*"):
         response = self.client.table("stage_1_llm_responses").select(select).eq("id", id).execute()
         return response.data[0] if response.data else None
+
+    def get_stage_1_llm_response_status(self, id):
+        response = self.client.table("stage_1_llm_responses").select("status").eq("id", id).execute()
+        return response.data[0]["status"] if response.data else None
 
     def get_audio_file_status(self, id):
         response = self.client.table("audio_files").select("status").eq("id", id).execute()

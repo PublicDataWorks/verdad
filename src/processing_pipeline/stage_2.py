@@ -249,6 +249,12 @@ def audio_clipping(context_before_seconds, context_after_seconds, repeat):
         )  # TODO: Retry failed llm responses (Error)
 
         if llm_response:
+            current_status = supabase_client.get_stage_1_llm_response_status(llm_response["id"])
+            if current_status == "Processing":
+                # Oops, another worker is already processing this llm response before we reserve it
+                print(f"Stage-1 LLM response {llm_response['id']} is already being processed by another worker")
+                continue
+
             # Immediately set the llm response to Processing, so that other workers don't pick it up
             supabase_client.set_stage_1_llm_response_status(llm_response["id"], "Processing")
             print(f"Found a new stage-1 LLM response: {llm_response['id']}")

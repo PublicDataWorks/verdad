@@ -217,6 +217,12 @@ def in_depth_analysis(snippet_ids, repeat):
             snippet = fetch_a_new_snippet_from_supabase(supabase_client)  # TODO: Retry failed snippets (status: Error)
 
             if snippet:
+                current_status = supabase_client.get_snippet_status(snippet["id"])
+                if current_status == "Processing":
+                    # Oops, another worker is already processing this snippet before we reserve it
+                    print(f"Snippet {snippet['id']} is already being processed by another worker")
+                    continue
+
                 # Immediately set the snippet to Processing, so that other workers don't pick it up
                 supabase_client.set_snippet_status(snippet["id"], "Processing")
                 print(f"Found a new snippet: {snippet['id']}")
