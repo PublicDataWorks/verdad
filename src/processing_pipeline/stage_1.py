@@ -261,6 +261,12 @@ def initial_disinformation_detection(audio_file_id, limit):
             audio_file = fetch_a_new_audio_file_from_supabase(supabase_client)  # TODO: Retry failed audio files (Error)
 
         if audio_file:
+            current_status = supabase_client.get_audio_file_status(audio_file["id"])
+            if current_status == "Processing":
+                # Oops, another worker is already processing this audio file before we reserve it
+                print(f"Audio file {audio_file['id']} is already being processed by another worker")
+                continue
+
             # Immediately set the audio file to Processing, so that other workers don't pick it up
             supabase_client.set_audio_file_status(audio_file["id"], "Processing")
             print(f"Found a new audio file:\n{json.dumps(audio_file, indent=2)}\n")
