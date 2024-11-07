@@ -14,9 +14,9 @@ BEGIN
     SELECT jsonb_agg(jsonb_build_object(
         'id', u.id,
         'email', u.email,
-        'raw_user_meta_data', u.raw_user_meta_data
-    ))
-    INTO result
+        'raw_user_meta_data',
+        u.raw_user_meta_data - 'iss' - 'sub' - 'email_verified' - 'phone_verified' - 'provider_id' - 'custom_claims'
+    )) INTO result
     FROM auth.users u;
 
     RETURN COALESCE(result, '[]'::jsonb);
