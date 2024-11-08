@@ -38,7 +38,6 @@ export async function handleCommentCreated(data: {
             room_id: data.roomId,
             project_id: data.projectId,
             created_by: data.createdBy,
-            created_at: data.createdAt,
             body: comment.body
         });
 
