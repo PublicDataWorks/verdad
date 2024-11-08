@@ -39,8 +39,7 @@ export async function handleCommentCreated(data: {
             project_id: data.projectId,
             created_by: data.createdBy,
             created_at: data.createdAt,
-            body: comment.body,
-            content: commentContent
+            body: comment.body
         });
 
     if (error) throw error;
@@ -127,7 +126,7 @@ export async function handleReactionRemoved(data: {
 export async function getCommentContent(commentId: string) {
     const { data, error } = await supabase
         .from('comments')
-        .select('content, edited_content')
+        .select('body')
         .eq('comment_id', commentId)
         .single();
 

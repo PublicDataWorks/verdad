@@ -78,7 +78,7 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                     type: 'edit',
                     actor: comment.userId || 'A user',
                     roomId: event.data.roomId,
-                    content: oldComment?.content || '',
+                    content: oldComment?.body || '',
                     editedContent: editedContent
                 });
                 break;
