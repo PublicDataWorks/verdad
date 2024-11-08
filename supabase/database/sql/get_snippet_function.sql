@@ -48,6 +48,7 @@ BEGIN
             WHEN us.id IS NOT NULL THEN true
             ELSE false
         END,
+        'user_like_status', ul.value,
         'political_leaning', s.political_leaning,
         'status', s.status,
         'error_message', s.error_message,
@@ -55,6 +56,7 @@ BEGIN
     ) INTO result
     FROM snippets s
     LEFT JOIN user_star_snippets us ON s.id = us.snippet AND us."user" = current_user_id
+    LEFT JOIN user_like_snippets ul ON s.id = ul.snippet AND ul."user" = current_user_id
     LEFT JOIN audio_files a ON s.audio_file = a.id
     WHERE s.id = snippet_id AND s.status = 'Processed';
 

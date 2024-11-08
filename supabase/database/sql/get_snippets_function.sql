@@ -53,10 +53,12 @@ BEGIN
             CASE
                 WHEN us.id IS NOT NULL THEN true
                 ELSE false
-            END AS starred_by_user
+            END AS starred_by_user,
+            ul.value AS user_like_status
         FROM snippets s
         LEFT JOIN audio_files a ON s.audio_file = a.id
         LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
+        LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (
             p_filter IS NULL OR
