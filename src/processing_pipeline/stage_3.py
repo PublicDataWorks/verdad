@@ -120,6 +120,10 @@ def __get_metadata(snippet):
     del metadata["start_time"]
     del metadata["end_time"]
 
+    # TODO: Add these fields back once we've fixed the pipeline
+    del metadata["explanation"]
+    del metadata["keywords_detected"]
+
     metadata["start_time"] = snippet["start_time"].split(":", 1)[1]
     metadata["end_time"] = snippet["end_time"].split(":", 1)[1]
     metadata["duration"] = snippet["duration"].split(":", 1)[1]
