@@ -1247,3 +1247,7 @@ Please proceed to analyze the provided audio content following these guidelines:
 # Final Instructions
 
 Please proceed to listen to the audio file provided and analyze the content based on the detailed heuristics and guidelines provided. Your task is to fill out the JSON template with the relevant information based on your analysis of the audio content.
+
+# Important Note
+
+Please note that the provided audio file does not necessarily contain disinformation, because the Stage 1 model is not perfect. It is your job to analyze the content and determine if it does contain disinformation or not. In case you think the audio file does not contain disinformation, please give it a zero confidence score.
