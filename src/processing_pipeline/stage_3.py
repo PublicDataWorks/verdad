@@ -107,7 +107,7 @@ def __get_metadata(snippet):
             metadata = flagged_snippet
             try:
                 # Handle escaped unicode characters in the transcription
-                metadata["transcription"] = flagged_snippet["transcription"].encode('latin-1').decode('unicode-escape')
+                metadata["transcription"] = flagged_snippet["transcription"].encode("latin-1").decode("unicode-escape")
             except (UnicodeError, AttributeError) as e:
                 # Fallback to original transcription if decoding fails
                 print(f"Warning: Failed to decode transcription: {e}")
