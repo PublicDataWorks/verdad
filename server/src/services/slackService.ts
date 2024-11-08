@@ -52,7 +52,7 @@ export async function sendSlackNotification(params: SlackNotificationParams) {
         case 'delete':
             subject = `🗑️ Comment Deleted in Room ${params.roomId}`;
             content = `
-                <p><strong>${params.actor}</strong> deleted a comment in room ${params.roomId}</p>
+                <p><strong>${params.actor}</strong> deleted comment ${params.commentId} in room ${params.roomId}</p>
             `;
             break;
     }

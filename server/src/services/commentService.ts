@@ -52,10 +52,21 @@ export async function handleCommentEdited(data: {
     commentId: string;
     editedAt: string;
 }) {
+    const comment = await liveblocks.getComment({
+        roomId: data.roomId,
+        threadId: data.threadId,
+        commentId: data.commentId
+    });
+
+    if (!comment.body) {
+        throw new Error('Comment body is undefined');
+    }
+
     const { error } = await supabase
         .from('comments')
         .update({
-            edited_at: data.editedAt
+            edited_at: data.editedAt,
+            body: comment.body
         })
         .eq('comment_id', data.commentId);
 
