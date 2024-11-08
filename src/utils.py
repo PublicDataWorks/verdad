@@ -157,6 +157,18 @@ def fetch_radio_stations():
             "state": "Florida",
             "name": "Haitian American Radio",
         },
+        {
+            "code": "SPMN",
+            "url": "https://icecast-rian.cdnvideo.ru/voicespa",
+            "state": "Russia",
+            "name": "Sputnik Mundo",
+        },
+        {
+            "code": "WZHF",
+            "url": "https://icecast-rian.cdnvideo.ru/voiceusa",
+            "state": "Russia",
+            "name": "Radio Sputnik",
+        },
         # ===============================================================
         # iHeart Radio Stations
         # ===============================================================
