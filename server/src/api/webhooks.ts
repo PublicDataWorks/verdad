@@ -1,14 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
-import { Liveblocks, WebhookHandler } from '@liveblocks/node';
+import { Liveblocks, WebhookHandler, stringifyCommentBody } from '@liveblocks/node';
 import { sendEmail } from '../services/emailService';
 import {
     handleCommentCreated,
     handleCommentEdited,
     handleCommentDeleted,
     handleReactionAdded,
-    handleReactionRemoved
+    handleReactionRemoved,
+    getCommentContent
 } from '../services/commentService';
 import { getEmailTemplate } from '../services/templateService';
+import { sendSlackNotification } from '../services/slackService';
 
 const WEBHOOK_SECRET = process.env.LIVEBLOCKS_WEBHOOK_SECRET;
 if (!WEBHOOK_SECRET) {
@@ -40,13 +42,54 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
 
         switch (event.type) {
             case "commentCreated":
-                await handleCommentCreated(event.data);
+                const commentContent = await handleCommentCreated(event.data);
+                await sendSlackNotification({
+                    type: 'comment',
+                    actor: event.data.createdBy,
+                    roomId: event.data.roomId,
+                    content: commentContent
+                });
                 break;
             case "commentEdited":
-                await handleCommentEdited(event.data);
+                const oldComment = await getCommentContent(event.data.commentId);
+                
+                const comment = await liveblocks.getComment({
+                    roomId: event.data.roomId,
+                    threadId: event.data.threadId,
+                    commentId: event.data.commentId
+                });
+                
+                if (!comment.body) {
+                    console.error('Comment body is undefined');
+                    break;
+                }
+                
+                const editedContent = await stringifyCommentBody(comment.body);
+                
+                await handleCommentEdited({
+                    projectId: event.data.projectId,
+                    roomId: event.data.roomId,
+                    threadId: event.data.threadId,
+                    commentId: event.data.commentId,
+                    editedAt: event.data.editedAt
+                });
+                
+                await sendSlackNotification({
+                    type: 'edit',
+                    actor: comment.userId || 'A user',
+                    roomId: event.data.roomId,
+                    content: oldComment?.content || '',
+                    editedContent: editedContent
+                });
                 break;
             case "commentDeleted":
                 await handleCommentDeleted(event.data);
+                await sendSlackNotification({
+                    type: 'delete',
+                    actor: 'A user',
+                    roomId: event.data.roomId,
+                    commentId: event.data.commentId
+                });
                 break;
             case "commentReactionAdded":
                 await handleReactionAdded(event.data);
@@ -81,6 +124,12 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                         case 'textMention': {
                             notificationMessage = `You were mentioned in room ${roomId}`;
                             templateName = 'mention_notification';
+                            await sendSlackNotification({
+                                type: 'mention',
+                                actor: inboxNotification.createdBy || 'A user',
+                                roomId,
+                                mentionedUsers: [userId]
+                            });
                             break;
                         }
                         default: {
@@ -100,11 +149,7 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                         .replace('{{notificationMessage}}', notificationMessage)
                         .replace('{{roomId}}', roomId)
                         .replace('{{additionalContent}}', '')
-                    : `
-                        <h1>New Notification from Verdad</h1>
-                        <p>${notificationMessage}</p>
-                        <a href="https://verdad.app/snippet/${roomId}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">View in Verdad</a>
-                    `;
+                    : `<!DOCTYPE html><html><body><p>${notificationMessage}</p></body></html>`;
 
                 await sendEmail(
                     userId,
