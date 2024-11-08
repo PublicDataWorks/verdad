@@ -1,7 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
-import { Liveblocks, WebhookHandler, stringifyCommentBody } from '@liveblocks/node';
-import { createClient } from "@supabase/supabase-js";
+import { Liveblocks, WebhookHandler } from '@liveblocks/node';
 import { sendEmail } from '../services/emailService';
+import {
+    handleCommentCreated,
+    handleCommentEdited,
+    handleCommentDeleted,
+    handleReactionAdded,
+    handleReactionRemoved
+} from '../services/commentService';
+import { getEmailTemplate } from '../services/templateService';
 
 const WEBHOOK_SECRET = process.env.LIVEBLOCKS_WEBHOOK_SECRET;
 if (!WEBHOOK_SECRET) {
@@ -14,10 +21,6 @@ const liveblocks = new Liveblocks({
     secret: process.env.LIVEBLOCKS_SECRET_KEY as string,
 });
 
-// const supabase = createClient(
-//     process.env.SUPABASE_URL as string,
-//     process.env.SUPABASE_SERVICE_ROLE_KEY as string
-// );
 
 export const handleWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -35,68 +38,80 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
             return;
         }
 
-        if (event.type === "notification") {
-            const { inboxNotificationId, userId, roomId } = event.data;
+        switch (event.type) {
+            case "commentCreated":
+                await handleCommentCreated(event.data);
+                break;
+            case "commentEdited":
+                await handleCommentEdited(event.data);
+                break;
+            case "commentDeleted":
+                await handleCommentDeleted(event.data);
+                break;
+            case "commentReactionAdded":
+                await handleReactionAdded(event.data);
+                break;
+            case "commentReactionRemoved":
+                await handleReactionRemoved(event.data);
+                break;
+            case "notification":
+                const { inboxNotificationId, userId, roomId } = event.data;
 
-            if (!userId || !roomId || !inboxNotificationId) {
-                console.error('Missing required data in webhook event');
-                res.status(400).json({ error: 'Missing required data' });
-                return;
-            }
+                if (!userId || !roomId || !inboxNotificationId) {
+                    console.error('Missing required data in webhook event');
+                    res.status(400).json({ error: 'Missing required data' });
+                    return;
+                }
 
-            const inboxNotification = await liveblocks.getInboxNotification({
-                inboxNotificationId,
-                userId,
-            });
+                const inboxNotification = await liveblocks.getInboxNotification({
+                    inboxNotificationId,
+                    userId,
+                });
 
-            // const { data: userData, error: userError } = await supabase
-            //     .from('auth.users')
-            //     .select('email')
-            //     .eq('email', userId)
-            //     .single();
+                let notificationMessage = 'You have a new notification';
+                let templateName = 'default_notification';
 
-            // if (userError || !userData) {
-            //     console.error('Error fetching user:', userError);
-            //     res.status(404).json({ error: 'User not found' });
-            //     return;
-            // }
-
-            let notificationMessage = 'You have a new notification';
-            let additionalContent = '';
-
-            if ('kind' in inboxNotification) {
-                switch (inboxNotification.kind) {
-                    case 'thread': {
-                        notificationMessage = `A new thread was created in room ${roomId}`;
-                        break;
-                    }
-                    case 'textMention': {
-                        notificationMessage = `You were mentioned in room ${roomId}`;
-                        break;
-                    }
-                    default: {
-                        // Handle custom notification types
-                        if (inboxNotification.kind.startsWith('$')) {
-                            const customType = inboxNotification.kind.slice(1); // Remove the $ prefix
-                            notificationMessage = `New ${customType} notification in room ${roomId}`;
+                if ('kind' in inboxNotification) {
+                    switch (inboxNotification.kind) {
+                        case 'thread': {
+                            notificationMessage = `A new thread was created in room ${roomId}`;
+                            templateName = 'thread_notification';
+                            break;
                         }
-                        break;
+                        case 'textMention': {
+                            notificationMessage = `You were mentioned in room ${roomId}`;
+                            templateName = 'mention_notification';
+                            break;
+                        }
+                        default: {
+                            if (inboxNotification.kind.startsWith('$')) {
+                                const customType = inboxNotification.kind.slice(1);
+                                notificationMessage = `New ${customType} notification in room ${roomId}`;
+                                templateName = `${customType}_notification`;
+                            }
+                            break;
+                        }
                     }
                 }
-            }
 
-            const emailContent = `
-                <h1>New Notification from Verdad</h1>
-                <p>${notificationMessage}</p>
-                ${additionalContent}
-                <a href="https://verdad.app/snippet/${roomId}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">View in Verdad</a>
-            `;
+                const template = await getEmailTemplate(templateName);
+                const emailContent = template
+                    ? template
+                        .replace('{{notificationMessage}}', notificationMessage)
+                        .replace('{{roomId}}', roomId)
+                        .replace('{{additionalContent}}', '')
+                    : `
+                        <h1>New Notification from Verdad</h1>
+                        <p>${notificationMessage}</p>
+                        <a href="https://verdad.app/snippet/${roomId}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">View in Verdad</a>
+                    `;
 
-            await sendEmail(
-                userId,
-                notificationMessage,
-                emailContent
-            );
+                await sendEmail(
+                    userId,
+                    notificationMessage,
+                    emailContent
+                );
+                break;
         }
 
         res.status(200).json({ message: 'Webhook processed successfully' });
