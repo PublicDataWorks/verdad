@@ -14,6 +14,9 @@ class SupabaseClient:
         )
         return response.data
 
+    def get_a_new_audio_file_and_reserve_it(self):
+        return self.client.rpc("fetch_a_new_audio_file_and_reserve_it").execute()
+
     def get_stage_1_llm_responses(self, status, order="created_at.asc", select="*", limit=1):
         response = (
             self.client.table("stage_1_llm_responses")
@@ -51,10 +54,6 @@ class SupabaseClient:
 
     def get_stage_1_llm_response_status(self, id):
         response = self.client.table("stage_1_llm_responses").select("status").eq("id", id).execute()
-        return response.data[0]["status"] if response.data else None
-
-    def get_audio_file_status(self, id):
-        response = self.client.table("audio_files").select("status").eq("id", id).execute()
         return response.data[0]["status"] if response.data else None
 
     def set_audio_file_status(self, id, status, error_message=None):

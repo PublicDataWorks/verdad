@@ -19,9 +19,10 @@ from constants import (
 
 @task(log_prints=True, retries=3)
 def fetch_a_new_audio_file_from_supabase(supabase_client):
-    response = supabase_client.get_audio_files(status="New", limit=1)
+    response = supabase_client.get_a_new_audio_file_and_reserve_it()
     if response:
-        return response[0]
+        print(f"Found a new audio file:\n{json.dumps(response, indent=2)}\n")
+        return response
     else:
         print("No new audio files found")
         return None
@@ -261,16 +262,6 @@ def initial_disinformation_detection(audio_file_id, limit):
             audio_file = fetch_a_new_audio_file_from_supabase(supabase_client)  # TODO: Retry failed audio files (Error)
 
         if audio_file:
-            current_status = supabase_client.get_audio_file_status(audio_file["id"])
-            if current_status == "Processing":
-                # Oops, another worker is already processing this audio file before we reserve it
-                print(f"Audio file {audio_file['id']} is already being processed by another worker")
-                continue
-
-            # Immediately set the audio file to Processing, so that other workers don't pick it up
-            supabase_client.set_audio_file_status(audio_file["id"], "Processing")
-            print(f"Found a new audio file:\n{json.dumps(audio_file, indent=2)}\n")
-
             local_file = download_audio_file_from_s3(s3_client, audio_file["file_path"])
 
             # Process the audio file

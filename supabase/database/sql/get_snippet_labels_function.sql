@@ -12,7 +12,7 @@ BEGIN
 
     SELECT jsonb_build_object(
         'snippet_id', snippet_id,
-        'labels', jsonb_agg(jsonb_build_object(
+        'labels', COALESCE(jsonb_agg(jsonb_build_object(
             'id', l.id,
             'text', CASE
                 WHEN p_language = 'spanish' THEN l.text_spanish
@@ -23,7 +23,7 @@ BEGIN
             'applied_by', sl.applied_by,
             'applied_at', sl.created_at,
             'upvoted_by', COALESCE(upvote_users, '[]'::jsonb)
-        ))
+        )), '[]'::jsonb)
     ) INTO result
     FROM public.snippet_labels sl
     JOIN public.labels l ON sl.label = l.id
