@@ -13,7 +13,7 @@ BEGIN
         FOR UPDATE SKIP LOCKED
     )
     RETURNING (
-        row_to_json(public.stage_1_llm_responses.*) - 'audio_file'
+        row_to_json(public.stage_1_llm_responses.*)::jsonb - 'audio_file'::text
     ) || jsonb_build_object(
         'audio_file', (
             SELECT jsonb_build_object(
