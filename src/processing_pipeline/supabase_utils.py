@@ -15,7 +15,8 @@ class SupabaseClient:
         return response.data
 
     def get_a_new_audio_file_and_reserve_it(self):
-        return self.client.rpc("fetch_a_new_audio_file_and_reserve_it").execute()
+        response = self.client.rpc("fetch_a_new_audio_file_and_reserve_it").execute()
+        return response.data if response else None
 
     def get_stage_1_llm_responses(self, status, order="created_at.asc", select="*", limit=1):
         response = (

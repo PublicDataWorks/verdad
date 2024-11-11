@@ -13,7 +13,7 @@ BEGIN
         LIMIT 1
         FOR UPDATE SKIP LOCKED
     )
-    RETURNING to_jsonb(*) INTO audio_file_record;
+    RETURNING row_to_json(public.audio_files.*) INTO audio_file_record;
 
     RETURN audio_file_record;
 END;
