@@ -8,38 +8,21 @@ class SupabaseClient:
             supabase_key,
         )
 
-    def get_audio_files(self, status, order="created_at.desc", select="*", limit=1):
-        response = (
-            self.client.table("audio_files").select(select).eq("status", status).order(order).limit(limit).execute()
-        )
-        return response.data
-
     def get_a_new_audio_file_and_reserve_it(self):
         response = self.client.rpc("fetch_a_new_audio_file_and_reserve_it").execute()
         return response.data if response else None
 
-    def get_stage_1_llm_responses(self, status, order="created_at.asc", select="*", limit=1):
-        response = (
-            self.client.table("stage_1_llm_responses")
-            .select(select)
-            .eq("status", status)
-            .order(order)
-            .limit(limit)
-            .execute()
-        )
-        return response.data
+    def get_a_new_stage_1_llm_response_and_reserve_it(self):
+        response = self.client.rpc("fetch_a_new_stage_1_llm_response_and_reserve_it").execute()
+        return response.data if response else None
 
-    def get_snippets(self, status, order="created_at.asc", select="*", limit=1):
-        response = self.client.table("snippets").select(select).eq("status", status).order(order).limit(limit).execute()
-        return response.data
+    def get_a_new_snippet_and_reserve_it(self):
+        response = self.client.rpc("fetch_a_new_snippet_and_reserve_it").execute()
+        return response.data if response else None
 
     def get_snippet_by_id(self, id, select="*"):
         response = self.client.table("snippets").select(select).eq("id", id).execute()
         return response.data[0] if response.data else None
-
-    def get_snippet_status(self, id):
-        response = self.client.table("snippets").select("status").eq("id", id).execute()
-        return response.data[0]["status"] if response.data else None
 
     def get_snippets_by_ids(self, ids, select="*"):
         response = self.client.table("snippets").select(select).in_("id", ids).execute()
@@ -52,10 +35,6 @@ class SupabaseClient:
     def get_stage_1_llm_response_by_id(self, id, select="*"):
         response = self.client.table("stage_1_llm_responses").select(select).eq("id", id).execute()
         return response.data[0] if response.data else None
-
-    def get_stage_1_llm_response_status(self, id):
-        response = self.client.table("stage_1_llm_responses").select("status").eq("id", id).execute()
-        return response.data[0]["status"] if response.data else None
 
     def set_audio_file_status(self, id, status, error_message=None):
         if error_message:

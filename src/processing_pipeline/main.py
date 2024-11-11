@@ -16,7 +16,7 @@ if __name__ == "__main__":
         case "initial_disinformation_detection":
             deployment = initial_disinformation_detection.to_deployment(
                 name="Stage 1: Initial Disinformation Detection",
-                concurrency_limit=5,
+                concurrency_limit=10,
                 parameters=dict(audio_file_id=None, limit=500),
             )
             serve(deployment)

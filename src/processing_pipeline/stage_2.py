@@ -10,11 +10,10 @@ from supabase_utils import SupabaseClient
 
 @task(log_prints=True, retries=3)
 def fetch_a_new_stage_1_llm_response_from_supabase(supabase_client):
-    response = supabase_client.get_stage_1_llm_responses(
-        status="New", select="*, audio_file(id, file_path, recorded_at)", limit=1
-    )
+    response = supabase_client.get_a_new_stage_1_llm_response_and_reserve_it()
     if response:
-        return response[0]
+        print(f"Found a new stage-1 LLM response: {response['id']}")
+        return response
     else:
         print("No new stage-1 LLM responses found")
         return None
@@ -249,16 +248,6 @@ def audio_clipping(context_before_seconds, context_after_seconds, repeat):
         )  # TODO: Retry failed llm responses (Error)
 
         if llm_response:
-            current_status = supabase_client.get_stage_1_llm_response_status(llm_response["id"])
-            if current_status == "Processing":
-                # Oops, another worker is already processing this llm response before we reserve it
-                print(f"Stage-1 LLM response {llm_response['id']} is already being processed by another worker")
-                continue
-
-            # Immediately set the llm response to Processing, so that other workers don't pick it up
-            supabase_client.set_stage_1_llm_response_status(llm_response["id"], "Processing")
-            print(f"Found a new stage-1 LLM response: {llm_response['id']}")
-
             local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, llm_response["audio_file"]["file_path"])
 
             # Process the stage-1 LLM response
