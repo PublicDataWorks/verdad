@@ -54,7 +54,9 @@ BEGIN
                 WHEN us.id IS NOT NULL THEN true
                 ELSE false
             END AS starred_by_user,
-            ul.value AS user_like_status
+            ul.value AS user_like_status,
+            (SELECT COUNT(*) FROM user_like_snippets uls WHERE uls.snippet = s.id AND uls.value = 1) AS like_count,
+            (SELECT COUNT(*) FROM user_like_snippets uls WHERE uls.snippet = s.id AND uls.value = -1) AS dislike_count
         FROM snippets s
         LEFT JOIN audio_files a ON s.audio_file = a.id
         LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id

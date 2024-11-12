@@ -49,6 +49,8 @@ BEGIN
             ELSE false
         END,
         'user_like_status', ul.value,
+        'like_count', (SELECT COUNT(*) FROM user_like_snippets uls WHERE uls.snippet = s.id AND uls.value = 1),
+        'dislike_count', (SELECT COUNT(*) FROM user_like_snippets uls WHERE uls.snippet = s.id AND uls.value = -1),
         'political_leaning', s.political_leaning,
         'status', s.status,
         'error_message', s.error_message,
