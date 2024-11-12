@@ -4,17 +4,25 @@ primary_region = 'sea'
 [build]
   dockerfile = "Dockerfile.recording_worker"
 
-[http_service]
-  internal_port = 80
-  force_https = true
-  auto_stop_machines = true
-  min_machines_running = 1
-  processes = ['app']
-
 [env]
   PREFECT_API_URL = "https://prefect.fly.dev/api"
 
+[processes]
+  max_recorder = ''
+  lite_recorder = ''
+
 [[vm]]
-  memory = '16gb'
+  processes = ['max_recorder']
+  memory = '8gb'
   cpu_kind = 'shared'
   cpus = 8
+
+[[vm]]
+  processes = ['lite_recorder']
+  memory = '2gb'
+  cpu_kind = 'shared'
+  cpus = 4
+
+[scale]
+  max_recorder = 1
+  lite_recorder = 1

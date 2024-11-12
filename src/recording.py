@@ -96,8 +96,17 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
     )
 
 
-@flow(name="Audio Recording", log_prints=True, task_runner=ConcurrentTaskRunner)
-def audio_processing_pipeline(url, duration_seconds, audio_birate, audio_channels, repeat):
+@flow(name="Audio Recording: Max Recorder", log_prints=True, task_runner=ConcurrentTaskRunner)
+def audio_processing_pipeline_max_recorder(url, duration_seconds, audio_birate, audio_channels, repeat):
+    __start_recording_flow(url, duration_seconds, audio_birate, audio_channels, repeat)
+
+
+@flow(name="Audio Recording: Lite Recorder", log_prints=True, task_runner=ConcurrentTaskRunner)
+def audio_processing_pipeline_lite_recorder(url, duration_seconds, audio_birate, audio_channels, repeat):
+    __start_recording_flow(url, duration_seconds, audio_birate, audio_channels, repeat)
+
+
+def __start_recording_flow(url, duration_seconds, audio_birate, audio_channels, repeat):
     # Reconstruct the radio station from the URL
     station = reconstruct_radio_station(url)
     if not station:
@@ -114,7 +123,6 @@ def audio_processing_pipeline(url, duration_seconds, audio_birate, audio_channel
         if not repeat:
             break
 
-
 def reconstruct_radio_station(url):
     radio_stations = fetch_radio_stations()
     for station in radio_stations:
@@ -127,17 +135,15 @@ def get_url_hash(url):
     # Hash the URL and get the last 6 characters
     return hashlib.sha256(url.encode()).hexdigest()[-6:]
 
-
-if __name__ == "__main__":
-    radio_stations = fetch_radio_stations()
+def serve_deployments(radio_stations, flow_function):
     duration_seconds = 1800  # Default to 30 minutes
     audio_birate = 64000  # Default to 64kbps bitrate
     audio_channels = 1  # Default to single channel (mono audio)
     concurrency_limit = 100
-
     all_deployments = []
+
     for station in radio_stations:
-        deployment = audio_processing_pipeline.to_deployment(
+        deployment = flow_function.to_deployment(
             f'{station["code"]}',
             tags=[station["state"], get_url_hash(station["url"])],
             parameters=dict(
@@ -149,5 +155,23 @@ if __name__ == "__main__":
             ),
         )
         all_deployments.append(deployment)
-
     serve(*all_deployments, limit=concurrency_limit)
+
+
+if __name__ == "__main__":
+    radio_stations = fetch_radio_stations()
+
+    # Divide the stations into two groups:
+    # Max recorder stations: the first 34 stations
+    # Lite recorder stations: the rest of the stations (which is currently 10 stations)
+    max_recorder_stations = radio_stations[:34]
+    lite_recorder_stations = radio_stations[34:]
+
+    process_group = os.environ.get("FLY_PROCESS_GROUP")
+    match process_group:
+        case "max_recorder":
+            serve_deployments(max_recorder_stations, audio_processing_pipeline_max_recorder)
+        case "lite_recorder":
+            serve_deployments(lite_recorder_stations, audio_processing_pipeline_lite_recorder)
+        case _:
+            raise ValueError(f"Invalid process group: {process_group}")
