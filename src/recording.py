@@ -162,10 +162,10 @@ if __name__ == "__main__":
     radio_stations = fetch_radio_stations()
 
     # Divide the stations into two groups:
-    # Max recorder stations: the first 34 stations
-    # Lite recorder stations: the rest of the stations (which is currently 10 stations)
-    max_recorder_stations = radio_stations[:34]
-    lite_recorder_stations = radio_stations[34:]
+    # Max recorder stations: the first 37 stations
+    # Lite recorder stations: the rest of the stations (which is currently 7 stations)
+    max_recorder_stations = radio_stations[:37]
+    lite_recorder_stations = radio_stations[37:]
 
     process_group = os.environ.get("FLY_PROCESS_GROUP")
     match process_group:
