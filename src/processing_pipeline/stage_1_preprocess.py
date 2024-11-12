@@ -28,7 +28,7 @@ class Stage1PreprocessTranscriptionExecutor:
         model = genai.GenerativeModel(model_name="gemini-1.5-flash-002")
 
         # Upload the audio file and wait for it to finish processing
-        audio_file = genai.upload_file(audio_file)
+        audio_file = genai.upload_file(path=audio_file, mime_type="audio/mp3")
         while audio_file.state.name == "PROCESSING":
             print("Processing the uploaded audio file...")
             time.sleep(1)
