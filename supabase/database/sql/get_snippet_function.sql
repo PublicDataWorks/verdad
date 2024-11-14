@@ -5,12 +5,33 @@ OR REPLACE FUNCTION get_snippet (
 ) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
     current_user_id UUID;
+    user_roles TEXT[];
+    is_hidden BOOLEAN;
     result jsonb;
 BEGIN
     -- Check if the user is authenticated
     current_user_id := auth.uid();
     IF current_user_id IS NULL THEN
         RAISE EXCEPTION 'Only logged-in users can call this function';
+    END IF;
+
+    -- Get the role names from the roles table by joining with user_roles
+    SELECT array_agg(r.name) INTO user_roles
+    FROM public.user_roles ur
+    JOIN public.roles r ON ur.role = r.id
+    WHERE ur."user" = current_user_id;
+
+    -- Check if the snippet is currently hidden
+    SELECT EXISTS (SELECT 1 FROM user_hide_snippets uhs WHERE uhs.snippet = snippet_id) INTO is_hidden;
+
+    -- If the user does not have "admin" role and the snippet is currently hidden, do not return it
+    IF (
+        user_roles IS NULL
+        OR ARRAY_LENGTH(user_roles, 1) = 0
+        OR 'admin' <> ANY(user_roles)
+    )
+    AND is_hidden THEN RETURN '{}'::jsonb;
+
     END IF;
 
     -- Return the specified snippet, if its status is processed
@@ -54,7 +75,8 @@ BEGIN
         'political_leaning', s.political_leaning,
         'status', s.status,
         'error_message', s.error_message,
-        'labels', get_snippet_labels(s.id, p_language) -> 'labels'
+        'labels', get_snippet_labels(s.id, p_language) -> 'labels',
+        'hidden', is_hidden
     ) INTO result
     FROM snippets s
     LEFT JOIN user_star_snippets us ON s.id = us.snippet AND us."user" = current_user_id

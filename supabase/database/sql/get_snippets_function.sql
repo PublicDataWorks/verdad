@@ -10,12 +10,23 @@ DECLARE
     result jsonb;
     total_count INTEGER;
     total_pages INTEGER;
+    user_roles TEXT[];
+    user_is_admin BOOLEAN;
 BEGIN
     -- Check if the user is authenticated
     current_user_id := auth.uid();
     IF current_user_id IS NULL THEN
         RAISE EXCEPTION 'Only logged-in users can call this function';
     END IF;
+
+    -- Get the role names from the roles table by joining with user_roles
+    SELECT array_agg(r.name) INTO user_roles
+    FROM public.user_roles ur
+    JOIN public.roles r ON ur.role = r.id
+    WHERE ur."user" = current_user_id;
+
+    -- Check if the current user has the 'admin' role
+    user_is_admin := COALESCE('admin' = ANY(user_roles), FALSE);
 
     CREATE TEMP TABLE filtered_snippets AS
         SELECT
@@ -55,13 +66,32 @@ BEGIN
                 ELSE false
             END AS starred_by_user,
             ul.value AS user_like_status,
-            (SELECT COUNT(*) FROM user_like_snippets uls WHERE uls.snippet = s.id AND uls.value = 1) AS like_count,
-            (SELECT COUNT(*) FROM user_like_snippets uls WHERE uls.snippet = s.id AND uls.value = -1) AS dislike_count
+            like_counts.likes AS like_count,
+            like_counts.dislikes AS dislike_count,
+            uhs.snippet IS NOT NULL AS hidden
         FROM snippets s
         LEFT JOIN audio_files a ON s.audio_file = a.id
         LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
         LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
+        LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
+        CROSS JOIN LATERAL (
+            SELECT
+                COUNT(*) FILTER (WHERE value = 1) AS likes,
+                COUNT(*) FILTER (WHERE value = -1) AS dislikes
+            FROM user_like_snippets uls
+            WHERE uls.snippet = s.id
+        ) like_counts
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
+        AND (
+            -- If user is admin, show all snippets (including hidden ones)
+            -- If user is not admin, only show non-hidden snippets
+            user_is_admin OR
+            NOT EXISTS (
+                SELECT 1
+                FROM user_hide_snippets uhs
+                WHERE uhs.snippet = s.id
+            )
+        )
         AND (
             p_filter IS NULL OR
             NOT p_filter ? 'languages' OR

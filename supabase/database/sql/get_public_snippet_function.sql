@@ -1,8 +1,17 @@
 CREATE
 OR REPLACE FUNCTION get_public_snippet (snippet_id UUID) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
+    is_hidden BOOLEAN;
     result jsonb;
 BEGIN
+    -- Check if the snippet is currently hidden
+    SELECT EXISTS (SELECT 1 FROM user_hide_snippets uhs WHERE uhs.snippet = snippet_id) INTO is_hidden;
+
+    -- If the snippet is hidden, return an empty JSON object
+    IF is_hidden THEN
+        RETURN '{}'::jsonb;
+    END IF;
+
     SELECT jsonb_build_object(
         'id', s.id,
         'recorded_at', s.recorded_at,
@@ -17,10 +26,10 @@ BEGIN
         'end_time', s.end_time,
         'file_path', s.file_path,
         'file_size', s.file_size,
-        'language', CASE 
-                        WHEN s.language IS NULL THEN NULL 
-                        ELSE s.language ->> 'primary_language' 
-                    END,
+        'language', CASE
+            WHEN s.language IS NULL THEN NULL
+            ELSE s.language ->> 'primary_language'
+        END,
         'context', s.context
     ) INTO result
     FROM snippets s
