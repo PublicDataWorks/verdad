@@ -171,6 +171,11 @@ def ensure_correct_timestamps(snippets):
         if start_time > end_time:
             raise ValueError("start_time must be less than or equal to end_time.")
 
+        # Ensure start_time and end_time are within the audio duration of 1800 seconds
+        duration = 1800  #FIXME: Hard-coded duration of 30 minutes
+        if start_time < 0 or end_time > duration:
+            raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
+
 
 @task(log_prints=True)
 def process_llm_response(
