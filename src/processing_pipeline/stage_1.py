@@ -292,6 +292,11 @@ def update_stage_1_llm_response_detection_result(supabase_client, id, detection_
     supabase_client.update_stage_1_llm_response_detection_result(id, detection_result)
 
 
+@task(log_prints=True, retries=3)
+def reset_status_of_stage_1_llm_response(supabase_client, stage_1_llm_response_id):
+    supabase_client.reset_stage_1_llm_response_status(stage_1_llm_response_id)
+
+
 @flow(name="Stage 1: Rerun Main Detection Phase", log_prints=True, task_runner=ConcurrentTaskRunner)
 def rerun_main_detection_phase(stage_1_llm_response_ids):
     if not stage_1_llm_response_ids:
@@ -333,6 +338,9 @@ def rerun_main_detection_phase(stage_1_llm_response_ids):
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
                 update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
+
+                # Reset the stage-1 LLM response status to New, error_message to None
+                reset_status_of_stage_1_llm_response(supabase_client, id)
 
             print(f"Processing completed for stage 1 llm response {id}")
 
