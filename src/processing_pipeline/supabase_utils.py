@@ -298,7 +298,3 @@ class SupabaseClient:
                 .execute()
             )
             return response.data[0]
-
-    def get_statistics(self):
-        response = self.client.rpc("get_statistics").execute()
-        return response.data
