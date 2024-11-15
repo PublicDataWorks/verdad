@@ -26,4 +26,5 @@ GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
 supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
 if __name__ == "__main__":
-    pass
+    statistics = supabase_client.get_statistics()
+    print(statistics)
