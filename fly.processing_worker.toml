@@ -32,11 +32,3 @@ primary_region = 'sea'
   memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1
-
-[scale]
-  initial_disinformation_detection = 1
-  audio_clipping = 1
-  in_depth_analysis = 1
-  rerun_main_detection_phase = 1
-  undo_audio_clipping = 1
-  undo_in_depth_analysis = 1
