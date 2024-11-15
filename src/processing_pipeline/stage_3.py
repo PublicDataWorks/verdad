@@ -71,6 +71,7 @@ def update_snippet_in_supabase(
     context,
     political_leaning,
     status,
+    error_message
 ):
     supabase_client.update_snippet(
         id=snippet_id,
@@ -87,6 +88,7 @@ def update_snippet_in_supabase(
         context=context,
         political_leaning=political_leaning,
         status=status,
+        error_message=error_message
     )
 
 
@@ -170,6 +172,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
             context=pro_response["context"],
             political_leaning=pro_response["political_leaning"],
             status="Processed",
+            error_message=None
         )
 
         # Create new labels based on the response and assign them to the snippet

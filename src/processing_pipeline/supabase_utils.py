@@ -187,6 +187,7 @@ class SupabaseClient:
         context,
         political_leaning,
         status,
+        error_message
     ):
         response = (
             self.client.table("snippets")
@@ -205,6 +206,7 @@ class SupabaseClient:
                     "context": context,
                     "political_leaning": political_leaning,
                     "status": status,
+                    "error_message": error_message,
                 }
             )
             .eq("id", id)
