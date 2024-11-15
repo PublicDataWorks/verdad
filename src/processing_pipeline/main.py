@@ -16,10 +16,10 @@ if __name__ == "__main__":
         case "initial_disinformation_detection":
             deployment = initial_disinformation_detection.to_deployment(
                 name="Stage 1: Initial Disinformation Detection",
-                concurrency_limit=10,
+                concurrency_limit=100,
                 parameters=dict(audio_file_id=None, limit=500),
             )
-            serve(deployment)
+            serve(deployment, limit=100)
         case "rerun_main_detection_phase":
             deployment = rerun_main_detection_phase.to_deployment(
                 name="Stage 1: Rerun Main Detection Phase",
@@ -29,10 +29,10 @@ if __name__ == "__main__":
         case "audio_clipping":
             deployment = audio_clipping.to_deployment(
                 name="Stage 2: Audio Clipping",
-                concurrency_limit=5,
+                concurrency_limit=100,
                 parameters=dict(context_before_seconds=90, context_after_seconds=30, repeat=True),
             )
-            serve(deployment)
+            serve(deployment, limit=100)
         case "undo_audio_clipping":
             deployment = undo_audio_clipping.to_deployment(
                 name="Stage 2: Undo Audio Clipping",
@@ -42,10 +42,10 @@ if __name__ == "__main__":
         case "in_depth_analysis":
             deployment = in_depth_analysis.to_deployment(
                 name="Stage 3: In-Depth Analysis",
-                concurrency_limit=5,
+                concurrency_limit=100,
                 parameters=dict(snippet_ids=[], repeat=True),
             )
-            serve(deployment)
+            serve(deployment, limit=100)
         case "undo_in_depth_analysis":
             deployment = undo_stage_3.to_deployment(
                 name="Stage 3: Undo In-Depth Analysis",
