@@ -16,6 +16,6 @@ primary_region = "sea"
   PREFECT_API_DATABASE_CONNECTION_URL = "postgresql+asyncpg://${DATABASE_URL#postgres://}"
 
 [[vm]]
-  memory = "4gb"
+  memory = "2gb"
   cpu_kind = "shared"
   cpus = 4
