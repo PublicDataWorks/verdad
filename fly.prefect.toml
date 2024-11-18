@@ -13,6 +13,7 @@ primary_region = "sea"
 [env]
   PREFECT_SERVER_API_HOST = "0.0.0.0"
   PREFECT_SERVER_API_PORT = "4200"
+  PREFECT_API_DATABASE_CONNECTION_URL = "postgresql+asyncpg://${DATABASE_URL#postgres://}"
 
 [[vm]]
   memory = "4gb"
