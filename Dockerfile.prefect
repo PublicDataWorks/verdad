@@ -4,6 +4,11 @@ FROM prefecthq/prefect:3-latest
 # Set the working directory in the container
 WORKDIR /app
 
+# Install required packages
+RUN pip install --no-cache-dir \
+    "asyncpg==0.30.0" \
+    "sqlalchemy==2.0.36"
+
 # Set environment variables
 ENV PREFECT_SERVER_API_HOST=0.0.0.0
 ENV PREFECT_SERVER_API_PORT=4200
@@ -12,8 +17,12 @@ ENV PREFECT_API_URL="https://prefect.fly.dev/api"
 # Copy the start_prefect_server.sh script into the container at /app
 COPY scripts/start_prefect_server.sh /app
 
-# Make sure the entrypoint script is executable
+# Copy the start_recording.sh script into the container at /app
+COPY scripts/start_recording.sh /app
+
+# Make sure all the scripts are executable
 RUN chmod +x /app/start_prefect_server.sh
+RUN chmod +x /app/start_recording.sh
 
 # Set the entrypoint script
 ENTRYPOINT ["/app/start_prefect_server.sh"]
