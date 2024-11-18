@@ -19,10 +19,3 @@ primary_region = "sea"
   memory = "4gb"
   cpu_kind = "shared"
   cpus = 4
-
-[[mounts]]
-  source = "prefect"
-  destination = "/data"
-  auto_extend_size_threshold = 80
-  auto_extend_size_increment = "1GB"
-  auto_extend_size_limit = "100GB"
