@@ -159,7 +159,10 @@ def insert_new_snippet_to_snippets_table_in_supabase(
 
 
 @task(log_prints=True)
-def ensure_correct_timestamps(snippets):
+def ensure_correct_timestamps(input_file, snippets):
+    audio = AudioSegment.from_mp3(input_file)
+    duration = int(len(audio) / 1000)  # Duration in seconds
+
     for snippet in snippets:
         start_time = snippet["start_time"]
         end_time = snippet["end_time"]
@@ -171,8 +174,7 @@ def ensure_correct_timestamps(snippets):
         if start_time > end_time:
             raise ValueError("start_time must be less than or equal to end_time.")
 
-        # Ensure start_time and end_time are within the audio duration of 1800 seconds
-        duration = 1800  #FIXME: Hard-coded duration of 30 minutes
+        # Ensure start_time and end_time are within the audio duration
         if start_time < 0 or end_time > duration:
             raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
 
@@ -190,7 +192,7 @@ def process_llm_response(
     try:
         print(f"Processing llm response {llm_response['id']}")
         flagged_snippets = (llm_response["detection_result"] or {}).get("flagged_snippets", [])
-        ensure_correct_timestamps(flagged_snippets)
+        ensure_correct_timestamps(local_file, flagged_snippets)
 
         for snippet in flagged_snippets:
             uuid = snippet["uuid"]

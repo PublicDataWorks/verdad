@@ -136,7 +136,7 @@ def get_url_hash(url):
     return hashlib.sha256(url.encode()).hexdigest()[-6:]
 
 def serve_deployments(radio_stations, flow_function):
-    duration_seconds = 1800  # Default to 30 minutes
+    duration_seconds = 900  # Default to 15 minutes
     audio_birate = 64000  # Default to 64kbps bitrate
     audio_channels = 1  # Default to single channel (mono audio)
     concurrency_limit = 100
