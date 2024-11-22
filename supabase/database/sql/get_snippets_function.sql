@@ -1,12 +1,5 @@
 CREATE
-OR REPLACE FUNCTION get_snippets (
-    page INTEGER DEFAULT 0,
-    page_size INTEGER DEFAULT 10,
-    p_language TEXT DEFAULT 'english',
-    p_filter JSONB DEFAULT '{}'::jsonb,
-    p_order_by TEXT DEFAULT 'recorded_at_desc'
-) RETURNS jsonb SECURITY DEFINER AS $$
-
+OR REPLACE FUNCTION get_snippets_order_by (p_language text,p_filter jsonb,page INTEGER,page_size INTEGER, p_order_by text) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
     current_user_id UUID;
     result jsonb;
@@ -214,6 +207,49 @@ BEGIN
                 AND sl.label IN (
                     SELECT (jsonb_array_elements_text(p_filter->'labels'))::UUID
                 )
+            )
+        )
+        AND (
+            p_filter IS NULL OR
+            NOT p_filter ? 'upvotedBy' OR
+            (
+                CASE
+                    WHEN jsonb_array_length(p_filter->'upvotedBy') = 0 THEN TRUE
+                    ELSE (
+                        CASE
+                            WHEN (
+                                p_filter->'upvotedBy' ? 'by_me' AND
+                                p_filter->'upvotedBy' ? 'by_others'
+                            ) THEN
+                                EXISTS (
+                                    SELECT 1
+                                    FROM label_upvotes lu
+                                    WHERE lu.snippet_label IN (
+                                        SELECT id FROM snippet_labels WHERE snippet = s.id
+                                    )
+                                )
+                            WHEN p_filter->'upvotedBy' ? 'by_me' THEN
+                                EXISTS (
+                                    SELECT 1
+                                    FROM label_upvotes lu
+                                    WHERE lu.snippet_label IN (
+                                        SELECT id FROM snippet_labels WHERE snippet = s.id
+                                    )
+                                    AND lu.upvoted_by = current_user_id
+                                )
+                            WHEN p_filter->'upvotedBy' ? 'by_others' THEN
+                                EXISTS (
+                                    SELECT 1
+                                    FROM label_upvotes lu
+                                    WHERE lu.snippet_label IN (
+                                        SELECT id FROM snippet_labels WHERE snippet = s.id
+                                    )
+                                    AND lu.upvoted_by != current_user_id
+                                )
+                            ELSE FALSE
+                        END
+                    )
+                END
             )
         )
         ORDER BY
