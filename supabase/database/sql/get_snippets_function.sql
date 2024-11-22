@@ -3,8 +3,10 @@ OR REPLACE FUNCTION get_snippets (
     page INTEGER DEFAULT 0,
     page_size INTEGER DEFAULT 10,
     p_language TEXT DEFAULT 'english',
-    p_filter JSONB DEFAULT '{}'::jsonb
+    p_filter JSONB DEFAULT '{}'::jsonb,
+    p_order_by TEXT DEFAULT 'recorded_at_desc'
 ) RETURNS jsonb SECURITY DEFINER AS $$
+
 DECLARE
     current_user_id UUID;
     result jsonb;
@@ -23,7 +25,7 @@ BEGIN
     SELECT array_agg(r.name) INTO user_roles
     FROM public.user_roles ur
     JOIN public.roles r ON ur.role = r.id
-    WHERE ur."user" = current_user_id;
+    WHERE ur."user" = current_user_id;    
 
     -- Check if the current user has the 'admin' role
     user_is_admin := COALESCE('admin' = ANY(user_roles), FALSE);
@@ -75,20 +77,20 @@ BEGIN
         LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
         LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
         CROSS JOIN LATERAL (
-            SELECT
+            SELECT 
                 COUNT(*) FILTER (WHERE value = 1) AS likes,
                 COUNT(*) FILTER (WHERE value = -1) AS dislikes
-            FROM user_like_snippets uls
+            FROM user_like_snippets uls 
             WHERE uls.snippet = s.id
         ) like_counts
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (
             -- If user is admin, show all snippets (including hidden ones)
             -- If user is not admin, only show non-hidden snippets
-            user_is_admin OR
+            user_is_admin OR 
             NOT EXISTS (
-                SELECT 1
-                FROM user_hide_snippets uhs
+                SELECT 1 
+                FROM user_hide_snippets uhs 
                 WHERE uhs.snippet = s.id
             )
         )
@@ -214,7 +216,25 @@ BEGIN
                 )
             )
         )
-        ORDER BY s.recorded_at DESC;
+        ORDER BY
+          CASE 
+          WHEN p_order_by = 'upvotes' THEN (s.upvote_count + s.like_count)
+          ELSE NULL
+          END DESC NULLS LAST,
+          CASE 
+              WHEN p_order_by = 'comments' THEN s.comment_count
+              ELSE NULL
+          END DESC NULLS LAST,
+          CASE 
+              WHEN p_order_by = 'activities' THEN s.updated_at
+              ELSE NULL
+          END DESC NULLS LAST,
+          CASE 
+              WHEN p_order_by IS NULL OR p_order_by = 'latest' OR p_order_by = '' THEN s.recorded_at
+              ELSE NULL
+          END DESC NULLS LAST,
+          -- Default fallback to recorded_at if no other conditions match
+          s.recorded_at DESC NULLS LAST;
 
     -- Get total count
     SELECT COUNT(*) INTO total_count
@@ -235,11 +255,11 @@ BEGIN
     total_pages := CEIL(total_count::FLOAT / page_size);
 
     RETURN jsonb_build_object(
-        'num_of_snippets', COALESCE(jsonb_array_length(result), 0),
-        'snippets', COALESCE(result, '[]'::jsonb),
-        'current_page', page,
-        'page_size', page_size,
-        'total_pages', total_pages
-    );
+    'num_of_snippets', total_count,
+    'snippets', COALESCE(result, '[]'::jsonb),
+    'current_page', page,
+    'page_size', page_size,
+    'total_pages', total_pages
+);
 END;
 $$ LANGUAGE plpgsql;
