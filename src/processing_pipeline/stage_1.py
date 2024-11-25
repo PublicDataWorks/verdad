@@ -371,7 +371,7 @@ class Stage1Executor:
         result = model.generate_content(
             [user_prompt],
             generation_config=genai.GenerationConfig(
-                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA
+                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
             ),
             safety_settings={
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,

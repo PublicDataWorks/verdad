@@ -122,7 +122,7 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                             break;
                         }
                         case 'textMention': {
-                            notificationMessage = `You were mentioned in room ${roomId}`;
+                            notificationMessage = "You have been @mentioned in a comment on VERDAD.app";
                             templateName = 'mention_notification';
                             await sendSlackNotification({
                                 type: 'mention',
@@ -149,6 +149,8 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                         .replace('{{notificationMessage}}', notificationMessage)
                         .replace('{{roomId}}', roomId)
                         .replace('{{additionalContent}}', '')
+                        .replace('{{commentBody}}', 'body' in inboxNotification ? inboxNotification.body : '')
+                        .replace('{{link}}', `https://verdad.app/snippet/${roomId}`)
                     : `<!DOCTYPE html><html><body><p>${notificationMessage}</p></body></html>`;
 
                 await sendEmail(

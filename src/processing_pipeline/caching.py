@@ -19,6 +19,6 @@ def create_generative_model_from_cache():
     # Construct a GenerativeModel from the cache.
     # model = genai.GenerativeModel.from_cached_content(
     #     cached_content=cache,
-    #     generation_config=genai.GenerationConfig(response_mime_type="application/json", response_schema=OutputSchema),
+    #     generation_config=genai.GenerationConfig(response_mime_type="application/json", response_schema=OutputSchema, max_output_tokens=8192),
     # )
     # return model

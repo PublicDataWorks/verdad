@@ -40,6 +40,9 @@ def get_system_instruction_for_stage_3():
 def get_output_schema_for_stage_3():
     return json.load(open("prompts/Stage_3_output_schema.json", "r"))
 
+def get_timestamped_transcription_generation_prompt():
+    return open("prompts/Timestamped_transcription_generation_prompt.md", "r").read()
+
 
 if __name__ == "__main__":
     # Print the transcription prompt for stage 1 Preprocess
@@ -55,8 +58,8 @@ if __name__ == "__main__":
     # print(system_instruction_for_stage_1_preprocess)
 
     # Print the detection prompt for stage 1 preprocess
-    detection_prompt_for_stage_1_preprocess = get_detection_prompt_for_stage_1_preprocess()
-    print(detection_prompt_for_stage_1_preprocess)
+    # detection_prompt_for_stage_1_preprocess = get_detection_prompt_for_stage_1_preprocess()
+    # print(detection_prompt_for_stage_1_preprocess)
 
     # Print the output schema for stage 1
     # output_schema_for_stage_1 = get_output_schema_for_stage_1()
@@ -81,3 +84,7 @@ if __name__ == "__main__":
     # Print output schema for stage 3
     # output_schema_for_stage_3 = get_output_schema_for_stage_3()
     # print(json.dumps(output_schema_for_stage_3, indent=2))
+
+    # Print timestamped transcription generation prompt
+    timestamped_transcription_generation_prompt = get_timestamped_transcription_generation_prompt()
+    print(timestamped_transcription_generation_prompt)

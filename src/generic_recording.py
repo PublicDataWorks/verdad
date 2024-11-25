@@ -185,7 +185,7 @@ if __name__ == "__main__":
         case _:
             raise Exception("Invalid process group")
 
-    duration_seconds = 900  # Default to 15 minutes
+    duration_seconds = 1800  # Default to 30 minutes
     audio_birate = 64000  # Default to 64kbps bitrate
     audio_channels = 1  # Default to single channel (mono audio)
 

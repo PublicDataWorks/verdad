@@ -252,6 +252,18 @@ BEGIN
                 END
             )
         )
+        AND
+        NOT EXISTS (
+                SELECT 1
+                FROM (
+                    SELECT snippet
+                    FROM user_like_snippets
+                    WHERE value = -1
+                    GROUP BY snippet
+                    HAVING COUNT(*) >= 2
+                ) dislikes
+                WHERE dislikes.snippet = s.id
+            )
         ORDER BY
           CASE 
           WHEN p_order_by = 'upvotes' THEN (s.upvote_count + s.like_count)
