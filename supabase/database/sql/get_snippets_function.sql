@@ -1,5 +1,5 @@
 CREATE
-OR REPLACE FUNCTION get_snippets (p_language text,p_filter jsonb,page INTEGER,page_size INTEGER, p_order_by text) RETURNS jsonb SECURITY DEFINER AS $$
+OR REPLACE FUNCTION get_snippets_order_by (p_language text,p_filter jsonb,page INTEGER,page_size INTEGER, p_order_by text) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
     current_user_id UUID;
     result jsonb;
@@ -18,7 +18,7 @@ BEGIN
     SELECT array_agg(r.name) INTO user_roles
     FROM public.user_roles ur
     JOIN public.roles r ON ur.role = r.id
-    WHERE ur."user" = current_user_id;
+    WHERE ur."user" = current_user_id;    
 
     -- Check if the current user has the 'admin' role
     user_is_admin := COALESCE('admin' = ANY(user_roles), FALSE);
@@ -70,20 +70,20 @@ BEGIN
         LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
         LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
         CROSS JOIN LATERAL (
-            SELECT
+            SELECT 
                 COUNT(*) FILTER (WHERE value = 1) AS likes,
                 COUNT(*) FILTER (WHERE value = -1) AS dislikes
-            FROM user_like_snippets uls
+            FROM user_like_snippets uls 
             WHERE uls.snippet = s.id
         ) like_counts
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (
             -- If user is admin, show all snippets (including hidden ones)
             -- If user is not admin, only show non-hidden snippets
-            user_is_admin OR
+            user_is_admin OR 
             NOT EXISTS (
-                SELECT 1
-                FROM user_hide_snippets uhs
+                SELECT 1 
+                FROM user_hide_snippets uhs 
                 WHERE uhs.snippet = s.id
             )
         )
@@ -252,8 +252,8 @@ BEGIN
                 END
             )
         )
-        AND (
-            NOT EXISTS (
+        AND
+        NOT EXISTS (
                 SELECT 1
                 FROM (
                     SELECT snippet
@@ -264,33 +264,25 @@ BEGIN
                 ) dislikes
                 WHERE dislikes.snippet = s.id
             )
-        )
-        ORDER BY (
-            -- Sort by engagement (upvotes + likes)
-            CASE WHEN p_order_by = 'upvotes'
-                 THEN s.upvote_count + s.like_count
-            END DESC,
-
-            -- Sort by comment count
-            CASE WHEN p_order_by = 'comments'
-                 THEN s.comment_count
-            END DESC,
-
-            -- Sort by last activity date
-            CASE WHEN p_order_by = 'activities'
-                 THEN s.updated_at
-            END DESC,
-
-            -- Sort by recording date (default sort)
-            CASE WHEN p_order_by IS NULL OR
-                      p_order_by = 'latest' OR
-                      p_order_by = ''
-                 THEN s.recorded_at
-            END DESC,
-
-            -- Always sort by recorded_at as final tiebreaker
-            s.recorded_at DESC;
-        )
+        ORDER BY
+          CASE 
+          WHEN p_order_by = 'upvotes' THEN (s.upvote_count + s.like_count)
+          ELSE NULL
+          END DESC NULLS LAST,
+          CASE 
+              WHEN p_order_by = 'comments' THEN s.comment_count
+              ELSE NULL
+          END DESC NULLS LAST,
+          CASE 
+              WHEN p_order_by = 'activities' THEN s.updated_at
+              ELSE NULL
+          END DESC NULLS LAST,
+          CASE 
+              WHEN p_order_by IS NULL OR p_order_by = 'latest' OR p_order_by = '' THEN s.recorded_at
+              ELSE NULL
+          END DESC NULLS LAST,
+          -- Default fallback to recorded_at if no other conditions match
+          s.recorded_at DESC NULLS LAST;
 
     -- Get total count
     SELECT COUNT(*) INTO total_count
