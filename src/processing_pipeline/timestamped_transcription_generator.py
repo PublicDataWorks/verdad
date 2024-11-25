@@ -4,7 +4,7 @@ import pathlib
 from pydub import AudioSegment
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from processing_pipeline.constants import get_timestamped_transcription_generation_output_schema, get_timestamped_transcription_generation_prompt
+from constants import get_timestamped_transcription_generation_output_schema, get_timestamped_transcription_generation_prompt
 
 class TimestampedTranscriptionGenerator:
 
