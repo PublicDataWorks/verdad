@@ -8,7 +8,7 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from openai import OpenAI
 from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
-from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
+from timestamped_transcription_generator import TimestampedTranscriptionGenerator
 from stage_1_preprocess import Stage1PreprocessDetectionExecutor, Stage1PreprocessTranscriptionExecutor
 from supabase_utils import SupabaseClient
 from constants import (
