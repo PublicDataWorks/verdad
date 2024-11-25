@@ -68,19 +68,13 @@ BEGIN
 
     -- Fetch unique radio station codes from the audio_files table
     WITH unique_sources AS (
-    SELECT DISTINCT 
-        radio_station_code,
-        radio_station_name
-    FROM public.audio_files
-    WHERE radio_station_code IS NOT NULL
+        SELECT DISTINCT radio_station_code
+        FROM public.audio_files
+        WHERE radio_station_code IS NOT NULL
     )
     SELECT jsonb_agg(
         jsonb_build_object(
-            'label', CASE 
-                WHEN radio_station_name IS NOT NULL 
-                THEN radio_station_name || ' - ' || radio_station_code
-                ELSE radio_station_code
-            END,
+            'label', radio_station_code,
             'value', radio_station_code
         )
     ) INTO sources
