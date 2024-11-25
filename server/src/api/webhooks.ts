@@ -149,7 +149,7 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                         .replace('{{notificationMessage}}', notificationMessage)
                         .replace('{{roomId}}', roomId)
                         .replace('{{additionalContent}}', '')
-                        .replace('{{commentBody}}', inboxNotification.body || '')
+                        .replace('{{commentBody}}', 'body' in inboxNotification ? inboxNotification.body : '')
                         .replace('{{link}}', `https://verdad.app/snippet/${roomId}`)
                     : `<!DOCTYPE html><html><body><p>${notificationMessage}</p></body></html>`;
 
