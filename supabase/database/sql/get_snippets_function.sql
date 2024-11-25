@@ -1,10 +1,5 @@
 CREATE
-OR REPLACE FUNCTION get_snippets (
-    page INTEGER DEFAULT 0,
-    page_size INTEGER DEFAULT 10,
-    p_language TEXT DEFAULT 'english',
-    p_filter JSONB DEFAULT '{}'::jsonb
-) RETURNS jsonb SECURITY DEFINER AS $$
+OR REPLACE FUNCTION get_snippets (p_language text,p_filter jsonb,page INTEGER,page_size INTEGER, p_order_by text) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
     current_user_id UUID;
     result jsonb;
@@ -215,7 +210,49 @@ BEGIN
             )
         )
         AND (
-            -- Exclude snippets with 2 or more dislikes
+            p_filter IS NULL OR
+            NOT p_filter ? 'upvotedBy' OR
+            (
+                CASE
+                    WHEN jsonb_array_length(p_filter->'upvotedBy') = 0 THEN TRUE
+                    ELSE (
+                        CASE
+                            WHEN (
+                                p_filter->'upvotedBy' ? 'by_me' AND
+                                p_filter->'upvotedBy' ? 'by_others'
+                            ) THEN
+                                EXISTS (
+                                    SELECT 1
+                                    FROM label_upvotes lu
+                                    WHERE lu.snippet_label IN (
+                                        SELECT id FROM snippet_labels WHERE snippet = s.id
+                                    )
+                                )
+                            WHEN p_filter->'upvotedBy' ? 'by_me' THEN
+                                EXISTS (
+                                    SELECT 1
+                                    FROM label_upvotes lu
+                                    WHERE lu.snippet_label IN (
+                                        SELECT id FROM snippet_labels WHERE snippet = s.id
+                                    )
+                                    AND lu.upvoted_by = current_user_id
+                                )
+                            WHEN p_filter->'upvotedBy' ? 'by_others' THEN
+                                EXISTS (
+                                    SELECT 1
+                                    FROM label_upvotes lu
+                                    WHERE lu.snippet_label IN (
+                                        SELECT id FROM snippet_labels WHERE snippet = s.id
+                                    )
+                                    AND lu.upvoted_by != current_user_id
+                                )
+                            ELSE FALSE
+                        END
+                    )
+                END
+            )
+        )
+        AND (
             NOT EXISTS (
                 SELECT 1
                 FROM (
@@ -228,7 +265,32 @@ BEGIN
                 WHERE dislikes.snippet = s.id
             )
         )
-        ORDER BY s.recorded_at DESC;
+        ORDER BY (
+            -- Sort by engagement (upvotes + likes)
+            CASE WHEN p_order_by = 'upvotes'
+                 THEN s.upvote_count + s.like_count
+            END DESC,
+
+            -- Sort by comment count
+            CASE WHEN p_order_by = 'comments'
+                 THEN s.comment_count
+            END DESC,
+
+            -- Sort by last activity date
+            CASE WHEN p_order_by = 'activities'
+                 THEN s.updated_at
+            END DESC,
+
+            -- Sort by recording date (default sort)
+            CASE WHEN p_order_by IS NULL OR
+                      p_order_by = 'latest' OR
+                      p_order_by = ''
+                 THEN s.recorded_at
+            END DESC,
+
+            -- Always sort by recorded_at as final tiebreaker
+            s.recorded_at DESC;
+        )
 
     -- Get total count
     SELECT COUNT(*) INTO total_count
@@ -249,11 +311,11 @@ BEGIN
     total_pages := CEIL(total_count::FLOAT / page_size);
 
     RETURN jsonb_build_object(
-        'num_of_snippets', COALESCE(jsonb_array_length(result), 0),
-        'snippets', COALESCE(result, '[]'::jsonb),
-        'current_page', page,
-        'page_size', page_size,
-        'total_pages', total_pages
-    );
+    'num_of_snippets', total_count,
+    'snippets', COALESCE(result, '[]'::jsonb),
+    'current_page', page,
+    'page_size', page_size,
+    'total_pages', total_pages
+);
 END;
 $$ LANGUAGE plpgsql;
