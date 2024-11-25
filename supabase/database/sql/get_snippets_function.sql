@@ -214,6 +214,20 @@ BEGIN
                 )
             )
         )
+        AND (
+            -- Exclude snippets with 2 or more dislikes
+            NOT EXISTS (
+                SELECT 1
+                FROM (
+                    SELECT snippet
+                    FROM user_like_snippets
+                    WHERE value = -1
+                    GROUP BY snippet
+                    HAVING COUNT(*) >= 2
+                ) dislikes
+                WHERE dislikes.snippet = s.id
+            )
+        )
         ORDER BY s.recorded_at DESC;
 
     -- Get total count
