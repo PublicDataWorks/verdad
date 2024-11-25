@@ -117,7 +117,7 @@ def __transcribe_audio_file_with_open_ai_whisper_1(audio_file):
 @task(log_prints=True)
 def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_file):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
-    timestamped_transcription = TimestampedTranscriptionGenerator.run(audio_file, gemini_key)
+    timestamped_transcription = TimestampedTranscriptionGenerator.run(audio_file, gemini_key, 10)
     return { "timestamped_transcription": timestamped_transcription }
 
 

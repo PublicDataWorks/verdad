@@ -13,23 +13,33 @@ class TimestampedTranscriptionGenerator:
     OUTPUT_SCHEMA = get_timestamped_transcription_generation_output_schema()
 
     @classmethod
-    def run(cls, audio_file, gemini_key):
-        # Define the segment length in seconds
-        segment_length = 15
+    def run(cls, audio_file, gemini_key, segment_length):
+        # Split the file into 2 equal parts
+        first_part, second_part = cls.split_file_into_two_parts(audio_file)
 
-        # Split the file into segments
-        audio_segments = cls.split_file_into_segments(audio_file, segment_length * 1000)
-
+        # Handle the first part
+        first_part_segments = cls.split_file_into_segments(first_part, segment_length * 1000, audio_file)
         try:
-            return cls.transcribe_segments(audio_segments, segment_length, gemini_key)
+            first =  cls.transcribe_segments(first_part_segments, gemini_key)
         finally:
-            # Delete the segments
-            for segment in audio_segments:
-                os.remove(segment)
+            for s in first_part_segments:
+                os.remove(s)
 
+        # Handle the second part
+        second_part_segments = cls.split_file_into_segments(second_part, segment_length * 1000, audio_file)
+        try:
+            second =  cls.transcribe_segments(second_part_segments, gemini_key)
+        finally:
+            for s in second_part_segments:
+                os.remove(s)
+
+        # Combine the two parts
+        segments = first + second
+        segment_transcriptions = [segment["transcription"] for segment in segments]
+        return cls.build_timestamped_transcription(segment_transcriptions, segment_length)
 
     @classmethod
-    def transcribe_segments(cls, audio_segments, segment_length, gemini_key):
+    def transcribe_segments(cls, audio_segments, gemini_key):
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
@@ -67,10 +77,7 @@ class TimestampedTranscriptionGenerator:
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             },
         )
-        segments = json.loads(result.text)["segments"]
-        segment_transcriptions = [segment["transcription"] for segment in segments]
-
-        return cls.build_timestamped_transcription(segment_transcriptions, segment_length)
+        return json.loads(result.text)["segments"]
 
     @classmethod
     def build_timestamped_transcription(cls, segment_transcriptions, segment_length):
@@ -85,9 +92,7 @@ class TimestampedTranscriptionGenerator:
         return result
 
     @classmethod
-    def split_file_into_segments(cls, file, segment_length):
-        # Load the audio file
-        audio = AudioSegment.from_mp3(file)
+    def split_file_into_segments(cls, audio, segment_length, filename):
         segments = []
 
         for i in range(0, len(audio), segment_length):
@@ -95,9 +100,15 @@ class TimestampedTranscriptionGenerator:
             subclip = audio[i:i + segment_length]
 
             # Export the subclip
-            output_file = f"{file}_segment_{(i // segment_length) + 1}.mp3"
+            output_file = f"{filename}_segment_{(i // segment_length) + 1}.mp3"
             subclip.export(output_file, format="mp3")
 
             segments.append(output_file)
 
         return segments
+
+    @classmethod
+    def split_file_into_two_parts(cls, file):
+        audio = AudioSegment.from_mp3(file)
+        half_length = len(audio) // 2
+        return audio[:half_length], audio[half_length:]

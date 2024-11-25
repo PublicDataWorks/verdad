@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     try:
         if os.path.exists(audio_file):
-            result = TimestampedTranscriptionGenerator.run(audio_file, GEMINI_KEY)
+            result = TimestampedTranscriptionGenerator.run(audio_file, GEMINI_KEY, 10)
             print(result)
         else:
             print(f"File {audio_file} does not exist")
