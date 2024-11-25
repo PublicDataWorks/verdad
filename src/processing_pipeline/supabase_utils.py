@@ -104,7 +104,7 @@ class SupabaseClient:
         audio_file_id,
         initial_transcription,
         initial_detection_result,
-        openai_response,
+        timestamped_transcription,
         detection_result,
         status,
     ):
@@ -115,7 +115,7 @@ class SupabaseClient:
                     "audio_file": audio_file_id,
                     "initial_transcription": initial_transcription,
                     "initial_detection_result": initial_detection_result,
-                    "timestamped_transcription": openai_response,
+                    "timestamped_transcription": timestamped_transcription,
                     "detection_result": detection_result,
                     "status": status
                 }

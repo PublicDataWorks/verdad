@@ -4,40 +4,18 @@ import pathlib
 from pydub import AudioSegment
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-
-from processing_pipeline.constants import get_timestamped_transcription_generation_prompt
+from processing_pipeline.constants import get_timestamped_transcription_generation_output_schema, get_timestamped_transcription_generation_prompt
 
 class TimestampedTranscriptionGenerator:
 
+    SYSTEM_INSTRUCTION = "You are a specialized language model designed to transcribe audio content in multiple languages, with a particular focus on Spanish and Arabic as spoken by immigrant communities in the USA."
     USER_PROMPT = get_timestamped_transcription_generation_prompt()
-    OUTPUT_SCHEMA = {
-        "type": "object",
-        "required": ["segments"],
-        "properties": {
-            "segments": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["segment", "transcription"],
-                    "properties": {
-                        "segment": {
-                            "type": "integer",
-                            "description": "The audio segment number"
-                        },
-                        "transcription": {
-                            "type": "string",
-                            "description": "The transcription of the audio segment"
-                        }
-                    }
-                }
-            }
-        }
-    }
+    OUTPUT_SCHEMA = get_timestamped_transcription_generation_output_schema()
 
     @classmethod
     def run(cls, audio_file, gemini_key):
         # Define the segment length in seconds
-        segment_length = 10
+        segment_length = 15
 
         # Split the file into segments
         audio_segments = cls.split_file_into_segments(audio_file, segment_length * 1000)
@@ -59,7 +37,10 @@ class TimestampedTranscriptionGenerator:
             raise ValueError("No audio segments provided!")
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name="gemini-1.5-pro-002")
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-pro-002",
+            system_instruction=cls.SYSTEM_INSTRUCTION
+        )
 
         segments = []
         for index, segment_path in enumerate(audio_segments):

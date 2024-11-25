@@ -17,7 +17,7 @@ if __name__ == "__main__":
             deployment = initial_disinformation_detection.to_deployment(
                 name="Stage 1: Initial Disinformation Detection",
                 concurrency_limit=100,
-                parameters=dict(audio_file_id=None, limit=500),
+                parameters=dict(audio_file_id=None, use_openai=True, limit=500),
             )
             serve(deployment, limit=100)
         case "rerun_main_detection_phase":

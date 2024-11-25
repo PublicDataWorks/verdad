@@ -29,14 +29,15 @@ supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabas
 
 if __name__ == "__main__":
     # Download the audio file from R2
-    audio_file = "radio_10628b_20241115_035124.mp3"
-    s3_client.download_file(R2_BUCKET_NAME, "radio_10628b/radio_10628b_20241115_035124.mp3", "radio_10628b_20241115_035124.mp3")
+    audio_file = "radio_080377_20241124_172450.mp3"
+    s3_client.download_file(R2_BUCKET_NAME, "radio_080377/radio_080377_20241124_172450.mp3", "radio_080377_20241124_172450.mp3")
 
-    if os.path.exists(audio_file):
-        result = TimestampedTranscriptionGenerator.run(audio_file, GEMINI_KEY)
-        print(result)
-    else:
-        print(f"File {audio_file} does not exist")
-
-    # Delete the local file
-    os.remove(audio_file)
+    try:
+        if os.path.exists(audio_file):
+            result = TimestampedTranscriptionGenerator.run(audio_file, GEMINI_KEY)
+            print(result)
+        else:
+            print(f"File {audio_file} does not exist")
+    finally:
+        # Delete the local file
+        os.remove(audio_file)

@@ -8,6 +8,7 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from openai import OpenAI
 from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
+from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
 from stage_1_preprocess import Stage1PreprocessDetectionExecutor, Stage1PreprocessTranscriptionExecutor
 from supabase_utils import SupabaseClient
 from constants import (
@@ -114,6 +115,13 @@ def __transcribe_audio_file_with_open_ai_whisper_1(audio_file):
 
 
 @task(log_prints=True)
+def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_file):
+    gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
+    timestamped_transcription = TimestampedTranscriptionGenerator.run(audio_file, gemini_key)
+    return { "timestamped_transcription": timestamped_transcription }
+
+
+@task(log_prints=True)
 def initial_disinformation_detection_with_gemini_1_5_pro_002(initial_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1PreprocessDetectionExecutor.run(gemini_key, initial_transcription, metadata)
@@ -144,7 +152,7 @@ def insert_stage_1_llm_response(
     audio_file_id,
     initial_transcription,
     initial_detection_result,
-    openai_response,
+    timestamped_transcription,
     detection_result,
     status,
 ):
@@ -152,14 +160,14 @@ def insert_stage_1_llm_response(
         audio_file_id=audio_file_id,
         initial_transcription=initial_transcription,
         initial_detection_result=initial_detection_result,
-        openai_response=openai_response,
+        timestamped_transcription=timestamped_transcription,
         detection_result=detection_result,
         status=status,
     )
 
 
 @task(log_prints=True)
-def process_audio_file(supabase_client, audio_file, local_file):
+def process_audio_file(supabase_client, audio_file, local_file, use_openai):
     try:
         # Transcribe the audio file with Google Gemini 1.5 Flash 002
         flash_response = transcribe_audio_file_with_gemini_1_5_flash_002(local_file)
@@ -191,17 +199,21 @@ def process_audio_file(supabase_client, audio_file, local_file):
                 audio_file_id=audio_file["id"],
                 initial_transcription=initial_transcription,
                 initial_detection_result=initial_detection_result,
-                openai_response=None,
+                timestamped_transcription=None,
                 detection_result=None,
                 status="Processed",
             )
         else:
-            # Transcribe the audio file with OpenAI Whisper 1
-            openai_response = transcribe_audio_file_with_open_ai_whisper_1(local_file)
+            if use_openai:
+                print("Transcribing the audio file with OpenAI Whisper 1")
+                timestamped_transcription = transcribe_audio_file_with_open_ai_whisper_1(local_file)
+            else:
+                print("Transcribing the audio file with custom timestamped-transcription-generator")
+                timestamped_transcription = transcribe_audio_file_with_custom_timestamped_transcription_generator(local_file)
 
-            print("Processing the timestamped transcription (from Whisper) with Gemini 1.5 Pro 002")
+            print("Processing the timestamped transcription with Gemini 1.5 Pro 002")
             detection_result = disinformation_detection_with_gemini_1_5_pro_002(
-                timestamped_transcription=openai_response["timestamped_transcription"],
+                timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                 metadata=metadata,
             )
             print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
@@ -215,7 +227,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
                     audio_file_id=audio_file["id"],
                     initial_transcription=initial_transcription,
                     initial_detection_result=initial_detection_result,
-                    openai_response=openai_response,
+                    timestamped_transcription=timestamped_transcription,
                     detection_result=detection_result,
                     status="Processed",
                 )
@@ -226,7 +238,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
                     audio_file_id=audio_file["id"],
                     initial_transcription=initial_transcription,
                     initial_detection_result=initial_detection_result,
-                    openai_response=openai_response,
+                    timestamped_transcription=timestamped_transcription,
                     detection_result=detection_result,
                     status="New",
                 )
@@ -240,7 +252,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
 
 
 @flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
-def initial_disinformation_detection(audio_file_id, limit):
+def initial_disinformation_detection(audio_file_id, use_openai, limit):
     # Setup S3 Client
     s3_client = boto3.client(
         "s3",
@@ -265,7 +277,7 @@ def initial_disinformation_detection(audio_file_id, limit):
             local_file = download_audio_file_from_s3(s3_client, audio_file["file_path"])
 
             # Process the audio file
-            process_audio_file(supabase_client, audio_file, local_file)
+            process_audio_file(supabase_client, audio_file, local_file, use_openai)
             processed_audio_files += 1
             print(f"Processed {processed_audio_files}/{limit} audio files")
 

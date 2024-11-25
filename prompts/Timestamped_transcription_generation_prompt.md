@@ -19,4 +19,10 @@ Here is the JSON schema for the output:
 }
 ```
 
+Additional Notes:
+
+-   Thoroughly review each segment’s transcription for completeness and accuracy before finalizing it.
+-   Check for grammatical errors and misheard words to ensure that the transcriptions accurately reflect the audio content.
+-   If certain parts of the audio are unclear or inaudible, indicate this in the transcription using placeholders such as [inaudible], [unclear], [noise], [music], etc.
+
 Please proceed to transcribe the provided audio segments.

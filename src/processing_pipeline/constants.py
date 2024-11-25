@@ -43,6 +43,9 @@ def get_output_schema_for_stage_3():
 def get_timestamped_transcription_generation_prompt():
     return open("prompts/Timestamped_transcription_generation_prompt.md", "r").read()
 
+def get_timestamped_transcription_generation_output_schema():
+    return json.load(open("prompts/Timestamped_transcription_generation_output_schema.json", "r"))
+
 
 if __name__ == "__main__":
     # Print the transcription prompt for stage 1 Preprocess
@@ -86,5 +89,9 @@ if __name__ == "__main__":
     # print(json.dumps(output_schema_for_stage_3, indent=2))
 
     # Print timestamped transcription generation prompt
-    timestamped_transcription_generation_prompt = get_timestamped_transcription_generation_prompt()
-    print(timestamped_transcription_generation_prompt)
+    # timestamped_transcription_generation_prompt = get_timestamped_transcription_generation_prompt()
+    # print(timestamped_transcription_generation_prompt)
+
+    # Print timestamped transcription generation output schema
+    timestamped_transcription_generation_output_schema = get_timestamped_transcription_generation_output_schema()
+    print(json.dumps(timestamped_transcription_generation_output_schema, indent=2))
