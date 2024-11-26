@@ -15,7 +15,7 @@ class TimestampedTranscriptionGenerator:
     @classmethod
     def run(cls, audio_file, gemini_key, segment_length):
         # Split the file into 2 equal parts
-        first_part, second_part = cls.split_file_into_two_parts(audio_file)
+        first_part, second_part = cls.split_file_into_two_parts(audio_file, segment_length)
 
         # Handle the first part
         first_part_segments = cls.split_file_into_segments(first_part, segment_length * 1000, audio_file)
@@ -108,7 +108,17 @@ class TimestampedTranscriptionGenerator:
         return segments
 
     @classmethod
-    def split_file_into_two_parts(cls, file):
+    def split_file_into_two_parts(cls, file, segment_length):
         audio = AudioSegment.from_mp3(file)
         half_length = len(audio) // 2
-        return audio[:half_length], audio[half_length:]
+
+        # Convert half_length from milliseconds to seconds
+        half_length_seconds = half_length / 1000
+
+        # Round down to nearest multiple of segment_length seconds
+        rounded_seconds = (half_length_seconds // segment_length) * segment_length
+
+        # Convert back to milliseconds
+        split_point = int(rounded_seconds * 1000)
+
+        return audio[:split_point], audio[split_point:]

@@ -29,8 +29,8 @@ supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabas
 
 if __name__ == "__main__":
     # Download the audio file from R2
-    audio_file = "radio_080377_20241124_172450.mp3"
-    s3_client.download_file(R2_BUCKET_NAME, "radio_080377/radio_080377_20241124_172450.mp3", "radio_080377_20241124_172450.mp3")
+    audio_file = "radio_1853b3_20241107_223226.mp3"
+    s3_client.download_file(R2_BUCKET_NAME, "radio_1853b3/radio_1853b3_20241107_223226.mp3", "radio_1853b3_20241107_223226.mp3")
 
     try:
         if os.path.exists(audio_file):
