@@ -391,5 +391,6 @@ class Stage1Executor:
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             },
+            request_options={"timeout": 1000}
         )
         return result.text
