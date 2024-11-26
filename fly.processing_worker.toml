@@ -17,9 +17,9 @@ primary_region = 'sea'
 
 [[vm]]
   processes = ["initial_disinformation_detection"]
-  memory = '2gb'
+  memory = '4gb'
   cpu_kind = 'shared'
-  cpus = 4
+  cpus = 8
 
 [[vm]]
   processes = ["audio_clipping", "in_depth_analysis"]
