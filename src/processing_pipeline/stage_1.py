@@ -343,7 +343,7 @@ def rerun_main_detection_phase(stage_1_llm_response_ids):
             else:
                 openai_response = stage_1_llm_response["timestamped_transcription"]
 
-                print("Processing the timestamped transcription (from Whisper) with Gemini 1.5 Pro 002")
+                print("Processing the timestamped transcription with Gemini 1.5 Pro 002")
                 detection_result = disinformation_detection_with_gemini_1_5_pro_002(
                     timestamped_transcription=openai_response["timestamped_transcription"],
                     metadata=metadata,
