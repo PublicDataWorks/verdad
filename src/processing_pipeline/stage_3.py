@@ -71,7 +71,7 @@ def update_snippet_in_supabase(
     context,
     political_leaning,
     status,
-    error_message
+    error_message,
 ):
     supabase_client.update_snippet(
         id=snippet_id,
@@ -88,7 +88,7 @@ def update_snippet_in_supabase(
         context=context,
         political_leaning=political_leaning,
         status=status,
-        error_message=error_message
+        error_message=error_message,
     )
 
 
@@ -172,7 +172,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
             context=pro_response["context"],
             political_leaning=pro_response["political_leaning"],
             status="Processed",
-            error_message=None
+            error_message=None,
         )
 
         # Create new labels based on the response and assign them to the snippet
@@ -242,30 +242,6 @@ def in_depth_analysis(snippet_ids, repeat):
             time.sleep(sleep_time)
 
 
-@task(log_prints=True, retries=3)
-def undo_stage_3_for_a_snippet(supabase_client, snippet_id):
-    supabase_client.reset_snippet(snippet_id)
-
-
-@flow(name="Stage 3: Undo In-Depth Analysis", log_prints=True, task_runner=ConcurrentTaskRunner)
-def undo_stage_3(snippet_ids):
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
-    success_ids = []
-    failure_ids = []
-
-    for id in snippet_ids:
-        try:
-            print(f"Reverting stage 3 for snippet: {id}")
-            undo_stage_3_for_a_snippet(supabase_client, id)
-            success_ids.append(id)
-        except Exception as e:
-            print(f"Failed to revert stage 3 for snippet: {id}. Error: {e}")
-            failure_ids.append(id)
-
-    print(f"Successfully reverted stage 3 for {len(success_ids)}/{len(snippet_ids)} snippets")
-    print("Here are the snippet ids that failed to revert:\n" + "\n".join(f" - {id}" for id in failure_ids))
-
-
 class Stage3Executor:
 
     SYSTEM_INSTRUCTION = get_system_instruction_for_stage_3()
@@ -307,7 +283,7 @@ class Stage3Executor:
                     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
                     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
                 },
-                request_options={"timeout": 1000}
+                request_options={"timeout": 1000},
             )
             return result.text
         finally:

@@ -47,10 +47,11 @@ if __name__ == "__main__":
             )
             serve(deployment, limit=100)
         case "undo_in_depth_analysis":
-            deployment = undo_stage_3.to_deployment(
-                name="Stage 3: Undo In-Depth Analysis",
-                parameters=dict(snippet_ids=[]),
-            )
-            serve(deployment)
+            # deployment = undo_stage_3.to_deployment(
+            #     name="Stage 3: Undo In-Depth Analysis",
+            #     parameters=dict(snippet_ids=[]),
+            # )
+            # serve(deployment)
+            pass
         case _:
             raise ValueError(f"Invalid process group: {process_group}")
