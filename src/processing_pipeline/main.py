@@ -2,9 +2,9 @@ import os
 from dotenv import load_dotenv
 from prefect import serve
 import sentry_sdk
-from stage_1 import initial_disinformation_detection, rerun_main_detection_phase
+from stage_1 import initial_disinformation_detection, rerun_main_detection_phase, undo_disinformation_detection
 from stage_2 import audio_clipping, undo_audio_clipping
-from stage_3 import in_depth_analysis, undo_stage_3
+from stage_3 import in_depth_analysis
 load_dotenv()
 
 # Setup Sentry
@@ -24,6 +24,12 @@ if __name__ == "__main__":
             deployment = rerun_main_detection_phase.to_deployment(
                 name="Stage 1: Rerun Main Detection Phase",
                 parameters=dict(stage_1_llm_response_ids=[]),
+            )
+            serve(deployment)
+        case "undo_disinformation_detection":
+            deployment = undo_disinformation_detection.to_deployment(
+                name="Stage 1: Undo Disinformation Detection",
+                parameters=dict(audio_file_ids=[]),
             )
             serve(deployment)
         case "audio_clipping":
@@ -46,12 +52,5 @@ if __name__ == "__main__":
                 parameters=dict(snippet_ids=[], repeat=True),
             )
             serve(deployment, limit=100)
-        case "undo_in_depth_analysis":
-            # deployment = undo_stage_3.to_deployment(
-            #     name="Stage 3: Undo In-Depth Analysis",
-            #     parameters=dict(snippet_ids=[]),
-            # )
-            # serve(deployment)
-            pass
         case _:
             raise ValueError(f"Invalid process group: {process_group}")

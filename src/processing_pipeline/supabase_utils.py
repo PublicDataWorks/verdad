@@ -298,3 +298,11 @@ class SupabaseClient:
                 .execute()
             )
             return response.data[0]
+
+    def reset_audio_file_status(self, ids):
+        response = self.client.table("audio_files").update({"status": "New", "error_message": None}).in_("id", ids).execute()
+        return response.data
+
+    def delete_stage_1_llm_responses(self, audio_file_ids):
+        response = self.client.table("stage_1_llm_responses").delete().in_("audio_file", audio_file_ids).execute()
+        return response.data
