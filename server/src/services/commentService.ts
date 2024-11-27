@@ -12,7 +12,6 @@ const liveblocks = new Liveblocks({
 });
 
 export async function handleCommentCreated(data: {
-  projectId: string;
   roomId: string;
   threadId: string;
   commentId: string;
@@ -32,10 +31,9 @@ export async function handleCommentCreated(data: {
   const commentContent = await stringifyCommentBody(comment.body);
 
   const { error } = await supabase.from("comments").insert({
-    comment_id: data.commentId,
+    id: data.commentId,
     thread_id: data.threadId,
     room_id: data.roomId,
-    project_id: data.projectId,
     created_by: data.createdBy,
     body: comment.body,
   });
@@ -45,7 +43,6 @@ export async function handleCommentCreated(data: {
 }
 
 export async function handleCommentEdited(data: {
-  projectId: string;
   roomId: string;
   threadId: string;
   commentId: string;
@@ -85,7 +82,6 @@ export async function handleCommentDeleted(data: {
 }
 
 export async function handleReactionAdded(data: {
-  projectId: string;
   roomId: string;
   threadId: string;
   commentId: string;
@@ -97,7 +93,6 @@ export async function handleReactionAdded(data: {
     comment_id: data.commentId,
     thread_id: data.threadId,
     room_id: data.roomId,
-    project_id: data.projectId,
     emoji: data.emoji,
     user_id: data.addedBy,
     added_at: data.addedAt,
@@ -107,7 +102,6 @@ export async function handleReactionAdded(data: {
 }
 
 export async function handleReactionRemoved(data: {
-  projectId: string;
   roomId: string;
   threadId: string;
   commentId: string;
