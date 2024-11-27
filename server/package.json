@@ -18,6 +18,7 @@
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "express": "^4.21.0",
+        "p-limit": "^6.1.0",
         "resend": "^4.0.1-alpha.0"
     },
     "devDependencies": {

@@ -67,7 +67,6 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                 const editedContent = await stringifyCommentBody(comment.body);
                 
                 await handleCommentEdited({
-                    projectId: event.data.projectId,
                     roomId: event.data.roomId,
                     threadId: event.data.threadId,
                     commentId: event.data.commentId,
