@@ -65,7 +65,7 @@ def __download_audio_file_from_s3(s3_client, file_path):
 
 
 @task(log_prints=True)
-def transcribe_audio_file_with_gemini_1_5_flash_002(audio_file):
+def transcribe_audio_file_with_gemini_1_5_flash(audio_file):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1PreprocessTranscriptionExecutor.run(audio_file, gemini_key)
     return json.loads(response)
@@ -73,6 +73,7 @@ def transcribe_audio_file_with_gemini_1_5_flash_002(audio_file):
 
 @task(log_prints=True)
 def transcribe_audio_file_with_open_ai_whisper_1(audio_file):
+    print(f"Transcribing the audio file {audio_file} with OpenAI Whisper 1")
     return __transcribe_audio_file_with_open_ai_whisper_1(audio_file)
 
 
@@ -116,20 +117,21 @@ def __transcribe_audio_file_with_open_ai_whisper_1(audio_file):
 
 @task(log_prints=True)
 def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_file):
+    print(f"Transcribing the audio file {audio_file} with the custom timestamped-transcription-generator")
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     timestamped_transcription = TimestampedTranscriptionGenerator.run(audio_file, gemini_key, 10)
     return { "timestamped_transcription": timestamped_transcription }
 
 
 @task(log_prints=True)
-def initial_disinformation_detection_with_gemini_1_5_pro_002(initial_transcription, metadata):
+def initial_disinformation_detection_with_gemini_1_5_pro(initial_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1PreprocessDetectionExecutor.run(gemini_key, initial_transcription, metadata)
     return json.loads(response)
 
 
 @task(log_prints=True)
-def disinformation_detection_with_gemini_1_5_pro_002(timestamped_transcription, metadata):
+def disinformation_detection_with_gemini_1_5_pro(timestamped_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1Executor.run(
         gemini_key=gemini_key,
@@ -169,8 +171,8 @@ def insert_stage_1_llm_response(
 @task(log_prints=True)
 def process_audio_file(supabase_client, audio_file, local_file, use_openai):
     try:
-        # Transcribe the audio file with Google Gemini 1.5 Flash 002
-        flash_response = transcribe_audio_file_with_gemini_1_5_flash_002(local_file)
+        # Transcribe the audio file with Google Gemini 1.5 Flash
+        flash_response = transcribe_audio_file_with_gemini_1_5_flash(local_file)
         initial_transcription = flash_response["transcription"]
 
         # Get metadata of the transcription
@@ -183,8 +185,8 @@ def process_audio_file(supabase_client, audio_file, local_file, use_openai):
             "time_zone": "UTC",
         }
 
-        # Detect disinformation from the initial transcription using Gemini 1.5 Pro 002
-        initial_detection_result = initial_disinformation_detection_with_gemini_1_5_pro_002(
+        # Detect disinformation from the initial transcription using Gemini 1.5 Pro
+        initial_detection_result = initial_disinformation_detection_with_gemini_1_5_pro(
             initial_transcription, metadata
         )
         print(f"Initial detection result:\n{json.dumps(initial_detection_result, indent=2)}\n")
@@ -205,14 +207,12 @@ def process_audio_file(supabase_client, audio_file, local_file, use_openai):
             )
         else:
             if use_openai:
-                print("Transcribing the audio file with OpenAI Whisper 1")
                 timestamped_transcription = transcribe_audio_file_with_open_ai_whisper_1(local_file)
             else:
-                print("Transcribing the audio file with custom timestamped-transcription-generator")
                 timestamped_transcription = transcribe_audio_file_with_custom_timestamped_transcription_generator(local_file)
 
-            print("Processing the timestamped transcription with Gemini 1.5 Pro 002")
-            detection_result = disinformation_detection_with_gemini_1_5_pro_002(
+            print("Processing the timestamped transcription with Gemini 1.5 Pro")
+            detection_result = disinformation_detection_with_gemini_1_5_pro(
                 timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                 metadata=metadata,
             )
@@ -343,8 +343,8 @@ def rerun_main_detection_phase(stage_1_llm_response_ids):
             else:
                 openai_response = stage_1_llm_response["timestamped_transcription"]
 
-                print("Processing the timestamped transcription with Gemini 1.5 Pro 002")
-                detection_result = disinformation_detection_with_gemini_1_5_pro_002(
+                print("Processing the timestamped transcription with Gemini 1.5 Pro")
+                detection_result = disinformation_detection_with_gemini_1_5_pro(
                     timestamped_transcription=openai_response["timestamped_transcription"],
                     metadata=metadata,
                 )
@@ -370,7 +370,7 @@ class Stage1Executor:
 
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro-002",
+            model_name="gemini-1.5-pro",
             system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 

@@ -145,13 +145,13 @@ def create_new_label_and_assign_to_snippet(supabase_client, snippet_id, label):
 @task(log_prints=True)
 def process_snippet(supabase_client, snippet, local_file, gemini_key):
     try:
-        print(f"Processing snippet: {local_file} with Gemini Pro 1.5-002")
+        print(f"Processing snippet: {local_file} with Gemini Pro 1.5")
 
         metadata = get_metadata(snippet)
         print(f"Metadata:\n{json.dumps(metadata, indent=2)}")
 
         pro_response = Stage3Executor.run(
-            gemini_key=gemini_key, model_name="gemini-1.5-pro-002", audio_file=local_file, metadata=metadata
+            gemini_key=gemini_key, model_name="gemini-1.5-pro", audio_file=local_file, metadata=metadata
         )
 
         pro_response = json.loads(pro_response)

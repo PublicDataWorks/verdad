@@ -72,7 +72,7 @@ def request_batch_prediction():
 
     request_body = {
         "displayName": "batch_prediction",
-        "model": "publishers/google/models/gemini-1.5-flash-002",
+        "model": "publishers/google/models/gemini-1.5-flash",
         "inputConfig": {"instancesFormat": "bigquery", "bigquerySource": {"inputUri": input_uri}},
         "outputConfig": {"predictionsFormat": "bigquery", "bigqueryDestination": {"outputUri": output_uri}},
     }
@@ -100,7 +100,7 @@ def request_online_prediction():
         "Authorization": f"Bearer {get_access_token()}",
         "Content-Type": "application/json; charset=utf-8",
     }
-    url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_number}/locations/us-central1/publishers/google/models/gemini-1.5-flash-002:streamGenerateContent"
+    url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_number}/locations/us-central1/publishers/google/models/gemini-1.5-flash:streamGenerateContent"
     response = requests.post(url, headers=headers, json=request_body)
     print(json.dumps(response.json(), indent=2))
 

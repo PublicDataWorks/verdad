@@ -25,7 +25,7 @@ class Stage1PreprocessTranscriptionExecutor:
             raise ValueError("Google Gemini API key was not set!")
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash-002")
+        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
         # Upload the audio file and wait for it to finish processing
         audio_file = genai.upload_file(path=audio_file, mime_type="audio/mp3")
@@ -66,7 +66,7 @@ class Stage1PreprocessDetectionExecutor:
 
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro-002",
+            model_name="gemini-1.5-pro",
             system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 

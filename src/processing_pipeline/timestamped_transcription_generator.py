@@ -14,34 +14,40 @@ class TimestampedTranscriptionGenerator:
 
     @classmethod
     def run(cls, audio_file, gemini_key, segment_length):
-        print("Splitting the file into 2 equal parts")
+        print("Splitting the file into 2 equal parts...")
         first_part, second_part = cls.split_file_into_two_parts(audio_file, segment_length)
 
-        print("Splitting the first part into segments")
-        first_part_segments = cls.split_file_into_segments(first_part, segment_length * 1000, audio_file)
         try:
-            print("Transcribing the first part")
-            first =  cls.transcribe_segments(first_part_segments, gemini_key)
-        finally:
-            print("Removing the first part segments")
-            for s in first_part_segments:
-                os.remove(s)
+            print("Splitting the first part into segments...")
+            first_part_segments = cls.split_file_into_segments(first_part, segment_length * 1000)
+            try:
+                print("Transcribing the first part...")
+                first =  cls.transcribe_segments(first_part_segments, gemini_key)
+            finally:
+                print("Removing the first part segments...")
+                for s in first_part_segments:
+                    os.remove(s)
 
-        print("Splitting the second part into segments")
-        second_part_segments = cls.split_file_into_segments(second_part, segment_length * 1000, audio_file)
-        try:
-            print("Transcribing the second part")
-            second =  cls.transcribe_segments(second_part_segments, gemini_key)
+            print("Splitting the second part into segments...")
+            second_part_segments = cls.split_file_into_segments(second_part, segment_length * 1000)
+            try:
+                print("Transcribing the second part...")
+                second =  cls.transcribe_segments(second_part_segments, gemini_key)
+            finally:
+                print("Removing the second part segments...")
+                for s in second_part_segments:
+                    os.remove(s)
         finally:
-            print("Removing the second part segments")
-            for s in second_part_segments:
-                os.remove(s)
+            print("Removing the two audio parts...")
+            os.remove(first_part)
+            os.remove(second_part)
 
-        print("Combining the segments from both parts")
+        print("Combining segments from both parts...")
         segments = first + second
-        print("Extracting the transcriptions from the segments")
+        print("Extracting the transcriptions from the segments...")
         segment_transcriptions = [segment["transcription"] for segment in segments]
-        print("Formatting the transcriptions into a timestamped transcription")
+
+        print("Formatting the transcriptions into a timestamped transcription...")
         return cls.build_timestamped_transcription(segment_transcriptions, segment_length)
 
     @classmethod
@@ -54,7 +60,7 @@ class TimestampedTranscriptionGenerator:
 
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro-002",
+            model_name="gemini-1.5-pro",
             system_instruction=cls.SYSTEM_INSTRUCTION
         )
 
@@ -99,34 +105,44 @@ class TimestampedTranscriptionGenerator:
         return result
 
     @classmethod
-    def split_file_into_segments(cls, audio, segment_length, filename):
+    def split_file_into_segments(cls, audio_file, segment_length_ms):
+        audio = AudioSegment.from_mp3(audio_file)
         segments = []
 
-        for i in range(0, len(audio), segment_length):
+        for i in range(0, len(audio), segment_length_ms):
             # Slice the audio segment
-            subclip = audio[i:i + segment_length]
+            subclip = audio[i:i + segment_length_ms]
 
             # Export the subclip
-            output_file = f"{filename}_segment_{(i // segment_length) + 1}.mp3"
+            output_file = f"{audio_file}_segment_{(i // segment_length_ms) + 1}.mp3"
             subclip.export(output_file, format="mp3")
 
             segments.append(output_file)
+            del subclip
 
+        del audio
         return segments
 
     @classmethod
     def split_file_into_two_parts(cls, file, segment_length):
         audio = AudioSegment.from_mp3(file)
         half_length = len(audio) // 2
+        segment_length_ms = segment_length * 1000
 
-        # Convert half_length from milliseconds to seconds
-        half_length_seconds = half_length / 1000
-
-        # Round down to nearest multiple of segment_length seconds
-        rounded_seconds = (half_length_seconds // segment_length) * segment_length
-
-        # Convert back to milliseconds
-        split_point = int(rounded_seconds * 1000)
-
+        # Round down the half_length to the nearest multiple of segment_length_ms
+        split_point = int((half_length // segment_length_ms) * segment_length_ms)
         print(f"Split point is at {split_point} milliseconds")
-        return audio[:split_point], audio[split_point:]
+
+        first_part = audio[:split_point]
+        second_part = audio[split_point:]
+
+        # Export the parts
+        first_part.export(f"{file}_part_1.mp3", format="mp3")
+        second_part.export(f"{file}_part_2.mp3", format="mp3")
+
+        # Release the memory
+        del audio
+        del first_part
+        del second_part
+
+        return f"{file}_part_1.mp3", f"{file}_part_2.mp3"
