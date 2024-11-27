@@ -14,28 +14,34 @@ class TimestampedTranscriptionGenerator:
 
     @classmethod
     def run(cls, audio_file, gemini_key, segment_length):
-        # Split the file into 2 equal parts
+        print("Splitting the file into 2 equal parts")
         first_part, second_part = cls.split_file_into_two_parts(audio_file, segment_length)
 
-        # Handle the first part
+        print("Splitting the first part into segments")
         first_part_segments = cls.split_file_into_segments(first_part, segment_length * 1000, audio_file)
         try:
+            print("Transcribing the first part")
             first =  cls.transcribe_segments(first_part_segments, gemini_key)
         finally:
+            print("Removing the first part segments")
             for s in first_part_segments:
                 os.remove(s)
 
-        # Handle the second part
+        print("Splitting the second part into segments")
         second_part_segments = cls.split_file_into_segments(second_part, segment_length * 1000, audio_file)
         try:
+            print("Transcribing the second part")
             second =  cls.transcribe_segments(second_part_segments, gemini_key)
         finally:
+            print("Removing the second part segments")
             for s in second_part_segments:
                 os.remove(s)
 
-        # Combine the two parts
+        print("Combining the segments from both parts")
         segments = first + second
+        print("Extracting the transcriptions from the segments")
         segment_transcriptions = [segment["transcription"] for segment in segments]
+        print("Formatting the transcriptions into a timestamped transcription")
         return cls.build_timestamped_transcription(segment_transcriptions, segment_length)
 
     @classmethod
@@ -122,4 +128,5 @@ class TimestampedTranscriptionGenerator:
         # Convert back to milliseconds
         split_point = int(rounded_seconds * 1000)
 
+        print(f"Split point is at {split_point} milliseconds")
         return audio[:split_point], audio[split_point:]
