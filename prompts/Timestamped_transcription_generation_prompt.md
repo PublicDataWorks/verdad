@@ -25,4 +25,9 @@ Additional Notes:
 -   Check for grammatical errors and misheard words to ensure that the transcriptions accurately reflect the audio content.
 -   If certain parts of the audio are unclear or inaudible, indicate this in the transcription using placeholders such as [inaudible], [unclear], [noise], [music], etc.
 
-Please proceed to transcribe the provided audio segments.
+Important Notes:
+
+-   Transcribe each segment independently, without considering the content of other segments.
+-   Ensure that the segment_number for each transcription in the JSON output matches the corresponding audio segment you are transcribing. Double-check that the segment numbers are accurate and sequential.
+
+Now proceed to transcribe the provided audio segments.

@@ -6,9 +6,9 @@
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["segment", "transcription"],
+                "required": ["segment_number", "transcription"],
                 "properties": {
-                    "segment": {
+                    "segment_number": {
                         "type": "integer",
                         "description": "The audio segment number"
                     },
