@@ -43,7 +43,7 @@ def fetch_audio_file_by_id(supabase_client, audio_file_id):
 def fetch_stage_1_llm_response_by_id(supabase_client, stage_1_llm_response_id):
     response = supabase_client.get_stage_1_llm_response_by_id(
         id=stage_1_llm_response_id,
-        select="*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week)",
+        select="*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week, file_path)",
     )
     if response:
         return response
@@ -305,56 +305,13 @@ def update_stage_1_llm_response_detection_result(supabase_client, id, detection_
 
 
 @task(log_prints=True, retries=3)
+def update_stage_1_llm_response_timestamped_transcription(supabase_client, id, timestamped_transcription):
+    supabase_client.update_stage_1_llm_response_timestamped_transcription(id, timestamped_transcription)
+
+
+@task(log_prints=True, retries=3)
 def reset_status_of_stage_1_llm_response(supabase_client, stage_1_llm_response_id):
     supabase_client.reset_stage_1_llm_response_status(stage_1_llm_response_id)
-
-
-@flow(name="Stage 1: Rerun Main Detection Phase", log_prints=True, task_runner=ConcurrentTaskRunner)
-def rerun_main_detection_phase(stage_1_llm_response_ids):
-    if not stage_1_llm_response_ids:
-        print("No stage 1 llm response ids were provided!")
-        return
-
-    # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
-
-    for id in stage_1_llm_response_ids:
-        stage_1_llm_response = fetch_stage_1_llm_response_by_id(supabase_client, id)
-
-        if stage_1_llm_response:
-            print(f"Found stage 1 llm response {id}")
-
-            # Get metadata of the transcription
-            audio_file = stage_1_llm_response["audio_file"]
-            metadata = {
-                "radio_station_name": audio_file["radio_station_name"],
-                "radio_station_code": audio_file["radio_station_code"],
-                "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-                "recorded_at": audio_file["recorded_at"],
-                "recording_day_of_week": audio_file["recording_day_of_week"],
-                "time_zone": "UTC",
-            }
-
-            initial_detection_result = stage_1_llm_response["initial_detection_result"] or {}
-            flag_snippets = initial_detection_result.get("flagged_snippets", [])
-
-            if len(flag_snippets) == 0:
-                print("No flagged snippets found during the initial detection phase.")
-            else:
-                openai_response = stage_1_llm_response["timestamped_transcription"]
-
-                print("Processing the timestamped transcription with Gemini 1.5 Pro")
-                detection_result = disinformation_detection_with_gemini_1_5_pro(
-                    timestamped_transcription=openai_response["timestamped_transcription"],
-                    metadata=metadata,
-                )
-                print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
-                update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
-
-                # Reset the stage-1 LLM response status to New, error_message to None
-                reset_status_of_stage_1_llm_response(supabase_client, id)
-
-            print(f"Processing completed for stage 1 llm response {id}")
 
 
 @task(log_prints=True, retries=3)
@@ -383,6 +340,69 @@ def undo_disinformation_detection(audio_file_ids):
 
     # Delete the stage 1 llm responses that are associated with the audio files
     delete_stage_1_llm_responses(supabase_client, audio_file_ids)
+
+
+@flow(name="Stage 1: Regenerate Timestamped Transcript", log_prints=True, task_runner=ConcurrentTaskRunner)
+def regenerate_timestamped_transcript(stage_1_llm_response_ids):
+    if not stage_1_llm_response_ids:
+        print("No stage 1 llm response ids were provided!")
+        return
+
+    # Setup Supabase client
+    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+
+    # Setup S3 Client
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=os.getenv("R2_ENDPOINT_URL"),
+        aws_access_key_id=os.getenv("R2_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
+    )
+
+    for id in stage_1_llm_response_ids:
+        stage_1_llm_response = fetch_stage_1_llm_response_by_id(supabase_client, id)
+
+        if stage_1_llm_response:
+            print(f"Found stage 1 llm response {id}")
+
+            # Get metadata of the transcription
+            audio_file = stage_1_llm_response["audio_file"]
+            local_file = download_audio_file_from_s3(s3_client, audio_file["file_path"])
+            metadata = {
+                "radio_station_name": audio_file["radio_station_name"],
+                "radio_station_code": audio_file["radio_station_code"],
+                "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
+                "recorded_at": audio_file["recorded_at"],
+                "recording_day_of_week": audio_file["recording_day_of_week"],
+                "time_zone": "UTC",
+            }
+
+            initial_detection_result = stage_1_llm_response["initial_detection_result"] or {}
+            flagged_snippets = initial_detection_result.get("flagged_snippets", [])
+
+            if len(flagged_snippets) == 0:
+                print("No flagged snippets found during the initial detection phase.")
+            else:
+                print("Transcribing the audio file with the custom timestamped-transcript generator")
+                timestamped_transcription = transcribe_audio_file_with_custom_timestamped_transcription_generator(
+                    local_file
+                )
+                update_stage_1_llm_response_timestamped_transcription(supabase_client, id, timestamped_transcription)
+
+                print("Processing the timestamped transcription with Gemini 1.5 Pro")
+                detection_result = disinformation_detection_with_gemini_1_5_pro(
+                    timestamped_transcription=timestamped_transcription["timestamped_transcription"],
+                    metadata=metadata,
+                )
+                print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
+                update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
+
+                # Reset the stage-1 LLM response status to New, error_message to None
+                reset_status_of_stage_1_llm_response(supabase_client, id)
+
+            print(f"Processing completed for stage 1 llm response {id}")
+            print(f"Delete the downloaded audio file: {local_file}")
+            os.remove(local_file)
 
 
 class Stage1Executor:

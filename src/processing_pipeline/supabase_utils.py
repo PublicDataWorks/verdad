@@ -253,6 +253,15 @@ class SupabaseClient:
         )
         return response.data
 
+    def update_stage_1_llm_response_timestamped_transcription(self, id, timestamped_transcription):
+        response = (
+            self.client.table("stage_1_llm_responses")
+            .update({"timestamped_transcription": timestamped_transcription})
+            .eq("id", id)
+            .execute()
+        )
+        return response.data
+
     def reset_stage_1_llm_response_status(self, id):
         response = (
             self.client.table("stage_1_llm_responses")
