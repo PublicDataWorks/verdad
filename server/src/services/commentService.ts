@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 import { Liveblocks, stringifyCommentBody } from "@liveblocks/node";
-import { liveblocksHeaders } from "./liveblockService";
 
 const supabase = createClient(
   process.env.SUPABASE_URL as string,
@@ -174,24 +173,11 @@ export async function fetchAllRooms(): Promise<any[]> {
 
 export async function fetchAllThreads(roomId: string): Promise<any[]> {
   let allThreads: any[] = [];
-  let cursor: string | undefined = undefined;
-  let hasNextPage = true;
 
-  while (hasNextPage) {
-    const response: any = await liveblocks.getThreads({
-      roomId,
-      limit: 100,
-      startingAfter: cursor,
-    });
-
-    allThreads = allThreads.concat(response.data);
-
-    if (response.nextCursor) {
-      cursor = response.nextCursor;
-    } else {
-      hasNextPage = false;
-    }
-  }
+  const response: any = await liveblocks.getThreads({
+    roomId,
+  });
+  allThreads = allThreads.concat(response.data);
 
   return allThreads;
 }
