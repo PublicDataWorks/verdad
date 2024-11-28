@@ -63,7 +63,7 @@ export async function handleCommentEdited(data: {
       edited_at: data.editedAt,
       body: comment.body,
     })
-    .eq("comment_id", data.commentId);
+    .eq("id", data.commentId);
 
   if (error) throw error;
 }
@@ -75,7 +75,7 @@ export async function handleCommentDeleted(data: {
   const { error } = await supabase
     .from("comments")
     .update({ deleted_at: data.deletedAt })
-    .eq("comment_id", data.commentId);
+    .eq("id", data.commentId);
 
   if (error) throw error;
 }
@@ -127,7 +127,7 @@ export async function getCommentContent(commentId: string) {
   const { data, error } = await supabase
     .from("comments")
     .select("body")
-    .eq("comment_id", commentId)
+    .eq("id", commentId)
     .single();
 
   if (error) {
