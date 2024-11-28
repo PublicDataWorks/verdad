@@ -187,6 +187,7 @@ def process_llm_response(
         if not os.path.isfile(local_file):
             raise FileNotFoundError(f"Audio file {local_file} does not exist.")
 
+        print("Loading the audio file into the memory")
         audio = AudioSegment.from_mp3(local_file)
         flagged_snippets = (llm_response["detection_result"] or {}).get("flagged_snippets", [])
         ensure_correct_timestamps(audio, flagged_snippets)

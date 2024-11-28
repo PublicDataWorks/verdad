@@ -21,8 +21,14 @@ primary_region = 'sea'
   cpu_kind = 'shared'
   cpus = 8
 
+  [[vm]]
+  processes = ["audio_clipping"]
+  memory = '2gb'
+  cpu_kind = 'shared'
+  cpus = 4
+
 [[vm]]
-  processes = ["regenerate_timestamped_transcript", "audio_clipping", "in_depth_analysis"]
+  processes = ["regenerate_timestamped_transcript", "in_depth_analysis"]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 4
