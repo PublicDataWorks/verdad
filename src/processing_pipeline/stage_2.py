@@ -62,7 +62,7 @@ def convert_formatted_time_str_to_seconds(time_str):
 
 @task(log_prints=True)
 def extract_snippet_clip(
-    input_file,
+    audio,
     output_file,
     formatted_start_time,
     formatted_end_time,
@@ -70,12 +70,6 @@ def extract_snippet_clip(
     context_after_seconds,
     formatted_recorded_at,
 ):
-    if not os.path.isfile(input_file):
-        raise FileNotFoundError(f"Audio file {input_file} does not exist.")
-
-    # Load the audio file
-    audio = AudioSegment.from_mp3(input_file)
-
     # Convert formatted time strings (HH:MM:SS) to seconds
     start_time = convert_formatted_time_str_to_seconds(formatted_start_time)
     end_time = convert_formatted_time_str_to_seconds(formatted_end_time)
@@ -159,8 +153,7 @@ def insert_new_snippet_to_snippets_table_in_supabase(
 
 
 @task(log_prints=True)
-def ensure_correct_timestamps(input_file, snippets):
-    audio = AudioSegment.from_mp3(input_file)
+def ensure_correct_timestamps(audio, snippets):
     duration = int(len(audio) / 1000)  # Duration in seconds
 
     for snippet in snippets:
@@ -191,8 +184,12 @@ def process_llm_response(
 ):
     try:
         print(f"Processing llm response {llm_response['id']}")
+        if not os.path.isfile(local_file):
+            raise FileNotFoundError(f"Audio file {local_file} does not exist.")
+
+        audio = AudioSegment.from_mp3(local_file)
         flagged_snippets = (llm_response["detection_result"] or {}).get("flagged_snippets", [])
-        ensure_correct_timestamps(local_file, flagged_snippets)
+        ensure_correct_timestamps(audio, flagged_snippets)
 
         for snippet in flagged_snippets:
             uuid = snippet["uuid"]
@@ -203,7 +200,7 @@ def process_llm_response(
             folder_name = f"{parts[0]}_{parts[1]}"
 
             snippet_duration, snippet_start_time, snippet_end_time, snippet_recorded_at = extract_snippet_clip(
-                local_file,
+                audio,
                 output_file,
                 start_time,
                 end_time,
@@ -226,6 +223,9 @@ def process_llm_response(
                 start_time=snippet_start_time,
                 end_time=snippet_end_time,
             )
+
+        # Release the memory of the audio file
+        del audio
 
         print(f"Processing completed for llm response {llm_response['id']}")
         supabase_client.set_stage_1_llm_response_status(llm_response["id"], "Processed")

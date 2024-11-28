@@ -4,7 +4,11 @@ import pathlib
 from pydub import AudioSegment
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from constants import get_timestamped_transcription_generation_output_schema, get_timestamped_transcription_generation_prompt
+from constants import (
+    get_timestamped_transcription_generation_output_schema,
+    get_timestamped_transcription_generation_prompt,
+)
+
 
 class TimestampedTranscriptionGenerator:
 
@@ -22,7 +26,7 @@ class TimestampedTranscriptionGenerator:
             first_part_segments = cls.split_file_into_segments(first_part, segment_length * 1000)
             try:
                 print("Transcribing the first part...")
-                first =  cls.transcribe_segments(first_part_segments, gemini_key)
+                first = cls.transcribe_segments(first_part_segments, gemini_key)
             finally:
                 print("Removing the first part segments...")
                 for s in first_part_segments:
@@ -32,7 +36,7 @@ class TimestampedTranscriptionGenerator:
             second_part_segments = cls.split_file_into_segments(second_part, segment_length * 1000)
             try:
                 print("Transcribing the second part...")
-                second =  cls.transcribe_segments(second_part_segments, gemini_key)
+                second = cls.transcribe_segments(second_part_segments, gemini_key)
             finally:
                 print("Removing the second part segments...")
                 for s in second_part_segments:
@@ -59,28 +63,22 @@ class TimestampedTranscriptionGenerator:
             raise ValueError("No audio segments provided!")
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro",
-            system_instruction=cls.SYSTEM_INSTRUCTION
-        )
+        model = genai.GenerativeModel(model_name="gemini-1.5-pro", system_instruction=cls.SYSTEM_INSTRUCTION)
 
         segments = []
         for index, segment_path in enumerate(audio_segments):
-            segments.extend([
-                f"\n<Segment {index + 1}>\n",
-                {
-                    "mime_type": "audio/mp3",
-                    "data": pathlib.Path(segment_path).read_bytes()
-                },
-                f"\n</Segment {index + 1}>\n\n",
-            ])
+            segments.extend(
+                [
+                    f"\n<Segment {index + 1}>\n",
+                    {"mime_type": "audio/mp3", "data": pathlib.Path(segment_path).read_bytes()},
+                    f"\n</Segment {index + 1}>\n\n",
+                ]
+            )
 
         result = model.generate_content(
             [cls.USER_PROMPT] + segments,
             generation_config=genai.GenerationConfig(
-                response_mime_type="application/json",
-                response_schema=cls.OUTPUT_SCHEMA,
-                max_output_tokens=8192
+                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
             ),
             safety_settings={
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
@@ -88,7 +86,7 @@ class TimestampedTranscriptionGenerator:
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             },
-            request_options={"timeout": 1000}
+            request_options={"timeout": 1000},
         )
         return json.loads(result.text)["segments"]
 
@@ -111,14 +109,13 @@ class TimestampedTranscriptionGenerator:
 
         for i in range(0, len(audio), segment_length_ms):
             # Slice the audio segment
-            subclip = audio[i:i + segment_length_ms]
+            subclip = audio[i : i + segment_length_ms]
 
             # Export the subclip
             output_file = f"{audio_file}_segment_{(i // segment_length_ms) + 1}.mp3"
             subclip.export(output_file, format="mp3")
 
             segments.append(output_file)
-            del subclip
 
         del audio
         return segments
