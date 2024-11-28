@@ -12,6 +12,7 @@ primary_region = 'sea'
   audio_clipping = ''
   in_depth_analysis = ''
   regenerate_timestamped_transcript = ''
+  redo_main_detection = ''
   undo_disinformation_detection = ''
   undo_audio_clipping = ''
 
@@ -34,7 +35,7 @@ primary_region = 'sea'
   cpus = 4
 
 [[vm]]
-  processes = ["undo_audio_clipping", "undo_disinformation_detection"]
+  processes = ["redo_main_detection", "undo_audio_clipping", "undo_disinformation_detection"]
   memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1

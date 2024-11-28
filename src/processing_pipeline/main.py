@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from prefect import serve
 import sentry_sdk
-from stage_1 import initial_disinformation_detection, regenerate_timestamped_transcript, undo_disinformation_detection
+from stage_1 import initial_disinformation_detection, redo_main_detection, regenerate_timestamped_transcript, undo_disinformation_detection
 from stage_2 import audio_clipping, undo_audio_clipping
 from stage_3 import in_depth_analysis
 load_dotenv()
@@ -23,6 +23,12 @@ if __name__ == "__main__":
         case "regenerate_timestamped_transcript":
             deployment = regenerate_timestamped_transcript.to_deployment(
                 name="Stage 1: Regenerate Timestamped Transcript",
+                parameters=dict(stage_1_llm_response_ids=[]),
+            )
+            serve(deployment)
+        case "redo_main_detection":
+            deployment = redo_main_detection.to_deployment(
+                name="Stage 1: Redo Main Detection Phase",
                 parameters=dict(stage_1_llm_response_ids=[]),
             )
             serve(deployment)
