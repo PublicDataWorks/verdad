@@ -42,6 +42,8 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
 
         switch (event.type) {
             case "commentCreated":
+                console.log('📝 Processing comment creation:', event.data);
+
                 const commentContent = await handleCommentCreated(event.data);
                 await sendSlackNotification({
                     type: 'comment',
@@ -51,6 +53,8 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                 });
                 break;
             case "commentEdited":
+                console.log('✏️ Processing comment edit:', event.data);
+
                 const oldComment = await getCommentContent(event.data.commentId);
                 
                 const comment = await liveblocks.getComment({
@@ -82,6 +86,8 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                 });
                 break;
             case "commentDeleted":
+                console.log('🗑️ Processing comment deletion:', event.data);
+
                 await handleCommentDeleted(event.data);
                 await sendSlackNotification({
                     type: 'delete',
@@ -91,11 +97,15 @@ export const handleWebhook = async (req: Request, res: Response, next: NextFunct
                 });
                 break;
             case "commentReactionAdded":
+                console.log('👍 Processing reaction addition:', event.data);
                 await handleReactionAdded(event.data);
                 break;
+
             case "commentReactionRemoved":
+                console.log('👎 Processing reaction removal:', event.data);
                 await handleReactionRemoved(event.data);
                 break;
+
             case "notification":
                 const { inboxNotificationId, userId, roomId } = event.data;
 
