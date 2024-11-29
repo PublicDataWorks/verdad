@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import sentry_sdk
 
 from processing_pipeline.supabase_utils import SupabaseClient
-from utils import fetch_radio_stations
+from utils import fetch_radio_stations, optional_flow, optional_task
 
 load_dotenv()
 
@@ -33,7 +33,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase_client = SupabaseClient(SUPABASE_URL, SUPABASE_KEY)
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels):
     try:
         url = station["url"]
@@ -58,7 +58,7 @@ def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels
         return None
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def upload_to_r2_and_clean_up(url, file_path):
     object_name = os.path.basename(file_path)
     url_hash = get_url_hash(url)
@@ -69,7 +69,7 @@ def upload_to_r2_and_clean_up(url, file_path):
     return destination_path
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def get_metadata(file, station, start_time):
     file_size = os.path.getsize(file)
     return {
@@ -83,7 +83,7 @@ def get_metadata(file, station, start_time):
     }
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def insert_recorded_audio_file_into_database(metadata, uploaded_path):
     supabase_client.insert_audio_file(
         radio_station_name=metadata["radio_station_name"],
@@ -96,12 +96,12 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
     )
 
 
-@flow(name="Audio Recording: Max Recorder", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Audio Recording: Max Recorder", log_prints=True, task_runner=ConcurrentTaskRunner)
 def audio_processing_pipeline_max_recorder(url, duration_seconds, audio_birate, audio_channels, repeat):
     __start_recording_flow(url, duration_seconds, audio_birate, audio_channels, repeat)
 
 
-@flow(name="Audio Recording: Lite Recorder", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Audio Recording: Lite Recorder", log_prints=True, task_runner=ConcurrentTaskRunner)
 def audio_processing_pipeline_lite_recorder(url, duration_seconds, audio_birate, audio_channels, repeat):
     __start_recording_flow(url, duration_seconds, audio_birate, audio_channels, repeat)
 

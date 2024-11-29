@@ -26,18 +26,21 @@ GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
 # Setup Supabase client
 supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
-
-if __name__ == "__main__":
+def main():
     # Download the audio file from R2
     audio_file = "radio_1853b3_20241127_102353.mp3"
-    s3_client.download_file(R2_BUCKET_NAME, "radio_1853b3/radio_1853b3_20241127_102353.mp3", "radio_1853b3_20241127_102353.mp3")
-
     try:
+        s3_client.download_file(R2_BUCKET_NAME, "radio_1853b3/radio_1853b3_20241127_102353.mp3", "radio_1853b3_20241127_102353.mp3")
+
         if os.path.exists(audio_file):
             result = TimestampedTranscriptionGenerator.run(audio_file, GEMINI_KEY, 10)
             print(result)
         else:
             print(f"File {audio_file} does not exist")
     finally:
-        # Delete the local file
-        os.remove(audio_file)
+        # Delete the local file if it exists
+        if os.path.exists(audio_file):
+            os.remove(audio_file)
+
+if __name__ == "__main__":
+    main()

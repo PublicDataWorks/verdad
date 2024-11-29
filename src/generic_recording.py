@@ -19,6 +19,7 @@ from radiostations.krgt import Krgt
 from radiostations.wado import Wado
 from radiostations.waqi import Waqi
 from radiostations.wkaq import Wkaq
+from utils import optional_flow, optional_task
 
 load_dotenv()
 
@@ -40,7 +41,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase_client = SupabaseClient(SUPABASE_URL, SUPABASE_KEY)
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels):
     try:
         if station.is_audio_playing():
@@ -66,7 +67,7 @@ def capture_audio_stream(station, duration_seconds, audio_birate, audio_channels
         return None
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def get_metadata(file, station, start_time):
     file_size = os.path.getsize(file)
     return {
@@ -80,7 +81,7 @@ def get_metadata(file, station, start_time):
     }
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def upload_to_r2_and_clean_up(url, file_path):
     object_name = os.path.basename(file_path)
 
@@ -96,7 +97,7 @@ def upload_to_r2_and_clean_up(url, file_path):
         return None
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def insert_recorded_audio_file_into_database(metadata, uploaded_path):
     supabase_client.insert_audio_file(
         radio_station_name=metadata["radio_station_name"],
@@ -109,7 +110,7 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
     )
 
 
-@flow(name="Generic Audio Recording", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Generic Audio Recording", log_prints=True, task_runner=ConcurrentTaskRunner)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
     RADIO_STATIONS = {
         Khot.code: Khot,
@@ -119,8 +120,13 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
         Wado.code: Wado,
         Waqi.code: Waqi,
     }
-    # Reconstruct the radion station object based on the station code
-    station = RADIO_STATIONS.get(station_code, lambda: None)()
+
+    # Reconstruct the radio station object based on the station code
+    station_class = RADIO_STATIONS.get(station_code)
+    if not station_class:
+        raise ValueError(f"Invalid station code: {station_code}")
+
+    station = station_class()
 
     station.setup_virtual_audio()
     station.start_browser()

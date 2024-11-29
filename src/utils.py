@@ -38,6 +38,45 @@ def optional_task(*args, **kwargs):
         # @optional_task(param=value)
         return wrapper
 
+def optional_flow(*args, **kwargs):
+    """Decorator that applies Prefect flow decorator unless explicitly disabled
+
+    Supports both @optional_flow and @optional_flow(param=value) syntax
+
+    The decorator is enabled by default and can be disabled by setting
+    ENABLE_PREFECT_DECORATOR=false in environment variables.
+
+    Args:
+        *args: Variable positional arguments to pass to Prefect flow
+        **kwargs: Variable keyword arguments to pass to Prefect flow
+
+    Returns:
+        Function: Original function if Prefect decorator is disabled,
+                 or Prefect flow-decorated function if enabled
+    """
+    enable_prefect = os.getenv('ENABLE_PREFECT_DECORATOR', 'true').lower() == 'true'
+
+    if not enable_prefect:
+        # If Prefect decorator is disabled, return the function as-is
+        if len(args) == 1 and callable(args[0]) and not kwargs:
+            return args[0]
+        def wrapper(func):
+            return func
+        return wrapper
+    else:
+        # If Prefect decorator is enabled (default), apply Prefect flow decorator
+        from prefect import flow
+
+        def wrapper(func):
+            return flow(*args, **kwargs)(func)
+
+        # Handle both @optional_flow and @optional_flow() syntax
+        if len(args) == 1 and callable(args[0]) and not kwargs:
+            # @optional_flow
+            return flow()(args[0])
+        # @optional_flow(param=value)
+        return wrapper
+
 def fetch_radio_stations():
     return [
         {

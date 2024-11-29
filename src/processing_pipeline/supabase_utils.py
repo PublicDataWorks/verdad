@@ -160,6 +160,9 @@ class SupabaseClient:
         return response.data
 
     def ensure_time_format(self, time_str):
+        if not time_str:
+            raise ValueError("Invalid time format. Expected format: 'HH:MM:SS'")
+
         # Ensure time_str is in the format "HH:MM:SS", in other words, it should have 2 colons
         match time_str.count(":"):
             case 0:
