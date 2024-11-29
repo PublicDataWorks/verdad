@@ -6,15 +6,15 @@
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["segment_number", "transcription"],
+                "required": ["segment_number", "transcript"],
                 "properties": {
                     "segment_number": {
                         "type": "integer",
                         "description": "The audio segment number"
                     },
-                    "transcription": {
+                    "transcript": {
                         "type": "string",
-                        "description": "The transcription of the audio segment"
+                        "description": "The transcript of the audio segment"
                     }
                 }
             }

@@ -12,7 +12,7 @@ from constants import (
 
 class TimestampedTranscriptionGenerator:
 
-    SYSTEM_INSTRUCTION = "You are a specialized language model designed to transcribe audio content in multiple languages, with a particular focus on Spanish and Arabic as spoken by immigrant communities in the USA."
+    SYSTEM_INSTRUCTION = "You are a specialized language model designed to transcribe audio content in multiple languages."
     USER_PROMPT = get_timestamped_transcription_generation_prompt()
     OUTPUT_SCHEMA = get_timestamped_transcription_generation_output_schema()
 
@@ -49,10 +49,10 @@ class TimestampedTranscriptionGenerator:
         print("Combining segments from both parts...")
         segments = first + second
         print("Extracting the transcriptions from the segments...")
-        segment_transcriptions = [segment["transcription"] for segment in segments]
+        segment_transcripts = [segment["transcript"] for segment in segments]
 
         print("Formatting the transcriptions into a timestamped transcription...")
-        return cls.build_timestamped_transcription(segment_transcriptions, segment_length)
+        return cls.build_timestamped_transcription(segment_transcripts, segment_length)
 
     @classmethod
     def transcribe_segments(cls, audio_segments, gemini_key):
