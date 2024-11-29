@@ -8,7 +8,7 @@ from processing_pipeline.timestamped_transcription_generator import TimestampedT
 class TestTimestampedTranscriptionGenerator:
     @pytest.fixture
     def sample_audio_file(self, test_data_dir):
-        # Creates a 30-second silent audio file for testing.
+        """Creates a 30-second silent audio file for testing."""
         audio = AudioSegment.silent(duration=30000)  # 30 seconds
         audio_path = os.path.join(test_data_dir, "test_audio.mp3")
         audio.export(audio_path, format="mp3")
@@ -18,7 +18,7 @@ class TestTimestampedTranscriptionGenerator:
 
     @pytest.fixture
     def mock_gemini_response(self):
-        # Returns a mock response from the Gemini API.
+        """Returns a mock response from the Gemini API."""
         return {
             "segments": [
                 {"segment_number": 1, "transcript": "This is the first segment."},

@@ -9,7 +9,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
-
+from utils import optional_task
 
 class RadioStation:
 
@@ -27,7 +27,7 @@ class RadioStation:
         self.play_button_selector = play_button_selector
         self.video_element_selector = video_element_selector
 
-    @task(log_prints=True)
+    @optional_task(log_prints=True)
     def setup_virtual_audio(self):
         self.ensure_pulseaudio_running()
 
@@ -74,7 +74,7 @@ class RadioStation:
             raise e
 
     # TODO: Before retry, must kill browser process
-    @task(log_prints=True, retries=10)
+    @optional_task(log_prints=True, retries=10)
     def start_browser(self):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
@@ -108,7 +108,7 @@ class RadioStation:
         print("PulseAudio sink inputs:")
         self.execute_command(["pactl", "list", "sink-inputs"])
 
-    @task(log_prints=True)
+    @optional_task(log_prints=True)
     def start_playing(self):
         WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, self.play_button_selector))
@@ -176,7 +176,7 @@ class RadioStation:
             print(f"Error checking audio status: {e}")
             return False
 
-    @task(log_prints=True)
+    @optional_task(log_prints=True)
     def stop(self, unload_modules=True):
         if self.driver:
             self.driver.quit()
