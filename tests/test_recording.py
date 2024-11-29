@@ -1,7 +1,6 @@
 import os
 import time
-from datetime import datetime
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 import pytest
 from recording import (
     capture_audio_stream,
@@ -14,7 +13,6 @@ from recording import (
     get_url_hash,
     reconstruct_radio_station
 )
-from utils import fetch_radio_stations
 
 class TestRecording:
     @pytest.fixture
@@ -40,7 +38,7 @@ class TestRecording:
 
     @pytest.fixture
     def mock_supabase_client(self):
-        with patch('recording.supabase_client') as mock:
+        with patch('recording.SupabaseClient') as mock:
             yield mock
 
     def test_capture_audio_stream_success(self, mock_ffmpeg, sample_station):

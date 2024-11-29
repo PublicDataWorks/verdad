@@ -41,7 +41,7 @@ class TestGenericRecording:
     @pytest.fixture
     def mock_supabase_client(self):
         """Setup mock Supabase client"""
-        with patch('generic_recording.supabase_client') as mock:
+        with patch('generic_recording.SupabaseClient') as mock:
             yield mock
 
     @pytest.fixture
@@ -216,9 +216,14 @@ class TestGenericRecording:
             mock_upload.assert_called_once()
             mock_insert.assert_called_once()
 
-    def test_generic_audio_processing_pipeline_high_memory(self, mock_radio_station):
+    def test_generic_audio_processing_pipeline_high_memory(self, mock_radio_station, mock_supabase_client):
         """Test pipeline with high memory usage"""
         station_code = "KHOT - 105.9 FM"
+
+        # Setup mock Supabase response
+        mock_response = Mock()
+        mock_response.data = [{"id": 1}]  # Simulate Supabase response structure
+        mock_supabase_client.insert_audio_file.return_value = {"id": 1}  # Set return value for insert_audio_file
 
         with patch('generic_recording.Khot', return_value=mock_radio_station) as mock_khot_class, \
             patch('generic_recording.Kisf'), \
@@ -271,6 +276,17 @@ class TestGenericRecording:
                 call(),  # Initial setup
                 call()   # After browser restart
             ])
+
+            # Verify Supabase interaction
+            mock_supabase_client.insert_audio_file.assert_called_once_with(
+                radio_station_name="Test Radio",
+                radio_station_code=station_code,
+                location_state="Test State",
+                recorded_at="2024-01-01T00:00:00",
+                recording_day_of_week="Monday",
+                file_path="radio_123456/test.mp3",
+                file_size=1000
+            )
 
     def test_generic_audio_processing_pipeline_playback_stopped(self, mock_radio_station):
         """Test pipeline when playback stops"""

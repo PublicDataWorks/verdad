@@ -5,7 +5,7 @@ import boto3
 
 from datetime import datetime
 from dotenv import load_dotenv
-from prefect import flow, serve, task
+from prefect import serve
 from prefect.task_runners import ConcurrentTaskRunner
 from ffmpeg import FFmpeg
 from botocore.exceptions import NoCredentialsError
