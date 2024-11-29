@@ -42,7 +42,7 @@ if __name__ == "__main__":
             deployment = audio_clipping.to_deployment(
                 name="Stage 2: Audio Clipping",
                 concurrency_limit=100,
-                parameters=dict(context_before_seconds=90, context_after_seconds=60, repeat=True),
+                parameters=dict(context_before_seconds=90, context_after_seconds=30, repeat=True),
             )
             serve(deployment, limit=100)
         case "undo_audio_clipping":
