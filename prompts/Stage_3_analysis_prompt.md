@@ -113,16 +113,128 @@ Perform the following steps:
 - **Context Accuracy:**
   - Ensure that the `main` part of the context matches with the transcription in the provided metadata.
 
-##### **H. Confidence Scores**
+##### **H. Confidence Scoring and Self-Review Process**
 
-- **Overall Confidence:**
-  - Assign a score from 0 to 100 indicating your confidence in the disinformation classification.
+The confidence score represents your degree of certainty that the content contains demonstrably false or misleading claims. This is NOT:
+- A measure of confidence in your analysis
+- A measure of how controversial or partisan the content is
+- A measure of whether you agree with the positions expressed
 
-- **Category Scores:**
-  - Provide individual confidence scores (0-100) for each disinformation category applied.
+**Initial Scoring Framework:**
+
+High Confidence Scores (80-100) require:
+- Specific factual claims that can be definitively proven false
+- Direct contradictions of well-documented facts
+- Demonstrably false statements or deliberate misrepresentation
+Example: "The COVID vaccine contains microchips for mind control"
+
+Medium Confidence Scores (40-79) require:
+- Misleading claims that omit crucial context
+- Deceptive presentation of real facts
+- Misrepresentation of causation vs correlation
+Example: "Immigrants are causing crime rates to spike" (when data shows no correlation)
+
+Low Confidence Scores (1-39) apply to:
+- Unsubstantiated claims without clear evidence
+- Exaggerated interpretations of real events
+- Misleading but not entirely false statements
+Example: "The government is hiding the truth about inflation"
+
+Zero Confidence Score (0) applies when:
+- Content makes no demonstrably false claims
+- Content expresses opinions without misrepresenting facts
+- Content may be partisan or controversial but is factually accurate
+Example: "We need stricter immigration policies"
+
+##### **I. Required Self-Review Process**
+
+After completing your initial analysis, perform this structured review:
+
+1. **Claim-by-Claim Analysis**
+   For each claim identified as disinformation:
+   - Quote the specific claim verbatim
+   - Identify what makes it false or misleading
+   - Cite specific evidence disproving the claim
+   - Assign and justify a sub-score
+
+2. **Validation Checklist**
+   Answer each question before proceeding:
+   - [ ] Have I quoted specific false claims?
+   - [ ] Can I prove these claims are false using reliable evidence?
+   - [ ] Am I scoring falsity rather than controversy?
+   - [ ] Would these scores be defensible to fact-checkers?
+   - [ ] Are my explanations consistent with my scores?
+
+3. **Score Adjustment Protocol**
+   If any validation fails:
+   - Reduce score to 0 if you cannot cite specific false claims
+   - Adjust scores to match available evidence
+   - Document reasoning for any score changes
+   - Ensure final scores reflect only demonstrably false content
+
+4. **Common Error Check**
+   Review for these frequent mistakes:
+   - Scoring opinions as if they were facts
+   - Confusing controversial content with false content
+   - Treating bias as equivalent to disinformation
+   - Scoring based on disagreement rather than falsity
 
 ##### **I. Emotional Tone Analysis**
+The emotional tone analysis identifies and measures emotions expressed in the content. Like our confidence scoring, this requires evidence-based assessment:
 
+**Analysis Framework:**
+
+1. **Emotion Identification:**
+   - List primary and secondary emotions detected
+   - Provide terms in both English and Spanish
+   - Must cite specific vocal cues, word choices, or patterns
+   - Example emotions: anger, fear, joy, sadness, surprise, disgust, contempt
+
+2. **Intensity Scoring (0-100):**
+   High Intensity (80-100):
+   - Explicit emotional language
+   - Strong vocal indicators
+   - Consistent throughout content
+   Example: Shouting, extreme language, intense emotional appeals
+
+   Medium Intensity (40-79):
+   - Clear but controlled emotion
+   - Mixed emotional signals
+   - Periodic emotional emphasis
+   Example: Serious concern, moderate anxiety, controlled anger
+
+   Low Intensity (1-39):
+   - Subtle emotional undertones
+   - Primarily neutral delivery
+   - Occasional emotional hints
+   Example: Mild frustration, slight worry, gentle enthusiasm
+
+   Zero Intensity (0):
+   - No detectible emotional content
+   - Purely factual delivery
+   - Neutral tone throughout
+
+3. **Evidence Requirements:**
+   For each emotion identified:
+   - Quote specific phrases demonstrating the emotion
+   - Note vocal characteristics (tone, pitch, speed)
+   - Identify patterns of emotional language
+   - Document changes in emotional intensity
+
+4. **Impact Analysis:**
+   Explain in both English and Spanish:
+   - How emotions affect the message's credibility
+   - Potential influence on audience reception
+   - Relationship to any disinformation claims
+   - Cultural context of emotional expressions
+
+5. **Self-Review Checklist:**
+   - [ ] Have I cited specific evidence for each emotion?
+   - [ ] Are intensity scores justified by concrete examples?
+   - [ ] Have I distinguished between speaker emotion and content tone?
+   - [ ] Is my analysis considering cultural emotional expression?
+   - [ ] Have I documented both verbal and vocal emotional indicators?
+  
 - **Identified Emotions:**
   - List any emotions expressed in the snippet (e.g., anger, fear, joy, sadness, surprise, disgust, contempt).
   - Provide the emotions in both English and Spanish.
@@ -136,6 +248,77 @@ Perform the following steps:
 ##### **J. Political Spectrum Analysis**
 
 Analyze the content's political orientation on a scale from -1.0 (extremely left-leaning) to +1.0 (extremely right-leaning), where 0.0 represents politically neutral content.
+
+**Analysis Framework:**
+
+1. **Observable Elements Required:**
+   - Explicit policy positions stated
+   - Specific arguments made
+   - Language and rhetoric used
+   - Sources or authorities cited
+   - Solutions proposed
+
+2. **Scoring Criteria:**
+
+   Strong Left (-0.7 to -1.0):
+   - Explicit advocacy for significant government intervention
+   - Strong emphasis on collective solutions
+   - Direct criticism of capitalist systems
+   Example: "We need complete government control of healthcare"
+
+   Moderate Left (-0.3 to -0.69):
+   - Support for regulated markets
+   - Emphasis on public services
+   - Progressive social positions
+   Example: "We should increase public education funding"
+
+   Centrist (-0.29 to +0.29):
+   - Mixed policy positions
+   - Balanced viewpoints
+   - Pragmatic solutions
+   Example: "Both market forces and regulations have their place"
+
+   Moderate Right (+0.3 to +0.69):
+   - Emphasis on free market solutions
+   - Limited government advocacy
+   - Traditional value references
+   Example: "Reducing regulations will boost business growth"
+
+   Strong Right (+0.7 to +1.0):
+   - Strong free market advocacy
+   - Significant government reduction proposals
+   - Emphasis on individual over collective solutions
+   Example: "Government should be completely out of healthcare"
+
+3. **Evidence Requirements:**
+   - Direct quotes supporting score
+   - Context analysis
+   - Pattern identification
+   - Mixed signal documentation
+
+4. **Self-Review Process:**
+   - [ ] Have I based scoring only on explicit content?
+   - [ ] Can I cite specific quotes for my rating?
+   - [ ] Have I avoided assumptions about speaker intent?
+   - [ ] Have I acknowledged mixed or ambiguous signals?
+   - [ ] Is my scoring consistent with provided evidence?
+
+5. **Documentation Format:**
+   "This content receives a score of [X] because it [cite specific elements]. This is evidenced by [quote or describe specific statements/arguments from the snippet]. Additional context includes [relevant patterns or mixed signals]."
+
+6. **Score Adjustment Protocol:**
+   - Reduce score magnitude if evidence is mixed
+   - Default to centrist (0.0) when signals conflict
+   - Document any score adjustments with reasoning
+   - Consider cultural and contextual factors
+
+Remember: Political orientation must be measured based solely on observable content elements. Avoid:
+- Inferring positions not explicitly stated
+- Assuming speaker intent or background
+- Categorizing based on adjacent topics
+- Scoring based on tone rather than content
+The goal is to detect and measure political orientation based on the actual content, not to categorize or label the speech. 
+Avoid inferring political leanings from adjacent topics or assumptions about the speaker.
 
 **Analysis Requirements:**
 
@@ -151,9 +334,6 @@ Analyze the content's political orientation on a scale from -1.0 (extremely left
    - Each claim in the explanation must cite specific elements from the snippet
    - Acknowledge when content contains mixed or ambiguous political signals
 
-3. Explanation Format: "This content receives a score of [X] because it [cite specific elements]. This is evidenced by [quote or describe specific statements/arguments from the snippet]."
-
-Remember: The goal is to detect and measure political orientation based on the actual content, not to categorize or label the speech. Avoid inferring political leanings from adjacent topics or assumptions about the speaker.
 
 #### **3. Assemble Structured Output**
 
@@ -336,59 +516,121 @@ Ensure your output strictly adheres to this schema.
                 }
             }
         },
-        "emotional_tone": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["emotion", "intensity", "explanation"],
-                "properties": {
-                    "emotion": {
-                        "type": "object",
-                        "required": ["spanish", "english"],
-                        "properties": {
-                            "spanish": { "type": "string" },
-                            "english": { "type": "string" }
+    "emotional_tone": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "required": ["emotion", "intensity", "evidence", "explanation"],
+            "properties": {
+                "emotion": {
+                    "type": "object",
+                    "required": ["spanish", "english"],
+                    "properties": {
+                        "spanish": { "type": "string" },
+                        "english": { "type": "string" }
+                    }
+                },
+                "intensity": {
+                    "type": "integer",
+                    "description": "Intensity of the emotion, ranging from 0 to 100."
+                },
+                "evidence": {
+                    "type": "object",
+                    "required": ["vocal_cues", "phrases", "patterns"],
+                    "properties": {
+                        "vocal_cues": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Specific vocal characteristics observed"
+                        },
+                        "phrases": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Direct quotes demonstrating the emotion"
+                        },
+                        "patterns": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Recurring emotional patterns or themes"
                         }
-                    },
-                    "intensity": {
-                        "type": "integer",
-                        "description": "Intensity of the emotion, ranging from 0 to 100."
-                    },
-                    "explanation": {
-                        "type": "object",
-                        "required": ["spanish", "english"],
-                        "properties": {
-                            "spanish": { "type": "string" },
-                            "english": { "type": "string" }
+                    }
+                },
+                "explanation": {
+                    "type": "object",
+                    "required": ["spanish", "english", "impact"],
+                    "properties": {
+                        "spanish": { "type": "string" },
+                        "english": { "type": "string" },
+                        "impact": {
+                            "type": "object",
+                            "required": ["credibility", "audience_reception", "cultural_context"],
+                            "properties": {
+                                "credibility": { "type": "string" },
+                                "audience_reception": { "type": "string" },
+                                "cultural_context": { "type": "string" }
+                            }
                         }
                     }
                 }
             }
-        },
-        "political_leaning": {
-            "type": "object",
-            "required": ["score", "explanation"],
-            "properties": {
-                "score": {
-                    "type": "number",
-                    "description": "Political leaning score, ranging from -1.0 to 1.0, where -1.0 is extremely left-leaning and 1.0 is extremely right-leaning."
-                },
-                "explanation": {
-                    "type": "object",
-                    "required": ["spanish", "english"],
-                    "properties": {
-                        "spanish": {
-                            "type": "string",
-                            "description": "Evidence-based explanation of the political leaning score in Spanish."
-                        },
-                        "english": {
-                            "type": "string",
-                            "description": "Evidence-based explanation of the political leaning score in English."
-                        }
+        }
+    },
+    "political_leaning": {
+        "type": "object",
+        "required": ["score", "evidence", "explanation"],
+        "properties": {
+            "score": {
+                "type": "number",
+                "description": "Political leaning score, ranging from -1.0 to 1.0."
+            },
+            "evidence": {
+                "type": "object",
+                "required": ["policy_positions", "arguments", "rhetoric", "sources", "solutions"],
+                "properties": {
+                    "policy_positions": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Explicit policy positions stated"
+                    },
+                    "arguments": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Specific arguments made"
+                    },
+                    "rhetoric": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Key phrases and rhetoric used"
+                    },
+                    "sources": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Sources or authorities cited"
+                    },
+                    "solutions": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Solutions proposed"
                     }
                 }
             },
-            "description": "Assessment of political orientation based on observable content elements."
+            "explanation": {
+                "type": "object",
+                "required": ["spanish", "english", "score_adjustments"],
+                "properties": {
+                    "spanish": { "type": "string" },
+                    "english": { "type": "string" },
+                    "score_adjustments": {
+                        "type": "object",
+                        "required": ["initial_score", "final_score", "reasoning"],
+                        "properties": {
+                            "initial_score": { "type": "number" },
+                            "final_score": { "type": "number" },
+                            "reasoning": { "type": "string" }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1249,8 +1491,18 @@ Please proceed to analyze the provided audio content following these guidelines:
 
 # Final Instructions
 
-Please proceed to listen to the audio file provided and analyze the content based on the detailed heuristics and guidelines provided. Your task is to fill out the JSON template with the relevant information based on your analysis of the audio content.
+Please proceed to analyze the provided audio content following these guidelines:
+
+1. Listen carefully to capture all spoken content.
+2. Apply the detailed heuristics for disinformation analysis.
+3. Base political orientation assessment solely on observable content elements.
+4. Document all findings with specific evidence from the content.
+5. Structure your output according to the provided JSON schema.
+6. Confidence scores must be based on demonstrably false claims, not controversy.
+7. Each non-zero score requires specific evidence.
+8. Complete the self-review process for every analysis.
+9. When in doubt, score conservatively (lower).
 
 # Important Note
 
-Please note that the provided audio file does not necessarily contain disinformation, because the Stage 1 model is not perfect. It is your job to analyze the content and determine if it does contain disinformation or not. In case you think the audio file does not contain disinformation, please give it a zero confidence score.
+Please note that the provided audio file does not necessarily contain disinformation. It is your job to analyze the content and determine if it does contain disinformation or not. If you assess that the audio file does not contain any potential misinformation or disinformation, please give it a zero confidence score.

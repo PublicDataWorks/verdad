@@ -143,11 +143,64 @@
         },
         "confidence_scores": {
             "type": "object",
-            "required": ["overall", "categories"],
+            "required": ["overall", "analysis", "categories"],
             "properties": {
                 "overall": {
                     "type": "integer",
                     "description": "Overall confidence score of the analysis, ranging from 0 to 100."
+                },
+                "analysis": {
+                    "type": "object",
+                    "required": ["claims", "validation_checklist", "score_adjustments"],
+                    "properties": {
+                        "claims": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["quote", "evidence", "score"],
+                                "properties": {
+                                    "quote": {
+                                        "type": "string",
+                                        "description": "Direct quote of the false or misleading claim"
+                                    },
+                                    "evidence": {
+                                        "type": "string",
+                                        "description": "Evidence demonstrating why the claim is false"
+                                    },
+                                    "score": {
+                                        "type": "integer",
+                                        "description": "Confidence score for this specific claim"
+                                    }
+                                }
+                            }
+                        },
+                        "validation_checklist": {
+                            "type": "object",
+                            "required": [
+                                "specific_claims_quoted",
+                                "evidence_provided",
+                                "scoring_falsity",
+                                "defensible_to_factcheckers",
+                                "consistent_explanations"
+                            ],
+                            "properties": {
+                                "specific_claims_quoted": { "type": "boolean" },
+                                "evidence_provided": { "type": "boolean" },
+                                "scoring_falsity": { "type": "boolean" },
+                                "defensible_to_factcheckers": { "type": "boolean" },
+                                "consistent_explanations": { "type": "boolean" }
+                            }
+                        },
+                        "score_adjustments": {
+                            "type": "object",
+                            "required": ["initial_score", "final_score", "adjustment_reason"],
+                            "properties": {
+                                "initial_score": { "type": "integer" },
+                                "final_score": { "type": "integer" },
+                                "adjustment_reason": { "type": "string" }
+                            }
+                        }
+                    }
                 },
                 "categories": {
                     "type": "array",
@@ -172,7 +225,7 @@
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["emotion", "intensity", "explanation"],
+                "required": ["emotion", "intensity", "evidence", "explanation"],
                 "properties": {
                     "emotion": {
                         "type": "object",
@@ -186,12 +239,42 @@
                         "type": "integer",
                         "description": "Intensity of the emotion, ranging from 0 to 100."
                     },
+                    "evidence": {
+                        "type": "object",
+                        "required": ["vocal_cues", "phrases", "patterns"],
+                        "properties": {
+                            "vocal_cues": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "Specific vocal characteristics observed"
+                            },
+                            "phrases": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "Direct quotes demonstrating the emotion"
+                            },
+                            "patterns": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "Recurring emotional patterns or themes"
+                            }
+                        }
+                    },
                     "explanation": {
                         "type": "object",
-                        "required": ["spanish", "english"],
+                        "required": ["spanish", "english", "impact"],
                         "properties": {
                             "spanish": { "type": "string" },
-                            "english": { "type": "string" }
+                            "english": { "type": "string" },
+                            "impact": {
+                                "type": "object",
+                                "required": ["credibility", "audience_reception", "cultural_context"],
+                                "properties": {
+                                    "credibility": { "type": "string" },
+                                    "audience_reception": { "type": "string" },
+                                    "cultural_context": { "type": "string" }
+                                }
+                            }
                         }
                     }
                 }
@@ -199,28 +282,61 @@
         },
         "political_leaning": {
             "type": "object",
-            "required": ["score", "explanation"],
+            "required": ["score", "evidence", "explanation"],
             "properties": {
                 "score": {
                     "type": "number",
-                    "description": "Political leaning score, ranging from -1.0 to 1.0, where -1.0 is extremely left-leaning and 1.0 is extremely right-leaning."
+                    "description": "Political leaning score, ranging from -1.0 to 1.0."
+                },
+                "evidence": {
+                    "type": "object",
+                    "required": ["policy_positions", "arguments", "rhetoric", "sources", "solutions"],
+                    "properties": {
+                        "policy_positions": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Explicit policy positions stated"
+                        },
+                        "arguments": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Specific arguments made"
+                        },
+                        "rhetoric": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Key phrases and rhetoric used"
+                        },
+                        "sources": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Sources or authorities cited"
+                        },
+                        "solutions": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Solutions proposed"
+                        }
+                    }
                 },
                 "explanation": {
                     "type": "object",
-                    "required": ["spanish", "english"],
+                    "required": ["spanish", "english", "score_adjustments"],
                     "properties": {
-                        "spanish": {
-                            "type": "string",
-                            "description": "Evidence-based explanation of the political leaning score in Spanish."
-                        },
-                        "english": {
-                            "type": "string",
-                            "description": "Evidence-based explanation of the political leaning score in English."
+                        "spanish": { "type": "string" },
+                        "english": { "type": "string" },
+                        "score_adjustments": {
+                            "type": "object",
+                            "required": ["initial_score", "final_score", "reasoning"],
+                            "properties": {
+                                "initial_score": { "type": "number" },
+                                "final_score": { "type": "number" },
+                                "reasoning": { "type": "string" }
+                            }
                         }
                     }
                 }
-            },
-            "description": "Assessment of political orientation based on observable content elements."
+            }
         }
     }
 }

@@ -692,3 +692,31 @@ This example illustrates how to structure the output for the flagged snippets. U
 - Ensure that the `start_time` and `end_time` fields are accurate and correspond to those in the timestamped transcription. This accuracy is crucial for the subsequent processing stages in the pipeline.
   - The `start_time` must always be less than or equal to the `end_time`.
   - Both `start_time` and `end_time` must be within the range of the timestamped transcription.
+
+---
+
+# Self-Review Process
+
+Before finalizing your output, complete this validation checklist:
+
+1. **False Claims Verification**
+   - For each flagged snippet:
+     * Have I identified specific, verifiably false claims?
+     * Can I articulate exactly why these claims are false?
+     * Would a reasonable person agree these claims are demonstrably false?
+   - If any answer is "no," reconsider flagging the snippet.
+
+2. **Context Review**
+   - Have I captured sufficient context before and after each snippet?
+   - Does the context change the interpretation of the flagged content?
+   - Have I accurately determined the snippet boundaries?
+
+3. **Final Verification**
+   Answer each with "yes" before proceeding:
+   - [ ] Each flagged snippet contains demonstrably false claims
+   - [ ] Timestamps are accurate and properly formatted
+   - [ ] Explanations clearly identify specific false claims
+   - [ ] I have distinguished between controversial content and actual disinformation
+   - [ ] My analysis would be defensible to fact-checkers
+
+If any verification fails, revise your analysis accordingly.
