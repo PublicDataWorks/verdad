@@ -74,7 +74,7 @@ class RadioStation:
             raise e
 
     # TODO: Before retry, must kill browser process
-    @optional_task(log_prints=True, retries=10)
+    @optional_task(log_prints=True, retries=20)
     def start_browser(self):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
