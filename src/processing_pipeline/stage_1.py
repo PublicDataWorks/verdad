@@ -8,17 +8,18 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from openai import OpenAI
 from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
-from .timestamped_transcription_generator import TimestampedTranscriptionGenerator
-from .stage_1_preprocess import Stage1PreprocessDetectionExecutor, Stage1PreprocessTranscriptionExecutor
-from .supabase_utils import SupabaseClient
-from .constants import (
+from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
+from processing_pipeline.stage_1_preprocess import Stage1PreprocessDetectionExecutor, Stage1PreprocessTranscriptionExecutor
+from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.constants import (
     get_system_instruction_for_stage_1,
     get_output_schema_for_stage_1,
     get_detection_prompt_for_stage_1,
 )
+from utils import optional_flow, optional_task
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def fetch_a_new_audio_file_from_supabase(supabase_client):
     response = supabase_client.get_a_new_audio_file_and_reserve_it()
     if response:
@@ -29,7 +30,7 @@ def fetch_a_new_audio_file_from_supabase(supabase_client):
         return None
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def fetch_audio_file_by_id(supabase_client, audio_file_id):
     response = supabase_client.get_audio_file_by_id(audio_file_id)
     if response:
@@ -39,7 +40,7 @@ def fetch_audio_file_by_id(supabase_client, audio_file_id):
         return None
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def fetch_stage_1_llm_response_by_id(supabase_client, stage_1_llm_response_id):
     response = supabase_client.get_stage_1_llm_response_by_id(
         id=stage_1_llm_response_id,
@@ -52,7 +53,7 @@ def fetch_stage_1_llm_response_by_id(supabase_client, stage_1_llm_response_id):
         return None
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def download_audio_file_from_s3(s3_client, file_path):
     return __download_audio_file_from_s3(s3_client, file_path)
 
@@ -64,14 +65,14 @@ def __download_audio_file_from_s3(s3_client, file_path):
     return file_name
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def transcribe_audio_file_with_gemini_1_5_flash(audio_file):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1PreprocessTranscriptionExecutor.run(audio_file, gemini_key)
     return json.loads(response)
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def transcribe_audio_file_with_open_ai_whisper_1(audio_file):
     print(f"Transcribing the audio file {audio_file} with OpenAI Whisper 1")
     return __transcribe_audio_file_with_open_ai_whisper_1(audio_file)
@@ -115,7 +116,7 @@ def __transcribe_audio_file_with_open_ai_whisper_1(audio_file):
     }
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_file):
     print(f"Transcribing the audio file {audio_file} with the custom timestamped-transcription-generator")
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
@@ -123,14 +124,14 @@ def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_
     return {"timestamped_transcription": timestamped_transcription}
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def initial_disinformation_detection_with_gemini_1_5_pro(initial_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1PreprocessDetectionExecutor.run(gemini_key, initial_transcription, metadata)
     return json.loads(response)
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def disinformation_detection_with_gemini_1_5_pro(timestamped_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1Executor.run(
@@ -148,7 +149,7 @@ def disinformation_detection_with_gemini_1_5_pro(timestamped_transcription, meta
     return json_response
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def insert_stage_1_llm_response(
     supabase_client,
     audio_file_id,
@@ -168,7 +169,7 @@ def insert_stage_1_llm_response(
     )
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def process_audio_file(supabase_client, audio_file, local_file, use_openai):
     try:
         # Transcribe the audio file with Google Gemini 1.5 Flash
@@ -251,7 +252,7 @@ def process_audio_file(supabase_client, audio_file, local_file, use_openai):
         supabase_client.set_audio_file_status(audio_file["id"], "Error", str(e))
 
 
-@flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
 def initial_disinformation_detection(audio_file_id, use_openai, limit):
     # Setup S3 Client
     s3_client = boto3.client(
@@ -299,34 +300,34 @@ def initial_disinformation_detection(audio_file_id, use_openai, limit):
         time.sleep(sleep_time)
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def update_stage_1_llm_response_detection_result(supabase_client, id, detection_result):
     supabase_client.update_stage_1_llm_response_detection_result(id, detection_result)
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def update_stage_1_llm_response_timestamped_transcription(supabase_client, id, timestamped_transcription):
     supabase_client.update_stage_1_llm_response_timestamped_transcription(id, timestamped_transcription)
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def reset_status_of_stage_1_llm_response(supabase_client, stage_1_llm_response_id):
     supabase_client.reset_stage_1_llm_response_status(stage_1_llm_response_id)
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def reset_status_of_audio_files(supabase_client, audio_file_ids):
     print(f"Reseting the status of the audio files: {audio_file_ids}")
     supabase_client.reset_audio_file_status(audio_file_ids)
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def delete_stage_1_llm_responses(supabase_client, audio_file_ids):
     print(f"Deleting the stage 1 llm responses that are associated with the audio files: {audio_file_ids}")
     supabase_client.delete_stage_1_llm_responses(audio_file_ids)
 
 
-@flow(name="Stage 1: Undo Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Stage 1: Undo Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
 def undo_disinformation_detection(audio_file_ids):
     if not audio_file_ids:
         print("No audio file ids were provided!")
@@ -342,7 +343,7 @@ def undo_disinformation_detection(audio_file_ids):
     delete_stage_1_llm_responses(supabase_client, audio_file_ids)
 
 
-@flow(name="Stage 1: Redo Main Detection Phase", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Stage 1: Redo Main Detection Phase", log_prints=True, task_runner=ConcurrentTaskRunner)
 def redo_main_detection(stage_1_llm_response_ids):
     if not stage_1_llm_response_ids:
         print("No stage 1 llm response ids were provided!")
@@ -390,7 +391,7 @@ def redo_main_detection(stage_1_llm_response_ids):
             print(f"Processing completed for stage 1 llm response {id}")
 
 
-@flow(name="Stage 1: Regenerate Timestamped Transcript", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Stage 1: Regenerate Timestamped Transcript", log_prints=True, task_runner=ConcurrentTaskRunner)
 def regenerate_timestamped_transcript(stage_1_llm_response_ids):
     if not stage_1_llm_response_ids:
         print("No stage 1 llm response ids were provided!")

@@ -1,10 +1,13 @@
 #!/bin/bash
 
+# Add the src directory to PYTHONPATH
+export PYTHONPATH="${PYTHONPATH}:/app/src"
+
 # Function to check if Prefect server is ready
 check_prefect_server() {
     # Try to connect to the Prefect API
     response=$(curl -s -o /dev/null -w "%{http_code}" https://prefect.fly.dev/api/health)
-    
+
     # Check if the response is 200 (OK)
     if [ "$response" -eq 200 ]; then
         return 0

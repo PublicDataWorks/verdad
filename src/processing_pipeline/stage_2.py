@@ -5,10 +5,11 @@ import boto3
 from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
 from pydub import AudioSegment
-from .supabase_utils import SupabaseClient
+from processing_pipeline.supabase_utils import SupabaseClient
+from utils import optional_flow, optional_task
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def fetch_a_new_stage_1_llm_response_from_supabase(supabase_client):
     response = supabase_client.get_a_new_stage_1_llm_response_and_reserve_it()
     if response:
@@ -19,7 +20,7 @@ def fetch_a_new_stage_1_llm_response_from_supabase(supabase_client):
         return None
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
     return __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path)
 
@@ -30,7 +31,7 @@ def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
     return file_name
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def upload_to_r2_and_clean_up(s3_client, r2_bucket_name, folder_name, file_path):
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f"File {file_path} does not exist.")
@@ -60,7 +61,7 @@ def convert_formatted_time_str_to_seconds(time_str):
     return int(round(total_seconds))
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def extract_snippet_clip(
     audio,
     output_file,
@@ -126,7 +127,7 @@ def extract_snippet_clip(
     )
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def insert_new_snippet_to_snippets_table_in_supabase(
     supabase_client,
     snippet_uuid,
@@ -152,7 +153,7 @@ def insert_new_snippet_to_snippets_table_in_supabase(
     )
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def ensure_correct_timestamps(audio, snippets):
     duration = int(len(audio) / 1000)  # Duration in seconds
 
@@ -172,7 +173,7 @@ def ensure_correct_timestamps(audio, snippets):
             raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def process_llm_response(
     supabase_client,
     llm_response,
@@ -236,7 +237,7 @@ def process_llm_response(
         supabase_client.set_stage_1_llm_response_status(llm_response["id"], "Error", str(e))
 
 
-@flow(name="Stage 2: Audio Clipping", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Stage 2: Audio Clipping", log_prints=True, task_runner=ConcurrentTaskRunner)
 def audio_clipping(context_before_seconds, context_after_seconds, repeat):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
@@ -285,7 +286,7 @@ def audio_clipping(context_before_seconds, context_after_seconds, repeat):
         time.sleep(sleep_time)
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def fetch_stage_1_llm_response_from_supabase(supabase_client, stage_1_llm_response_id):
     response = supabase_client.get_stage_1_llm_response_by_id(
         id=stage_1_llm_response_id,
@@ -298,7 +299,7 @@ def fetch_stage_1_llm_response_from_supabase(supabase_client, stage_1_llm_respon
         return None
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def fetch_snippets_from_supabase(supabase_client, snippet_ids):
     return supabase_client.get_snippets_by_ids(
         ids=snippet_ids,
@@ -306,22 +307,22 @@ def fetch_snippets_from_supabase(supabase_client, snippet_ids):
     )
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def delete_snippet_from_r2(s3_client, r2_bucket_name, file_path):
     s3_client.delete_object(Bucket=r2_bucket_name, Key=file_path)
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def delete_snippet_from_supabase(supabase_client, snippet_id):
     supabase_client.delete_snippet(snippet_id)
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def reset_status_of_stage_1_llm_response(supabase_client, stage_1_llm_response_id):
     supabase_client.reset_stage_1_llm_response_status(stage_1_llm_response_id)
 
 
-@flow(name="Stage 2: Undo Audio Clipping", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Stage 2: Undo Audio Clipping", log_prints=True, task_runner=ConcurrentTaskRunner)
 def undo_audio_clipping(stage_1_llm_response_ids):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")

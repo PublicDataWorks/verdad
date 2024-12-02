@@ -7,15 +7,16 @@ import boto3
 from prefect import task, flow
 from prefect.task_runners import ConcurrentTaskRunner
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from .supabase_utils import SupabaseClient
-from .constants import (
+from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.constants import (
     get_system_instruction_for_stage_3,
     get_output_schema_for_stage_3,
     get_user_prompt_for_stage_3,
 )
+from utils import optional_flow, optional_task
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id):
     response = supabase_client.get_snippet_by_id(
         id=snippet_id,
@@ -28,7 +29,7 @@ def fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id):
         return None
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def fetch_a_new_snippet_from_supabase(supabase_client):
     return __fetch_a_new_snippet_from_supabase(supabase_client)
 
@@ -43,7 +44,7 @@ def __fetch_a_new_snippet_from_supabase(supabase_client):
         return None
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
     return __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path)
 
@@ -54,7 +55,7 @@ def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
     return file_name
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def update_snippet_in_supabase(
     supabase_client,
     snippet_id,
@@ -92,7 +93,7 @@ def update_snippet_in_supabase(
     )
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def get_metadata(snippet):
     return __get_metadata(snippet)
 
@@ -130,7 +131,7 @@ def __get_metadata(snippet):
     return metadata
 
 
-@task(log_prints=True, retries=3)
+@optional_task(log_prints=True, retries=3)
 def create_new_label_and_assign_to_snippet(supabase_client, snippet_id, label):
     english_label_text = label["english"]
     spanish_label_text = label["spanish"]
@@ -142,7 +143,7 @@ def create_new_label_and_assign_to_snippet(supabase_client, snippet_id, label):
     supabase_client.assign_label_to_snippet(label_id=label["id"], snippet_id=snippet_id)
 
 
-@task(log_prints=True)
+@optional_task(log_prints=True)
 def process_snippet(supabase_client, snippet, local_file, gemini_key):
     try:
         print(f"Processing snippet: {local_file} with Gemini Pro 1.5")
@@ -186,7 +187,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
         supabase_client.set_snippet_status(snippet["id"], "Error", str(e))
 
 
-@flow(name="Stage 3: In-depth Analysis", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Stage 3: In-depth Analysis", log_prints=True, task_runner=ConcurrentTaskRunner)
 def in_depth_analysis(snippet_ids, repeat):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
