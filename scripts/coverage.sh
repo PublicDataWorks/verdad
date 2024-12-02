@@ -1,7 +1,11 @@
 #!/bin/bash
 
+# Remove previous coverage data
+rm -rf htmlcov/
+rm -f .coverage
+
 # Run pytest with coverage
-pytest --cov=src --cov-report=html tests/
+python -m pytest
 
 # Get the absolute path of the coverage report
 COVERAGE_PATH="$(pwd)/htmlcov/index.html"

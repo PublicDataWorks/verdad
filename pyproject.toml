@@ -1,5 +1,10 @@
+[tool.pytest.ini_options]
+addopts = "--cov=src --cov-report=html --cov-report=term-missing"
+testpaths = ["tests"]
+
 [tool.coverage.run]
 source = ["src"]
+branch = true
 omit = [
     "tests/*",
     "**/__init__.py",
@@ -16,3 +21,9 @@ exclude_lines = [
 ]
 show_missing = true
 fail_under = 80
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.xml]
+output = "coverage.xml"

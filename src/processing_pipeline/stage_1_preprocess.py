@@ -2,7 +2,7 @@ import json
 import time
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from constants import (
+from .constants import (
     get_transcription_prompt_for_stage_1_preprocess,
     get_system_instruction_for_stage_1_preprocess,
     get_output_schema_for_stage_1_preprocess,

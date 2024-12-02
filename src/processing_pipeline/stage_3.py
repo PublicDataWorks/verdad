@@ -6,9 +6,9 @@ import boto3
 
 from prefect import task, flow
 from prefect.task_runners import ConcurrentTaskRunner
-from supabase_utils import SupabaseClient
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from constants import (
+from .supabase_utils import SupabaseClient
+from .constants import (
     get_system_instruction_for_stage_3,
     get_output_schema_for_stage_3,
     get_user_prompt_for_stage_3,

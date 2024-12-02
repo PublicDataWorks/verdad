@@ -5,7 +5,7 @@ import boto3
 from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
 from pydub import AudioSegment
-from supabase_utils import SupabaseClient
+from .supabase_utils import SupabaseClient
 
 
 @task(log_prints=True, retries=3)
