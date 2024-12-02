@@ -179,7 +179,7 @@ After completing your initial analysis, perform this structured review:
    - Treating bias as equivalent to disinformation
    - Scoring based on disagreement rather than falsity
 
-##### **I. Emotional Tone Analysis**
+##### **J. Emotional Tone Analysis**
 The emotional tone analysis identifies and measures emotions expressed in the content. Like our confidence scoring, this requires evidence-based assessment:
 
 **Analysis Framework:**
@@ -245,7 +245,7 @@ The emotional tone analysis identifies and measures emotions expressed in the co
 - **Explanation:**
   - Briefly explain how the emotional tone contributes to the message and its potential impact (in both English and Spanish).
 
-##### **J. Political Spectrum Analysis**
+##### **K. Political Spectrum Analysis**
 
 Analyze the content's political orientation on a scale from -1.0 (extremely left-leaning) to +1.0 (extremely right-leaning), where 0.0 represents politically neutral content.
 
@@ -491,11 +491,64 @@ Ensure your output strictly adheres to this schema.
         },
         "confidence_scores": {
             "type": "object",
-            "required": ["overall", "categories"],
+            "required": ["overall", "analysis", "categories"],
             "properties": {
                 "overall": {
                     "type": "integer",
                     "description": "Overall confidence score of the analysis, ranging from 0 to 100."
+                },
+                "analysis": {
+                    "type": "object",
+                    "required": ["claims", "validation_checklist", "score_adjustments"],
+                    "properties": {
+                        "claims": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["quote", "evidence", "score"],
+                                "properties": {
+                                    "quote": {
+                                        "type": "string",
+                                        "description": "Direct quote of the false or misleading claim"
+                                    },
+                                    "evidence": {
+                                        "type": "string",
+                                        "description": "Evidence demonstrating why the claim is false"
+                                    },
+                                    "score": {
+                                        "type": "integer",
+                                        "description": "Confidence score for this specific claim"
+                                    }
+                                }
+                            }
+                        },
+                        "validation_checklist": {
+                            "type": "object",
+                            "required": [
+                                "specific_claims_quoted",
+                                "evidence_provided",
+                                "scoring_falsity",
+                                "defensible_to_factcheckers",
+                                "consistent_explanations"
+                            ],
+                            "properties": {
+                                "specific_claims_quoted": { "type": "boolean" },
+                                "evidence_provided": { "type": "boolean" },
+                                "scoring_falsity": { "type": "boolean" },
+                                "defensible_to_factcheckers": { "type": "boolean" },
+                                "consistent_explanations": { "type": "boolean" }
+                            }
+                        },
+                        "score_adjustments": {
+                            "type": "object",
+                            "required": ["initial_score", "final_score", "adjustment_reason"],
+                            "properties": {
+                                "initial_score": { "type": "integer" },
+                                "final_score": { "type": "integer" },
+                                "adjustment_reason": { "type": "string" }
+                            }
+                        }
+                    }
                 },
                 "categories": {
                     "type": "array",
@@ -516,117 +569,118 @@ Ensure your output strictly adheres to this schema.
                 }
             }
         },
-    "emotional_tone": {
-        "type": "array",
-        "items": {
-            "type": "object",
-            "required": ["emotion", "intensity", "evidence", "explanation"],
-            "properties": {
-                "emotion": {
-                    "type": "object",
-                    "required": ["spanish", "english"],
-                    "properties": {
-                        "spanish": { "type": "string" },
-                        "english": { "type": "string" }
-                    }
-                },
-                "intensity": {
-                    "type": "integer",
-                    "description": "Intensity of the emotion, ranging from 0 to 100."
-                },
-                "evidence": {
-                    "type": "object",
-                    "required": ["vocal_cues", "phrases", "patterns"],
-                    "properties": {
-                        "vocal_cues": {
-                            "type": "array",
-                            "items": { "type": "string" },
-                            "description": "Specific vocal characteristics observed"
-                        },
-                        "phrases": {
-                            "type": "array",
-                            "items": { "type": "string" },
-                            "description": "Direct quotes demonstrating the emotion"
-                        },
-                        "patterns": {
-                            "type": "array",
-                            "items": { "type": "string" },
-                            "description": "Recurring emotional patterns or themes"
+        "emotional_tone": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["emotion", "intensity", "evidence", "explanation"],
+                "properties": {
+                    "emotion": {
+                        "type": "object",
+                        "required": ["spanish", "english"],
+                        "properties": {
+                            "spanish": { "type": "string" },
+                            "english": { "type": "string" }
                         }
-                    }
-                },
-                "explanation": {
-                    "type": "object",
-                    "required": ["spanish", "english", "impact"],
-                    "properties": {
-                        "spanish": { "type": "string" },
-                        "english": { "type": "string" },
-                        "impact": {
-                            "type": "object",
-                            "required": ["credibility", "audience_reception", "cultural_context"],
-                            "properties": {
-                                "credibility": { "type": "string" },
-                                "audience_reception": { "type": "string" },
-                                "cultural_context": { "type": "string" }
+                    },
+                    "intensity": {
+                        "type": "integer",
+                        "description": "Intensity of the emotion, ranging from 0 to 100."
+                    },
+                    "evidence": {
+                        "type": "object",
+                        "required": ["vocal_cues", "phrases", "patterns"],
+                        "properties": {
+                            "vocal_cues": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "Specific vocal characteristics observed"
+                            },
+                            "phrases": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "Direct quotes demonstrating the emotion"
+                            },
+                            "patterns": {
+                                "type": "array",
+                                "items": { "type": "string" },
+                                "description": "Recurring emotional patterns or themes"
+                            }
+                        }
+                    },
+                    "explanation": {
+                        "type": "object",
+                        "required": ["spanish", "english", "impact"],
+                        "properties": {
+                            "spanish": { "type": "string" },
+                            "english": { "type": "string" },
+                            "impact": {
+                                "type": "object",
+                                "required": ["credibility", "audience_reception", "cultural_context"],
+                                "properties": {
+                                    "credibility": { "type": "string" },
+                                    "audience_reception": { "type": "string" },
+                                    "cultural_context": { "type": "string" }
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-    },
-    "political_leaning": {
-        "type": "object",
-        "required": ["score", "evidence", "explanation"],
-        "properties": {
-            "score": {
-                "type": "number",
-                "description": "Political leaning score, ranging from -1.0 to 1.0."
-            },
-            "evidence": {
-                "type": "object",
-                "required": ["policy_positions", "arguments", "rhetoric", "sources", "solutions"],
-                "properties": {
-                    "policy_positions": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Explicit policy positions stated"
-                    },
-                    "arguments": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Specific arguments made"
-                    },
-                    "rhetoric": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Key phrases and rhetoric used"
-                    },
-                    "sources": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Sources or authorities cited"
-                    },
-                    "solutions": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Solutions proposed"
+        },
+        "political_leaning": {
+            "type": "object",
+            "required": ["score", "evidence", "explanation"],
+            "properties": {
+                "score": {
+                    "type": "number",
+                    "description": "Political leaning score, ranging from -1.0 to 1.0."
+                },
+                "evidence": {
+                    "type": "object",
+                    "required": ["policy_positions", "arguments", "rhetoric", "sources", "solutions"],
+                    "properties": {
+                        "policy_positions": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Explicit policy positions stated"
+                        },
+                        "arguments": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Specific arguments made"
+                        },
+                        "rhetoric": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Key phrases and rhetoric used"
+                        },
+                        "sources": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Sources or authorities cited"
+                        },
+                        "solutions": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Solutions proposed"
+                        }
                     }
-                }
-            },
-            "explanation": {
-                "type": "object",
-                "required": ["spanish", "english", "score_adjustments"],
-                "properties": {
-                    "spanish": { "type": "string" },
-                    "english": { "type": "string" },
-                    "score_adjustments": {
-                        "type": "object",
-                        "required": ["initial_score", "final_score", "reasoning"],
-                        "properties": {
-                            "initial_score": { "type": "number" },
-                            "final_score": { "type": "number" },
-                            "reasoning": { "type": "string" }
+                },
+                "explanation": {
+                    "type": "object",
+                    "required": ["spanish", "english", "score_adjustments"],
+                    "properties": {
+                        "spanish": { "type": "string" },
+                        "english": { "type": "string" },
+                        "score_adjustments": {
+                            "type": "object",
+                            "required": ["initial_score", "final_score", "reasoning"],
+                            "properties": {
+                                "initial_score": { "type": "number" },
+                                "final_score": { "type": "number" },
+                                "reasoning": { "type": "string" }
+                            }
                         }
                     }
                 }
@@ -1359,6 +1413,32 @@ Below is a complete example showing all required fields:
   },
   "confidence_scores": {
     "overall": 92,
+    "analysis": {
+      "claims": [
+        {
+          "quote": "Dicen que el gobierno quiere controlar nuestras mentes con las vacunas.",
+          "evidence": "There is no scientific evidence supporting the claim that vaccines can control minds. Vaccines are designed to elicit an immune response to prevent disease.",
+          "score": 95
+        },
+        {
+          "quote": "Es por eso que están empujando tanto la vacunación obligatoria.",
+          "evidence": "Mandatory vaccinations are implemented to achieve herd immunity and protect public health, not for mind control purposes.",
+          "score": 90
+        }
+      ],
+      "validation_checklist": {
+        "specific_claims_quoted": true,
+        "evidence_provided": true,
+        "scoring_falsity": true,
+        "defensible_to_factcheckers": true,
+        "consistent_explanations": true
+      },
+      "score_adjustments": {
+        "initial_score": 95,
+        "final_score": 92,
+        "adjustment_reason": "Adjusted overall score considering the combination of claims and their potential impact."
+      }
+    },
     "categories": [
       {
         "category": "COVID-19 and Vaccination",
@@ -1377,9 +1457,19 @@ Below is a complete example showing all required fields:
         "english": "Fear"
       },
       "intensity": 80,
+      "evidence": {
+        "vocal_cues": ["Raised pitch during key phrases", "Slower pace indicating seriousness"],
+        "phrases": ["controlar nuestras mentes", "proteger a nuestras familias"],
+        "patterns": ["Consistent use of fear-inducing language"]
+      },
       "explanation": {
         "spanish": "El orador expresa miedo sobre la manipulación del gobierno a través de las vacunas.",
-        "english": "The speaker expresses fear about government manipulation through vaccines."
+        "english": "The speaker expresses fear about government manipulation through vaccines.",
+        "impact": {
+          "credibility": "The emotional tone may cause listeners to perceive the message as urgent, potentially bypassing critical analysis.",
+          "audience_reception": "The fear expressed can resonate with individuals already distrustful of government actions.",
+          "cultural_context": "In communities with historical skepticism towards authority, such fear appeals may have heightened impact."
+        }
       }
     },
     {
@@ -1388,9 +1478,19 @@ Below is a complete example showing all required fields:
         "english": "Distrust"
       },
       "intensity": 85,
+      "evidence": {
+        "vocal_cues": ["Emphasized words", "Declarative tone"],
+        "phrases": ["hay muchas cosas que no nos dicen", "el gobierno no tiene soluciones claras"],
+        "patterns": ["Use of language suggesting secrecy and incompetence"]
+      },
       "explanation": {
         "spanish": "Hay un fuerte sentido de desconfianza hacia las acciones y políticas gubernamentales.",
-        "english": "There is a strong sense of distrust towards governmental actions and policies."
+        "english": "There is a strong sense of distrust towards governmental actions and policies.",
+        "impact": {
+          "credibility": "Distrustful tone can undermine confidence in official information sources.",
+          "audience_reception": "May reinforce existing biases against government institutions.",
+          "cultural_context": "Distrust may be amplified in communities with experiences of institutional neglect."
+        }
       }
     },
     {
@@ -1399,17 +1499,39 @@ Below is a complete example showing all required fields:
         "english": "Concern"
       },
       "intensity": 75,
+      "evidence": {
+        "vocal_cues": ["Measured tone", "Slight hesitation"],
+        "phrases": ["la economía está en declive", "inflación está aumentando"],
+        "patterns": ["Highlighting negative economic indicators"]
+      },
       "explanation": {
         "spanish": "El orador está preocupado por la situación económica y el impacto de las vacunaciones obligatorias en las libertades personales.",
-        "english": "The speaker is concerned about the economic situation and the impact of mandatory vaccinations on personal freedoms."
+        "english": "The speaker is concerned about the economic situation and the impact of mandatory vaccinations on personal freedoms.",
+        "impact": {
+          "credibility": "Expressing concern may make the message more relatable to the audience.",
+          "audience_reception": "Listeners may share these concerns, increasing receptivity to the message.",
+          "cultural_context": "Economic hardship is a common concern that can transcend cultural barriers."
+        }
       }
     }
   ],
   "political_leaning": {
     "score": 0.2,
+    "evidence": {
+      "policy_positions": ["Opposition to mandatory vaccinations"],
+      "arguments": ["Government lacks clear solutions", "Government wants to control minds"],
+      "rhetoric": ["Control", "Pushing", "Inform ourselves"],
+      "sources": [],
+      "solutions": ["Self-education", "Protect our families"]
+    },
     "explanation": {
       "spanish": "El contenido muestra una ligera tendencia conservadora debido a su énfasis en la desconfianza hacia la intervención gubernamental y la preferencia por la autonomía individual, evidenciado en frases como 'debemos informarnos' y 'proteger a nuestras familias'. Sin embargo, las preocupaciones económicas expresadas no muestran una clara orientación política.",
-      "english": "The content shows a slight conservative tendency due to its emphasis on distrust of government intervention and preference for individual autonomy, evidenced in phrases like 'we must inform ourselves' and 'protect our families'. However, the economic concerns expressed do not show a clear political orientation."
+      "english": "The content shows a slight conservative tendency due to its emphasis on distrust of government intervention and preference for individual autonomy, evidenced in phrases like 'we must inform ourselves' and 'protect our families'. However, the economic concerns expressed do not show a clear political orientation.",
+      "score_adjustments": {
+        "initial_score": 0.3,
+        "final_score": 0.2,
+        "reasoning": "Adjusted the score to reflect the moderate nature of the content and lack of explicit policy advocacy."
+      }
     }
   }
 }
