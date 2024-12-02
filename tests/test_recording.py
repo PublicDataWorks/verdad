@@ -32,13 +32,13 @@ class TestRecording:
         }
 
     @pytest.fixture
-    def mock_s3_client(self):
-        with patch('recording.s3_client') as mock:
+    def mock_supabase_client(self):
+        with patch('recording.supabase_client') as mock:
             yield mock
 
     @pytest.fixture
-    def mock_supabase_client(self):
-        with patch('recording.SupabaseClient') as mock:
+    def mock_s3_client(self):
+        with patch('recording.s3_client') as mock:
             yield mock
 
     def test_capture_audio_stream_success(self, mock_ffmpeg, sample_station):

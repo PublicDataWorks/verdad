@@ -32,16 +32,17 @@ class TestGenericRecording:
         station.source_name = "virtual_mic_test"
         return station
 
-    @pytest.fixture
-    def mock_s3_client(self):
-        """Setup mock S3 client"""
-        with patch('generic_recording.s3_client') as mock:
-            yield mock
 
     @pytest.fixture
     def mock_supabase_client(self):
         """Setup mock Supabase client"""
-        with patch('generic_recording.SupabaseClient') as mock:
+        with patch('generic_recording.supabase_client') as mock:
+            yield mock
+
+    @pytest.fixture
+    def mock_s3_client(self):
+        """Setup mock S3 client"""
+        with patch('generic_recording.s3_client') as mock:
             yield mock
 
     @pytest.fixture
@@ -288,7 +289,7 @@ class TestGenericRecording:
                 file_size=1000
             )
 
-    def test_generic_audio_processing_pipeline_playback_stopped(self, mock_radio_station):
+    def test_generic_audio_processing_pipeline_playback_stopped(self, mock_radio_station, mock_supabase_client):
         """Test pipeline when playback stops"""
         station_code = "KHOT - 105.9 FM"
 
@@ -344,7 +345,7 @@ class TestGenericRecording:
                 call()   # After browser restart
             ])
 
-    def test_generic_audio_processing_pipeline_cleanup(self, mock_radio_station):
+    def test_generic_audio_processing_pipeline_cleanup(self, mock_radio_station, mock_supabase_client):
         """Test pipeline cleanup"""
         station_code = "KHOT - 105.9 FM"
 

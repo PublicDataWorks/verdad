@@ -1,6 +1,5 @@
 import os
 import sys
-from unittest.mock import patch, Mock
 import pytest
 
 # Add src directory to Python path
@@ -16,43 +15,6 @@ os.environ['R2_SECRET_ACCESS_KEY'] = 'test-secret-key'
 os.environ['R2_BUCKET_NAME'] = 'test-bucket'
 os.environ['SENTRY_DSN'] = 'https://test@test.ingest.sentry.io/123456'
 os.environ['ENABLE_PREFECT_DECORATOR'] = 'false'
-
-# Mock Supabase client before any imports
-mock_supabase_instance = Mock()
-mock_supabase = Mock(return_value=mock_supabase_instance)
-with patch('supabase.create_client', mock_supabase):
-    from processing_pipeline.supabase_utils import SupabaseClient
-
-@pytest.fixture(autouse=True)
-def mock_env_vars():
-    """Mock environment variables"""
-    env_vars = {
-        'SUPABASE_URL': 'https://test.supabase.co',
-        'SUPABASE_KEY': 'test-key',
-        'R2_ENDPOINT_URL': 'https://test.r2.endpoint',
-        'R2_ACCESS_KEY_ID': 'test-access-key',
-        'R2_SECRET_ACCESS_KEY': 'test-secret-key',
-        'R2_BUCKET_NAME': 'test-bucket',
-        'SENTRY_DSN': 'https://test@test.ingest.sentry.io/123456',
-        'ENABLE_PREFECT_DECORATOR': 'false'
-    }
-    with patch.dict('os.environ', env_vars, clear=True):
-        yield env_vars
-
-@pytest.fixture
-def mock_supabase_client():
-    """Return the mocked Supabase client instance"""
-    mock_instance = Mock()
-
-    # Setup mock response for insert_audio_file
-    mock_instance.insert_audio_file.return_value = {"id": 1}
-
-    # Setup mock table operations if needed
-    mock_table = Mock()
-    mock_table.insert.return_value.execute.return_value.data = [{"id": 1}]
-    mock_instance.table.return_value = mock_table
-
-    return mock_instance
 
 @pytest.fixture
 def test_data_dir():
