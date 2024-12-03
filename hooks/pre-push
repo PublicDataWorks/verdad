@@ -1,0 +1,33 @@
+#!/bin/bash
+set -e
+
+# Get the current branch name
+BRANCH_NAME=$(git symbolic-ref --short HEAD)
+echo "Running pre-push hook on branch: $BRANCH_NAME"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Function to check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Check if pytest is installed
+if ! command_exists pytest; then
+    echo -e "${RED}Error: pytest is not installed. Please run 'pip install pytest pytest-cov'${NC}"
+    exit 1
+fi
+
+echo "Running tests with coverage..."
+
+# Run pytest with coverage
+if pytest --cov=src --cov-report=term-missing; then
+    echo -e "${GREEN}All tests passed successfully!${NC}"
+    exit 0
+else
+    echo -e "${RED}Tests failed. Push aborted.${NC}"
+    exit 1
+fi
