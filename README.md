@@ -235,7 +235,7 @@ git push --no-verify
 
 ```bash
 # Run tests with coverage report
-./scripts/coverage.shl
+./scripts/coverage.sh
 ```
 
 ### Configuration
