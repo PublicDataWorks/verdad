@@ -16,8 +16,10 @@ from processing_pipeline.stage_1 import (
     undo_disinformation_detection,
     redo_main_detection,
     regenerate_timestamped_transcript,
-    Stage1Executor
+    Stage1Executor,
+    transcribe_audio_file_with_open_ai_whisper_1
 )
+from processing_pipeline.stage_3 import create_new_label_and_assign_to_snippet
 
 @pytest.fixture
 def mock_environment(monkeypatch):
@@ -397,3 +399,255 @@ class TestHelperFunctions:
         )
 
         mock_supabase_client.insert_stage_1_llm_response.assert_called_once()
+
+    def test_transcribe_audio_file_with_whisper_1(self):
+        """Test transcription with OpenAI Whisper"""
+        mock_file = Mock()
+        with patch('os.getenv', return_value='test-key'), \
+            patch('builtins.open', return_value=mock_file) as mock_open, \
+            patch('processing_pipeline.stage_1.OpenAI') as mock_openai_class:
+            mock_client = Mock()
+            mock_openai_class.return_value = mock_client
+            mock_response = Mock(
+                text="Test transcription",
+                language="en",
+                duration=60.0,
+                segments=[
+                    Mock(start=0, text="Test segment 1"),
+                    Mock(start=30, text="Test segment 2")
+                ]
+            )
+            mock_client.audio.transcriptions.create.return_value = mock_response
+
+            result = transcribe_audio_file_with_open_ai_whisper_1("test.mp3")
+
+            # Verify file operations
+            mock_open.assert_called_once_with("test.mp3", "rb")
+
+            # Verify OpenAI client setup and usage
+            mock_openai_class.assert_called_once_with(api_key='test-key')
+            mock_client.audio.transcriptions.create.assert_called_once_with(
+                model="whisper-1",
+                file=mock_file,
+                response_format="verbose_json",
+                timestamp_granularities=["segment"]
+            )
+
+            # Verify result
+            assert result["language"] == "en"
+            assert result["duration"] == 60
+            assert result["transcription"] == "Test transcription"
+            assert "[00:00]" in result["timestamped_transcription"]
+            assert "[00:30]" in result["timestamped_transcription"]
+            assert "Test segment 1" in result["timestamped_transcription"]
+            assert "Test segment 2" in result["timestamped_transcription"]
+
+    def test_transcribe_audio_file_with_whisper_1_no_api_key(self):
+        """Test transcription without API key"""
+        with patch.dict('os.environ', {}, clear=True):
+            with pytest.raises(ValueError, match="OpenAI API key was not set!"):
+                transcribe_audio_file_with_open_ai_whisper_1("test.mp3")
+
+    def test_create_new_label_and_assign(self, mock_supabase_client):
+        """Test creating and assigning new label"""
+        mock_supabase_client.create_new_label.return_value = {"id": 1}
+
+        create_new_label_and_assign_to_snippet(
+            mock_supabase_client,
+            "test-id",
+            {"english": "Test Label", "spanish": "Etiqueta de prueba"}
+        )
+
+        mock_supabase_client.create_new_label.assert_called_once_with(
+            "Test Label",
+            "Etiqueta de prueba"
+        )
+        mock_supabase_client.assign_label_to_snippet.assert_called_once_with(
+            label_id=1,
+            snippet_id="test-id"
+        )
+
+    def test_initial_disinformation_detection_with_retry(self, mock_supabase_client, mock_s3_client):
+        """Test initial disinformation detection with retries"""
+        audio_file = {
+            "id": 1,
+            "file_path": "test/path.mp3",
+            "status": "Error",
+            "radio_station_name": "Test Station",
+            "radio_station_code": "TEST-FM",
+            "location_state": "Test State",
+            "location_city": "Test City",
+            "recorded_at": "2024-01-01T00:00:00Z",
+            "recording_day_of_week": "Monday"
+        }
+
+        # Setup the mock to return None first, then the audio file, then None again
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.side_effect = [None, audio_file, None]
+
+        with patch('os.remove'), \
+            patch('time.sleep') as mock_sleep, \
+            patch('processing_pipeline.stage_1.process_audio_file') as mock_process:
+
+            initial_disinformation_detection(audio_file_id=None, use_openai=False, limit=1)
+
+            assert mock_sleep.call_count >= 1
+            mock_sleep.assert_has_calls([call(60)])  # First sleep when no file found
+            mock_process.assert_called_once_with(
+                mock_supabase_client, audio_file, "path.mp3", False
+            )
+
+
+    def test_redo_main_detection_multiple_files(self, mock_supabase_client, mock_gemini_model):
+        """Test redo main detection with multiple files"""
+        stage_1_llm_responses = [
+            {
+                "id": 1,
+                "timestamped_transcription": {"timestamped_transcription": "Test 1"},
+                "initial_detection_result": {"flagged_snippets": [{"uuid": "1"}]},
+                "audio_file": {
+                    "radio_station_name": "Test Station",
+                    "radio_station_code": "TEST-FM",
+                    "location_state": "Test State",
+                    "location_city": "Test City",
+                    "recorded_at": "2024-01-01T00:00:00Z",
+                    "recording_day_of_week": "Monday"
+                }
+            },
+            {
+                "id": 2,
+                "timestamped_transcription": {"timestamped_transcription": "Test 2"},
+                "initial_detection_result": {"flagged_snippets": [{"uuid": "2"}]},
+                "audio_file": {
+                    "radio_station_name": "Test Station",
+                    "radio_station_code": "TEST-FM",
+                    "location_state": "Test State",
+                    "location_city": "Test City",
+                    "recorded_at": "2024-01-01T00:00:00Z",
+                    "recording_day_of_week": "Monday"
+                }
+            }
+        ]
+
+        for response in stage_1_llm_responses:
+            mock_supabase_client.get_stage_1_llm_response_by_id.return_value = response
+            redo_main_detection([1, 2])
+
+            mock_supabase_client.update_stage_1_llm_response_detection_result.assert_called()
+            mock_supabase_client.reset_stage_1_llm_response_status.assert_called()
+
+
+
+    def test_regenerate_timestamped_transcript_with_error(self, mock_supabase_client, mock_s3_client):
+        """Test regenerate timestamped transcript with error"""
+        stage_1_llm_response = {
+            "id": 1,
+            "audio_file": {
+                "file_path": "test/path.mp3"
+            }
+        }
+        mock_supabase_client.get_stage_1_llm_response_by_id.return_value = stage_1_llm_response
+
+        # Mock the S3 client directly since it's used in the code
+        mock_s3_client.download_file.side_effect = Exception("Download failed")
+
+        with pytest.raises(Exception, match="Download failed"):
+            regenerate_timestamped_transcript([1])
+
+        # Since we're not handling the error in the function itself,
+        # we should not expect set_stage_1_llm_response_status to be called
+        mock_supabase_client.set_stage_1_llm_response_status.assert_not_called()
+
+    def test_undo_disinformation_detection_no_responses(self, mock_supabase_client):
+        """Test undo disinformation detection with no responses"""
+        mock_supabase_client.delete_stage_1_llm_responses.return_value = []
+
+        undo_disinformation_detection([1, 2])
+
+        mock_supabase_client.reset_audio_file_status.assert_called_once_with([1, 2])
+        mock_supabase_client.delete_stage_1_llm_responses.assert_called_once_with([1, 2])
+
+    @patch('processing_pipeline.stage_1.TimestampedTranscriptionGenerator')
+    def test_transcribe_audio_file_with_custom_generator_error(self, mock_generator):
+        """Test custom generator with error"""
+        mock_generator.run.side_effect = Exception("Generation failed")
+
+        with pytest.raises(Exception, match="Generation failed"):
+            transcribe_audio_file_with_custom_timestamped_transcription_generator("test.mp3")
+
+    def test_process_audio_file_with_no_flagged_snippets(self, mock_supabase_client, mock_gemini_model):
+        """Test processing audio file with no flagged snippets"""
+        audio_file = {
+            "id": 1,
+            "radio_station_name": "Test Station",
+            "radio_station_code": "TEST-FM",
+            "location_state": "Test State",
+            "location_city": "Test City",
+            "recorded_at": "2024-01-01T00:00:00Z",
+            "recording_day_of_week": "Monday"
+        }
+
+        # Mock responses with no flagged snippets
+        mock_flash_response = {"transcription": "Test transcription"}
+        mock_detection_response = {"flagged_snippets": []}
+
+        with patch('processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1_5_flash',
+                return_value=mock_flash_response), \
+            patch('processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_1_5_pro',
+                return_value=mock_detection_response):
+
+            process_audio_file(mock_supabase_client, audio_file, "test.mp3", False)
+
+            mock_supabase_client.insert_stage_1_llm_response.assert_called_with(
+                audio_file_id=1,
+                initial_transcription="Test transcription",
+                initial_detection_result=mock_detection_response,
+                timestamped_transcription=None,
+                detection_result=None,
+                status="Processed"
+            )
+
+    def test_stage_1_executor(self, mock_gemini_model):
+        """Test Stage1Executor"""
+        mock_response = Mock()
+        mock_response.text = json.dumps({
+            "test": "response"
+        })
+        mock_gemini_model.return_value.generate_content.return_value = mock_response
+
+        with patch('google.generativeai.configure'):
+            result = Stage1Executor.run(
+                gemini_key="test-key",
+                timestamped_transcription="Test transcription",
+                metadata={"test": "metadata"}
+            )
+
+            # Verify behavior
+            assert isinstance(json.loads(result), dict)
+            mock_gemini_model.assert_called_once()
+            mock_gemini_model.return_value.generate_content.assert_called_once()
+
+            # Verify the content of the request
+            args, kwargs = mock_gemini_model.return_value.generate_content.call_args
+            assert len(args[0]) == 1  # Should have one argument (user prompt)
+            assert "Test transcription" in args[0][0]  # Should contain the transcription
+            assert json.dumps({"test": "metadata"}, indent=2) in args[0][0]  # Should contain the metadata
+
+    def test_initial_disinformation_detection_specific_file(self, mock_supabase_client, mock_s3_client):
+        """Test initial disinformation detection with specific file"""
+        audio_file = {
+            "id": 1,
+            "file_path": "test/path.mp3",
+            "radio_station_name": "Test Station",
+            "radio_station_code": "TEST-FM",
+            "location_state": "Test State",
+            "location_city": "Test City",
+            "recorded_at": "2024-01-01T00:00:00Z",
+            "recording_day_of_week": "Monday"
+        }
+        mock_supabase_client.get_audio_file_by_id.return_value = audio_file
+
+        with patch('os.remove'):
+            initial_disinformation_detection(audio_file_id=1, use_openai=True, limit=1)
+
+            mock_supabase_client.get_audio_file_by_id.assert_called_once_with(1)
+            mock_s3_client.download_file.assert_called_once()

@@ -2,9 +2,9 @@ import os
 from dotenv import load_dotenv
 from prefect import serve
 import sentry_sdk
-from stage_1 import initial_disinformation_detection, redo_main_detection, regenerate_timestamped_transcript, undo_disinformation_detection
-from stage_2 import audio_clipping, undo_audio_clipping
-from stage_3 import in_depth_analysis
+from processing_pipeline.stage_1 import initial_disinformation_detection, redo_main_detection, regenerate_timestamped_transcript, undo_disinformation_detection
+from processing_pipeline.stage_2 import audio_clipping, undo_audio_clipping
+from processing_pipeline.stage_3 import in_depth_analysis
 load_dotenv()
 
 # Setup Sentry
