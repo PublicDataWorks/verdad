@@ -94,7 +94,7 @@ Below are detailed heuristics for each disinformation category, including cultur
 ### **1. Election Integrity and Voting Processes**
 
 **Description**:
-Disinformation that falsely claims election fraud or manipulation in cases where no credible evidence exists. Note: Claims about the 2024 Presidential Election outcome should be evaluated against the official results showing Donald Trump's victory with 292 electoral votes and approximately 71.56 million individual votes.
+Disinformation that falsely claims election fraud or manipulation in cases where no credible evidence exists. Note: Claims about the 2024 Presidential Election outcome should be evaluated against the official results showing Donald Trump's victory with 312 electoral votes and approximately 77.2 million individual votes (49.9%).
 
 **Keywords/Phrases**:
 - **Spanish**:
@@ -118,7 +118,7 @@ Disinformation that falsely claims election fraud or manipulation in cases where
 - Claims of widespread voter fraud without evidence
 - False claims that Kamala Harris won the 2024 election
 - Unfounded allegations about voting systems being manipulated to favor Harris
-- Note: Statements accurately reporting Trump's 2024 victory (292 electoral votes, state-by-state results) should NOT be flagged as disinformation
+- Note: Statements accurately reporting Trump's 2024 victory (312 electoral votes and winning the popular vote) should NOT be flagged as disinformation
 
 **Examples**:
 - *Spanish*: "Harris ganó el voto popular por millones, pero Trump robó la elección" (FALSE claim to flag)

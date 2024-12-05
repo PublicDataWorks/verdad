@@ -10,13 +10,14 @@ Below are detailed heuristics for each disinformation category, including nuance
 
 Disinformation that casts doubt on the legitimacy and fairness of electoral systems. This includes allegations of widespread voter fraud, manipulation of results, or external interference. Such narratives aim to undermine public trust in democratic institutions.
 
-**Common Narratives**:
+**Important Note About 2024 Election**:
+Donald Trump won the 2024 Presidential Election with 312 electoral votes and approximately 77.16 million individual votes, compared to Kamala Harris's 74.73 million votes. Claims accurately reporting these results are NOT disinformation. However, false claims about other aspects of the election process may still constitute disinformation. Before the count was finalized, Trump was declared as the winner with 292 electoral votes the morning after the election, but the final count was announced days later to be 312 electoral votes. In a decisive sweep of the 2024 presidential election, Donald Trump secured victory in all seven battleground states: Arizona, Georgia, Michigan, Nevada, North Carolina, Pennsylvania, Wisconsin
 
-- Claims that elections are **"rigged"** or **"stolen"**.
-- Allegations of non-citizens or deceased individuals voting.
-- Assertions that mail-in voting leads to fraud.
-- Concerns about electronic voting machines being tampered with.
-- Movements like **"Stop the Steal"** gaining traction.
+**Common Narratives That May Constitute Disinformation**:
+- Claims about elections prior to 2024 being "rigged" without evidence
+- Allegations of non-citizens or deceased individuals voting
+- Unsubstantiated claims about voting machine tampering
+- False claims about the 2024 election results that contradict the official tallies
 
 **Cultural/Regional Variations**:
 
@@ -35,8 +36,16 @@ Disinformation that casts doubt on the legitimacy and fairness of electoral syst
 
 **Examples**:
 
-- *Spanish*: "No confíes en el sistema; hubo 'fraude electoral' en las últimas elecciones."
-- *Arabic*: "لا تثقوا بالنظام؛ حدث 'تزوير في الأصوات' في الانتخابات الأخيرة."
+- _Spanish_: "No confíes en el sistema; hubo 'fraude electoral' en las últimas elecciones."
+- _Arabic_: "لا تثقوا بالنظام؛ حدث 'تزوير في الأصوات' في الانتخابات الأخيرة."
+
+**Examples of What IS Disinformation**:
+- _Spanish_: "Las elecciones de 2020 fueron robadas" (The 2020 election was stolen)
+- _Arabic_: "تم تزوير انتخابات 2020" (The 2020 election was rigged)
+
+**Examples of What is NOT Disinformation**:
+- _Spanish_: "Trump ganó las elecciones de 2024 con 292 votos electorales"
+- _Arabic_: "فاز ترامب في انتخابات 2024 ب 292 صوتًا انتخابيًا"
 
 ---
 

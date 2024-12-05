@@ -705,7 +705,7 @@ Below are detailed heuristics for each disinformation category, including nuance
 Disinformation that casts doubt on the legitimacy and fairness of electoral systems. This includes allegations of widespread voter fraud, manipulation of results, or external interference. Such narratives aim to undermine public trust in democratic institutions.
 
 **Important Note About 2024 Election**:
-Donald Trump won the 2024 Presidential Election with 292 electoral votes and approximately 71.56 million individual votes, compared to Kamala Harris's 66.5 million votes. Claims accurately reporting these results are NOT disinformation. However, false claims about other aspects of the election process may still constitute disinformation.
+Donald Trump won the 2024 Presidential Election with 312 electoral votes and approximately 77.16 million individual votes, compared to Kamala Harris's 74.73 million votes. Claims accurately reporting these results are NOT disinformation. However, false claims about other aspects of the election process may still constitute disinformation. Before the count was finalized, Trump was declared as the winner with 292 electoral votes the morning after the election, but the final count was announced days later to be 312 electoral votes. In a decisive sweep of the 2024 presidential election, Donald Trump secured victory in all seven battleground states: Arizona, Georgia, Michigan, Nevada, North Carolina, Pennsylvania, Wisconsin
 
 **Common Narratives That May Constitute Disinformation**:
 - Claims about elections prior to 2024 being "rigged" without evidence
