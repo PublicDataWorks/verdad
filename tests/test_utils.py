@@ -74,7 +74,8 @@ class TestUtils:
         stations = fetch_radio_stations()
         valid_states = {
             "Georgia", "Pennsylvania", "Michigan", "Texas", "Florida",
-            "Nevada", "Arizona", "Wisconsin", "Russia", "International"
+            "Nevada", "Arizona", "Wisconsin", "Russia", "International",
+            "North Carolina", "California"
         }
 
         for station in stations:
@@ -85,11 +86,11 @@ class TestUtils:
         """Test that the stations can be properly grouped for max and lite recorders"""
         stations = fetch_radio_stations()
 
-        # According to the recording.py file, first 37 stations are for max recorder
-        max_recorder_stations = stations[:37]
-        lite_recorder_stations = stations[37:]
+        # According to the recording.py file, first 39 stations are for max recorder
+        max_recorder_stations = stations[:39]
+        lite_recorder_stations = stations[39:]
 
-        assert len(max_recorder_stations) == 37, "Max recorder should have 37 stations"
+        assert len(max_recorder_stations) == 39, "Max recorder should have 39 stations"
         assert len(lite_recorder_stations) > 0, "Lite recorder should have some stations"
         assert len(stations) == len(max_recorder_stations) + len(lite_recorder_stations)
 

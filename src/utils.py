@@ -344,4 +344,61 @@ def fetch_radio_stations():
             "state": "Michigan",
             "name": "US Arab Radio",
         },
+        # ===============================================================
+        # New radio stations
+        # ===============================================================
+        {
+            "code": "WOLS",
+            "url": "https://sonos.norsanmedia.com/wols",
+            "state": "North Carolina",
+            "name": "La Raza"
+        },
+        {
+            "code": "WSRP",
+            "url": "https://radioenhd.com:7108/;",
+            "state": "North Carolina",
+            "name": "La Grande"
+        },
+        {
+            "code": "WIST",
+            "url": "https://sonos.norsanmedia.com/razatriad",
+            "state": "North Carolina",
+            "name": "La Raza Triad"
+        },
+        {
+            "code": "KMRO",
+            "url": "https://ice10.securenetsystems.net/KMRO",
+            "state": "North Carolina",
+            "name": "Radio Nueva Vida"
+        },
+        {
+            "code": "WGOS",
+            "url": "https://stream10.usastreams.com/8040/stream",
+            "state": "North Carolina",
+            "name": "Radio Vida Nueva"
+        },
+        {
+            "code": "WGSP",
+            "url": "https://stream-163.zeno.fm/xaz83f7uapjtv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJ4YXo4M2Y3dWFwanR2IiwiaG9zdCI6InN0cmVhbS0xNjMuemVuby5mbSIsInJ0dGwiOjUsImp0aSI6Ik10emkySllfU0F5bHlOZ0lqcTYtOFEiLCJpYXQiOjE3MzMzNjUzMTgsImV4cCI6MTczMzM2NTM3OH0.mL7rTxPUFj3-toPAXR4l7X1iOYMsRD47dImyMi8jFrU",
+            "state": "North Carolina",
+            "name": "Latina tu Musica"
+        },
+        {
+            "code": "WYMY",
+            "url": "https://18813.live.streamtheworld.com/WYMYPRIVATEAAC_SC?dist=triton-web&pname=StandardPlayerV4",
+            "state": "North Carolina",
+            "name": "La Ley"
+        },
+        {
+            "code": "WSGH",
+            "url": "https://ice7.securenetsystems.net/MOVIDITA",
+            "state": "North Carolina",
+            "name": "Activa"
+        },
+        {
+            "code": "KVNR",
+            "url": "https://stream-146.zeno.fm/2znsmu8d8zquv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiIyem5zbXU4ZDh6cXV2IiwiaG9zdCI6InN0cmVhbS0xNDYuemVuby5mbSIsInJ0dGwiOjUsImp0aSI6IjZ5Q3RJRmN5UlVXaU9YaEVoTU9YcHciLCJpYXQiOjE3MzMzNzc0MTQsImV4cCI6MTczMzM3NzQ3NH0.E_1JOM9UODLnbrEjxdjAGDrVGqEZUbe1CwNI7zP7PRk",
+            "state": "California",
+            "name": "Little Saigon Radio"
+        }
     ]

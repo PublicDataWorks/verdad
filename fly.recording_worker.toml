@@ -19,9 +19,9 @@ primary_region = 'sea'
 
 [[vm]]
   processes = ['lite_recorder']
-  memory = '2gb'
+  memory = '4gb'
   cpu_kind = 'shared'
-  cpus = 4
+  cpus = 8
 
 [scale]
   max_recorder = 1

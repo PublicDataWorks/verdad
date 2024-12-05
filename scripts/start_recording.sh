@@ -3,12 +3,19 @@
 # Array for Audio Recording: Lite Recorder
 LITE_RECORDER=(
     "Audio Recording: Lite Recorder/ARAB"
+    "Audio Recording: Lite Recorder/KMRO"
+    "Audio Recording: Lite Recorder/KVNR"
     "Audio Recording: Lite Recorder/MCD"
+    "Audio Recording: Lite Recorder/WGOS"
+    "Audio Recording: Lite Recorder/WGSP"
+    "Audio Recording: Lite Recorder/WIST"
     "Audio Recording: Lite Recorder/WMUZ - 1200 AM"
     "Audio Recording: Lite Recorder/WNZK - 680 AM"
-    "Audio Recording: Lite Recorder/WUMR - 106"
+    "Audio Recording: Lite Recorder/WOLS"
+    "Audio Recording: Lite Recorder/WSGH"
+    "Audio Recording: Lite Recorder/WSRP"
     "Audio Recording: Lite Recorder/WWFE - 670 AM"
-    "Audio Recording: Lite Recorder/WZTU - 94"
+    "Audio Recording: Lite Recorder/WYMY"
 )
 
 # Array for Audio Recording: Max Recorder
@@ -28,7 +35,7 @@ MAX_RECORDER=(
     "Audio Recording: Max Recorder/KWST - 1430 AM"
     "Audio Recording: Max Recorder/KYAR - 98"
     "Audio Recording: Max Recorder/KZLZ - 105"
-    "Audio Recording: Max Recorder/RUMBA - 4451"
+    "Audio Recording: Max Recorder/RUMBA 4451"
     "Audio Recording: Max Recorder/SPMN"
     "Audio Recording: Max Recorder/WACC - 830 AM"
     "Audio Recording: Max Recorder/WAXY - 790 AM"
@@ -48,8 +55,10 @@ MAX_RECORDER=(
     "Audio Recording: Max Recorder/WSDS - 1480 AM"
     "Audio Recording: Max Recorder/WSRF - 99"
     "Audio Recording: Max Recorder/WSUA - 1260 AM"
+    "Audio Recording: Max Recorder/WUMR - 106"
     "Audio Recording: Max Recorder/WURN - 1040 AM"
     "Audio Recording: Max Recorder/WZHF"
+    "Audio Recording: Max Recorder/WZTU - 94"
 )
 
 # Array for Generic Audio Recording
