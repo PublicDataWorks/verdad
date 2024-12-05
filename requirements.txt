@@ -8,13 +8,14 @@ prefect==3.0.1
 boto3==1.35.15
 selenium==4.24.0
 webdriver-manager==4.0.2
-google-generativeai==0.8.2
+google-generativeai==0.8.3
 psutil==6.0.0
 sentry-sdk==2.14.0
 pytest==8.3.3
 supabase==2.9.0
 pydub==0.25.1
 openai==1.51.2
+tiktoken==0.8.0
 pydantic==2.7.1
 # google-cloud-bigquery-storage==2.26.0
 # fastavro==1.9.7

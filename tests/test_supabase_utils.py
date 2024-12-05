@@ -481,3 +481,125 @@ class TestSupabaseClient:
         mock_supabase.table.assert_called_once_with("audio_files")
         mock_supabase.table.return_value.update.assert_called_once_with({"status": "New", "error_message": None})
         mock_supabase.table.return_value.update.return_value.in_.assert_called_once_with("id", [])
+
+    def test_get_a_snippet_that_has_no_embedding(self, supabase_client, mock_supabase):
+        """Test fetching a snippet that has no embedding"""
+        # Test successful case
+        expected_response = {"id": "test-id", "status": "New"}
+        mock_supabase.rpc.return_value.execute.return_value.data = expected_response
+
+        response = supabase_client.get_a_snippet_that_has_no_embedding()
+
+        mock_supabase.rpc.assert_called_with("fetch_a_snippet_that_has_no_embedding")
+        assert response == expected_response
+
+        # Test case where no snippet is found
+        mock_supabase.rpc.return_value.execute.return_value.data = None
+
+        response = supabase_client.get_a_snippet_that_has_no_embedding()
+
+        mock_supabase.rpc.assert_called_with("fetch_a_snippet_that_has_no_embedding")
+        assert response is None
+
+    def test_upsert_snippet_embedding(self, supabase_client, mock_supabase):
+        """Test upserting snippet embedding"""
+        # Test data
+        snippet_id = "test-id"
+        snippet_document = "Test document content"
+        document_token_count = 100
+        embedding = [0.1, 0.2, 0.3]
+        model_name = "text-embedding-3-large"
+        status = "Processed"
+        error_message = None
+
+        # Test case 1: Insert new embedding (no existing embedding)
+        expected_insert_response = [{"id": 1, "snippet": snippet_id}]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+        mock_supabase.table.return_value.insert.return_value.execute.return_value.data = expected_insert_response
+
+        response = supabase_client.upsert_snippet_embedding(
+            snippet_id=snippet_id,
+            snippet_document=snippet_document,
+            document_token_count=document_token_count,
+            embedding=embedding,
+            model_name=model_name,
+            status=status,
+            error_message=error_message
+        )
+
+        # Verify insert was called with correct parameters
+        mock_supabase.table.return_value.insert.assert_called_once_with({
+            "snippet": snippet_id,
+            "snippet_document": snippet_document,
+            "document_token_count": document_token_count,
+            "embedding": embedding,
+            "model_name": model_name,
+            "status": status,
+            "error_message": error_message,
+        })
+        assert response == expected_insert_response[0]
+
+        # Test case 2: Update existing embedding
+        expected_update_response = [{"id": 1, "snippet": snippet_id}]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"id": 1}]
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_update_response
+
+        response = supabase_client.upsert_snippet_embedding(
+            snippet_id=snippet_id,
+            snippet_document=snippet_document,
+            document_token_count=document_token_count,
+            embedding=embedding,
+            model_name=model_name,
+            status=status,
+            error_message=error_message
+        )
+
+        # Verify update was called with correct parameters
+        mock_supabase.table.return_value.update.assert_called_once_with({
+            "snippet_document": snippet_document,
+            "document_token_count": document_token_count,
+            "embedding": embedding,
+            "model_name": model_name,
+            "status": status,
+            "error_message": error_message,
+        })
+        mock_supabase.table.return_value.update.return_value.eq.assert_called_once_with("snippet", snippet_id)
+        assert response == expected_update_response[0]
+
+    def test_upsert_snippet_embedding_with_error(self, supabase_client, mock_supabase):
+        """Test upserting snippet embedding with error status"""
+        # Test data
+        snippet_id = "test-id"
+        snippet_document = None
+        document_token_count = None
+        embedding = None
+        model_name = "text-embedding-3-large"
+        status = "Error"
+        error_message = "Failed to generate embedding"
+
+        # Mock responses
+        expected_response = [{"id": 1, "snippet": snippet_id}]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+        mock_supabase.table.return_value.insert.return_value.execute.return_value.data = expected_response
+
+        response = supabase_client.upsert_snippet_embedding(
+            snippet_id=snippet_id,
+            snippet_document=snippet_document,
+            document_token_count=document_token_count,
+            embedding=embedding,
+            model_name=model_name,
+            status=status,
+            error_message=error_message
+        )
+
+        # Verify insert was called with correct parameters
+        mock_supabase.table.return_value.insert.assert_called_once_with({
+            "snippet": snippet_id,
+            "snippet_document": snippet_document,
+            "document_token_count": document_token_count,
+            "embedding": embedding,
+            "model_name": model_name,
+            "status": status,
+            "error_message": error_message,
+        })
+        assert response == expected_response[0]

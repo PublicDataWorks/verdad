@@ -15,6 +15,7 @@ primary_region = 'sea'
   redo_main_detection = ''
   undo_disinformation_detection = ''
   undo_audio_clipping = ''
+  embedding = ''
 
 [[vm]]
   processes = ["initial_disinformation_detection"]
@@ -29,7 +30,7 @@ primary_region = 'sea'
   cpus = 4
 
 [[vm]]
-  processes = ["regenerate_timestamped_transcript", "in_depth_analysis"]
+  processes = ["regenerate_timestamped_transcript", "in_depth_analysis", "embedding"]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 4

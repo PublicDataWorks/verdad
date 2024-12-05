@@ -9,6 +9,7 @@ BEGIN
         SELECT id
         FROM public.stage_1_llm_responses
         WHERE status = 'New'
+        ORDER BY created_at DESC
         LIMIT 1
         FOR UPDATE SKIP LOCKED
     )

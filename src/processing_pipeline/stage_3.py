@@ -4,7 +4,6 @@ import google.generativeai as genai
 import json
 import boto3
 
-from prefect import task, flow
 from prefect.task_runners import ConcurrentTaskRunner
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from processing_pipeline.supabase_utils import SupabaseClient

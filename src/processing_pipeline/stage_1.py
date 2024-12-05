@@ -6,7 +6,6 @@ import boto3
 import uuid
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from openai import OpenAI
-from prefect import flow, task
 from prefect.task_runners import ConcurrentTaskRunner
 from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
 from processing_pipeline.stage_1_preprocess import Stage1PreprocessDetectionExecutor, Stage1PreprocessTranscriptionExecutor

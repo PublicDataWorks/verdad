@@ -99,6 +99,15 @@ class TestMainProcessing:
                     'parameters': {'snippet_ids': [], 'repeat': True}
                 },
                 'serve_limit': 100
+            },
+            {
+                'group': 'embedding',
+                'expected_params': {
+                    'name': "Stage 4: Embedding",
+                    'concurrency_limit': 100,
+                    'parameters': {'repeat': True}
+                },
+                'serve_limit': 100
             }
         ]
 
@@ -136,6 +145,9 @@ class TestMainProcessing:
                         deployment = mock_flow.to_deployment(**case['expected_params'])
                         mock_serve(deployment)
                     case "in_depth_analysis":
+                        deployment = mock_flow.to_deployment(**case['expected_params'])
+                        mock_serve(deployment, limit=case.get('serve_limit'))
+                    case "embedding":
                         deployment = mock_flow.to_deployment(**case['expected_params'])
                         mock_serve(deployment, limit=case.get('serve_limit'))
 
@@ -196,6 +208,7 @@ class TestMainProcessing:
             'audio_clipping',
             'undo_audio_clipping',
             'in_depth_analysis',
+            'embedding',
             'invalid_group'
         ]
 
@@ -309,6 +322,13 @@ class TestMainProcessing:
                             parameters=dict(context_before_seconds=90, context_after_seconds=60, repeat=True),
                         )
                         mock_serve(deployment, limit=100)
+                    case "embedding":
+                        deployment = mock_flow.to_deployment(
+                            name="Stage 4: Embedding",
+                            concurrency_limit=100,
+                            parameters=dict(repeat=True),
+                        )
+                        mock_serve(deployment, limit=100)
 
                 if case['has_limit']:
                     mock_serve.assert_called_once_with(mock_deployment, limit=case['limit_value'])
@@ -341,6 +361,7 @@ class TestMainProcessing:
             'audio_clipping',
             'undo_audio_clipping',
             'in_depth_analysis',
+            'embedding',
             'invalid_group'
         ]
 

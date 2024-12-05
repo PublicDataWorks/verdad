@@ -9,6 +9,7 @@ BEGIN
         SELECT id
         FROM public.snippets
         WHERE status = 'New'
+        ORDER BY recorded_at DESC
         LIMIT 1
         FOR UPDATE SKIP LOCKED
     )

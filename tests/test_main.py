@@ -74,7 +74,7 @@ class TestMain:
 
             # Import and run main
             import main
-            main.main()
+            main.test_timestamped_transcription_generator()
 
             # Verify S3 download
             mock_s3.download_file.assert_called_once_with(
@@ -107,7 +107,7 @@ class TestMain:
 
             # Import and run main
             import main
-            main.main()
+            main.test_timestamped_transcription_generator()
 
             # Verify download was attempted
             mock_s3.download_file.assert_called_once_with(
@@ -145,7 +145,7 @@ class TestMain:
             # Import and run main
             import main
             with pytest.raises(Exception, match="Download failed"):
-                main.main()
+                main.test_timestamped_transcription_generator()
 
             # Verify existence check was made
             mock_exists.assert_called_with("radio_1853b3_20241127_102353.mp3")
@@ -169,7 +169,7 @@ class TestMain:
             # Import and run main
             import main
             with pytest.raises(Exception, match="Transcription failed"):
-                main.main()
+                main.test_timestamped_transcription_generator()
 
             mock_remove.assert_called_once_with("radio_1853b3_20241127_102353.mp3")
 
@@ -191,6 +191,6 @@ class TestMain:
             # Import and run main
             import main
             with pytest.raises(Exception, match="Cleanup failed"):
-                main.main()
+                main.test_timestamped_transcription_generator()
 
             mock_remove.assert_called_once_with("radio_1853b3_20241127_102353.mp3")

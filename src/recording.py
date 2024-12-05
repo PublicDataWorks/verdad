@@ -3,7 +3,7 @@ import os
 import time
 import hashlib
 import boto3
-from prefect import flow, serve, task
+from prefect import serve
 from prefect.task_runners import ConcurrentTaskRunner
 
 from ffmpeg import FFmpeg

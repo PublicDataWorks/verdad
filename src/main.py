@@ -20,13 +20,13 @@ s3_client = boto3.client(
     aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
 )
 
-# Setup Gemini Key
-GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
-
 # Setup Supabase client
 supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
-def main():
+# Setup Gemini Key
+GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
+
+def test_timestamped_transcription_generator():
     # Download the audio file from R2
     audio_file = "radio_1853b3_20241127_102353.mp3"
     try:
@@ -43,4 +43,4 @@ def main():
             os.remove(audio_file)
 
 if __name__ == "__main__":
-    main()
+    test_timestamped_transcription_generator()

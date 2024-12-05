@@ -318,3 +318,34 @@ class SupabaseClient:
     def delete_stage_1_llm_responses(self, audio_file_ids):
         response = self.client.table("stage_1_llm_responses").delete().in_("audio_file", audio_file_ids).execute()
         return response.data
+
+    def get_a_snippet_that_has_no_embedding(self):
+        response = self.client.rpc("fetch_a_snippet_that_has_no_embedding").execute()
+        return response.data if response.data else None
+
+    def upsert_snippet_embedding(self, snippet_id, snippet_document, document_token_count, embedding, model_name, status, error_message):
+        # Check if the embedding of the snippet already exists
+        existing_embedding = self.client.table("snippet_embeddings").select("id").eq("snippet", snippet_id).execute()
+        if existing_embedding.data:
+            # If it exists, update the embedding
+            response = self.client.table("snippet_embeddings").update({
+                "snippet_document": snippet_document,
+                "document_token_count": document_token_count,
+                "embedding": embedding,
+                "model_name": model_name,
+                "status": status,
+                "error_message": error_message,
+            }).eq("snippet", snippet_id).execute()
+            return response.data[0]
+        else:
+            # If not, insert the new embedding
+            response = self.client.table("snippet_embeddings").insert({
+                "snippet": snippet_id,
+                "snippet_document": snippet_document,
+                "document_token_count": document_token_count,
+                "embedding": embedding,
+                "model_name": model_name,
+                "status": status,
+                "error_message": error_message,
+            }).execute()
+            return response.data[0]
