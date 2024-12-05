@@ -645,3 +645,78 @@ Disinformation involving extreme representations of political groups or figures,
 - *Arabic*: "يريد 'الاشتراكيون' تحويلنا إلى بلد شيوعي آخر."
 
 ---
+
+### **19. Labor Rights and Union Activities**
+
+**Description**:
+
+Disinformation that undermines labor organizing efforts and workers' rights through false narratives about unions, collective bargaining, or labor law enforcement. This includes misrepresenting the role of unions, the NLRB, and the impacts of collective bargaining.
+
+**Common Narratives**:
+
+- Portraying unions as corrupt organizations that only collect dues
+- Claiming organizing efforts will lead to job losses or business closures
+- Misrepresenting NLRB processes and workers' legal rights
+- Spreading fear about strikes and collective action
+- Alleging that unions hurt economic growth or worker freedom
+
+**Cultural/Regional Variations**:
+
+- **Spanish-Speaking Communities**:
+  - Drawing parallels to labor conflicts in countries of origin
+  - References to historical labor movements and strikes
+  - Use of terms like "sindicatos corruptos" (corrupt unions)
+- **Arabic-Speaking Communities**:
+  - Concerns about workplace discrimination and retaliation
+  - Cultural perspectives on collective action
+  - References to labor rights in home countries
+
+**Potential Legitimate Discussions**:
+
+- Debates about union policies and leadership
+- Discussions of labor law reform
+- Analysis of collective bargaining outcomes
+- Conversations about workplace conditions and safety
+
+**Examples**:
+
+- *Spanish*: "Los sindicatos solo quieren tus cuotas y harán que la empresa cierre."
+- *Arabic*: "النقابات تريد فقط رسومك وستجعل الشركة تغلق."
+
+#### **19.1 Collective Bargaining and Labor Law**
+
+**Description**:
+
+Disinformation about collective bargaining processes, labor laws, and workers' rights under the NLRB.
+
+**Common Narratives**:
+
+- Claims that collective bargaining always leads to worse conditions
+- Misrepresenting workers' legal rights during organizing
+- False statements about NLRB procedures and protections
+- Allegations of unfair labor practices without evidence
+
+**Examples**:
+
+- *Spanish*: "La negociación colectiva siempre resulta en pérdida de beneficios."
+- *Arabic*: "المفاوضة الجماعية تؤدي دائمًا إلى فقدان المزايا."
+
+#### **19.2 Strikes and Labor Actions**
+
+**Description**:
+
+Disinformation about strikes, picketing, and other forms of collective action.
+
+**Common Narratives**:
+
+- Portraying all strikes as violent or illegal
+- Claiming strikers always lose their jobs
+- Spreading fear about strike impacts on communities
+- Misrepresenting striker rights and protections
+
+**Examples**:
+
+- *Spanish*: "Las huelgas siempre terminan en violencia y pérdida de empleos."
+- *Arabic*: "الإضرابات تنتهي دائمًا بالعنف وفقدان الوظائف."
+
+---

@@ -643,6 +643,39 @@ Disinformation involving extreme portrayals of political groups or figures, attr
 
 ---
 
+### **19. Labor Rights and Union Activities**
+
+**Description**:
+
+Disinformation that misrepresents labor organizing efforts, union activities, or workers' rights, often aiming to discourage collective action or spread fear about unions.
+
+**Keywords/Phrases**:
+
+- **Spanish**:
+  - "sindicatos corruptos" (corrupt unions)
+  - "huelga ilegal" (illegal strike)
+  - "agitadores laborales" (labor agitators)
+  - "pérdida de empleos por sindicatos" (job losses due to unions)
+- **Arabic**:
+  - "نقابات فاسدة" (corrupt unions)
+  - "إضراب غير قانوني" (illegal strike)
+  - "محرضون عماليون" (labor agitators)
+  - "فقدان الوظائف بسبب النقابات" (job losses due to unions)
+
+**Heuristics**:
+
+- Claims that unions only collect dues without providing benefits
+- Allegations that organizing efforts will lead to business closures
+- False statements about NLRB processes or workers' rights
+- Misrepresentation of collective bargaining impacts
+
+**Examples**:
+
+- *Spanish*: "Los 'sindicatos corruptos' solo quieren tu dinero y causarán el cierre de la empresa."
+- *Arabic*: "النقابات الفاسدة تريد فقط أموالك وستتسبب في إغلاق الشركة."
+
+---
+
 ## Additional Instructions
 
 - **Maximize Reliability**: Carefully apply the heuristics to ensure accurate identification of potential disinformation.

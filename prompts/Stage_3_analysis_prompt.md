@@ -1349,6 +1349,81 @@ Disinformation involving extreme representations of political groups or figures,
 
 ---
 
+### **19. Labor Rights and Union Activities**
+
+**Description**:
+
+Disinformation that undermines labor organizing efforts and workers' rights through false narratives about unions, collective bargaining, or labor law enforcement. This includes misrepresenting the role of unions, the NLRB, and the impacts of collective bargaining.
+
+**Common Narratives**:
+
+- Portraying unions as corrupt organizations that only collect dues
+- Claiming organizing efforts will lead to job losses or business closures
+- Misrepresenting NLRB processes and workers' legal rights
+- Spreading fear about strikes and collective action
+- Alleging that unions hurt economic growth or worker freedom
+
+**Cultural/Regional Variations**:
+
+- **Spanish-Speaking Communities**:
+  - Drawing parallels to labor conflicts in countries of origin
+  - References to historical labor movements and strikes
+  - Use of terms like "sindicatos corruptos" (corrupt unions)
+- **Arabic-Speaking Communities**:
+  - Concerns about workplace discrimination and retaliation
+  - Cultural perspectives on collective action
+  - References to labor rights in home countries
+
+**Potential Legitimate Discussions**:
+
+- Debates about union policies and leadership
+- Discussions of labor law reform
+- Analysis of collective bargaining outcomes
+- Conversations about workplace conditions and safety
+
+**Examples**:
+
+- *Spanish*: "Los sindicatos solo quieren tus cuotas y harán que la empresa cierre."
+- *Arabic*: "النقابات تريد فقط رسومك وستجعل الشركة تغلق."
+
+#### **19.1 Collective Bargaining and Labor Law**
+
+**Description**:
+
+Disinformation about collective bargaining processes, labor laws, and workers' rights under the NLRB.
+
+**Common Narratives**:
+
+- Claims that collective bargaining always leads to worse conditions
+- Misrepresenting workers' legal rights during organizing
+- False statements about NLRB procedures and protections
+- Allegations of unfair labor practices without evidence
+
+**Examples**:
+
+- *Spanish*: "La negociación colectiva siempre resulta en pérdida de beneficios."
+- *Arabic*: "المفاوضة الجماعية تؤدي دائمًا إلى فقدان المزايا."
+
+#### **19.2 Strikes and Labor Actions**
+
+**Description**:
+
+Disinformation about strikes, picketing, and other forms of collective action.
+
+**Common Narratives**:
+
+- Portraying all strikes as violent or illegal
+- Claiming strikers always lose their jobs
+- Spreading fear about strike impacts on communities
+- Misrepresenting striker rights and protections
+
+**Examples**:
+
+- *Spanish*: "Las huelgas siempre terminan en violencia y pérdida de empleos."
+- *Arabic*: "الإضرابات تنتهي دائمًا بالعنف وفقدان الوظائف."
+
+---
+
 ### **Additional Instructions**
 
 - **Cultural Sensitivity:** Always consider the cultural context and avoid imposing external biases. Be respectful of cultural nuances in language and expression.
@@ -1404,7 +1479,7 @@ Below is a complete example showing all required fields:
     "register": "Informal"
   },
   "context": {
-    "before": "Estamos viviendo tiempos difíciles, y hay muchas cosas que no nos dicen. La economía está en declive, la inflación está aumentando y parece que el gobierno no tiene soluciones claras. Además, hay un debate constante sobre las vacunas obligatorias.",
+    "before": "Estamos viviendo tiempos difíciles, y hay muchas cosas que no nos dicen. La economía está en declive, la inflación está aumentando y parece que el gobierno no tiene soluciones claras. Además, hay un debate constante sobre las vacunaciones obligatorias.",
     "before_en": "We are living in difficult times, and there are many things they're not telling us. The economy is declining, inflation is rising, and it seems like the government doesn't have clear solutions. Additionally, there's a constant debate about mandatory vaccinations.",
     "after": "Por eso debemos informarnos y proteger a nuestras familias.",
     "after_en": "That's why we need to inform ourselves and protect our families.",
