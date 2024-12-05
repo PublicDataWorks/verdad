@@ -66,35 +66,35 @@ Below are detailed heuristics for each disinformation category, including cultur
 ### **1. Election Integrity and Voting Processes**
 
 **Description**:
-
-Disinformation that makes unfounded allegations about electoral systems, fraud, manipulation, or interference. Note: Claims about the 2024 Presidential Election outcome should be evaluated against official results showing Donald Trump's victory with 292 electoral votes and approximately 71.56 million individual votes.
+Disinformation that falsely claims election fraud or manipulation in cases where no credible evidence exists. Note: Claims about the 2024 Presidential Election outcome should be evaluated against the official results showing Donald Trump's victory with 312 electoral votes and approximately 77.2 million individual votes (49.9%).
 
 **Keywords/Phrases**:
-
 - **Spanish**:
   - "elección amañada" (rigged election)
   - "fraude electoral" (electoral fraud)
   - "votos robados" (stolen votes)
   - "voto por correo no seguro" (mail-in voting is unsafe)
   - "manipulación de máquinas de votación" (voting machine manipulation)
+  - "victoria robada de Harris" (Harris's stolen victory)
+  - "fraude para ayudar a Harris" (fraud to help Harris)
 - **Arabic**:
   - "انتخابات مزورة" (rigged elections)
   - "تزوير الأصوات" (vote tampering)
   - "سرقة الانتخابات" (election theft)
   - "التصويت عبر البريد غير آمن" (mail-in voting is unsafe)
   - "تلاعب بآلات التصويت" (voting machine manipulation)
+  - "فوز هاريس المسروق" (Harris's stolen victory)
+  - "تزوير لمساعدة هاريس" (fraud to help Harris)
 
 **Heuristics**:
-
 - Claims of widespread voter fraud without evidence
 - False claims that Kamala Harris won the 2024 election
-- Unfounded allegations about specific states' results that contradict official tallies
-- Claims that mail-in voting led to significant fraud
+- Unfounded allegations about voting systems being manipulated to favor Harris
+- Note: Statements accurately reporting Trump's 2024 victory (312 electoral votes and winning the popular vote) should NOT be flagged as disinformation
 
 **Examples**:
-
-- *Spanish*: "Harris ganó el voto popular por millones, pero Trump robó la elección" (FALSE - Trump won with 71.56M votes)
-- *Arabic*: "هاريس فازت بالتصويت الشعبي بالملايين ، لكن ترامب سرق الانتخابات" (FALSE - Trump won with 71.56M votes)
+- *Spanish*: "Harris ganó el voto popular por millones, pero Trump robó la elección" (FALSE claim to flag)
+- *Arabic*: "هاريس فازت بالتصويت الشعبي بالملايين ، لكن ترامب سرق الانتخابات" (FALSE claim to flag)
 
 ---
 
@@ -612,6 +612,39 @@ Disinformation involving extreme portrayals of political groups or figures, attr
 
 - *Spanish*: "Los 'progresistas radicales' quieren destruir el país."
 - *Arabic*: "يريد 'التقدميون المتطرفون' تدمير البلاد."
+
+---
+
+### **19. Labor Rights and Union Activities**
+
+**Description**:
+
+Disinformation that misrepresents labor organizing efforts, union activities, or workers' rights, often aiming to discourage collective action or spread fear about unions.
+
+**Keywords/Phrases**:
+
+- **Spanish**:
+  - "sindicatos corruptos" (corrupt unions)
+  - "huelga ilegal" (illegal strike)
+  - "agitadores laborales" (labor agitators)
+  - "pérdida de empleos por sindicatos" (job losses due to unions)
+- **Arabic**:
+  - "نقابات فاسدة" (corrupt unions)
+  - "إضراب غير قانوني" (illegal strike)
+  - "محرضون عماليون" (labor agitators)
+  - "فقدان الوظائف بسبب النقابات" (job losses due to unions)
+
+**Heuristics**:
+
+- Claims that unions only collect dues without providing benefits
+- Allegations that organizing efforts will lead to business closures
+- False statements about NLRB processes or workers' rights
+- Misrepresentation of collective bargaining impacts
+
+**Examples**:
+
+- *Spanish*: "Los 'sindicatos corruptos' solo quieren tu dinero y causarán el cierre de la empresa."
+- *Arabic*: "النقابات الفاسدة تريد فقط أموالك وستتسبب في إغلاق الشركة."
 
 ---
 
