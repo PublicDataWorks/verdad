@@ -1,5 +1,7 @@
 import json
+import os
 from unittest.mock import Mock, patch, call
+import uuid
 import pytest
 from processing_pipeline.stage_1 import (
     fetch_a_new_audio_file_from_supabase,
@@ -651,3 +653,183 @@ class TestHelperFunctions:
 
             mock_supabase_client.get_audio_file_by_id.assert_called_once_with(1)
             mock_s3_client.download_file.assert_called_once()
+
+    def test_transcribe_audio_file_with_custom_generator_multiple_segments(self, mock_supabase_client):
+        """Test transcription with custom generator handling multiple segments"""
+        with patch('processing_pipeline.stage_1.TimestampedTranscriptionGenerator') as mock_generator:
+            # Mock generator to return transcription with multiple segments
+            mock_generator.run.return_value = (
+                "[00:00] First segment.\n"
+                "[00:10] Second segment.\n"
+                "[00:20] Third segment.\n"
+            )
+
+            result = transcribe_audio_file_with_custom_timestamped_transcription_generator("test.mp3")
+
+            assert isinstance(result, dict)
+            assert "timestamped_transcription" in result
+            assert len(result["timestamped_transcription"].split("\n")) == 4  # 3 segments + empty line
+            mock_generator.run.assert_called_once_with("test.mp3", os.getenv("GOOGLE_GEMINI_KEY"), 10)
+
+    def test_disinformation_detection_with_unicode_handling(self, mock_supabase_client, mock_gemini_model):
+        """Test disinformation detection with Unicode characters"""
+        timestamped_transcription = "Test transcription with Unicode: áéíóú ñ"
+        metadata = {
+            "radio_station_name": "Test Station",
+            "time_zone": "UTC"
+        }
+
+        # Configure mock response with Unicode characters
+        mock_gemini_model.return_value.generate_content.return_value.text = json.dumps({
+            "flagged_snippets": [{
+                "uuid": str(uuid.uuid4()),
+                "transcription": "Unicode text: áéíóú",
+                "explanation": "Test explanation with ñ"
+            }]
+        })
+
+        result = disinformation_detection_with_gemini_1_5_pro(
+            timestamped_transcription=timestamped_transcription,
+            metadata=metadata
+        )
+
+        assert isinstance(result, dict)
+        assert "flagged_snippets" in result
+        assert len(result["flagged_snippets"]) == 1
+        assert "uuid" in result["flagged_snippets"][0]
+
+    def test_regenerate_timestamped_transcript_with_multiple_files(self, mock_supabase_client, mock_s3_client):
+        """Test regenerating timestamped transcripts for multiple files"""
+        stage_1_llm_responses = [
+            {
+                "id": 1,
+                "audio_file": {
+                    "file_path": "test1.mp3",
+                    "radio_station_name": "Test Station 1",
+                    "radio_station_code": "TEST1-FM",
+                    "location_state": "Test State",
+                    "location_city": "Test City",
+                    "recorded_at": "2024-01-01T00:00:00Z",
+                    "recording_day_of_week": "Monday"
+                },
+                "initial_detection_result": {"flagged_snippets": [{"uuid": "1"}]},
+                "timestamped_transcription": {"timestamped_transcription": "Test transcription 1"}
+            },
+            {
+                "id": 2,
+                "audio_file": {
+                    "file_path": "test2.mp3",
+                    "radio_station_name": "Test Station 2",
+                    "radio_station_code": "TEST2-FM",
+                    "location_state": "Test State",
+                    "location_city": "Test City",
+                    "recorded_at": "2024-01-01T00:00:00Z",
+                    "recording_day_of_week": "Monday"
+                },
+                "initial_detection_result": {"flagged_snippets": [{"uuid": "2"}]},
+                "timestamped_transcription": {"timestamped_transcription": "Test transcription 2"}
+            }
+        ]
+
+        mock_gemini_response = Mock()
+        mock_gemini_response.text = json.dumps({
+            "flagged_snippets": [
+                {
+                    "uuid": str(uuid.uuid4()),
+                    "transcription": "Test transcription",
+                    "explanation": "Test explanation"
+                }
+            ]
+        })
+
+        with patch('os.remove'), \
+            patch('processing_pipeline.stage_1.transcribe_audio_file_with_custom_timestamped_transcription_generator') as mock_transcribe, \
+            patch('processing_pipeline.stage_1.fetch_stage_1_llm_response_by_id') as mock_fetch, \
+            patch('processing_pipeline.stage_1.download_audio_file_from_s3') as mock_download, \
+            patch('google.generativeai.GenerativeModel') as mock_genai_model:
+
+            # Setup mock transcribe
+            mock_transcribe.return_value = {"timestamped_transcription": "Test transcription"}
+
+            # Setup mock fetch
+            mock_fetch.side_effect = stage_1_llm_responses
+
+            # Setup mock download
+            mock_download.return_value = "local_file.mp3"
+
+            # Setup mock Gemini model
+            mock_model = Mock()
+            mock_model.generate_content.return_value = mock_gemini_response
+            mock_genai_model.return_value = mock_model
+
+            # Mock genai.configure to prevent actual API calls
+            with patch('google.generativeai.configure'):
+                regenerate_timestamped_transcript([1, 2])
+
+                # Verify fetch was called for each ID
+                assert mock_fetch.call_count == 2
+                mock_fetch.assert_has_calls([
+                    call(mock_supabase_client, 1),
+                    call(mock_supabase_client, 2)
+                ])
+
+                # Verify transcribe was called for each file
+                assert mock_transcribe.call_count == 2
+                mock_transcribe.assert_has_calls([
+                    call("local_file.mp3"),
+                    call("local_file.mp3")
+                ])
+
+                # Verify Gemini model was called for each file
+                assert mock_model.generate_content.call_count == 2
+
+                # Verify update was called for each response
+                assert mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.call_count == 2
+                mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_has_calls([
+                    call(1, {"timestamped_transcription": "Test transcription"}),
+                    call(2, {"timestamped_transcription": "Test transcription"})
+                ])
+
+                # Verify download was called for each file
+                assert mock_download.call_count == 2
+                mock_download.assert_has_calls([
+                    call(mock_s3_client, "test1.mp3"),
+                    call(mock_s3_client, "test2.mp3")
+                ])
+
+                # Verify status updates
+                assert mock_supabase_client.reset_stage_1_llm_response_status.call_count == 2
+                mock_supabase_client.reset_stage_1_llm_response_status.assert_has_calls([
+                    call(1),
+                    call(2)
+                ])
+
+    def test_initial_disinformation_detection_memory_management(self, mock_supabase_client, mock_s3_client):
+        """Test memory management during initial disinformation detection"""
+        audio_files = [
+            {
+                "id": i,
+                "file_path": f"test{i}.mp3",
+                "radio_station_name": "Test Station",
+                "radio_station_code": "TEST-FM",
+                "location_state": "Test State",
+                "location_city": "Test City",
+                "recorded_at": "2024-01-01T00:00:00Z",
+                "recording_day_of_week": "Monday"
+            } for i in range(3)
+        ]
+
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.side_effect = audio_files + [None]
+
+        with patch('os.remove') as mock_remove, \
+            patch('processing_pipeline.stage_1.process_audio_file') as mock_process:
+
+            initial_disinformation_detection(
+                audio_file_id=None,
+                use_openai=False,
+                limit=3
+            )
+
+            assert mock_process.call_count == 3
+            assert mock_remove.call_count == 3
+            assert mock_s3_client.download_file.call_count == 3

@@ -1,4 +1,3 @@
-import importlib
 import os
 import sys
 from unittest.mock import Mock, patch
@@ -103,7 +102,7 @@ class TestMainProcessing:
             {
                 'group': 'embedding',
                 'expected_params': {
-                    'name': "Stage 4: Embedding",
+                    'name': "Stage 5: Embedding",
                     'concurrency_limit': 100,
                     'parameters': {'repeat': True}
                 },
@@ -324,7 +323,7 @@ class TestMainProcessing:
                         mock_serve(deployment, limit=100)
                     case "embedding":
                         deployment = mock_flow.to_deployment(
-                            name="Stage 4: Embedding",
+                            name="Stage 5: Embedding",
                             concurrency_limit=100,
                             parameters=dict(repeat=True),
                         )

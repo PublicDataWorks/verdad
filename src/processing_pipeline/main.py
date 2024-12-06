@@ -5,7 +5,7 @@ import sentry_sdk
 from processing_pipeline.stage_1 import initial_disinformation_detection, redo_main_detection, regenerate_timestamped_transcript, undo_disinformation_detection
 from processing_pipeline.stage_2 import audio_clipping, undo_audio_clipping
 from processing_pipeline.stage_3 import in_depth_analysis
-from processing_pipeline.stage_4 import embedding
+from processing_pipeline.stage_5 import embedding
 load_dotenv()
 
 # Setup Sentry
@@ -61,7 +61,7 @@ if __name__ == "__main__":
             serve(deployment, limit=100)
         case "embedding":
             deployment = embedding.to_deployment(
-                name="Stage 4: Embedding",
+                name="Stage 5: Embedding",
                 concurrency_limit=100,
                 parameters=dict(repeat=True),
             )

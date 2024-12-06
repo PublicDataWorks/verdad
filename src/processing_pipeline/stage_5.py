@@ -69,7 +69,7 @@ def generate_snippet_embedding(supabase_client, snippet_id, snippet_document):
 
     try:
         print(f"Generating vector embedding for snippet f{snippet_id}...")
-        embedding = Stage4Executor.run(snippet_document, model_name)
+        embedding = Stage5Executor.run(snippet_document, model_name)
         upsert_snippet_embedding_to_supabase(
             supabase_client=supabase_client,
             snippet_id=snippet_id,
@@ -96,7 +96,7 @@ def generate_snippet_embedding(supabase_client, snippet_id, snippet_document):
         )
 
 
-@optional_flow(name="Stage 4: Embedding", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Stage 5: Embedding", log_prints=True, task_runner=ConcurrentTaskRunner)
 def embedding(repeat):
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
@@ -121,7 +121,7 @@ def embedding(repeat):
         time.sleep(sleep_time)
 
 
-class Stage4Executor:
+class Stage5Executor:
 
     @classmethod
     def run(cls, text, model_name):

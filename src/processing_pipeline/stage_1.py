@@ -167,6 +167,15 @@ def insert_stage_1_llm_response(
         status=status,
     )
 
+@optional_task(log_prints=True, retries=3)
+def set_audio_file_status_success(supabase_client, audio_file_id):
+    supabase_client.set_audio_file_status(audio_file_id, "Processed")
+
+
+@optional_task(log_prints=True, retries=3)
+def set_audio_file_status_error(supabase_client, audio_file_id, error_message):
+    supabase_client.set_audio_file_status(audio_file_id, "Error", error_message)
+
 
 @optional_task(log_prints=True)
 def process_audio_file(supabase_client, audio_file, local_file, use_openai):
@@ -244,11 +253,11 @@ def process_audio_file(supabase_client, audio_file, local_file, use_openai):
                 )
 
         print(f"Processing completed for {local_file}")
-        supabase_client.set_audio_file_status(audio_file["id"], "Processed")
+        set_audio_file_status_success(supabase_client, audio_file["id"])
 
     except Exception as e:
         print(f"Failed to process audio file {local_file}: {e}")
-        supabase_client.set_audio_file_status(audio_file["id"], "Error", str(e))
+        set_audio_file_status_error(supabase_client, audio_file["id"], str(e))
 
 
 @optional_flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
