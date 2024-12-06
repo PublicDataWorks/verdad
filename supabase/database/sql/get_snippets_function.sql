@@ -1,7 +1,13 @@
 DROP FUNCTION IF EXISTS get_snippets;
 
-CREATE
-OR REPLACE FUNCTION get_snippets (p_language text,p_filter jsonb,page INTEGER,page_size INTEGER, p_order_by text, p_search_term text) RETURNS jsonb SECURITY DEFINER AS $$
+CREATE OR REPLACE FUNCTION get_snippets (
+    p_language text,
+    p_filter jsonb,
+    page INTEGER,
+    page_size INTEGER,
+    p_order_by text,
+    p_search_term text DEFAULT ''
+) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
     current_user_id UUID;
     result jsonb;
@@ -9,6 +15,7 @@ DECLARE
     total_pages INTEGER;
     user_roles TEXT[];
     user_is_admin BOOLEAN;
+    trimmed_search_term TEXT := TRIM(p_search_term); -- Trim the search term here
 BEGIN
     current_user_id := auth.uid();
     IF current_user_id IS NULL THEN
@@ -252,12 +259,12 @@ BEGIN
             )
         )
         AND (
-            p_search_term = '' OR (
-                ((title ->> 'english') || ' ' || (title ->> 'spanish')) &@ p_search_term
-                OR ((explanation ->> 'english') || ' ' || (explanation ->> 'spanish')) &@ p_search_term
-                OR ((summary ->> 'english') || ' ' || (summary ->> 'spanish')) &@ p_search_term
-                OR transcription &@ p_search_term                 
-                OR translation &@ p_search_term
+            trimmed_search_term = '' OR (
+                ((s.title ->> 'english') || ' ' || (s.title ->> 'spanish')) &@ trimmed_search_term
+                OR ((s.explanation ->> 'english') || ' ' || (s.explanation ->> 'spanish')) &@ trimmed_search_term
+                OR ((s.summary ->> 'english') || ' ' || (s.summary ->> 'spanish')) &@ trimmed_search_term
+                OR s.transcription &@ trimmed_search_term                 
+                OR s.translation &@ trimmed_search_term
             )
         )
         ORDER BY 
@@ -269,7 +276,7 @@ BEGIN
                 ELSE EXTRACT(EPOCH FROM s.recorded_at)
             END DESC,
             s.recorded_at DESC;
-          
+        
     SELECT COUNT(*) INTO total_count
     FROM filtered_snippets;
 
@@ -285,11 +292,11 @@ BEGIN
     total_pages := CEIL(total_count::FLOAT / page_size);
 
     RETURN jsonb_build_object(
-    'num_of_snippets', total_count,
-    'snippets', COALESCE(result, '[]'::jsonb),
-    'current_page', page,
-    'page_size', page_size,
-    'total_pages', total_pages
-);
+        'num_of_snippets', total_count,
+        'snippets', COALESCE(result, '[]'::jsonb),
+        'current_page', page,
+        'page_size', page_size,
+        'total_pages', total_pages
+    );
 END;
 $$ LANGUAGE plpgsql;
