@@ -1,5 +1,7 @@
+DROP FUNCTION IF EXISTS get_snippets;
+
 CREATE
-OR REPLACE FUNCTION get_snippets_order_by (p_language text,p_filter jsonb,page INTEGER,page_size INTEGER, p_order_by text) RETURNS jsonb SECURITY DEFINER AS $$
+OR REPLACE FUNCTION get_snippets (p_language text,p_filter jsonb,page INTEGER,page_size INTEGER, p_order_by text, p_search_term text) RETURNS jsonb SECURITY DEFINER AS $$
 DECLARE
     current_user_id UUID;
     result jsonb;
@@ -8,19 +10,16 @@ DECLARE
     user_roles TEXT[];
     user_is_admin BOOLEAN;
 BEGIN
-    -- Check if the user is authenticated
     current_user_id := auth.uid();
     IF current_user_id IS NULL THEN
         RAISE EXCEPTION 'Only logged-in users can call this function';
     END IF;
 
-    -- Get the role names from the roles table by joining with user_roles
     SELECT array_agg(r.name) INTO user_roles
     FROM public.user_roles ur
     JOIN public.roles r ON ur.role = r.id
     WHERE ur."user" = current_user_id;
 
-    -- Check if the current user has the 'admin' role
     user_is_admin := COALESCE('admin' = ANY(user_roles), FALSE);
 
     CREATE TEMP TABLE filtered_snippets AS
@@ -252,6 +251,16 @@ BEGIN
                 END
             )
         )
+        AND (
+            p_search_term = '' OR (
+                ((title ->> 'english') || ' ' || (title ->> 'spanish')) &@ p_search_term
+                OR transcription &@ p_search_term                 
+                OR translation &@ p_search_term
+                OR ((context ->> 'english') || ' ' || (context ->> 'spanish')) &@ p_search_term
+                OR ((explanation ->> 'english') || ' ' || (explanation ->> 'spanish')) &@ p_search_term
+                OR ((summary ->> 'english') || ' ' || (summary ->> 'spanish')) &@ p_search_term
+            )
+        )
         ORDER BY 
             CASE
                 WHEN p_order_by = 'upvotes' THEN s.upvote_count + s.like_count
@@ -262,11 +271,9 @@ BEGIN
             END DESC,
             s.recorded_at DESC;
           
-    -- Get total count
     SELECT COUNT(*) INTO total_count
     FROM filtered_snippets;
 
-    -- Get paginated results
     SELECT jsonb_agg(fs.*) INTO result
     FROM (
         SELECT * FROM filtered_snippets
@@ -274,10 +281,8 @@ BEGIN
         OFFSET page * page_size
     ) fs;
 
-    -- Clean up
     DROP TABLE filtered_snippets;
 
-    -- Calculate total pages after getting the filtered count
     total_pages := CEIL(total_count::FLOAT / page_size);
 
     RETURN jsonb_build_object(
@@ -288,5 +293,4 @@ BEGIN
     'total_pages', total_pages
 );
 END;
-
 $$ LANGUAGE plpgsql;
