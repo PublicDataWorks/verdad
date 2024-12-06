@@ -254,11 +254,10 @@ BEGIN
         AND (
             p_search_term = '' OR (
                 ((title ->> 'english') || ' ' || (title ->> 'spanish')) &@ p_search_term
-                OR transcription &@ p_search_term                 
-                OR translation &@ p_search_term
-                OR ((context ->> 'english') || ' ' || (context ->> 'spanish')) &@ p_search_term
                 OR ((explanation ->> 'english') || ' ' || (explanation ->> 'spanish')) &@ p_search_term
                 OR ((summary ->> 'english') || ' ' || (summary ->> 'spanish')) &@ p_search_term
+                OR transcription &@ p_search_term                 
+                OR translation &@ p_search_term
             )
         )
         ORDER BY 
