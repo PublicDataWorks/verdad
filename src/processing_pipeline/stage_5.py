@@ -50,7 +50,7 @@ def generate_snippet_document(snippet):
 
     document = f"Title: {title}\n\nSummary: {summary}\n\nExplanation: {explanation}\n\nContent: {transcription}\n\nTopics: {topics}"
 
-    print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>SNIPPET DOCUMENT<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n{document}")
+    print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> SNIPPET DOCUMENT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n{document}")
     return document
 
 
