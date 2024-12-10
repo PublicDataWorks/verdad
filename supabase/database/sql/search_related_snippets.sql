@@ -45,7 +45,7 @@ BEGIN
         JOIN snippets s ON s.id = se.snippet
         JOIN audio_files a ON a.id = s.audio_file
         WHERE
-            se.snippet != snippet_id
+            se.snippet != snippet_id  -- Exclude the source snippet
             AND 1 - (se.embedding <=> source_embedding) > match_threshold
         ORDER BY se.embedding <=> source_embedding
         LIMIT match_count
