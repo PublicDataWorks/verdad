@@ -33,6 +33,7 @@ BEGIN
         SELECT
             s.id,
             s.recorded_at,
+            s.user_last_activity,
             s.duration,
             s.start_time,
             s.end_time,
@@ -271,7 +272,11 @@ BEGIN
             CASE
                 WHEN p_order_by = 'upvotes' THEN s.upvote_count + s.like_count
                 WHEN p_order_by = 'comments' THEN s.comment_count 
-                WHEN p_order_by = 'activities' THEN EXTRACT(EPOCH FROM s.updated_at)
+                WHEN p_order_by = 'activities' THEN 
+                    CASE 
+                        WHEN s.user_last_activity IS NULL THEN 0
+                        ELSE EXTRACT(EPOCH FROM s.user_last_activity)
+                    END
                 WHEN p_order_by IS NULL OR p_order_by = 'latest' OR p_order_by = '' THEN EXTRACT(EPOCH FROM s.recorded_at)
                 ELSE EXTRACT(EPOCH FROM s.recorded_at)
             END DESC,
