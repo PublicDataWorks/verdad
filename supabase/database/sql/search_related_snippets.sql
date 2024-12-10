@@ -1,7 +1,8 @@
 CREATE OR REPLACE FUNCTION search_related_snippets(
     snippet_id uuid,
+    p_language TEXT DEFAULT 'english',
     match_threshold float DEFAULT 0.7,
-    match_count int DEFAULT 10
+    match_count int DEFAULT 3
 )
 RETURNS jsonb
 SECURITY DEFINER AS $$
@@ -31,8 +32,12 @@ BEGIN
             s.id,
             s.title,
             a.radio_station_name,
+            a.radio_station_code,
             a.location_state,
-            s.summary,
+            CASE
+                WHEN p_language = 'spanish' THEN s.summary ->> 'spanish'
+                ELSE s.summary ->> 'english'
+            END AS summary,
             s.recorded_at,
             s.comment_count,
             1 - (se.embedding <=> source_embedding) as similarity
@@ -50,22 +55,10 @@ BEGIN
             'id', ss.id,
             'title', ss.title,
             'radio_station_name', ss.radio_station_name,
+            'radio_station_code', ss.radio_station_code,
             'location_state', ss.location_state,
             'summary', ss.summary,
-            'labels', COALESCE(
-                (
-                    SELECT jsonb_agg(
-                        jsonb_build_object(
-                            'text', l.text,
-                            'text_spanish', l.text_spanish
-                        )
-                    )
-                    FROM snippet_labels sl
-                    JOIN labels l ON l.id = sl.label
-                    WHERE sl.snippet = ss.id
-                ),
-                '[]'::jsonb
-            ),
+            'labels', get_snippet_labels(ss.id, p_language) -> 'labels',
             'recorded_at', ss.recorded_at,
             'comment_count', ss.comment_count,
             'similarity', ss.similarity
