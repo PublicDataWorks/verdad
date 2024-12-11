@@ -26,6 +26,8 @@ BEGIN
         'end_time', s.end_time,
         'file_path', s.file_path,
         'file_size', s.file_size,
+        'title', s.title,
+        'summary', s.summary,
         'language', CASE
             WHEN s.language IS NULL THEN NULL
             ELSE s.language ->> 'primary_language'
