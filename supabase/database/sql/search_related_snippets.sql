@@ -2,7 +2,7 @@ CREATE OR REPLACE FUNCTION search_related_snippets(
     snippet_id uuid,
     p_language TEXT DEFAULT 'english',
     match_threshold float DEFAULT 0.7,
-    match_count int DEFAULT 3
+    match_count int DEFAULT 5
 )
 RETURNS jsonb
 SECURITY DEFINER AS $$
@@ -40,12 +40,17 @@ BEGIN
             END AS summary,
             s.recorded_at,
             s.comment_count,
-            1 - (se.embedding <=> source_embedding) as similarity
+            1 - (se.embedding <=> source_embedding) as similarity,
+            CASE
+                WHEN us.id IS NOT NULL THEN true
+                ELSE false
+            END AS starred_by_user
         FROM snippet_embeddings se
         JOIN snippets s ON s.id = se.snippet
         JOIN audio_files a ON a.id = s.audio_file
+        LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
         WHERE
-            se.snippet != snippet_id  -- Exclude the source snippet
+            se.snippet != snippet_id
             AND 1 - (se.embedding <=> source_embedding) > match_threshold
         ORDER BY se.embedding <=> source_embedding
         LIMIT match_count
@@ -61,7 +66,8 @@ BEGIN
             'labels', get_snippet_labels(ss.id, p_language) -> 'labels',
             'recorded_at', ss.recorded_at,
             'comment_count', ss.comment_count,
-            'similarity', ss.similarity
+            'similarity', ss.similarity,
+            'starred_by_user', ss.starred_by_user
         )
     ) INTO result
     FROM similar_snippets ss;
