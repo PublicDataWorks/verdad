@@ -455,7 +455,7 @@ class TestStage4:
         )
 
         assert isinstance(result, dict)
-        assert isinstance(grounding, dict)
+        assert isinstance(grounding, str)
 
         # Verify GenerativeModel was called twice with different configurations
         assert mock_gemini_model.call_count == 2

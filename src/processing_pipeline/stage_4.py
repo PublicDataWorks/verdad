@@ -220,7 +220,10 @@ class Stage4Executor:
         # Use another prompt to ensure the response is a "valid" json
         result = Stage4Executor.__ensure_json_format(response.text)
 
-        return result, response.candidates[0].grounding_metadata
+        # Convert the grounding metadata to a string
+        grounding_metadata = str(response.candidates[0].grounding_metadata) if response.candidates else None
+
+        return result, grounding_metadata
 
     @classmethod
     def __ensure_json_format(cls, response):
