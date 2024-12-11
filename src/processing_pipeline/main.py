@@ -6,6 +6,7 @@ from processing_pipeline.stage_1 import initial_disinformation_detection, redo_m
 from processing_pipeline.stage_2 import audio_clipping, undo_audio_clipping
 from processing_pipeline.stage_3 import in_depth_analysis
 from processing_pipeline.stage_5 import embedding
+from processing_pipeline.stage_4 import analysis_review
 load_dotenv()
 
 # Setup Sentry
@@ -55,6 +56,13 @@ if __name__ == "__main__":
         case "in_depth_analysis":
             deployment = in_depth_analysis.to_deployment(
                 name="Stage 3: In-Depth Analysis",
+                concurrency_limit=100,
+                parameters=dict(snippet_ids=[], repeat=True),
+            )
+            serve(deployment, limit=100)
+        case "analysis_review":
+            deployment = analysis_review.to_deployment(
+                name="Stage 4: Analysis Review",
                 concurrency_limit=100,
                 parameters=dict(snippet_ids=[], repeat=True),
             )

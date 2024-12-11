@@ -132,7 +132,7 @@ def fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id):
         return None
 
 
-@optional_flow(name="Stage 4: Disinformation Analysis Review", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(name="Stage 4: Analysis Review", log_prints=True, task_runner=ConcurrentTaskRunner)
 def analysis_review(snippet_ids, repeat):
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
