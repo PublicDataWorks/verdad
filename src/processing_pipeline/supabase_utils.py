@@ -221,7 +221,16 @@ class SupabaseClient:
         )
         return response.data
 
-    def submit_snippet_review(self, id, transcription, translation, title, summary, explanation, disinformation_categories, keywords_detected, language, confidence_scores, context, political_leaning, grounding_metadata, previous_analysis):
+    def update_snippet_previous_analysis(self, id, previous_analysis):
+        response = (
+            self.client.table("snippets")
+            .update({"previous_analysis": previous_analysis})
+            .eq("id", id)
+            .execute()
+        )
+        return response.data
+
+    def submit_snippet_review(self, id, transcription, translation, title, summary, explanation, disinformation_categories, keywords_detected, language, confidence_scores, context, political_leaning, grounding_metadata):
         response = (
             self.client.table("snippets")
             .update({
@@ -237,7 +246,6 @@ class SupabaseClient:
                 "context": context,
                 "political_leaning": political_leaning,
                 "grounding_metadata": grounding_metadata,
-                "previous_analysis": previous_analysis,
                 "status": "Processed",
                 "error_message": None
             })

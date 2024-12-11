@@ -162,7 +162,69 @@ class TestStage4:
                     }
                 }
             },
-            "recorded_at": "2024-01-01T00:00:00+00:00"
+            "recorded_at": "2024-01-01T00:00:00+00:00",
+            "previous_analysis": {
+                "id": "test-id",
+                "transcription": "Test transcription",
+                "translation": "Test translation",
+                "title": {"english": "Test title", "spanish": "Título de prueba"},
+                "summary": {"english": "Test summary", "spanish": "Resumen de prueba"},
+                "explanation": {"english": "Test explanation", "spanish": "Explicación de prueba"},
+                "disinformation_categories": [{"english": "Category 1", "spanish": "Categoría 1"}],
+                "keywords_detected": ["keyword1", "keyword2"],
+                "language": {
+                    "primary_language": "es",
+                    "dialect": "standard",
+                    "register": "formal"
+                },
+                "confidence_scores": {
+                    "overall": 90,
+                    "analysis": {
+                        "claims": [],
+                        "validation_checklist": {
+                            "specific_claims_quoted": True,
+                            "evidence_provided": True,
+                            "scoring_falsity": True,
+                            "defensible_to_factcheckers": True,
+                            "consistent_explanations": True
+                        },
+                        "score_adjustments": {
+                            "initial_score": 90,
+                            "final_score": 90,
+                            "adjustment_reason": "No adjustment needed"
+                        }
+                    },
+                    "categories": []
+                },
+                "context": {
+                    "before": "Test before",
+                    "before_en": "Test before in English",
+                    "after": "Test after",
+                    "after_en": "Test after in English",
+                    "main": "Test main",
+                    "main_en": "Test main in English"
+                },
+                "political_leaning": {
+                    "score": 0.0,
+                    "evidence": {
+                        "policy_positions": [],
+                        "arguments": [],
+                        "rhetoric": [],
+                        "sources": [],
+                        "solutions": []
+                    },
+                    "explanation": {
+                        "spanish": "Neutral",
+                        "english": "Neutral",
+                        "score_adjustments": {
+                            "initial_score": 0.0,
+                            "final_score": 0.0,
+                            "reasoning": "Content is neutral"
+                        }
+                    }
+                },
+                "recorded_at": "2024-01-01T00:00:00+00:00"
+            }
         }
 
     @pytest.fixture
@@ -199,14 +261,12 @@ class TestStage4:
             "political_leaning": "neutral"
         }
         grounding_metadata = {"sources": ["test-source"]}
-        previous_analysis = {"previous": "analysis"}
 
         submit_snippet_review_result(
             mock_supabase_client,
             "test-id",
             response,
-            grounding_metadata,
-            previous_analysis
+            grounding_metadata
         )
 
         mock_supabase_client.submit_snippet_review.assert_called_once()
@@ -321,8 +381,7 @@ class TestStage4:
                 confidence_scores=mock_response["confidence_scores"],
                 context=mock_response["context"],
                 political_leaning=mock_response["political_leaning"],
-                grounding_metadata=mock_grounding,
-                previous_analysis=sample_snippet
+                grounding_metadata=mock_grounding
             )
 
             # Verify label creation for each disinformation category
@@ -718,8 +777,7 @@ class TestStage4:
             mock_supabase_client,
             "test-id",
             response,
-            grounding_metadata,
-            previous_analysis
+            grounding_metadata
         )
 
         mock_supabase_client.submit_snippet_review.assert_called_once()

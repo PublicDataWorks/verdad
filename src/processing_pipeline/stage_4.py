@@ -40,7 +40,7 @@ def prepare_snippet_for_review(snippet_json):
 
 
 @optional_task(log_prints=True, retries=3)
-def submit_snippet_review_result(supabase_client, snippet_id, response, grounding_metadata, previous_analysis):
+def submit_snippet_review_result(supabase_client, snippet_id, response, grounding_metadata):
     supabase_client.submit_snippet_review(
         id=snippet_id,
         transcription=response["transcription"],
@@ -55,7 +55,6 @@ def submit_snippet_review_result(supabase_client, snippet_id, response, groundin
         context=response["context"],
         political_leaning=response["political_leaning"],
         grounding_metadata=grounding_metadata,
-        previous_analysis=previous_analysis,
     )
 
 
@@ -76,19 +75,28 @@ def delete_vector_embedding_of_snippet(supabase_client, snippet_id):
     supabase_client.delete_vector_embedding_of_snippet(snippet_id)
 
 
+@optional_task(log_prints=True, retries=3)
+def backup_snippet_analysis(supabase_client, snippet):
+    supabase_client.update_snippet_previous_analysis(snippet["id"], snippet)
+
+
 @optional_task(log_prints=True)
 def process_snippet(supabase_client, snippet):
     try:
-        # Back up the snippet's current analysis
-        previous_analysis = snippet
+        if snippet["previous_analysis"]:
+            previous_analysis = snippet["previous_analysis"]
+        else:
+            # Backup the snippet's current analysis
+            backup_snippet_analysis(supabase_client, snippet)
+            previous_analysis = snippet
 
-        transcription, metadata, analysis_json = prepare_snippet_for_review(snippet)
+        transcription, metadata, analysis_json = prepare_snippet_for_review(previous_analysis)
         print(
             f"TRANSCRIPTION:\n{transcription}\n\n"
             f"METADATA:\n{json.dumps(metadata, indent=2)}"
         )
 
-        print("Reviewing the snippet")
+        print("Reviewing the snippet...")
         response, grounding_metadata = Stage4Executor.run(
             transcription=transcription,
             metadata=metadata,
@@ -96,7 +104,7 @@ def process_snippet(supabase_client, snippet):
         )
 
         print("Review completed. Updating the snippet in Supabase")
-        submit_snippet_review_result(supabase_client, snippet['id'], response, grounding_metadata, previous_analysis)
+        submit_snippet_review_result(supabase_client, snippet['id'], response, grounding_metadata)
 
         # Create new labels based on the response and assign them to the snippet
         for category in response["disinformation_categories"]:

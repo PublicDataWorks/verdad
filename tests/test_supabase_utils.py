@@ -623,7 +623,6 @@ class TestSupabaseClient:
             context="Test context",
             political_leaning="neutral",
             grounding_metadata={"source": "test"},
-            previous_analysis={"analysis": "test"}
         )
 
         mock_supabase.table.assert_called_once_with("snippets")
@@ -640,7 +639,6 @@ class TestSupabaseClient:
             "context": "Test context",
             "political_leaning": "neutral",
             "grounding_metadata": {"source": "test"},
-            "previous_analysis": {"analysis": "test"},
             "status": "Processed",
             "error_message": None
         })
@@ -700,3 +698,72 @@ class TestSupabaseClient:
         mock_supabase.table.return_value.select.assert_called_once()
         mock_supabase.table.return_value.insert.assert_not_called()
         assert response == existing_label
+
+    def test_update_snippet_previous_analysis(self, supabase_client, mock_supabase):
+        """Test updating snippet's previous analysis"""
+        test_cases = [
+            # Basic case with simple analysis
+            {
+                "snippet_id": "test-id-1",
+                "previous_analysis": {
+                    "transcription": "Test transcription",
+                    "translation": "Test translation",
+                    "status": "Processed"
+                },
+                "expected_response": [{"id": "test-id-1"}]
+            },
+            # Case with complex nested analysis
+            {
+                "snippet_id": "test-id-2",
+                "previous_analysis": {
+                    "transcription": "Test transcription",
+                    "translation": "Test translation",
+                    "title": {"english": "Test title", "spanish": "Título de prueba"},
+                    "summary": {"english": "Test summary", "spanish": "Resumen de prueba"},
+                    "disinformation_categories": [
+                        {"english": "Category 1", "spanish": "Categoría 1"}
+                    ],
+                    "confidence_scores": {
+                        "overall": 0.9,
+                        "categories": [
+                            {"name": "accuracy", "score": 0.95}
+                        ]
+                    },
+                    "status": "Processed"
+                },
+                "expected_response": [{"id": "test-id-2"}]
+            },
+            # Case with null values
+            {
+                "snippet_id": "test-id-3",
+                "previous_analysis": {
+                    "transcription": None,
+                    "translation": None,
+                    "title": None,
+                    "status": "New"
+                },
+                "expected_response": [{"id": "test-id-3"}]
+            }
+        ]
+
+        for case in test_cases:
+            # Reset mock for each test case
+            mock_supabase.reset_mock()
+            mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = case["expected_response"]
+
+            # Execute the update
+            response = supabase_client.update_snippet_previous_analysis(
+                case["snippet_id"],
+                case["previous_analysis"]
+            )
+
+            # Verify the calls and response
+            mock_supabase.table.assert_called_once_with("snippets")
+            mock_supabase.table.return_value.update.assert_called_once_with({
+                "previous_analysis": case["previous_analysis"]
+            })
+            mock_supabase.table.return_value.update.return_value.eq.assert_called_once_with(
+                "id",
+                case["snippet_id"]
+            )
+            assert response == case["expected_response"]
