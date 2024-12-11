@@ -52,6 +52,7 @@ BEGIN
         WHERE
             se.snippet != snippet_id
             AND 1 - (se.embedding <=> source_embedding) > match_threshold
+            AND se.status = 'Processed'
         ORDER BY se.embedding <=> source_embedding
         LIMIT match_count
     )
