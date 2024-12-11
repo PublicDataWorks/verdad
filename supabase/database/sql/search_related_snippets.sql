@@ -31,6 +31,10 @@ BEGIN
         SELECT
             s.id,
             s.title,
+            s.file_path,
+            s.recorded_at,
+            s.comment_count,
+            s.start_time,
             a.radio_station_name,
             a.radio_station_code,
             a.location_state,
@@ -38,8 +42,6 @@ BEGIN
                 WHEN p_language = 'spanish' THEN s.summary ->> 'spanish'
                 ELSE s.summary ->> 'english'
             END AS summary,
-            s.recorded_at,
-            s.comment_count,
             1 - (se.embedding <=> source_embedding) as similarity,
             CASE
                 WHEN us.id IS NOT NULL THEN true
@@ -68,7 +70,9 @@ BEGIN
             'recorded_at', ss.recorded_at,
             'comment_count', ss.comment_count,
             'similarity', ss.similarity,
-            'starred_by_user', ss.starred_by_user
+            'starred_by_user', ss.starred_by_user,
+            'file_path', ss.file_path,
+            'start_time', ss.start_time
         )
     ) INTO result
     FROM similar_snippets ss;
