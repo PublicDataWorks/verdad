@@ -1,0 +1,282 @@
+{
+    "type": "object",
+    "required": [
+        "transcription",
+        "translation",
+        "title",
+        "summary",
+        "explanation",
+        "disinformation_categories",
+        "keywords_detected",
+        "language",
+        "context",
+        "confidence_scores",
+        "political_leaning"
+    ],
+    "properties": {
+        "transcription": {
+            "type": "string",
+            "description": "Transcription of the entire audio clip in the original language."
+        },
+        "translation": {
+            "type": "string",
+            "description": "Translation of the transcription into English."
+        },
+        "title": {
+            "type": "object",
+            "required": ["spanish", "english"],
+            "properties": {
+                "spanish": {
+                    "type": "string",
+                    "description": "Title of the snippet in Spanish."
+                },
+                "english": {
+                    "type": "string",
+                    "description": "Title of the snippet in English."
+                }
+            },
+            "description": "Descriptive title of the snippet."
+        },
+        "summary": {
+            "type": "object",
+            "required": ["spanish", "english"],
+            "properties": {
+                "spanish": {
+                    "type": "string",
+                    "description": "Summary of the snippet in Spanish."
+                },
+                "english": {
+                    "type": "string",
+                    "description": "Summary of the snippet in English."
+                }
+            },
+            "description": "Objective summary of the snippet."
+        },
+        "explanation": {
+            "type": "object",
+            "required": ["spanish", "english"],
+            "properties": {
+                "spanish": {
+                    "type": "string",
+                    "description": "Explanation in Spanish."
+                },
+                "english": {
+                    "type": "string",
+                    "description": "Explanation in English."
+                }
+            },
+            "description": "Detailed explanation of why the snippet constitutes disinformation."
+        },
+        "disinformation_categories": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["spanish", "english"],
+                "properties": {
+                    "spanish": {
+                        "type": "string",
+                        "description": "Disinformation category in Spanish."
+                    },
+                    "english": {
+                        "type": "string",
+                        "description": "Disinformation category in English."
+                    }
+                }
+            },
+            "description": "Disinformation categories that the snippet belongs to."
+        },
+        "keywords_detected": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Specific words or phrases that triggered the flag, in original language."
+        },
+        "language": {
+            "type": "object",
+            "required": ["primary_language", "dialect", "register"],
+            "properties": {
+                "primary_language": {
+                    "type": "string",
+                    "description": "Primary language of the audio (e.g., Spanish, Arabic)."
+                },
+                "dialect": {
+                    "type": "string",
+                    "description": "Specific dialect or regional variation."
+                },
+                "register": {
+                    "type": "string",
+                    "description": "Language register (formal, informal, colloquial, slang)."
+                }
+            }
+        },
+        "context": {
+            "type": "object",
+            "required": ["before", "before_en", "after", "after_en", "main", "main_en"],
+            "properties": {
+                "before": {
+                    "type": "string",
+                    "description": "Part of the audio clip transcription that precedes the snippet."
+                },
+                "before_en": {
+                    "type": "string",
+                    "description": "Translation of the `before` part into English."
+                },
+                "after": {
+                    "type": "string",
+                    "description": "Part of the audio clip transcription that follows the snippet."
+                },
+                "after_en": {
+                    "type": "string",
+                    "description": "Translation of the `after` part into English."
+                },
+                "main": {
+                    "type": "string",
+                    "description": "The transcription of the snippet itself."
+                },
+                "main_en": {
+                    "type": "string",
+                    "description": "Translation of the `main` part into English."
+                }
+            }
+        },
+        "confidence_scores": {
+            "type": "object",
+            "required": ["overall", "analysis", "categories"],
+            "properties": {
+                "overall": {
+                    "type": "integer",
+                    "description": "Overall confidence score of the analysis, ranging from 0 to 100."
+                },
+                "analysis": {
+                    "type": "object",
+                    "required": ["claims", "validation_checklist", "score_adjustments"],
+                    "properties": {
+                        "claims": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["quote", "evidence", "score"],
+                                "properties": {
+                                    "quote": {
+                                        "type": "string",
+                                        "description": "Direct quote of the false or misleading claim"
+                                    },
+                                    "evidence": {
+                                        "type": "string",
+                                        "description": "Evidence demonstrating why the claim is false"
+                                    },
+                                    "score": {
+                                        "type": "integer",
+                                        "description": "Confidence score for this specific claim"
+                                    }
+                                }
+                            }
+                        },
+                        "validation_checklist": {
+                            "type": "object",
+                            "required": [
+                                "specific_claims_quoted",
+                                "evidence_provided",
+                                "scoring_falsity",
+                                "defensible_to_factcheckers",
+                                "consistent_explanations"
+                            ],
+                            "properties": {
+                                "specific_claims_quoted": { "type": "boolean" },
+                                "evidence_provided": { "type": "boolean" },
+                                "scoring_falsity": { "type": "boolean" },
+                                "defensible_to_factcheckers": { "type": "boolean" },
+                                "consistent_explanations": { "type": "boolean" }
+                            }
+                        },
+                        "score_adjustments": {
+                            "type": "object",
+                            "required": ["initial_score", "final_score", "adjustment_reason"],
+                            "properties": {
+                                "initial_score": { "type": "integer" },
+                                "final_score": { "type": "integer" },
+                                "adjustment_reason": { "type": "string" }
+                            }
+                        }
+                    }
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["category", "score"],
+                        "properties": {
+                            "category": {
+                                "type": "string",
+                                "description": "Name of the disinformation category."
+                            },
+                            "score": {
+                                "type": "integer",
+                                "description": "Confidence score for this category, ranging from 0 to 100."
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "political_leaning": {
+            "type": "object",
+            "required": ["score", "evidence", "explanation"],
+            "properties": {
+                "score": {
+                    "type": "number",
+                    "description": "Political leaning score, ranging from -1.0 to 1.0."
+                },
+                "evidence": {
+                    "type": "object",
+                    "required": ["policy_positions", "arguments", "rhetoric", "sources", "solutions"],
+                    "properties": {
+                        "policy_positions": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Explicit policy positions stated"
+                        },
+                        "arguments": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Specific arguments made"
+                        },
+                        "rhetoric": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Key phrases and rhetoric used"
+                        },
+                        "sources": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Sources or authorities cited"
+                        },
+                        "solutions": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Solutions proposed"
+                        }
+                    }
+                },
+                "explanation": {
+                    "type": "object",
+                    "required": ["spanish", "english", "score_adjustments"],
+                    "properties": {
+                        "spanish": { "type": "string" },
+                        "english": { "type": "string" },
+                        "score_adjustments": {
+                            "type": "object",
+                            "required": ["initial_score", "final_score", "reasoning"],
+                            "properties": {
+                                "initial_score": { "type": "number" },
+                                "final_score": { "type": "number" },
+                                "reasoning": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

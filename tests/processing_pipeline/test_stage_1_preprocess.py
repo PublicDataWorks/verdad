@@ -131,7 +131,7 @@ class TestStage1PreprocessDetectionExecutor:
         # Verify configurations
         mock_genai.configure.assert_called_once_with(api_key="fake-api-key")
         mock_genai.GenerativeModel.assert_called_once_with(
-            model_name="gemini-1.5-pro",
+            model_name="gemini-1.5-pro-latest",
             system_instruction=Stage1PreprocessDetectionExecutor.SYSTEM_INSTRUCTION
         )
 

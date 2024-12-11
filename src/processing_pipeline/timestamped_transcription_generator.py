@@ -63,7 +63,7 @@ class TimestampedTranscriptionGenerator:
             raise ValueError("No audio segments provided!")
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name="gemini-1.5-pro", system_instruction=cls.SYSTEM_INSTRUCTION)
+        model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest", system_instruction=cls.SYSTEM_INSTRUCTION)
 
         segments = []
         for index, segment_path in enumerate(audio_segments):

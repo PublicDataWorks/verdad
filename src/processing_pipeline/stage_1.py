@@ -475,7 +475,7 @@ class Stage1Executor:
 
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro",
+            model_name="gemini-1.5-pro-latest",
             system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 

@@ -7,6 +7,8 @@ project_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 sys.path.insert(0, project_root)
 
 # Set up environment variables before any imports
+os.environ['GOOGLE_GEMINI_PAID_KEY'] = 'test-key'
+os.environ['GOOGLE_GEMINI_KEY'] = 'test-key'
 os.environ['SUPABASE_URL'] = 'https://test.supabase.co'
 os.environ['SUPABASE_KEY'] = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYxNjE1MzYwMCwiZXhwIjoxOTMxNzI5NjAwfQ.test-signature'
 os.environ['R2_ENDPOINT_URL'] = 'https://test.r2.endpoint'

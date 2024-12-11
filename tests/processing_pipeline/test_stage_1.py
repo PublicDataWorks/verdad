@@ -21,7 +21,6 @@ from processing_pipeline.stage_1 import (
     Stage1Executor,
     transcribe_audio_file_with_open_ai_whisper_1
 )
-from processing_pipeline.stage_3 import create_new_label_and_assign_to_snippet
 
 @pytest.fixture
 def mock_environment(monkeypatch):
@@ -449,25 +448,6 @@ class TestHelperFunctions:
         with patch.dict('os.environ', {}, clear=True):
             with pytest.raises(ValueError, match="OpenAI API key was not set!"):
                 transcribe_audio_file_with_open_ai_whisper_1("test.mp3")
-
-    def test_create_new_label_and_assign(self, mock_supabase_client):
-        """Test creating and assigning new label"""
-        mock_supabase_client.create_new_label.return_value = {"id": 1}
-
-        create_new_label_and_assign_to_snippet(
-            mock_supabase_client,
-            "test-id",
-            {"english": "Test Label", "spanish": "Etiqueta de prueba"}
-        )
-
-        mock_supabase_client.create_new_label.assert_called_once_with(
-            "Test Label",
-            "Etiqueta de prueba"
-        )
-        mock_supabase_client.assign_label_to_snippet.assert_called_once_with(
-            label_id=1,
-            snippet_id="test-id"
-        )
 
     def test_initial_disinformation_detection_with_retry(self, mock_supabase_client, mock_s3_client):
         """Test initial disinformation detection with retries"""

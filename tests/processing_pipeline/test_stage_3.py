@@ -9,7 +9,6 @@ from processing_pipeline.stage_3 import (
     download_audio_file_from_s3,
     update_snippet_in_supabase,
     get_metadata,
-    create_new_label_and_assign_to_snippet,
     process_snippet,
     in_depth_analysis,
     Stage3Executor
@@ -180,22 +179,6 @@ class TestStage3:
         assert result["end_time"] == "01:30"
         assert result["duration"] == "01:00"
 
-    def test_create_new_label_and_assign(self, mock_supabase_client):
-        """Test creating and assigning new label"""
-        label = {"english": "Test Label", "spanish": "Etiqueta de prueba"}
-        mock_supabase_client.create_new_label.return_value = {"id": 1}
-
-        create_new_label_and_assign_to_snippet(mock_supabase_client, "test-id", label)
-
-        mock_supabase_client.create_new_label.assert_called_once_with(
-            label["english"],
-            label["spanish"]
-        )
-        mock_supabase_client.assign_label_to_snippet.assert_called_once_with(
-            label_id=1,
-            snippet_id="test-id"
-        )
-
     def test_process_snippet(self, mock_supabase_client, mock_gemini_model, sample_snippet, mock_gemini_response):
         """Test processing a snippet"""
         # Configure mock Gemini model
@@ -205,9 +188,6 @@ class TestStage3:
 
         # Configure mock response
         mock_gemini_model.return_value.generate_content.return_value.text = json.dumps(mock_gemini_response)
-
-        # Configure mock label creation
-        mock_supabase_client.create_new_label.return_value = {"id": 1}
 
         with patch('google.generativeai.upload_file', return_value=mock_audio_file), \
              patch('google.generativeai.get_file', return_value=mock_audio_file), \
@@ -230,18 +210,8 @@ class TestStage3:
                 emotional_tone=mock_gemini_response["emotional_tone"],
                 context=mock_gemini_response["context"],
                 political_leaning=mock_gemini_response["political_leaning"],
-                status="Processed",
+                status="Ready for review",
                 error_message=None
-            )
-
-            # Verify label creation and assignment
-            mock_supabase_client.create_new_label.assert_called_once_with(
-                "Misinformation",
-                "Desinformación"
-            )
-            mock_supabase_client.assign_label_to_snippet.assert_called_once_with(
-                label_id=1,
-                snippet_id=sample_snippet["id"]
             )
 
     def test_process_snippet_error(self, mock_supabase_client, mock_gemini_model, sample_snippet):
@@ -271,7 +241,7 @@ class TestStage3:
 
             result = Stage3Executor.run(
                 gemini_key="test-key",
-                model_name="gemini-1.5-pro",
+                model_name="gemini-1.5-pro-latest",
                 audio_file="test.mp3",
                 metadata={"test": "metadata"}
             )
@@ -282,7 +252,7 @@ class TestStage3:
     def test_stage_3_executor_without_api_key(self):
         """Test Stage3Executor without API key"""
         with pytest.raises(ValueError, match="Google Gemini API key was not set!"):
-            Stage3Executor.run(None, "gemini-1.5-pro", "test.mp3", {})
+            Stage3Executor.run(None, "gemini-1.5-pro-latest", "test.mp3", {})
 
     @patch('time.sleep')
     def test_in_depth_analysis_flow(self, mock_sleep, mock_supabase_client, mock_s3_client, sample_snippet):
@@ -352,8 +322,9 @@ class TestStage3:
 
             process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
 
-            mock_supabase_client.create_new_label.assert_not_called()
-            mock_supabase_client.assign_label_to_snippet.assert_not_called()
+            # Verify the snippet was updated with empty disinformation categories
+            mock_supabase_client.update_snippet.assert_called_once()
+            assert mock_supabase_client.update_snippet.call_args[1]['disinformation_categories'] == []
 
     def test_process_snippet_invalid_response(self, mock_supabase_client, mock_gemini_model, sample_snippet):
         """Test processing snippet with invalid Gemini response"""

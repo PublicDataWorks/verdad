@@ -47,6 +47,18 @@ def get_timestamped_transcription_generation_output_schema():
     return json.load(open("prompts/Timestamped_transcription_generation_output_schema.json", "r"))
 
 
+def get_system_instruction_for_stage_4():
+    return open("prompts/Stage_4_system_instruction.md", "r").read()
+
+
+def get_user_prompt_for_stage_4():
+    return open("prompts/Stage_4_review_prompt.md", "r").read()
+
+
+def get_output_schema_for_stage_4():
+    return json.load(open("prompts/Stage_4_output_schema.json", "r"))
+
+
 if __name__ == "__main__":
     # Print the transcription prompt for stage 1 Preprocess
     # transcription_prompt_for_stage_1_preprocess = get_transcription_prompt_for_stage_1_preprocess()
@@ -93,5 +105,17 @@ if __name__ == "__main__":
     # print(timestamped_transcription_generation_prompt)
 
     # Print timestamped transcription generation output schema
-    timestamped_transcription_generation_output_schema = get_timestamped_transcription_generation_output_schema()
-    print(json.dumps(timestamped_transcription_generation_output_schema, indent=2))
+    # timestamped_transcription_generation_output_schema = get_timestamped_transcription_generation_output_schema()
+    # print(json.dumps(timestamped_transcription_generation_output_schema, indent=2))
+
+    # Print system instruction for stage 4
+    # system_instruction_for_stage_4 = get_system_instruction_for_stage_4()
+    # print(system_instruction_for_stage_4)
+
+    # # Print user prompt for stage 4
+    # user_prompt_for_stage_4 = get_user_prompt_for_stage_4()
+    # print(user_prompt_for_stage_4)
+
+    # Print output schema for stage 4
+    output_schema_for_stage_4 = get_output_schema_for_stage_4()
+    print(json.dumps(output_schema_for_stage_4, indent=2))

@@ -12,7 +12,6 @@ You are also provided with the metadata of the audio clip, which contains:
 - `duration`: the duration of the entire audio clip, in MM:SS format
 - `start_time`: the start time of the snippet within the audio clip, in MM:SS format
 - `end_time`: the end time of the snippet within the audio clip, in MM:SS format
-- `explanation`: the explanation of why the snippet was flagged as disinformation
 - `transcription`: the transcription of the snippet within the audio clip
   - Note that this is not the transcription of the entire audio clip
 

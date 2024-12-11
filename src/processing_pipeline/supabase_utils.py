@@ -20,6 +20,10 @@ class SupabaseClient:
         response = self.client.rpc("fetch_a_new_snippet_and_reserve_it").execute()
         return response.data if response else None
 
+    def get_a_ready_for_review_snippet_and_reserve_it(self):
+        response = self.client.rpc("fetch_a_ready_for_review_snippet_and_reserve_it").execute()
+        return response.data if response.data else None
+
     def get_snippet_by_id(self, id, select="*"):
         response = self.client.table("snippets").select(select).eq("id", id).execute()
         return response.data[0] if response.data else None
@@ -217,6 +221,31 @@ class SupabaseClient:
         )
         return response.data
 
+    def submit_snippet_review(self, id, transcription, translation, title, summary, explanation, disinformation_categories, keywords_detected, language, confidence_scores, context, political_leaning, grounding_metadata, previous_analysis):
+        response = (
+            self.client.table("snippets")
+            .update({
+                "transcription": transcription,
+                "translation": translation,
+                "title": title,
+                "summary": summary,
+                "explanation": explanation,
+                "disinformation_categories": disinformation_categories,
+                "keywords_detected": keywords_detected,
+                "language": language,
+                "confidence_scores": confidence_scores,
+                "context": context,
+                "political_leaning": political_leaning,
+                "grounding_metadata": grounding_metadata,
+                "previous_analysis": previous_analysis,
+                "status": "Processed",
+                "error_message": None
+            })
+            .eq("id", id)
+            .execute()
+        )
+        return response.data
+
     def reset_snippet(self, id):
         response = (
             self.client.table("snippets")
@@ -349,3 +378,7 @@ class SupabaseClient:
                 "error_message": error_message,
             }).execute()
             return response.data[0]
+
+    def delete_vector_embedding_of_snippet(self, snippet_id):
+        response = self.client.table("snippet_embeddings").delete().eq("snippet", snippet_id).execute()
+        return response.data

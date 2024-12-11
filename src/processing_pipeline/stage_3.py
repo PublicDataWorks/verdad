@@ -130,18 +130,6 @@ def __get_metadata(snippet):
     return metadata
 
 
-@optional_task(log_prints=True, retries=3)
-def create_new_label_and_assign_to_snippet(supabase_client, snippet_id, label):
-    english_label_text = label["english"]
-    spanish_label_text = label["spanish"]
-
-    # Create the label
-    label = supabase_client.create_new_label(english_label_text, spanish_label_text)
-
-    # Assign the label to the snippet
-    supabase_client.assign_label_to_snippet(label_id=label["id"], snippet_id=snippet_id)
-
-
 @optional_task(log_prints=True)
 def process_snippet(supabase_client, snippet, local_file, gemini_key):
     try:
@@ -151,7 +139,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
         print(f"Metadata:\n{json.dumps(metadata, indent=2)}")
 
         pro_response = Stage3Executor.run(
-            gemini_key=gemini_key, model_name="gemini-1.5-pro", audio_file=local_file, metadata=metadata
+            gemini_key=gemini_key, model_name="gemini-1.5-pro-latest", audio_file=local_file, metadata=metadata
         )
 
         pro_response = json.loads(pro_response)
@@ -171,13 +159,9 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
             emotional_tone=pro_response["emotional_tone"],
             context=pro_response["context"],
             political_leaning=pro_response["political_leaning"],
-            status="Processed",
+            status="Ready for review",
             error_message=None,
         )
-
-        # Create new labels based on the response and assign them to the snippet
-        for category in pro_response["disinformation_categories"]:
-            create_new_label_and_assign_to_snippet(supabase_client, snippet["id"], category)
 
         print(f"Processing completed for {local_file}")
 

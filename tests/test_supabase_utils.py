@@ -603,3 +603,100 @@ class TestSupabaseClient:
             "error_message": error_message,
         })
         assert response == expected_response[0]
+
+    def test_submit_snippet_review(self, supabase_client, mock_supabase):
+        """Test submitting snippet review"""
+        expected_response = [{"id": "test-id"}]
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+
+        response = supabase_client.submit_snippet_review(
+            id="test-id",
+            transcription="Test transcription",
+            translation="Test translation",
+            title="Test title",
+            summary="Test summary",
+            explanation="Test explanation",
+            disinformation_categories=["category1"],
+            keywords_detected=["keyword1"],
+            language="en",
+            confidence_scores={"score": 0.9},
+            context="Test context",
+            political_leaning="neutral",
+            grounding_metadata={"source": "test"},
+            previous_analysis={"analysis": "test"}
+        )
+
+        mock_supabase.table.assert_called_once_with("snippets")
+        mock_supabase.table.return_value.update.assert_called_once_with({
+            "transcription": "Test transcription",
+            "translation": "Test translation",
+            "title": "Test title",
+            "summary": "Test summary",
+            "explanation": "Test explanation",
+            "disinformation_categories": ["category1"],
+            "keywords_detected": ["keyword1"],
+            "language": "en",
+            "confidence_scores": {"score": 0.9},
+            "context": "Test context",
+            "political_leaning": "neutral",
+            "grounding_metadata": {"source": "test"},
+            "previous_analysis": {"analysis": "test"},
+            "status": "Processed",
+            "error_message": None
+        })
+        assert response == expected_response
+
+    def test_delete_stage_1_llm_responses(self, supabase_client, mock_supabase):
+        """Test deleting stage 1 LLM responses"""
+        expected_response = [{"id": 1}, {"id": 2}]
+        mock_supabase.table.return_value.delete.return_value.in_.return_value.execute.return_value.data = expected_response
+
+        audio_file_ids = [1, 2]
+        response = supabase_client.delete_stage_1_llm_responses(audio_file_ids)
+
+        mock_supabase.table.assert_called_once_with("stage_1_llm_responses")
+        mock_supabase.table.return_value.delete.assert_called_once()
+        mock_supabase.table.return_value.delete.return_value.in_.assert_called_once_with("audio_file", audio_file_ids)
+        assert response == expected_response
+
+    def test_delete_vector_embedding_of_snippet(self, supabase_client, mock_supabase):
+        """Test deleting vector embedding of snippet"""
+        expected_response = [{"id": 1, "snippet": "test-id"}]
+        mock_supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = expected_response
+
+        response = supabase_client.delete_vector_embedding_of_snippet("test-id")
+
+        mock_supabase.table.assert_called_once_with("snippet_embeddings")
+        mock_supabase.table.return_value.delete.assert_called_once()
+        mock_supabase.table.return_value.delete.return_value.eq.assert_called_once_with("snippet", "test-id")
+        assert response == expected_response
+
+    def test_get_a_ready_for_review_snippet_and_reserve_it(self, supabase_client, mock_supabase):
+        """Test getting a ready for review snippet"""
+        # Test successful case
+        expected_response = {"id": "test-id", "status": "ReadyForReview"}
+        mock_supabase.rpc.return_value.execute.return_value.data = expected_response
+
+        response = supabase_client.get_a_ready_for_review_snippet_and_reserve_it()
+
+        mock_supabase.rpc.assert_called_with("fetch_a_ready_for_review_snippet_and_reserve_it")
+        assert response == expected_response
+
+        # Test case where no snippet is found
+        mock_supabase.rpc.return_value.execute.return_value.data = None
+
+        response = supabase_client.get_a_ready_for_review_snippet_and_reserve_it()
+
+        mock_supabase.rpc.assert_called_with("fetch_a_ready_for_review_snippet_and_reserve_it")
+        assert response is None
+
+    def test_create_new_label_existing(self, supabase_client, mock_supabase):
+        """Test creating new label when label already exists"""
+        existing_label = {"id": 1, "text": "Test Label"}
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [existing_label]
+
+        response = supabase_client.create_new_label("Test Label", "Etiqueta de Prueba")
+
+        mock_supabase.table.return_value.select.assert_called_once()
+        mock_supabase.table.return_value.insert.assert_not_called()
+        assert response == existing_label
