@@ -5,16 +5,21 @@ import json
 import boto3
 import uuid
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.api_core import exceptions as google_exceptions
 from openai import OpenAI
 from prefect.task_runners import ConcurrentTaskRunner
 from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
-from processing_pipeline.stage_1_preprocess import Stage1PreprocessDetectionExecutor, Stage1PreprocessTranscriptionExecutor
+from processing_pipeline.stage_1_preprocess import (
+    Stage1PreprocessDetectionExecutor,
+    Stage1PreprocessTranscriptionExecutor,
+)
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
     get_system_instruction_for_stage_1,
     get_output_schema_for_stage_1,
     get_detection_prompt_for_stage_1,
 )
+from processing_pipeline.gemini_1206_transcription_generator import Gemini1206TranscriptionGenerator
 from utils import optional_flow, optional_task
 
 
@@ -116,6 +121,14 @@ def __transcribe_audio_file_with_open_ai_whisper_1(audio_file):
 
 
 @optional_task(log_prints=True)
+def transcribe_audio_file_with_gemini_1206(audio_file):
+    print(f"Transcribing the audio file {audio_file} with Gemini 1206")
+    gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
+    timestamped_transcription = Gemini1206TranscriptionGenerator.run(audio_file, gemini_key)
+    return {"timestamped_transcription": timestamped_transcription}
+
+
+@optional_task(log_prints=True)
 def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_file):
     print(f"Transcribing the audio file {audio_file} with the custom timestamped-transcription-generator")
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
@@ -154,6 +167,7 @@ def insert_stage_1_llm_response(
     audio_file_id,
     initial_transcription,
     initial_detection_result,
+    transcriptor,
     timestamped_transcription,
     detection_result,
     status,
@@ -162,10 +176,12 @@ def insert_stage_1_llm_response(
         audio_file_id=audio_file_id,
         initial_transcription=initial_transcription,
         initial_detection_result=initial_detection_result,
+        transcriptor=transcriptor,
         timestamped_transcription=timestamped_transcription,
         detection_result=detection_result,
         status=status,
     )
+
 
 @optional_task(log_prints=True, retries=3)
 def set_audio_file_status_success(supabase_client, audio_file_id):
@@ -178,7 +194,7 @@ def set_audio_file_status_error(supabase_client, audio_file_id, error_message):
 
 
 @optional_task(log_prints=True)
-def process_audio_file(supabase_client, audio_file, local_file, use_openai):
+def process_audio_file(supabase_client, audio_file, local_file):
     try:
         # Transcribe the audio file with Google Gemini 1.5 Flash
         flash_response = transcribe_audio_file_with_gemini_1_5_flash(local_file)
@@ -208,19 +224,27 @@ def process_audio_file(supabase_client, audio_file, local_file, use_openai):
                 audio_file_id=audio_file["id"],
                 initial_transcription=initial_transcription,
                 initial_detection_result=initial_detection_result,
+                transcriptor=None,
                 timestamped_transcription=None,
                 detection_result=None,
                 status="Processed",
             )
         else:
-            if use_openai:
-                timestamped_transcription = transcribe_audio_file_with_open_ai_whisper_1(local_file)
-            else:
+            # Use Gemini 1206 for the timestamped transcription
+            try:
+                transcriptor = "gemini-1206"
+                timestamped_transcription = transcribe_audio_file_with_gemini_1206(local_file)
+            except google_exceptions.ResourceExhausted as e:
+                print(
+                    f"Failed to transcribe the audio file with Gemini 1206 due to Rate Limit: {e}\n"
+                    "Falling back to the custom timestamped-transcript generator"
+                )
+                transcriptor = "custom"
                 timestamped_transcription = transcribe_audio_file_with_custom_timestamped_transcription_generator(
                     local_file
                 )
 
-            print("Processing the timestamped transcription with Gemini 1.5 Pro")
+            print("Processing the timestamped transcription with Gemini 1.5 Pro (Main detection phase)")
             detection_result = disinformation_detection_with_gemini_1_5_pro(
                 timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                 metadata=metadata,
@@ -236,6 +260,7 @@ def process_audio_file(supabase_client, audio_file, local_file, use_openai):
                     audio_file_id=audio_file["id"],
                     initial_transcription=initial_transcription,
                     initial_detection_result=initial_detection_result,
+                    transcriptor=transcriptor,
                     timestamped_transcription=timestamped_transcription,
                     detection_result=detection_result,
                     status="Processed",
@@ -247,6 +272,7 @@ def process_audio_file(supabase_client, audio_file, local_file, use_openai):
                     audio_file_id=audio_file["id"],
                     initial_transcription=initial_transcription,
                     initial_detection_result=initial_detection_result,
+                    transcriptor=transcriptor,
                     timestamped_transcription=timestamped_transcription,
                     detection_result=detection_result,
                     status="New",
@@ -261,7 +287,7 @@ def process_audio_file(supabase_client, audio_file, local_file, use_openai):
 
 
 @optional_flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
-def initial_disinformation_detection(audio_file_id, use_openai, limit):
+def initial_disinformation_detection(audio_file_id, limit):
     # Setup S3 Client
     s3_client = boto3.client(
         "s3",
@@ -286,7 +312,7 @@ def initial_disinformation_detection(audio_file_id, use_openai, limit):
             local_file = download_audio_file_from_s3(s3_client, audio_file["file_path"])
 
             # Process the audio file
-            process_audio_file(supabase_client, audio_file, local_file, use_openai)
+            process_audio_file(supabase_client, audio_file, local_file)
             processed_audio_files += 1
             print(f"Processed {processed_audio_files}/{limit} audio files")
 

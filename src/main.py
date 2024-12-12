@@ -8,9 +8,6 @@ from processing_pipeline.timestamped_transcription_generator import TimestampedT
 
 load_dotenv()
 
-# Setup Sentry
-sentry_sdk.init(dsn=os.getenv("SENTRY_DSN"))
-
 # Setup S3 Client
 R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
 s3_client = boto3.client(
@@ -20,17 +17,17 @@ s3_client = boto3.client(
     aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
 )
 
-# Setup Supabase client
-supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
-
 # Setup Gemini Key
 GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
+
 
 def test_timestamped_transcription_generator():
     # Download the audio file from R2
     audio_file = "radio_1853b3_20241127_102353.mp3"
     try:
-        s3_client.download_file(R2_BUCKET_NAME, "radio_1853b3/radio_1853b3_20241127_102353.mp3", "radio_1853b3_20241127_102353.mp3")
+        s3_client.download_file(
+            R2_BUCKET_NAME, "radio_1853b3/radio_1853b3_20241127_102353.mp3", "radio_1853b3_20241127_102353.mp3"
+        )
 
         if os.path.exists(audio_file):
             result = TimestampedTranscriptionGenerator.run(audio_file, GEMINI_KEY, 10)
@@ -41,6 +38,7 @@ def test_timestamped_transcription_generator():
         # Delete the local file if it exists
         if os.path.exists(audio_file):
             os.remove(audio_file)
+
 
 if __name__ == "__main__":
     test_timestamped_transcription_generator()

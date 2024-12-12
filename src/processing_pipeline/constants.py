@@ -59,6 +59,10 @@ def get_output_schema_for_stage_4():
     return json.load(open("prompts/Stage_4_output_schema.json", "r"))
 
 
+def get_gemini_1206_transcription_generation_prompt():
+    return open("prompts/Gemini_1206_transcription_generation_prompt.md", "r").read()
+
+
 if __name__ == "__main__":
     # Print the transcription prompt for stage 1 Preprocess
     # transcription_prompt_for_stage_1_preprocess = get_transcription_prompt_for_stage_1_preprocess()
@@ -117,5 +121,9 @@ if __name__ == "__main__":
     # print(user_prompt_for_stage_4)
 
     # Print output schema for stage 4
-    output_schema_for_stage_4 = get_output_schema_for_stage_4()
-    print(json.dumps(output_schema_for_stage_4, indent=2))
+    # output_schema_for_stage_4 = get_output_schema_for_stage_4()
+    # print(json.dumps(output_schema_for_stage_4, indent=2))
+
+    # Print gemini 1206 transcription generation prompt
+    gemini_1206_transcription_generation_prompt = get_gemini_1206_transcription_generation_prompt()
+    print(gemini_1206_transcription_generation_prompt)

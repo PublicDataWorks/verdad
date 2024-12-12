@@ -2,11 +2,12 @@ from unittest.mock import Mock, patch
 import pytest
 from processing_pipeline.supabase_utils import SupabaseClient
 
+
 class TestSupabaseClient:
     @pytest.fixture
     def mock_supabase(self):
         """Setup mock Supabase client"""
-        with patch('processing_pipeline.supabase_utils.create_client') as mock_create:
+        with patch("processing_pipeline.supabase_utils.create_client") as mock_create:
             mock_client = Mock()
             mock_create.return_value = mock_client
             yield mock_client
@@ -54,7 +55,9 @@ class TestSupabaseClient:
     def test_get_snippet_by_id(self, supabase_client, mock_supabase):
         """Test getting snippet by ID"""
         expected_response = [{"id": "test-id", "status": "New"}]
-        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.get_snippet_by_id("test-id")
 
@@ -66,19 +69,25 @@ class TestSupabaseClient:
     def test_get_snippets_by_ids(self, supabase_client, mock_supabase):
         """Test getting snippets by IDs"""
         expected_response = [{"id": "test-id-1"}, {"id": "test-id-2"}]
-        mock_supabase.table.return_value.select.return_value.in_.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.select.return_value.in_.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.get_snippets_by_ids(["test-id-1", "test-id-2"])
 
         mock_supabase.table.assert_called_once_with("snippets")
         mock_supabase.table.return_value.select.assert_called_once_with("*")
-        mock_supabase.table.return_value.select.return_value.in_.assert_called_once_with("id", ["test-id-1", "test-id-2"])
+        mock_supabase.table.return_value.select.return_value.in_.assert_called_once_with(
+            "id", ["test-id-1", "test-id-2"]
+        )
         assert response == expected_response
 
     def test_get_audio_file_by_id(self, supabase_client, mock_supabase):
         """Test getting audio file by ID"""
         expected_response = [{"id": 1, "status": "New"}]
-        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.get_audio_file_by_id(1)
 
@@ -90,7 +99,9 @@ class TestSupabaseClient:
     def test_get_stage_1_llm_response_by_id(self, supabase_client, mock_supabase):
         """Test getting stage 1 LLM response by ID"""
         expected_response = [{"id": 1, "status": "New"}]
-        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.get_stage_1_llm_response_by_id(1)
 
@@ -102,7 +113,9 @@ class TestSupabaseClient:
     def test_set_audio_file_status(self, supabase_client, mock_supabase):
         """Test setting audio file status"""
         expected_response = [{"id": 1, "status": "Processing"}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         # Test without error message
         response = supabase_client.set_audio_file_status(1, "Processing")
@@ -117,7 +130,9 @@ class TestSupabaseClient:
     def test_set_stage_1_llm_response_status(self, supabase_client, mock_supabase):
         """Test setting stage 1 LLM response status"""
         expected_response = [{"id": 1, "status": "Processing"}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         # Test without error message
         response = supabase_client.set_stage_1_llm_response_status(1, "Processing")
@@ -132,7 +147,9 @@ class TestSupabaseClient:
     def test_set_snippet_status(self, supabase_client, mock_supabase):
         """Test setting snippet status"""
         expected_response = [{"id": "test-id", "status": "Processing"}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         # Test without error message
         response = supabase_client.set_snippet_status("test-id", "Processing")
@@ -156,19 +173,21 @@ class TestSupabaseClient:
             recorded_at="2024-01-01T00:00:00",
             recording_day_of_week="Monday",
             file_path="test/path.mp3",
-            file_size=1000
+            file_size=1000,
         )
 
         mock_supabase.table.assert_called_once_with("audio_files")
-        mock_supabase.table.return_value.insert.assert_called_once_with({
-            "radio_station_name": "Test Station",
-            "radio_station_code": "TEST-FM",
-            "location_state": "Test State",
-            "recorded_at": "2024-01-01T00:00:00",
-            "recording_day_of_week": "Monday",
-            "file_path": "test/path.mp3",
-            "file_size": 1000
-        })
+        mock_supabase.table.return_value.insert.assert_called_once_with(
+            {
+                "radio_station_name": "Test Station",
+                "radio_station_code": "TEST-FM",
+                "location_state": "Test State",
+                "recorded_at": "2024-01-01T00:00:00",
+                "recording_day_of_week": "Monday",
+                "file_path": "test/path.mp3",
+                "file_size": 1000,
+            }
+        )
         assert response == expected_response[0]
 
     def test_insert_stage_1_llm_response(self, supabase_client, mock_supabase):
@@ -180,20 +199,24 @@ class TestSupabaseClient:
             audio_file_id=1,
             initial_transcription="Test transcription",
             initial_detection_result={"test": "result"},
+            transcriptor="gemini-1206",
             timestamped_transcription={"test": "transcription"},
             detection_result={"test": "result"},
-            status="New"
+            status="New",
         )
 
         mock_supabase.table.assert_called_once_with("stage_1_llm_responses")
-        mock_supabase.table.return_value.insert.assert_called_once_with({
-            "audio_file": 1,
-            "initial_transcription": "Test transcription",
-            "initial_detection_result": {"test": "result"},
-            "timestamped_transcription": {"test": "transcription"},
-            "detection_result": {"test": "result"},
-            "status": "New"
-        })
+        mock_supabase.table.return_value.insert.assert_called_once_with(
+            {
+                "audio_file": 1,
+                "initial_transcription": "Test transcription",
+                "initial_detection_result": {"test": "result"},
+                "transcriptor": "gemini-1206",
+                "timestamped_transcription": {"test": "transcription"},
+                "detection_result": {"test": "result"},
+                "status": "New",
+            }
+        )
         assert response == expected_response[0]
 
     def test_insert_snippet(self, supabase_client, mock_supabase):
@@ -210,7 +233,7 @@ class TestSupabaseClient:
             recorded_at="2024-01-01T00:00:00",
             duration="00:01:00",
             start_time="00:00:00",
-            end_time="00:01:00"
+            end_time="00:01:00",
         )
 
         mock_supabase.table.assert_called_once_with("snippets")
@@ -229,7 +252,9 @@ class TestSupabaseClient:
     def test_update_snippet(self, supabase_client, mock_supabase):
         """Test updating snippet"""
         expected_response = [{"id": "test-id"}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.update_snippet(
             id="test-id",
@@ -246,7 +271,7 @@ class TestSupabaseClient:
             context="Test context",
             political_leaning="neutral",
             status="Processed",
-            error_message=None
+            error_message=None,
         )
 
         mock_supabase.table.assert_called_once_with("snippets")
@@ -256,7 +281,9 @@ class TestSupabaseClient:
     def test_reset_snippet(self, supabase_client, mock_supabase):
         """Test resetting snippet"""
         expected_response = [{"id": "test-id"}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.reset_snippet("test-id")
 
@@ -267,7 +294,9 @@ class TestSupabaseClient:
     def test_delete_snippet(self, supabase_client, mock_supabase):
         """Test deleting snippet"""
         expected_response = [{"id": "test-id"}]
-        mock_supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.delete_snippet("test-id")
 
@@ -283,7 +312,9 @@ class TestSupabaseClient:
     def test_update_stage_1_llm_response_detection_result(self, supabase_client, mock_supabase):
         """Test updating stage 1 LLM response detection result"""
         expected_response = [{"id": 1}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         detection_result = {"test": "result"}
         response = supabase_client.update_stage_1_llm_response_detection_result(1, detection_result)
@@ -295,19 +326,25 @@ class TestSupabaseClient:
     def test_update_stage_1_llm_response_timestamped_transcription(self, supabase_client, mock_supabase):
         """Test updating stage 1 LLM response timestamped transcription"""
         expected_response = [{"id": 1}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         timestamped_transcription = {"test": "transcription"}
         response = supabase_client.update_stage_1_llm_response_timestamped_transcription(1, timestamped_transcription)
 
         mock_supabase.table.assert_called_once_with("stage_1_llm_responses")
-        mock_supabase.table.return_value.update.assert_called_once_with({"timestamped_transcription": timestamped_transcription})
+        mock_supabase.table.return_value.update.assert_called_once_with(
+            {"timestamped_transcription": timestamped_transcription}
+        )
         assert response == expected_response
 
     def test_reset_stage_1_llm_response_status(self, supabase_client, mock_supabase):
         """Test resetting stage 1 LLM response status"""
         expected_response = [{"id": 1}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.reset_stage_1_llm_response_status(1)
 
@@ -350,7 +387,9 @@ class TestSupabaseClient:
     def test_get_stage_1_llm_response_by_id_with_custom_select(self, supabase_client, mock_supabase):
         """Test getting stage 1 LLM response by ID with custom select"""
         expected_response = [{"id": 1, "custom_field": "value"}]
-        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.get_stage_1_llm_response_by_id(1, select="id,custom_field")
 
@@ -409,7 +448,9 @@ class TestSupabaseClient:
     def test_update_snippet_with_null_fields(self, supabase_client, mock_supabase):
         """Test updating snippet with null fields"""
         expected_response = [{"id": "test-id"}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.update_snippet(
             id="test-id",
@@ -426,7 +467,7 @@ class TestSupabaseClient:
             context=None,
             political_leaning=None,
             status="New",
-            error_message=None
+            error_message=None,
         )
 
         mock_supabase.table.assert_called_once_with("snippets")
@@ -440,21 +481,24 @@ class TestSupabaseClient:
         mock_supabase.table.return_value.insert.return_value.execute.return_value.data = new_label
 
         response = supabase_client.create_new_label(
-            "Test Label & Special Chars",
-            "Etiqueta de Prueba & Caracteres Especiales"
+            "Test Label & Special Chars", "Etiqueta de Prueba & Caracteres Especiales"
         )
 
-        mock_supabase.table.return_value.insert.assert_called_once_with({
-            "text": "Test Label & Special Chars",
-            "text_spanish": "Etiqueta de Prueba & Caracteres Especiales",
-            "is_ai_suggested": True
-        })
+        mock_supabase.table.return_value.insert.assert_called_once_with(
+            {
+                "text": "Test Label & Special Chars",
+                "text_spanish": "Etiqueta de Prueba & Caracteres Especiales",
+                "is_ai_suggested": True,
+            }
+        )
         assert response == new_label[0]
 
     def test_assign_label_to_snippet_duplicate_handling(self, supabase_client, mock_supabase):
         """Test assigning same label to snippet multiple times"""
         existing_assignment = [{"label": 1, "snippet": "test-id"}]
-        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = existing_assignment
+        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = (
+            existing_assignment
+        )
 
         # First assignment
         response1 = supabase_client.assign_label_to_snippet(1, "test-id")
@@ -524,25 +568,29 @@ class TestSupabaseClient:
             embedding=embedding,
             model_name=model_name,
             status=status,
-            error_message=error_message
+            error_message=error_message,
         )
 
         # Verify insert was called with correct parameters
-        mock_supabase.table.return_value.insert.assert_called_once_with({
-            "snippet": snippet_id,
-            "snippet_document": snippet_document,
-            "document_token_count": document_token_count,
-            "embedding": embedding,
-            "model_name": model_name,
-            "status": status,
-            "error_message": error_message,
-        })
+        mock_supabase.table.return_value.insert.assert_called_once_with(
+            {
+                "snippet": snippet_id,
+                "snippet_document": snippet_document,
+                "document_token_count": document_token_count,
+                "embedding": embedding,
+                "model_name": model_name,
+                "status": status,
+                "error_message": error_message,
+            }
+        )
         assert response == expected_insert_response[0]
 
         # Test case 2: Update existing embedding
         expected_update_response = [{"id": 1, "snippet": snippet_id}]
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [{"id": 1}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_update_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_update_response
+        )
 
         response = supabase_client.upsert_snippet_embedding(
             snippet_id=snippet_id,
@@ -551,18 +599,20 @@ class TestSupabaseClient:
             embedding=embedding,
             model_name=model_name,
             status=status,
-            error_message=error_message
+            error_message=error_message,
         )
 
         # Verify update was called with correct parameters
-        mock_supabase.table.return_value.update.assert_called_once_with({
-            "snippet_document": snippet_document,
-            "document_token_count": document_token_count,
-            "embedding": embedding,
-            "model_name": model_name,
-            "status": status,
-            "error_message": error_message,
-        })
+        mock_supabase.table.return_value.update.assert_called_once_with(
+            {
+                "snippet_document": snippet_document,
+                "document_token_count": document_token_count,
+                "embedding": embedding,
+                "model_name": model_name,
+                "status": status,
+                "error_message": error_message,
+            }
+        )
         mock_supabase.table.return_value.update.return_value.eq.assert_called_once_with("snippet", snippet_id)
         assert response == expected_update_response[0]
 
@@ -589,25 +639,29 @@ class TestSupabaseClient:
             embedding=embedding,
             model_name=model_name,
             status=status,
-            error_message=error_message
+            error_message=error_message,
         )
 
         # Verify insert was called with correct parameters
-        mock_supabase.table.return_value.insert.assert_called_once_with({
-            "snippet": snippet_id,
-            "snippet_document": snippet_document,
-            "document_token_count": document_token_count,
-            "embedding": embedding,
-            "model_name": model_name,
-            "status": status,
-            "error_message": error_message,
-        })
+        mock_supabase.table.return_value.insert.assert_called_once_with(
+            {
+                "snippet": snippet_id,
+                "snippet_document": snippet_document,
+                "document_token_count": document_token_count,
+                "embedding": embedding,
+                "model_name": model_name,
+                "status": status,
+                "error_message": error_message,
+            }
+        )
         assert response == expected_response[0]
 
     def test_submit_snippet_review(self, supabase_client, mock_supabase):
         """Test submitting snippet review"""
         expected_response = [{"id": "test-id"}]
-        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.submit_snippet_review(
             id="test-id",
@@ -626,28 +680,32 @@ class TestSupabaseClient:
         )
 
         mock_supabase.table.assert_called_once_with("snippets")
-        mock_supabase.table.return_value.update.assert_called_once_with({
-            "transcription": "Test transcription",
-            "translation": "Test translation",
-            "title": "Test title",
-            "summary": "Test summary",
-            "explanation": "Test explanation",
-            "disinformation_categories": ["category1"],
-            "keywords_detected": ["keyword1"],
-            "language": "en",
-            "confidence_scores": {"score": 0.9},
-            "context": "Test context",
-            "political_leaning": "neutral",
-            "grounding_metadata": {"source": "test"},
-            "status": "Processed",
-            "error_message": None
-        })
+        mock_supabase.table.return_value.update.assert_called_once_with(
+            {
+                "transcription": "Test transcription",
+                "translation": "Test translation",
+                "title": "Test title",
+                "summary": "Test summary",
+                "explanation": "Test explanation",
+                "disinformation_categories": ["category1"],
+                "keywords_detected": ["keyword1"],
+                "language": "en",
+                "confidence_scores": {"score": 0.9},
+                "context": "Test context",
+                "political_leaning": "neutral",
+                "grounding_metadata": {"source": "test"},
+                "status": "Processed",
+                "error_message": None,
+            }
+        )
         assert response == expected_response
 
     def test_delete_stage_1_llm_responses(self, supabase_client, mock_supabase):
         """Test deleting stage 1 LLM responses"""
         expected_response = [{"id": 1}, {"id": 2}]
-        mock_supabase.table.return_value.delete.return_value.in_.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.delete.return_value.in_.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         audio_file_ids = [1, 2]
         response = supabase_client.delete_stage_1_llm_responses(audio_file_ids)
@@ -660,7 +718,9 @@ class TestSupabaseClient:
     def test_delete_vector_embedding_of_snippet(self, supabase_client, mock_supabase):
         """Test deleting vector embedding of snippet"""
         expected_response = [{"id": 1, "snippet": "test-id"}]
-        mock_supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = expected_response
+        mock_supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = (
+            expected_response
+        )
 
         response = supabase_client.delete_vector_embedding_of_snippet("test-id")
 
@@ -691,7 +751,9 @@ class TestSupabaseClient:
     def test_create_new_label_existing(self, supabase_client, mock_supabase):
         """Test creating new label when label already exists"""
         existing_label = {"id": 1, "text": "Test Label"}
-        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [existing_label]
+        mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+            existing_label
+        ]
 
         response = supabase_client.create_new_label("Test Label", "Etiqueta de Prueba")
 
@@ -708,9 +770,9 @@ class TestSupabaseClient:
                 "previous_analysis": {
                     "transcription": "Test transcription",
                     "translation": "Test translation",
-                    "status": "Processed"
+                    "status": "Processed",
                 },
-                "expected_response": [{"id": "test-id-1"}]
+                "expected_response": [{"id": "test-id-1"}],
             },
             # Case with complex nested analysis
             {
@@ -720,50 +782,34 @@ class TestSupabaseClient:
                     "translation": "Test translation",
                     "title": {"english": "Test title", "spanish": "Título de prueba"},
                     "summary": {"english": "Test summary", "spanish": "Resumen de prueba"},
-                    "disinformation_categories": [
-                        {"english": "Category 1", "spanish": "Categoría 1"}
-                    ],
-                    "confidence_scores": {
-                        "overall": 0.9,
-                        "categories": [
-                            {"name": "accuracy", "score": 0.95}
-                        ]
-                    },
-                    "status": "Processed"
+                    "disinformation_categories": [{"english": "Category 1", "spanish": "Categoría 1"}],
+                    "confidence_scores": {"overall": 0.9, "categories": [{"name": "accuracy", "score": 0.95}]},
+                    "status": "Processed",
                 },
-                "expected_response": [{"id": "test-id-2"}]
+                "expected_response": [{"id": "test-id-2"}],
             },
             # Case with null values
             {
                 "snippet_id": "test-id-3",
-                "previous_analysis": {
-                    "transcription": None,
-                    "translation": None,
-                    "title": None,
-                    "status": "New"
-                },
-                "expected_response": [{"id": "test-id-3"}]
-            }
+                "previous_analysis": {"transcription": None, "translation": None, "title": None, "status": "New"},
+                "expected_response": [{"id": "test-id-3"}],
+            },
         ]
 
         for case in test_cases:
             # Reset mock for each test case
             mock_supabase.reset_mock()
-            mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = case["expected_response"]
+            mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = case[
+                "expected_response"
+            ]
 
             # Execute the update
-            response = supabase_client.update_snippet_previous_analysis(
-                case["snippet_id"],
-                case["previous_analysis"]
-            )
+            response = supabase_client.update_snippet_previous_analysis(case["snippet_id"], case["previous_analysis"])
 
             # Verify the calls and response
             mock_supabase.table.assert_called_once_with("snippets")
-            mock_supabase.table.return_value.update.assert_called_once_with({
-                "previous_analysis": case["previous_analysis"]
-            })
-            mock_supabase.table.return_value.update.return_value.eq.assert_called_once_with(
-                "id",
-                case["snippet_id"]
+            mock_supabase.table.return_value.update.assert_called_once_with(
+                {"previous_analysis": case["previous_analysis"]}
             )
+            mock_supabase.table.return_value.update.return_value.eq.assert_called_once_with("id", case["snippet_id"])
             assert response == case["expected_response"]

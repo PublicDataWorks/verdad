@@ -19,7 +19,7 @@ if __name__ == "__main__":
             deployment = initial_disinformation_detection.to_deployment(
                 name="Stage 1: Initial Disinformation Detection",
                 concurrency_limit=100,
-                parameters=dict(audio_file_id=None, use_openai=False, limit=1000),
+                parameters=dict(audio_file_id=None, limit=1000),
             )
             serve(deployment, limit=100)
         case "regenerate_timestamped_transcript":

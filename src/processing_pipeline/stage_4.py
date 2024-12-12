@@ -200,9 +200,9 @@ class Stage4Executor:
         # Prepare the user prompt
         user_prompt = (
             f"{cls.USER_PROMPT}\n\n"
-            f"### **Transcription**\n{transcription}\n\n"
-            f"### **Audio Metadata**\n{json.dumps(metadata, indent=2)}\n\n"
-            f"### **Analysis JSON**\n{json.dumps(analysis_json, indent=2)}"
+            f"### **Transcription:**\n{transcription}\n\n"
+            f"### **Audio Metadata:**\n{json.dumps(metadata, indent=2)}\n\n"
+            f"### **Analysis JSON:**\n{json.dumps(analysis_json, indent=2)}"
         )
 
         response = model.generate_content(
