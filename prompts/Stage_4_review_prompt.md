@@ -8,6 +8,7 @@ You will receive **three inputs**:
 
     - The **full transcription of the entire audio file**.
     - This is the **primary source material** and the most important input.
+    - The transcription **may contain multiple languages** mixed together.
 
 2. **Audio Metadata**
 
@@ -26,6 +27,7 @@ You will receive **three inputs**:
 3. **Analysis JSON**
 
     - A complex JSON object containing a detailed analysis of the audio file.
+    - This analysis focuses on identifying and evaluating potential disinformation content within the audio.
 
     **Structure:**
 
@@ -175,6 +177,11 @@ You will receive **three inputs**:
         -   Ensure scores are appropriate given the Transcription, Metadata, and the scoring guidelines provided.
     -   Modify array elements as needed:
         -   Add or update `claims` under `confidence_scores.analysis`.
+
+-   **Content Preservation:**
+
+    - If, upon review, a section of the Analysis JSON is deemed accurate and well-written, it should be kept unchanged. There is no need to rephrase or modify content that is already sufficient.
+    - Only change the content when you are confident in your assessment. If you are unsure about a change, keep the original content as is.
 
 -   **Objectivity and Neutrality:**
 
