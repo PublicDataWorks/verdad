@@ -331,11 +331,13 @@ class TestSupabaseClient:
         )
 
         timestamped_transcription = {"test": "transcription"}
-        response = supabase_client.update_stage_1_llm_response_timestamped_transcription(1, timestamped_transcription)
+        response = supabase_client.update_stage_1_llm_response_timestamped_transcription(
+            1, timestamped_transcription, "gemini-1206"
+        )
 
         mock_supabase.table.assert_called_once_with("stage_1_llm_responses")
         mock_supabase.table.return_value.update.assert_called_once_with(
-            {"timestamped_transcription": timestamped_transcription}
+            {"transcriptor": "gemini-1206", "timestamped_transcription": timestamped_transcription}
         )
         assert response == expected_response
 

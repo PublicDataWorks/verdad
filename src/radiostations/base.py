@@ -11,6 +11,7 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 from utils import optional_task
 
+
 class RadioStation:
 
     class Config:
@@ -74,7 +75,7 @@ class RadioStation:
             raise e
 
     # TODO: Before retry, must kill browser process
-    @optional_task(log_prints=True, retries=30)
+    @optional_task(log_prints=True, retries=3000)
     def start_browser(self):
         chrome_options = Options()
         chrome_options.add_argument("--headless")
@@ -122,7 +123,7 @@ class RadioStation:
 
         # Wait for a moment to let the audio start
         print("Wait a bit...")
-        time.sleep(20)
+        time.sleep(30)
 
         # Detailed audio checks
         try:

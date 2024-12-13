@@ -318,7 +318,7 @@ class TestMainFlows:
         mock_supabase_client.get_stage_1_llm_response_by_id.return_value = stage_1_llm_response
 
         with patch("os.remove") as mock_remove, patch(
-            "processing_pipeline.stage_1.transcribe_audio_file_with_custom_timestamped_transcription_generator"
+            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1206"
         ) as mock_transcribe:
             mock_transcribe.return_value = {"timestamped_transcription": "Test transcription"}
 
@@ -718,7 +718,7 @@ class TestHelperFunctions:
         )
 
         with patch("os.remove"), patch(
-            "processing_pipeline.stage_1.transcribe_audio_file_with_custom_timestamped_transcription_generator"
+            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1206"
         ) as mock_transcribe, patch(
             "processing_pipeline.stage_1.fetch_stage_1_llm_response_by_id"
         ) as mock_fetch, patch(
@@ -760,8 +760,8 @@ class TestHelperFunctions:
                 assert mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.call_count == 2
                 mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_has_calls(
                     [
-                        call(1, {"timestamped_transcription": "Test transcription"}),
-                        call(2, {"timestamped_transcription": "Test transcription"}),
+                        call(1, {"timestamped_transcription": "Test transcription"}, "gemini-1206"),
+                        call(2, {"timestamped_transcription": "Test transcription"}, "gemini-1206"),
                     ]
                 )
 

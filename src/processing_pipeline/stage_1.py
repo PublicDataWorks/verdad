@@ -340,13 +340,18 @@ def update_stage_1_llm_response_detection_result(supabase_client, id, detection_
 
 
 @optional_task(log_prints=True, retries=3)
-def update_stage_1_llm_response_timestamped_transcription(supabase_client, id, timestamped_transcription):
-    supabase_client.update_stage_1_llm_response_timestamped_transcription(id, timestamped_transcription)
+def update_stage_1_llm_response_timestamped_transcription(supabase_client, id, timestamped_transcription, transcriptor):
+    supabase_client.update_stage_1_llm_response_timestamped_transcription(id, timestamped_transcription, transcriptor)
 
 
 @optional_task(log_prints=True, retries=3)
 def reset_status_of_stage_1_llm_response(supabase_client, stage_1_llm_response_id):
     supabase_client.reset_stage_1_llm_response_status(stage_1_llm_response_id)
+
+
+@optional_task(log_prints=True, retries=3)
+def set_status_of_stage_1_llm_response(supabase_client, stage_1_llm_response_id, status, error_message=None):
+    supabase_client.set_stage_1_llm_response_status(stage_1_llm_response_id, status, error_message)
 
 
 @optional_task(log_prints=True, retries=3)
@@ -466,11 +471,21 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
             if len(flagged_snippets) == 0:
                 print("No flagged snippets found during the initial detection phase.")
             else:
-                print("Transcribing the audio file with the custom timestamped-transcript generator")
-                timestamped_transcription = transcribe_audio_file_with_custom_timestamped_transcription_generator(
-                    local_file
+                try:
+                    transcriptor = "gemini-1206"
+                    timestamped_transcription = transcribe_audio_file_with_gemini_1206(local_file)
+                except google_exceptions.ResourceExhausted as e:
+                    print(
+                        f"Failed to transcribe the audio file with Gemini 1206 due to Rate Limit: {e}\n"
+                        "Falling back to the custom timestamped-transcript generator"
+                    )
+                    transcriptor = "custom"
+                    timestamped_transcription = transcribe_audio_file_with_custom_timestamped_transcription_generator(
+                        local_file
+                    )
+                update_stage_1_llm_response_timestamped_transcription(
+                    supabase_client, id, timestamped_transcription, transcriptor
                 )
-                update_stage_1_llm_response_timestamped_transcription(supabase_client, id, timestamped_transcription)
 
                 print("Processing the timestamped transcription with Gemini 1.5 Pro")
                 detection_result = disinformation_detection_with_gemini_1_5_pro(
@@ -480,8 +495,20 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
                 update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
 
-                # Reset the stage-1 LLM response status to New, error_message to None
-                reset_status_of_stage_1_llm_response(supabase_client, id)
+                flagged_snippets = detection_result["flagged_snippets"]
+
+                if len(flagged_snippets) == 0:
+                    print(
+                        "No flagged snippets found during the main detection phase.\n"
+                        "Set the stage-1 LLM response status to Processed"
+                    )
+                    set_status_of_stage_1_llm_response(supabase_client, id, "Processed", None)
+                else:
+                    print(
+                        "Flagged snippets found during the main detection phase.\n"
+                        "Reset the stage-1 LLM response status to New, error_message to None"
+                    )
+                    reset_status_of_stage_1_llm_response(supabase_client, id)
 
             print(f"Processing completed for stage 1 llm response {id}")
             print(f"Delete the downloaded audio file: {local_file}")

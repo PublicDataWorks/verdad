@@ -6,7 +6,11 @@ import json
 from prefect.task_runners import ConcurrentTaskRunner
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-from processing_pipeline.constants import get_output_schema_for_stage_4, get_system_instruction_for_stage_4, get_user_prompt_for_stage_4
+from processing_pipeline.constants import (
+    get_output_schema_for_stage_4,
+    get_system_instruction_for_stage_4,
+    get_user_prompt_for_stage_4,
+)
 from processing_pipeline.supabase_utils import SupabaseClient
 from utils import optional_flow, optional_task
 
@@ -35,7 +39,7 @@ def prepare_snippet_for_review(snippet_json):
         "recording_day_of_week": recorded_at.strftime("%A"),
     }
 
-    transcription=analysis_json["transcription"]
+    transcription = analysis_json["transcription"]
     return transcription, metadata, analysis_json
 
 
@@ -94,6 +98,7 @@ def process_snippet(supabase_client, snippet):
         print(
             f"TRANSCRIPTION:\n{transcription}\n\n"
             f"METADATA:\n{json.dumps(metadata, indent=2)}"
+            f"ANALYSIS_JSON:\n{json.dumps(analysis_json, indent=2)}"
         )
 
         print("Reviewing the snippet...")
@@ -104,20 +109,20 @@ def process_snippet(supabase_client, snippet):
         )
 
         print("Review completed. Updating the snippet in Supabase")
-        submit_snippet_review_result(supabase_client, snippet['id'], response, grounding_metadata)
+        submit_snippet_review_result(supabase_client, snippet["id"], response, grounding_metadata)
 
         # Create new labels based on the response and assign them to the snippet
         for category in response["disinformation_categories"]:
             create_new_label_and_assign_to_snippet(supabase_client, snippet["id"], category)
 
-
         # Delete the vector embedding of the old snippet (if any) to trigger a new embedding
-        delete_vector_embedding_of_snippet(supabase_client, snippet['id'])
+        delete_vector_embedding_of_snippet(supabase_client, snippet["id"])
         print(f"Processing completed for snippet {snippet['id']}")
 
     except Exception as e:
         print(f"Failed to process snippet {snippet['id']}: {e}")
         supabase_client.set_snippet_status(snippet["id"], "Error", f"[Stage 4] {e}")
+
 
 @optional_task(log_prints=True, retries=3)
 def fetch_a_ready_for_review_snippet_from_supabase(supabase_client):
@@ -161,7 +166,6 @@ def analysis_review(snippet_ids, repeat):
             if snippet:
                 # Process the snippet
                 process_snippet(supabase_client, snippet)
-
 
             # Stop the flow if we're not meant to repeat the process
             if not repeat:
@@ -208,12 +212,7 @@ class Stage4Executor:
         response = model.generate_content(
             contents=[user_prompt],
             tools={
-                "google_search_retrieval": {
-                    "dynamic_retrieval_config": {
-                        "mode": "dynamic",
-                        "dynamic_threshold": 0.6
-                    }
-                }
+                "google_search_retrieval": {"dynamic_retrieval_config": {"mode": "dynamic", "dynamic_threshold": 0.6}}
             },
             generation_config=genai.GenerationConfig(max_output_tokens=8192),
             safety_settings={
@@ -248,9 +247,7 @@ class Stage4Executor:
         response = model.generate_content(
             contents=[user_prompt],
             generation_config=genai.GenerationConfig(
-                response_mime_type="application/json",
-                response_schema=cls.OUTPUT_SCHEMA,
-                max_output_tokens=8192
+                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
             ),
             safety_settings={
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
