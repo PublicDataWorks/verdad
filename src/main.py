@@ -2,8 +2,6 @@ import os
 import boto3
 from dotenv import load_dotenv
 
-import sentry_sdk
-from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
 
 load_dotenv()
@@ -38,6 +36,24 @@ def test_timestamped_transcription_generator():
         # Delete the local file if it exists
         if os.path.exists(audio_file):
             os.remove(audio_file)
+
+# def test_stage_4():
+#     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+#     snippet = supabase_client.get_snippet_by_id(id="d8a5b222-0b0a-4503-8e6c-ad51e0d784d7")
+#     previous_analysis = snippet["previous_analysis"]
+#     transcription, metadata, analysis_json = prepare_snippet_for_review(previous_analysis)
+#     print(
+#         f"TRANSCRIPTION:\n{transcription}\n\n"
+#         f"METADATA:\n{json.dumps(metadata, indent=2)}\n\n"
+#         f"ANALYSIS_JSON:\n{json.dumps(analysis_json, indent=2)}"
+#     )
+#     response, grounding_metadata = Stage4Executor.run(
+#         transcription=transcription,
+#         metadata=metadata,
+#         analysis_json=analysis_json,
+#     )
+#     print(response)
+#     print(grounding_metadata)
 
 
 if __name__ == "__main__":

@@ -667,7 +667,6 @@ class TestSupabaseClient:
 
         response = supabase_client.submit_snippet_review(
             id="test-id",
-            transcription="Test transcription",
             translation="Test translation",
             title="Test title",
             summary="Test summary",
@@ -684,7 +683,6 @@ class TestSupabaseClient:
         mock_supabase.table.assert_called_once_with("snippets")
         mock_supabase.table.return_value.update.assert_called_once_with(
             {
-                "transcription": "Test transcription",
                 "translation": "Test translation",
                 "title": "Test title",
                 "summary": "Test summary",

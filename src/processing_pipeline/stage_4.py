@@ -18,7 +18,6 @@ from utils import optional_flow, optional_task
 @optional_task(log_prints=True)
 def prepare_snippet_for_review(snippet_json):
     analysis_json = {
-        "transcription": snippet_json["transcription"],
         "translation": snippet_json["translation"],
         "title": snippet_json["title"],
         "summary": snippet_json["summary"],
@@ -39,7 +38,7 @@ def prepare_snippet_for_review(snippet_json):
         "recording_day_of_week": recorded_at.strftime("%A"),
     }
 
-    transcription = analysis_json["transcription"]
+    transcription = snippet_json["transcription"]
     return transcription, metadata, analysis_json
 
 
@@ -47,7 +46,6 @@ def prepare_snippet_for_review(snippet_json):
 def submit_snippet_review_result(supabase_client, snippet_id, response, grounding_metadata):
     supabase_client.submit_snippet_review(
         id=snippet_id,
-        transcription=response["transcription"],
         translation=response["translation"],
         title=response["title"],
         summary=response["summary"],
@@ -98,7 +96,6 @@ def process_snippet(supabase_client, snippet):
         print(
             f"TRANSCRIPTION:\n{transcription}\n\n"
             f"METADATA:\n{json.dumps(metadata, indent=2)}"
-            f"ANALYSIS_JSON:\n{json.dumps(analysis_json, indent=2)}"
         )
 
         print("Reviewing the snippet...")

@@ -232,11 +232,10 @@ class SupabaseClient:
         )
         return response.data
 
-    def submit_snippet_review(self, id, transcription, translation, title, summary, explanation, disinformation_categories, keywords_detected, language, confidence_scores, context, political_leaning, grounding_metadata):
+    def submit_snippet_review(self, id, translation, title, summary, explanation, disinformation_categories, keywords_detected, language, confidence_scores, context, political_leaning, grounding_metadata):
         response = (
             self.client.table("snippets")
             .update({
-                "transcription": transcription,
                 "translation": translation,
                 "title": title,
                 "summary": summary,

@@ -1,7 +1,6 @@
 {
     "type": "object",
     "required": [
-        "transcription",
         "translation",
         "title",
         "summary",
@@ -14,10 +13,6 @@
         "political_leaning"
     ],
     "properties": {
-        "transcription": {
-            "type": "string",
-            "description": "Transcription of the entire audio clip in the original language."
-        },
         "translation": {
             "type": "string",
             "description": "Translation of the transcription into English."

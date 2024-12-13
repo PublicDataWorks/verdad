@@ -33,7 +33,6 @@ You will receive **three inputs**:
 
     ```json
     {
-      "transcription": "...", // Full transcription of the entire audio file
       "translation": "...",
       "title": {
         "spanish": "...",
@@ -121,7 +120,6 @@ You will receive **three inputs**:
 
     **Clarification Regarding Fields:**
 
-    - The **`transcription` field** in the Analysis JSON contains the **full transcription of the entire audio file**, identical to the one provided in the Transcription input.
     - The **`context` field** provides specific segments of the transcription related to the disinformation content:
         - **`before`**: Text immediately before the disinformation snippet.
         - **`main`**: The disinformation snippet itself.

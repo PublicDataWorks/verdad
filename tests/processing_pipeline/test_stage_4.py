@@ -242,13 +242,11 @@ class TestStage4:
         assert isinstance(analysis_json, dict)
         assert "recorded_at" in metadata
         assert "recording_day_of_week" in metadata
-        assert "transcription" in analysis_json
         assert "translation" in analysis_json
 
     def test_submit_snippet_review_result(self, mock_supabase_client):
         """Test submitting snippet review result"""
         response = {
-            "transcription": "Test transcription",
             "translation": "Test translation",
             "title": "Test title",
             "summary": "Test summary",
@@ -296,7 +294,6 @@ class TestStage4:
         transcription, metadata, analysis_json = prepare_snippet_for_review(sample_snippet)
 
         mock_response = {
-            "transcription": "Test transcription",
             "translation": "Test translation",
             "title": {"english": "Test title", "spanish": "Título de prueba"},
             "summary": {"english": "Test summary", "spanish": "Resumen de prueba"},
@@ -370,7 +367,6 @@ class TestStage4:
             # Verify the calls in order
             mock_supabase_client.submit_snippet_review.assert_called_once_with(
                 id=sample_snippet["id"],
-                transcription=mock_response["transcription"],
                 translation=mock_response["translation"],
                 title=mock_response["title"],
                 summary=mock_response["summary"],
@@ -758,7 +754,6 @@ class TestStage4:
     def test_submit_snippet_review_result_with_none_values(self, mock_supabase_client):
         """Test submitting snippet review with None values"""
         response = {
-            "transcription": None,
             "translation": None,
             "title": None,
             "summary": None,
