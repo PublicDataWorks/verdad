@@ -277,7 +277,7 @@ class TestMainFlows:
                 "radio_station_code": "TEST-FM",
                 "location_state": "Test State",
                 "location_city": "Test City",
-                "recorded_at": "2024-01-01T00:00:00Z",
+                "recorded_at": "2024-01-01T00:00:00+00:00",
                 "recording_day_of_week": "Monday",
             },
         }
@@ -311,7 +311,7 @@ class TestMainFlows:
                 "radio_station_code": "TEST-FM",
                 "location_state": "Test State",
                 "location_city": "Test City",
-                "recorded_at": "2024-01-01T00:00:00Z",
+                "recorded_at": "2024-01-01T00:00:00+00:00",
                 "recording_day_of_week": "Monday",
             },
         }
@@ -340,7 +340,7 @@ class TestHelperFunctions:
             "radio_station_code": "TEST-FM",
             "location_state": "Test State",
             "location_city": "Test City",
-            "recorded_at": "2024-01-01T00:00:00Z",
+            "recorded_at": "2024-01-01T00:00:00+00:00",
             "recording_day_of_week": "Monday",
         }
 
@@ -364,7 +364,7 @@ class TestHelperFunctions:
                     "radio_station_name": "Test Station",
                     "radio_station_code": "TEST-FM",
                     "location": {"state": "Test State", "city": "Test City"},
-                    "recorded_at": "2024-01-01T00:00:00Z",
+                    "recorded_at": "January 1, 2024 12:00 AM",
                     "recording_day_of_week": "Monday",
                     "time_zone": "UTC",
                 },
@@ -461,7 +461,7 @@ class TestHelperFunctions:
             "radio_station_code": "TEST-FM",
             "location_state": "Test State",
             "location_city": "Test City",
-            "recorded_at": "2024-01-01T00:00:00Z",
+            "recorded_at": "2024-01-01T00:00:00+00:00",
             "recording_day_of_week": "Monday",
         }
 
@@ -490,7 +490,7 @@ class TestHelperFunctions:
                     "radio_station_code": "TEST-FM",
                     "location_state": "Test State",
                     "location_city": "Test City",
-                    "recorded_at": "2024-01-01T00:00:00Z",
+                    "recorded_at": "2024-01-01T00:00:00+00:00",
                     "recording_day_of_week": "Monday",
                 },
             },
@@ -503,7 +503,7 @@ class TestHelperFunctions:
                     "radio_station_code": "TEST-FM",
                     "location_state": "Test State",
                     "location_city": "Test City",
-                    "recorded_at": "2024-01-01T00:00:00Z",
+                    "recorded_at": "2024-01-01T00:00:00+00:00",
                     "recording_day_of_week": "Monday",
                 },
             },
@@ -556,7 +556,7 @@ class TestHelperFunctions:
             "radio_station_code": "TEST-FM",
             "location_state": "Test State",
             "location_city": "Test City",
-            "recorded_at": "2024-01-01T00:00:00Z",
+            "recorded_at": "2024-01-01T00:00:00+00:00",
             "recording_day_of_week": "Monday",
         }
 
@@ -618,7 +618,7 @@ class TestHelperFunctions:
             "radio_station_code": "TEST-FM",
             "location_state": "Test State",
             "location_city": "Test City",
-            "recorded_at": "2024-01-01T00:00:00Z",
+            "recorded_at": "2024-01-01T00:00:00+00:00",
             "recording_day_of_week": "Monday",
         }
         mock_supabase_client.get_audio_file_by_id.return_value = audio_file
@@ -682,7 +682,7 @@ class TestHelperFunctions:
                     "radio_station_code": "TEST1-FM",
                     "location_state": "Test State",
                     "location_city": "Test City",
-                    "recorded_at": "2024-01-01T00:00:00Z",
+                    "recorded_at": "2024-01-01T00:00:00+00:00",
                     "recording_day_of_week": "Monday",
                 },
                 "initial_detection_result": {"flagged_snippets": [{"uuid": "1"}]},
@@ -696,7 +696,7 @@ class TestHelperFunctions:
                     "radio_station_code": "TEST2-FM",
                     "location_state": "Test State",
                     "location_city": "Test City",
-                    "recorded_at": "2024-01-01T00:00:00Z",
+                    "recorded_at": "2024-01-01T00:00:00+00:00",
                     "recording_day_of_week": "Monday",
                 },
                 "initial_detection_result": {"flagged_snippets": [{"uuid": "2"}]},
@@ -783,7 +783,7 @@ class TestHelperFunctions:
                 "radio_station_code": "TEST-FM",
                 "location_state": "Test State",
                 "location_city": "Test City",
-                "recorded_at": "2024-01-01T00:00:00Z",
+                "recorded_at": "2024-01-01T00:00:00+00:00",
                 "recording_day_of_week": "Monday",
             }
             for i in range(3)
@@ -807,7 +807,7 @@ class TestHelperFunctions:
             "radio_station_code": "TEST-FM",
             "location_state": "Test State",
             "location_city": "Test City",
-            "recorded_at": "2024-01-01T00:00:00Z",
+            "recorded_at": "2024-01-01T00:00:00+00:00",
             "recording_day_of_week": "Monday",
         }
 

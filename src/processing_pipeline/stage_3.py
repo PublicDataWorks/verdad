@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import time
 import google.generativeai as genai
@@ -113,6 +114,9 @@ def __get_metadata(snippet):
                 metadata["transcription"] = flagged_snippet["transcription"]
 
     audio_file = snippet["audio_file"]
+    recorded_at = datetime.strptime(snippet["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
+    audio_file["recorded_at"] = recorded_at.strftime("%B %-d, %Y %-I:%M %p")
+    audio_file["recording_day_of_week"] = recorded_at.strftime("%A")
     audio_file["time_zone"] = "UTC"
     metadata["additional_info"] = audio_file
 

@@ -108,7 +108,8 @@ class TestStage3:
             },
             "start_time": "00:00:30",
             "end_time": "00:01:30",
-            "duration": "00:01:00"
+            "duration": "00:01:00",
+            "recorded_at": "2024-01-01T00:00:00+00:00"
         }
 
     def test_fetch_specific_snippet(self, mock_supabase_client):

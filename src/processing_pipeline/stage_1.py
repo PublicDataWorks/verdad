@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import time
 import google.generativeai as genai
@@ -201,12 +202,13 @@ def process_audio_file(supabase_client, audio_file, local_file):
         initial_transcription = flash_response["transcription"]
 
         # Get metadata of the transcription
+        recorded_at = datetime.strptime(audio_file["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
         metadata = {
             "radio_station_name": audio_file["radio_station_name"],
             "radio_station_code": audio_file["radio_station_code"],
             "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-            "recorded_at": audio_file["recorded_at"],
-            "recording_day_of_week": audio_file["recording_day_of_week"],
+            "recorded_at": recorded_at.strftime("%B %-d, %Y %-I:%M %p"),
+            "recording_day_of_week": recorded_at.strftime("%A"),
             "time_zone": "UTC",
         }
 
@@ -399,12 +401,13 @@ def redo_main_detection(stage_1_llm_response_ids):
 
             # Get metadata of the transcription
             audio_file = stage_1_llm_response["audio_file"]
+            recorded_at = datetime.strptime(audio_file["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
             metadata = {
                 "radio_station_name": audio_file["radio_station_name"],
                 "radio_station_code": audio_file["radio_station_code"],
                 "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-                "recorded_at": audio_file["recorded_at"],
-                "recording_day_of_week": audio_file["recording_day_of_week"],
+                "recorded_at": recorded_at.strftime("%B %-d, %Y %-I:%M %p"),
+                "recording_day_of_week": recorded_at.strftime("%A"),
                 "time_zone": "UTC",
             }
 
@@ -456,12 +459,13 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
             # Get metadata of the transcription
             audio_file = stage_1_llm_response["audio_file"]
             local_file = download_audio_file_from_s3(s3_client, audio_file["file_path"])
+            recorded_at = datetime.strptime(audio_file["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
             metadata = {
                 "radio_station_name": audio_file["radio_station_name"],
                 "radio_station_code": audio_file["radio_station_code"],
                 "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-                "recorded_at": audio_file["recorded_at"],
-                "recording_day_of_week": audio_file["recording_day_of_week"],
+                "recorded_at": recorded_at.strftime("%B %-d, %Y %-I:%M %p"),
+                "recording_day_of_week": recorded_at.strftime("%A"),
                 "time_zone": "UTC",
             }
 
