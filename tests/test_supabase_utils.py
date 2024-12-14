@@ -675,7 +675,6 @@ class TestSupabaseClient:
             keywords_detected=["keyword1"],
             language="en",
             confidence_scores={"score": 0.9},
-            context="Test context",
             political_leaning="neutral",
             grounding_metadata={"source": "test"},
         )
@@ -691,7 +690,6 @@ class TestSupabaseClient:
                 "keywords_detected": ["keyword1"],
                 "language": "en",
                 "confidence_scores": {"score": 0.9},
-                "context": "Test context",
                 "political_leaning": "neutral",
                 "grounding_metadata": {"source": "test"},
                 "status": "Processed",

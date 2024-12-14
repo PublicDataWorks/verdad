@@ -2,7 +2,7 @@
 
 ### **Inputs**
 
-You will receive **three inputs**:
+You will receive **four inputs**:
 
 1. **Transcription**
 
@@ -10,7 +10,13 @@ You will receive **three inputs**:
     - This is the **primary source material** and the most important input.
     - The transcription **may contain multiple languages** mixed together.
 
-2. **Audio Metadata**
+2. **Disinformation Snippet** (part of the Transcription)
+
+    - This is a specific segment of the full transcription that has been previously identified as containing disinformation or misinformation.
+    - If this snippet is not found in the transcription, that means the inputs are invalid.
+      - In that case, please stop your reviewing and keep everything unchanged (output the exact same Analysis JSON as the input).
+
+3. **Audio Metadata**
 
     - A JSON object containing metadata about the audio recording.
     - Includes the date and day of the week of the recording in **UTC**.
@@ -24,16 +30,15 @@ You will receive **three inputs**:
     }
     ```
 
-3. **Analysis JSON**
+4. **Analysis JSON**
 
-    - A complex JSON object containing a detailed analysis of the audio file.
-    - This analysis focuses on identifying and evaluating potential disinformation content within the audio.
+    - A complex JSON object containing a detailed analysis of the disinformation snippet within the transcription.
 
     **Structure:**
 
     ```json
     {
-      "translation": "...",
+      "translation": "...", // Full translation of the entire transcription, not just the disinformation snippet
       "title": {
         "spanish": "...",
         "english": "..."
@@ -57,14 +62,6 @@ You will receive **three inputs**:
         "primary_language": "...",
         "dialect": "...",
         "register": "..."
-      },
-      "context": {
-        "before": "...",    // Transcription immediately before the disinformation snippet
-        "before_en": "...", // English translation of the 'before' section
-        "after": "...",     // Transcription immediately after the disinformation snippet
-        "after_en": "...",  // English translation of the 'after' section
-        "main": "...",      // Transcription of the disinformation snippet itself
-        "main_en": "..."    // English translation of the 'main' section
       },
       "confidence_scores": {
         "overall": 0-100,
@@ -118,14 +115,6 @@ You will receive **three inputs**:
     }
     ```
 
-    **Clarification Regarding Fields:**
-
-    - The **`context` field** provides specific segments of the transcription related to the disinformation content:
-        - **`before`**: Text immediately before the disinformation snippet.
-        - **`main`**: The disinformation snippet itself.
-        - **`after`**: Text immediately after the disinformation snippet.
-    - The **`main` section within `context`** is particularly important as it contains the **exact transcription of the disinformation snippet**.
-
 ### **Your Tasks**
 
 1. **Primary Analysis:**
@@ -160,7 +149,7 @@ You will receive **three inputs**:
 
     -   The **Transcription** is the most important input.
     -   All analysis and updates must be consistent with and directly supported by the Transcription and Audio Metadata.
-    -   Pay special attention to the **`main` section within the `context` field**, as it contains the **disinformation snippet** that needs careful analysis.
+    -   Give particular focus to the **Disinformation Snippet**, as it is the segment of the Transcription identified as containing disinformation.
 
 -   **Comprehensive Review:**
 

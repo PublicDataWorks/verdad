@@ -232,7 +232,7 @@ class SupabaseClient:
         )
         return response.data
 
-    def submit_snippet_review(self, id, translation, title, summary, explanation, disinformation_categories, keywords_detected, language, confidence_scores, context, political_leaning, grounding_metadata):
+    def submit_snippet_review(self, id, translation, title, summary, explanation, disinformation_categories, keywords_detected, language, confidence_scores, political_leaning, grounding_metadata):
         response = (
             self.client.table("snippets")
             .update({
@@ -244,7 +244,6 @@ class SupabaseClient:
                 "keywords_detected": keywords_detected,
                 "language": language,
                 "confidence_scores": confidence_scores,
-                "context": context,
                 "political_leaning": political_leaning,
                 "grounding_metadata": grounding_metadata,
                 "status": "Processed",

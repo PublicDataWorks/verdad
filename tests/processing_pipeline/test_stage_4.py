@@ -235,14 +235,16 @@ class TestStage4:
 
     def test_prepare_snippet_for_review(self, sample_snippet):
         """Test preparing snippet for review"""
-        transcription, metadata, analysis_json = prepare_snippet_for_review(sample_snippet)
+        transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(sample_snippet)
 
         assert isinstance(transcription, str)
+        assert isinstance(disinformation_snippet, str)
         assert isinstance(metadata, dict)
         assert isinstance(analysis_json, dict)
         assert "recorded_at" in metadata
         assert "recording_day_of_week" in metadata
         assert "translation" in analysis_json
+        assert "context" not in analysis_json
 
     def test_submit_snippet_review_result(self, mock_supabase_client):
         """Test submitting snippet review result"""
@@ -255,7 +257,6 @@ class TestStage4:
             "keywords_detected": [],
             "language": "es",
             "confidence_scores": {},
-            "context": "Test context",
             "political_leaning": "neutral"
         }
         grounding_metadata = {"sources": ["test-source"]}
@@ -291,7 +292,7 @@ class TestStage4:
     def test_process_snippet(self, mock_supabase_client, mock_gemini_model, sample_snippet):
         """Test processing a snippet"""
         # First, let's create a proper response that matches what prepare_snippet_for_review expects
-        transcription, metadata, analysis_json = prepare_snippet_for_review(sample_snippet)
+        transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(sample_snippet)
 
         mock_response = {
             "translation": "Test translation",
@@ -360,7 +361,7 @@ class TestStage4:
 
         with patch('google.generativeai.configure'), \
             patch('processing_pipeline.stage_4.Stage4Executor.run', return_value=(mock_response, mock_grounding)), \
-            patch('processing_pipeline.stage_4.prepare_snippet_for_review', return_value=(transcription, metadata, analysis_json)):
+            patch('processing_pipeline.stage_4.prepare_snippet_for_review', return_value=(transcription, disinformation_snippet, metadata, analysis_json)):
 
             process_snippet(mock_supabase_client, sample_snippet)
 
@@ -375,7 +376,6 @@ class TestStage4:
                 keywords_detected=mock_response["keywords_detected"],
                 language=mock_response["language"],
                 confidence_scores=mock_response["confidence_scores"],
-                context=mock_response["context"],
                 political_leaning=mock_response["political_leaning"],
                 grounding_metadata=mock_grounding
             )
@@ -438,6 +438,7 @@ class TestStage4:
         # Set up the response for both calls
         mock_gemini_model.return_value.generate_content.side_effect = [
             Mock(
+                
                 text=json.dumps({
                     "transcription": "Test transcription",
                     "translation": "Test translation",
@@ -505,6 +506,7 @@ class TestStage4:
 
         result, grounding = Stage4Executor.run(
             transcription=transcription,
+            disinformation_snippet="Test disinformation",
             metadata=metadata,
             analysis_json=analysis_json
         )
@@ -528,8 +530,8 @@ class TestStage4:
 
     def test_stage_4_executor_without_valid_inputs(self):
         """Test Stage4Executor without valid inputs"""
-        with pytest.raises(ValueError, match=re.escape("All inputs (transcription, metadata, analysis_json) must be provided")):
-            Stage4Executor.run(None, None, None)
+        with pytest.raises(ValueError, match=re.escape("All inputs (transcription, disinformation_snippet, metadata, analysis_json) must be provided")):
+            Stage4Executor.run(None, None, None, None)
 
     def test_analysis_review_flow(self, mock_sleep, mock_supabase_client, sample_snippet):
         """Test analysis review flow"""
@@ -642,7 +644,6 @@ class TestStage4:
             "keywords_detected": [],
             "language": "es",
             "confidence_scores": {},
-            "context": "Test",
             "political_leaning": "neutral"
         }
 
@@ -662,7 +663,6 @@ class TestStage4:
                 "keywords_detected": [],
                 "language": {
                     "primary_language": "",
-                    "dialect": "",
                     "register": ""
                 },
                 "confidence_scores": {
@@ -762,11 +762,9 @@ class TestStage4:
             "keywords_detected": None,
             "language": None,
             "confidence_scores": None,
-            "context": None,
             "political_leaning": None
         }
         grounding_metadata = None
-        previous_analysis = None
 
         submit_snippet_review_result(
             mock_supabase_client,
@@ -829,6 +827,7 @@ class TestStage4:
         with pytest.raises(ValueError):
             Stage4Executor.run(
                 transcription=None,
+                disinformation_snippet=None,
                 metadata=None,
                 analysis_json=None
             )
@@ -840,6 +839,7 @@ class TestStage4:
         with pytest.raises(Exception):
             Stage4Executor.run(
                 transcription="Test transcription",
+                disinformation_snippet="Test disinformation",
                 metadata={"recorded_at": "January 1, 2024 12:00 AM"},
                 analysis_json={"test": "analysis"}
             )
@@ -890,7 +890,6 @@ class TestStage4:
                     "keywords_detected": [],
                     "language": {"primary_language": "en", "dialect": "standard", "register": "formal"},
                     "confidence_scores": {"overall": 0},
-                    "context": {"before": "", "before_en": "", "after": "", "after_en": "", "main": "", "main_en": ""},
                     "political_leaning": {"score": 0.0}
                 },
                 {"sources": []}

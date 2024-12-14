@@ -26,7 +26,6 @@ def prepare_snippet_for_review(snippet_json):
         "keywords_detected": snippet_json["keywords_detected"],
         "language": snippet_json["language"],
         "confidence_scores": snippet_json["confidence_scores"],
-        "context": snippet_json["context"],
         "recorded_at": snippet_json["recorded_at"],
         "political_leaning": snippet_json["political_leaning"],
     }
@@ -39,7 +38,8 @@ def prepare_snippet_for_review(snippet_json):
     }
 
     transcription = snippet_json["transcription"]
-    return transcription, metadata, analysis_json
+    disinformation_snippet = snippet_json["context"]["main"]
+    return transcription, disinformation_snippet, metadata, analysis_json
 
 
 @optional_task(log_prints=True, retries=3)
@@ -54,7 +54,6 @@ def submit_snippet_review_result(supabase_client, snippet_id, response, groundin
         keywords_detected=response["keywords_detected"],
         language=response["language"],
         confidence_scores=response["confidence_scores"],
-        context=response["context"],
         political_leaning=response["political_leaning"],
         grounding_metadata=grounding_metadata,
     )
@@ -92,15 +91,17 @@ def process_snippet(supabase_client, snippet):
             backup_snippet_analysis(supabase_client, snippet)
             previous_analysis = snippet
 
-        transcription, metadata, analysis_json = prepare_snippet_for_review(previous_analysis)
+        transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(previous_analysis)
         print(
             f"TRANSCRIPTION:\n{transcription}\n\n"
+            f"DISINFORMATION SNIPPET:\n{disinformation_snippet}\n\n"
             f"METADATA:\n{json.dumps(metadata, indent=2)}"
         )
 
         print("Reviewing the snippet...")
         response, grounding_metadata = Stage4Executor.run(
             transcription=transcription,
+            disinformation_snippet=disinformation_snippet,
             metadata=metadata,
             analysis_json=analysis_json,
         )
@@ -184,9 +185,11 @@ class Stage4Executor:
     OUTPUT_SCHEMA = get_output_schema_for_stage_4()
 
     @classmethod
-    def run(cls, transcription, metadata, analysis_json):
-        if not transcription or not metadata or not analysis_json:
-            raise ValueError("All inputs (transcription, metadata, analysis_json) must be provided")
+    def run(cls, transcription, disinformation_snippet, metadata, analysis_json):
+        if not transcription or not disinformation_snippet or not metadata or not analysis_json:
+            raise ValueError(
+                "All inputs (transcription, disinformation_snippet, metadata, analysis_json) must be provided"
+            )
 
         gemini_key = os.getenv("GOOGLE_GEMINI_PAID_KEY")
         if not gemini_key:
@@ -202,6 +205,7 @@ class Stage4Executor:
         user_prompt = (
             f"{cls.USER_PROMPT}\n\n"
             f"### **Transcription:**\n{transcription}\n\n"
+            f"### **Disinformation Snippet:**\n{disinformation_snippet}\n\n"
             f"### **Audio Metadata:**\n{json.dumps(metadata, indent=2)}\n\n"
             f"### **Analysis JSON:**\n{json.dumps(analysis_json, indent=2)}"
         )
