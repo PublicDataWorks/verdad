@@ -186,10 +186,13 @@ class Stage4Executor:
 
     @classmethod
     def run(cls, transcription, disinformation_snippet, metadata, analysis_json):
-        if not transcription or not disinformation_snippet or not metadata or not analysis_json:
+        if not transcription or not metadata or not analysis_json:
             raise ValueError(
-                "All inputs (transcription, disinformation_snippet, metadata, analysis_json) must be provided"
+                "All inputs (transcription, metadata, analysis_json) must be provided"
             )
+
+        if not disinformation_snippet:
+            print("Warning: Disinformation Snippet was not provided for Review")
 
         gemini_key = os.getenv("GOOGLE_GEMINI_PAID_KEY")
         if not gemini_key:

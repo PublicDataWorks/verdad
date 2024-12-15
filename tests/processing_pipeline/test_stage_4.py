@@ -530,7 +530,7 @@ class TestStage4:
 
     def test_stage_4_executor_without_valid_inputs(self):
         """Test Stage4Executor without valid inputs"""
-        with pytest.raises(ValueError, match=re.escape("All inputs (transcription, disinformation_snippet, metadata, analysis_json) must be provided")):
+        with pytest.raises(ValueError, match=re.escape("All inputs (transcription, metadata, analysis_json) must be provided")):
             Stage4Executor.run(None, None, None, None)
 
     def test_analysis_review_flow(self, mock_sleep, mock_supabase_client, sample_snippet):
