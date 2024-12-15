@@ -214,6 +214,7 @@ class SupabaseClient:
                     "emotional_tone": emotional_tone,
                     "context": context,
                     "political_leaning": political_leaning,
+                    "previous_analysis": None,
                     "status": status,
                     "error_message": error_message,
                 }
