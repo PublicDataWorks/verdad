@@ -13,8 +13,7 @@ You will receive **four inputs**:
 2. **Disinformation Snippet** (part of the Transcription)
 
     - This is a specific segment of the full transcription that has been previously identified as containing disinformation or misinformation.
-    - If this snippet is not found in the transcription, that means the inputs are invalid.
-      - In that case, please stop your reviewing and keep everything unchanged (output the exact same Analysis JSON as the input).
+    - If this snippet is not found in the transcription, that means the inputs are invalid. Refer to the **Guidelines** section below for instructions on how to handle this situation.
 
 3. **Audio Metadata**
 
@@ -150,6 +149,11 @@ You will receive **four inputs**:
     -   The **Transcription** is the most important input.
     -   All analysis and updates must be consistent with and directly supported by the Transcription and Audio Metadata.
     -   Give particular focus to the **Disinformation Snippet**, as it is the segment of the Transcription identified as containing disinformation.
+      -   Ensure that the **Disinformation Snippet** is included in the Transcription.
+      -   If the snippet is not found within the Transcription:
+          -   Set the **confidence_scores.overall** to 0.
+          -   Write a clear explanation in the **confidence_scores.analysis.score_adjustments.adjustment_reason** field, indicating that the snippet was not found within the Transcription.
+          -   Keep all other fields in the Analysis JSON unchanged.
 
 -   **Comprehensive Review:**
 
