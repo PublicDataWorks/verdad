@@ -111,7 +111,8 @@ Perform the following steps:
   - Translate the three parts of the context into English.
 
 - **Context Accuracy:**
-  - Ensure that the `main` part of the context matches with the transcription in the provided metadata.
+  - Ensure that the `main` part of the `context` matches with the transcription in the provided metadata.
+  - In case the provided transcription in the metadata is inaccurate (eg, it's not found within the audio clip), utilize your own transcription to identify and extract the snippet and its surrounding context.
 
 ##### **H. Confidence Scoring and Self-Review Process**
 
@@ -481,7 +482,7 @@ Ensure your output strictly adheres to this schema.
                 },
                 "main": {
                     "type": "string",
-                    "description": "The transcription of the snippet itself. It should match with the transcription in the provided metadata."
+                    "description": "The transcription of the snippet itself."
                 },
                 "main_en": {
                     "type": "string",
