@@ -187,9 +187,7 @@ class Stage4Executor:
     @classmethod
     def run(cls, transcription, disinformation_snippet, metadata, analysis_json):
         if not transcription or not metadata or not analysis_json:
-            raise ValueError(
-                "All inputs (transcription, metadata, analysis_json) must be provided"
-            )
+            raise ValueError("All inputs (transcription, metadata, analysis_json) must be provided")
 
         if not disinformation_snippet:
             print("Warning: Disinformation Snippet was not provided for Review")
@@ -237,7 +235,7 @@ class Stage4Executor:
         return result, grounding_metadata
 
     @classmethod
-    def __ensure_json_format(cls, response):
+    def __ensure_json_format(cls, text):
         gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
@@ -246,7 +244,20 @@ class Stage4Executor:
         model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest")
 
         # Prepare the user prompt
-        user_prompt = "Convert the following text into a valid JSON object:\n\n" + response
+        user_prompt = (
+            """
+You are a helpful assistant whose task is to convert provided text into a valid JSON object following a given schema. Your responsibilities are:
+
+1. **Validation**: Check if the provided text can be converted into a valid JSON object that adheres to the specified schema.
+2. **Conversion**:
+   - If the text is convertible, convert it into a valid JSON object according to the schema.
+   - Set field `"is_convertible": true` in the JSON object.
+3. **Error Handling**:
+   - If the text is not convertible (e.g., missing fields, incorrect data types), return a JSON object with the field `"is_convertible": false`.
+
+Now, please convert the following text into a valid JSON object:\n\n"""
+            + text
+        )
 
         response = model.generate_content(
             contents=[user_prompt],
@@ -261,4 +272,9 @@ class Stage4Executor:
             },
             request_options={"timeout": 1000},
         )
-        return json.loads(response.text)
+        result = json.loads(response.text)
+
+        if result["is_convertible"]:
+            return result
+        else:
+            raise ValueError(f"[Stage 4] The provided text is not convertible to a valid JSON object:\n{text}")

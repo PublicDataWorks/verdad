@@ -150,10 +150,11 @@ You will receive **four inputs**:
     -   All analysis and updates must be consistent with and directly supported by the Transcription and Audio Metadata.
     -   Give particular focus to the **Disinformation Snippet**, as it is the segment of the Transcription identified as containing disinformation.
       -   Ensure that the **Disinformation Snippet** is included in the Transcription.
-      -   If the snippet is not found within the Transcription:
+          -   Note that the snippet may not perfectly match the transcription; minor discrepancies are acceptable as long as the core content is present.
+      -   If the snippet cannot be located in the Transcription:
           -   Set the **confidence_scores.overall** to 0.
-          -   Write a clear explanation in the **confidence_scores.analysis.score_adjustments.adjustment_reason** field, indicating that the snippet was not found within the Transcription.
-          -   Keep all other fields in the Analysis JSON unchanged.
+          -   Write a clear explanation in the **confidence_scores.analysis.score_adjustments.adjustment_reason** field, indicating that the snippet is missing from the Transcription.
+          -   Leave all other fields in the Analysis JSON unchanged.
 
 -   **Comprehensive Review:**
 
@@ -313,7 +314,7 @@ Analyze the content's political orientation on a scale from -1.0 (extremely left
    - [ ] Is my scoring consistent with provided evidence?
 
 5. **Documentation Format:**
-   "This content receives a score of [X] because it [cite specific elements]. This is evidenced by [quote or describe specific statements/arguments from the snippet]. Additional context includes [relevant patterns or mixed signals]."
+   "This content receives a score of [X] because it [cite specific elements]. This is evidenced by [quote or describe specific statements/arguments from the transcription]. Additional context includes [relevant patterns or mixed signals]."
 
 6. **Score Adjustment Protocol:**
    - Reduce score magnitude if evidence is mixed
@@ -340,7 +341,7 @@ Avoid inferring political leanings from adjacent topics or assumptions about the
 
 2. Evidence-Based Scoring:
    - Score must be justified by direct references to the content
-   - Each claim in the explanation must cite specific elements from the snippet
+   - Each claim in the explanation must cite specific elements from the transcription
    - Acknowledge when content contains mixed or ambiguous political signals
 
 ---
