@@ -9,6 +9,7 @@ primary_region = 'sea'
 
 [processes]
   initial_disinformation_detection = ''
+  initial_disinformation_detection_2 = ''
   audio_clipping = ''
   in_depth_analysis = ''
   regenerate_timestamped_transcript = ''
@@ -16,10 +17,11 @@ primary_region = 'sea'
   undo_disinformation_detection = ''
   undo_audio_clipping = ''
   analysis_review = ''
+  analysis_review_2 = ''
   embedding = ''
 
 [[vm]]
-  processes = ["initial_disinformation_detection"]
+  processes = ["initial_disinformation_detection", "initial_disinformation_detection_2"]
   memory = '4gb'
   cpu_kind = 'shared'
   cpus = 8
@@ -30,8 +32,15 @@ primary_region = 'sea'
   cpu_kind = 'shared'
   cpus = 4
 
+
 [[vm]]
-  processes = ["regenerate_timestamped_transcript", "in_depth_analysis", "analysis_review", "embedding"]
+  processes = ["analysis_review", "analysis_review_2"]
+  memory = '2gb'
+  cpu_kind = 'shared'
+  cpus = 8
+
+[[vm]]
+  processes = ["regenerate_timestamped_transcript", "in_depth_analysis", "embedding"]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 4

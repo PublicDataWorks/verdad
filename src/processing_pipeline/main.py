@@ -22,6 +22,13 @@ if __name__ == "__main__":
                 parameters=dict(audio_file_id=None, limit=1000),
             )
             serve(deployment, limit=100)
+        case "initial_disinformation_detection_2":
+            deployment = initial_disinformation_detection.to_deployment(
+                name="Stage 1: Initial Disinformation Detection 2",
+                concurrency_limit=100,
+                parameters=dict(audio_file_id=None, limit=1000),
+            )
+            serve(deployment, limit=100)
         case "regenerate_timestamped_transcript":
             deployment = regenerate_timestamped_transcript.to_deployment(
                 name="Stage 1: Regenerate Timestamped Transcript",
@@ -63,6 +70,13 @@ if __name__ == "__main__":
         case "analysis_review":
             deployment = analysis_review.to_deployment(
                 name="Stage 4: Analysis Review",
+                concurrency_limit=100,
+                parameters=dict(snippet_ids=[], repeat=True),
+            )
+            serve(deployment, limit=100)
+        case "analysis_review_2":
+            deployment = analysis_review.to_deployment(
+                name="Stage 4: Analysis Review 2",
                 concurrency_limit=100,
                 parameters=dict(snippet_ids=[], repeat=True),
             )
