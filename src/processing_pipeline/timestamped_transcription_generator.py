@@ -5,6 +5,7 @@ from pydub import AudioSegment
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from processing_pipeline.constants import (
+    GEMINI_1_5_PRO,
     get_timestamped_transcription_generation_output_schema,
     get_timestamped_transcription_generation_prompt,
 )
@@ -63,7 +64,7 @@ class TimestampedTranscriptionGenerator:
             raise ValueError("No audio segments provided!")
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest", system_instruction=cls.SYSTEM_INSTRUCTION)
+        model = genai.GenerativeModel(model_name=GEMINI_1_5_PRO, system_instruction=cls.SYSTEM_INSTRUCTION)
 
         segments = []
         for index, segment_path in enumerate(audio_segments):

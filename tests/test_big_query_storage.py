@@ -8,6 +8,7 @@ from big_query_storage import (
     request_online_prediction,
     get_job_status
 )
+from processing_pipeline.constants import GEMINI_1_5_FLASH
 
 class TestBigQueryStorage:
 
@@ -67,7 +68,7 @@ class TestBigQueryStorage:
         }
         expected_body = {
             "displayName": "batch_prediction",
-            "model": "publishers/google/models/gemini-1.5-flash",
+            "model": f"publishers/google/models/{GEMINI_1_5_FLASH}",
             "inputConfig": {
                 "instancesFormat": "bigquery",
                 "bigquerySource": {
@@ -118,7 +119,7 @@ class TestBigQueryStorage:
 
     def test_request_online_prediction(self):
         """Test requesting online prediction"""
-        expected_url = "https://us-central1-aiplatform.googleapis.com/v1/projects/1024948154020/locations/us-central1/publishers/google/models/gemini-1.5-flash:streamGenerateContent"
+        expected_url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/1024948154020/locations/us-central1/publishers/google/models/{GEMINI_1_5_FLASH}:streamGenerateContent"
         expected_headers = {
             "Authorization": "Bearer test-token",
             "Content-Type": "application/json; charset=utf-8",

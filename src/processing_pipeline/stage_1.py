@@ -16,6 +16,7 @@ from processing_pipeline.stage_1_preprocess import (
 )
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
+    GEMINI_1_5_PRO,
     get_system_instruction_for_stage_1,
     get_output_schema_for_stage_1,
     get_detection_prompt_for_stage_1,
@@ -532,7 +533,7 @@ class Stage1Executor:
 
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro-latest",
+            model_name=GEMINI_1_5_PRO,
             system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 

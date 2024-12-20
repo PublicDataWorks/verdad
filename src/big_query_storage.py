@@ -7,6 +7,8 @@ from google.oauth2 import service_account
 from google.auth import default
 from google.auth.transport.requests import Request
 
+from processing_pipeline.constants import GEMINI_1_5_FLASH
+
 load_dotenv()
 
 PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")
@@ -72,7 +74,7 @@ def request_batch_prediction():
 
     request_body = {
         "displayName": "batch_prediction",
-        "model": "publishers/google/models/gemini-1.5-flash",
+        "model": f"publishers/google/models/{GEMINI_1_5_FLASH}",
         "inputConfig": {"instancesFormat": "bigquery", "bigquerySource": {"inputUri": input_uri}},
         "outputConfig": {"predictionsFormat": "bigquery", "bigqueryDestination": {"outputUri": output_uri}},
     }
@@ -100,7 +102,7 @@ def request_online_prediction():
         "Authorization": f"Bearer {get_access_token()}",
         "Content-Type": "application/json; charset=utf-8",
     }
-    url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_number}/locations/us-central1/publishers/google/models/gemini-1.5-flash:streamGenerateContent"
+    url = f"https://us-central1-aiplatform.googleapis.com/v1/projects/{project_number}/locations/us-central1/publishers/google/models/{GEMINI_1_5_FLASH}:streamGenerateContent"
     response = requests.post(url, headers=headers, json=request_body)
     print(json.dumps(response.json(), indent=2))
 

@@ -13,6 +13,7 @@ from processing_pipeline.stage_3 import (
     in_depth_analysis,
     Stage3Executor
 )
+from processing_pipeline.constants import GEMINI_1_5_PRO
 
 class TestStage3:
     @pytest.fixture
@@ -242,7 +243,7 @@ class TestStage3:
 
             result = Stage3Executor.run(
                 gemini_key="test-key",
-                model_name="gemini-1.5-pro-latest",
+                model_name=GEMINI_1_5_PRO,
                 audio_file="test.mp3",
                 metadata={"test": "metadata"}
             )
@@ -253,7 +254,7 @@ class TestStage3:
     def test_stage_3_executor_without_api_key(self):
         """Test Stage3Executor without API key"""
         with pytest.raises(ValueError, match="Google Gemini API key was not set!"):
-            Stage3Executor.run(None, "gemini-1.5-pro-latest", "test.mp3", {})
+            Stage3Executor.run(None, GEMINI_1_5_PRO, "test.mp3", {})
 
     @patch('time.sleep')
     def test_in_depth_analysis_flow(self, mock_sleep, mock_supabase_client, mock_s3_client, sample_snippet):

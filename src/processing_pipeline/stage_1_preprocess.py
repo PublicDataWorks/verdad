@@ -3,6 +3,8 @@ import time
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from processing_pipeline.constants import (
+    GEMINI_1_5_FLASH,
+    GEMINI_1_5_PRO,
     get_transcription_prompt_for_stage_1_preprocess,
     get_system_instruction_for_stage_1_preprocess,
     get_output_schema_for_stage_1_preprocess,
@@ -25,7 +27,7 @@ class Stage1PreprocessTranscriptionExecutor:
             raise ValueError("Google Gemini API key was not set!")
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+        model = genai.GenerativeModel(model_name=GEMINI_1_5_FLASH)
 
         # Upload the audio file and wait for it to finish processing
         audio_file = genai.upload_file(path=audio_file, mime_type="audio/mp3")
@@ -66,7 +68,7 @@ class Stage1PreprocessDetectionExecutor:
 
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro-latest",
+            model_name=GEMINI_1_5_PRO,
             system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 

@@ -14,6 +14,7 @@ from processing_pipeline.stage_4 import (
     fetch_a_specific_snippet_from_supabase,
     Stage4Executor,
 )
+from processing_pipeline.constants import GEMINI_1_5_PRO
 
 
 class TestStage4:
@@ -461,11 +462,11 @@ class TestStage4:
 
         # First call should be for main analysis
         assert mock_gemini_model.call_args_list[0] == call(
-            model_name="gemini-1.5-pro-latest", system_instruction=Stage4Executor.SYSTEM_INSTRUCTION
+            model_name=GEMINI_1_5_PRO, system_instruction=Stage4Executor.SYSTEM_INSTRUCTION
         )
 
         # Second call should be for JSON format validation
-        assert mock_gemini_model.call_args_list[1] == call(model_name="gemini-1.5-pro-latest")
+        assert mock_gemini_model.call_args_list[1] == call(model_name=GEMINI_1_5_PRO)
 
     def test_stage_4_executor_without_valid_inputs(self):
         """Test Stage4Executor without valid inputs"""

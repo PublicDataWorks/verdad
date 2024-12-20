@@ -7,6 +7,7 @@ from prefect.task_runners import ConcurrentTaskRunner
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 from processing_pipeline.constants import (
+    GEMINI_1_5_PRO,
     get_output_schema_for_stage_4,
     get_system_instruction_for_stage_4,
     get_user_prompt_for_stage_4,
@@ -198,7 +199,7 @@ class Stage4Executor:
 
         genai.configure(api_key=gemini_key)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-pro-latest",
+            model_name=GEMINI_1_5_PRO,
             system_instruction=cls.SYSTEM_INSTRUCTION,
         )
 
@@ -241,7 +242,7 @@ class Stage4Executor:
             raise ValueError("Google Gemini API key was not set!")
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name="gemini-1.5-pro-latest")
+        model = genai.GenerativeModel(model_name=GEMINI_1_5_PRO)
 
         # Prepare the user prompt
         user_prompt = (

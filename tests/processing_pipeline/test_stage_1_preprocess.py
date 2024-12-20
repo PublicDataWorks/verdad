@@ -6,6 +6,7 @@ from processing_pipeline.stage_1_preprocess import (
     Stage1PreprocessTranscriptionExecutor,
     Stage1PreprocessDetectionExecutor
 )
+from processing_pipeline.constants import GEMINI_1_5_FLASH, GEMINI_1_5_PRO
 
 class TestStage1PreprocessTranscriptionExecutor:
     @pytest.fixture
@@ -41,7 +42,7 @@ class TestStage1PreprocessTranscriptionExecutor:
 
         # Verify configurations
         mock_genai.configure.assert_called_once_with(api_key="fake-api-key")
-        mock_genai.GenerativeModel.assert_called_once_with(model_name="gemini-1.5-flash")
+        mock_genai.GenerativeModel.assert_called_once_with(model_name=GEMINI_1_5_FLASH)
 
         # Verify generate_content call
         mock_model.generate_content.assert_called_once()
@@ -131,7 +132,7 @@ class TestStage1PreprocessDetectionExecutor:
         # Verify configurations
         mock_genai.configure.assert_called_once_with(api_key="fake-api-key")
         mock_genai.GenerativeModel.assert_called_once_with(
-            model_name="gemini-1.5-pro-latest",
+            model_name=GEMINI_1_5_PRO,
             system_instruction=Stage1PreprocessDetectionExecutor.SYSTEM_INSTRUCTION
         )
 
