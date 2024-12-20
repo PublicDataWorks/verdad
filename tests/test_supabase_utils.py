@@ -1,4 +1,4 @@
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 import pytest
 from processing_pipeline.supabase_utils import SupabaseClient
 
@@ -694,6 +694,7 @@ class TestSupabaseClient:
                 "grounding_metadata": {"source": "test"},
                 "status": "Processed",
                 "error_message": None,
+                "reviewed_at": ANY,
             }
         )
         assert response == expected_response

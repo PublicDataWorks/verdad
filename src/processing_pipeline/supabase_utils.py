@@ -1,4 +1,5 @@
 from supabase import create_client
+from datetime import datetime, timezone
 
 
 class SupabaseClient:
@@ -248,7 +249,8 @@ class SupabaseClient:
                 "political_leaning": political_leaning,
                 "grounding_metadata": grounding_metadata,
                 "status": "Processed",
-                "error_message": None
+                "error_message": None,
+                "reviewed_at": datetime.now(timezone.utc).isoformat()
             })
             .eq("id", id)
             .execute()
