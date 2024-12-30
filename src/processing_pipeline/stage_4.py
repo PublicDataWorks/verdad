@@ -1,21 +1,13 @@
 from datetime import datetime
 import os
 import time
+import google.generativeai as genai
 import json
 from prefect.task_runners import ConcurrentTaskRunner
-from google import genai
-from google.genai.types import (
-    Tool,
-    GenerateContentConfig,
-    GoogleSearch,
-    HarmCategory,
-    HarmBlockThreshold,
-    SafetySetting,
-)
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 from processing_pipeline.constants import (
     GEMINI_1_5_PRO,
-    GEMINI_2_0_FLASH_EXP,
     get_output_schema_for_stage_4,
     get_system_instruction_for_stage_4,
     get_user_prompt_for_stage_4,
@@ -205,9 +197,11 @@ class Stage4Executor:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
-        client = genai.Client(api_key=gemini_key)
-        model_id = GEMINI_2_0_FLASH_EXP
-        google_search_tool = Tool(google_search=GoogleSearch())
+        genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel(
+            model_name=GEMINI_1_5_PRO,
+            system_instruction=cls.SYSTEM_INSTRUCTION,
+        )
 
         # Prepare the user prompt
         user_prompt = (
@@ -218,37 +212,19 @@ class Stage4Executor:
             f"### **Analysis JSON:**\n{json.dumps(analysis_json, indent=2)}"
         )
 
-        response = client.models.generate_content(
-            model=model_id,
-            contents=user_prompt,
-            config=GenerateContentConfig(
-                tools=[google_search_tool],
-                response_modalities=["TEXT"],
-                system_instruction=cls.SYSTEM_INSTRUCTION,
-                max_output_tokens=8192,
-                safety_settings=[
-                    SafetySetting(
-                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        threshold="BLOCK_NONE",
-                    ),
-                    SafetySetting(
-                        category="HARM_CATEGORY_HATE_SPEECH",
-                        threshold="BLOCK_NONE",
-                    ),
-                    SafetySetting(
-                        category="HARM_CATEGORY_HARASSMENT",
-                        threshold="BLOCK_NONE",
-                    ),
-                    SafetySetting(
-                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                        threshold="BLOCK_NONE",
-                    ),
-                    SafetySetting(
-                        category="HARM_CATEGORY_CIVIC_INTEGRITY",
-                        threshold="BLOCK_NONE",
-                    ),
-                ],
-            ),
+        response = model.generate_content(
+            contents=[user_prompt],
+            tools={
+                "google_search_retrieval": {"dynamic_retrieval_config": {"mode": "dynamic", "dynamic_threshold": 0.6}}
+            },
+            generation_config=genai.GenerationConfig(max_output_tokens=8192),
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            },
+            request_options={"timeout": 1000},
         )
 
         # Use another prompt to ensure the response is a "valid" json
@@ -265,8 +241,8 @@ class Stage4Executor:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
-        client = genai.Client(api_key=gemini_key)
-        model_id = GEMINI_1_5_PRO
+        genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel(model_name=GEMINI_1_5_PRO)
 
         # Prepare the user prompt
         user_prompt = (
@@ -284,38 +260,19 @@ Now, please convert the following text into a valid JSON object:\n\n"""
             + text
         )
 
-        response = client.models.generate_content(
-            model=model_id,
-            contents=user_prompt,
-            config=GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=cls.OUTPUT_SCHEMA,
-                max_output_tokens=8192,
-                safety_settings=[
-                    SafetySetting(
-                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        threshold="BLOCK_NONE",
-                    ),
-                    SafetySetting(
-                        category="HARM_CATEGORY_HATE_SPEECH",
-                        threshold="BLOCK_NONE",
-                    ),
-                    SafetySetting(
-                        category="HARM_CATEGORY_HARASSMENT",
-                        threshold="BLOCK_NONE",
-                    ),
-                    SafetySetting(
-                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                        threshold="BLOCK_NONE",
-                    ),
-                    SafetySetting(
-                        category="HARM_CATEGORY_CIVIC_INTEGRITY",
-                        threshold="BLOCK_NONE",
-                    ),
-                ],
+        response = model.generate_content(
+            contents=[user_prompt],
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
             ),
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            },
+            request_options={"timeout": 1000},
         )
-
         result = json.loads(response.text)
 
         if result["is_convertible"]:

@@ -2,7 +2,6 @@ import json
 
 GEMINI_1_5_PRO = "gemini-1.5-pro-002"
 GEMINI_1_5_FLASH = "gemini-1.5-flash"
-GEMINI_2_0_FLASH_EXP = "gemini-2.0-flash-exp"
 
 
 def get_transcription_prompt_for_stage_1_preprocess():
@@ -44,10 +43,8 @@ def get_system_instruction_for_stage_3():
 def get_output_schema_for_stage_3():
     return json.load(open("prompts/Stage_3_output_schema.json", "r"))
 
-
 def get_timestamped_transcription_generation_prompt():
     return open("prompts/Timestamped_transcription_generation_prompt.md", "r").read()
-
 
 def get_timestamped_transcription_generation_output_schema():
     return json.load(open("prompts/Timestamped_transcription_generation_output_schema.json", "r"))

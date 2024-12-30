@@ -9,7 +9,6 @@ boto3==1.35.15
 selenium==4.24.0
 webdriver-manager==4.0.2
 google-generativeai==0.8.3
-google-genai==0.3.0
 psutil==6.0.0
 sentry-sdk==2.14.0
 pytest==8.3.3
