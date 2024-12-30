@@ -1,5 +1,6 @@
 from supabase import create_client
 from datetime import datetime, timezone
+from processing_pipeline.constants import GEMINI_1_5_PRO
 
 
 class SupabaseClient:
@@ -250,7 +251,8 @@ class SupabaseClient:
                 "grounding_metadata": grounding_metadata,
                 "status": "Processed",
                 "error_message": None,
-                "reviewed_at": datetime.now(timezone.utc).isoformat()
+                "reviewed_at": datetime.now(timezone.utc).isoformat(),
+                "reviewed_by": GEMINI_1_5_PRO  # Hardcoded for now
             })
             .eq("id", id)
             .execute()
