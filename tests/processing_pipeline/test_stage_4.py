@@ -1,6 +1,6 @@
 import json
 from unittest import mock
-from unittest.mock import Mock, call, patch
+from unittest.mock import ANY, Mock, call, patch
 import pytest
 import re
 from processing_pipeline.stage_4 import (
@@ -14,7 +14,7 @@ from processing_pipeline.stage_4 import (
     fetch_a_specific_snippet_from_supabase,
     Stage4Executor,
 )
-from processing_pipeline.constants import GEMINI_1_5_PRO
+from processing_pipeline.constants import GEMINI_1_5_PRO, GEMINI_2_0_FLASH_EXP
 
 
 class TestStage4:
@@ -33,10 +33,16 @@ class TestStage4:
     @pytest.fixture
     def mock_gemini_model(self):
         """Create a mock Gemini model"""
-        with patch("google.generativeai.GenerativeModel") as mock:
-            model = Mock()
-            model.generate_content.return_value.text = json.dumps(
+        with patch("google.genai.Client") as mock:
+            client = Mock()
+            models = Mock()
+            client.models = models
+
+            # Create mock response for both generate_content calls
+            response = Mock()
+            response.text = json.dumps(
                 {
+                    "is_convertible": True,
                     "transcription": "Test transcription",
                     "translation": "Test translation",
                     "title": {"english": "Test title", "spanish": "Título de prueba"},
@@ -93,8 +99,13 @@ class TestStage4:
                     },
                 }
             )
-            model.generate_content.return_value.candidates = [Mock(grounding_metadata={"sources": ["test-source"]})]
-            mock.return_value = model
+            response.candidates = [Mock(grounding_metadata={"sources": ["test-source"]})]
+
+            # Set up the generate_content method to return our mock response
+            models.generate_content = Mock(return_value=response)
+
+            # Return the mock client
+            mock.return_value = client
             yield mock
 
     @pytest.fixture
@@ -445,7 +456,7 @@ class TestStage4:
             candidates=[Mock(grounding_metadata={"sources": ["test-source"]})],
         )
 
-        mock_gemini_model.return_value.generate_content.side_effect = [mock, mock]
+        mock_gemini_model.return_value.models.generate_content.side_effect = [mock, mock]
 
         result, grounding = Stage4Executor.run(
             transcription=transcription,
@@ -461,12 +472,14 @@ class TestStage4:
         assert mock_gemini_model.call_count == 2
 
         # First call should be for main analysis
-        assert mock_gemini_model.call_args_list[0] == call(
-            model_name=GEMINI_1_5_PRO, system_instruction=Stage4Executor.SYSTEM_INSTRUCTION
+        assert mock_gemini_model.return_value.models.generate_content.call_args_list[0] == call(
+            model=GEMINI_2_0_FLASH_EXP, contents=ANY, config=ANY
         )
 
         # Second call should be for JSON format validation
-        assert mock_gemini_model.call_args_list[1] == call(model_name=GEMINI_1_5_PRO)
+        assert mock_gemini_model.return_value.models.generate_content.call_args_list[1] == call(
+            model=GEMINI_1_5_PRO, contents=ANY, config=ANY
+        )
 
     def test_stage_4_executor_without_valid_inputs(self):
         """Test Stage4Executor without valid inputs"""
@@ -582,7 +595,7 @@ class TestStage4:
     def test_process_snippet_with_empty_response(self, mock_supabase_client, mock_gemini_model, sample_snippet):
         """Test processing snippet with empty response"""
         with patch("google.generativeai.configure"):
-            mock_gemini_model.return_value.generate_content.return_value.text = json.dumps(
+            mock_gemini_model.return_value.models.generate_content.return_value.text = json.dumps(
                 {
                     "is_convertible": False,
                     "transcription": "",
@@ -728,7 +741,7 @@ class TestStage4:
 
     def test_stage_4_executor_api_error(self, mock_gemini_model):
         """Test Stage4Executor handling of API errors"""
-        mock_gemini_model.return_value.generate_content.side_effect = Exception("API Error")
+        mock_gemini_model.return_value.models.generate_content.side_effect = Exception("API Error")
 
         with pytest.raises(Exception):
             Stage4Executor.run(
