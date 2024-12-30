@@ -1,6 +1,7 @@
 from unittest.mock import ANY, Mock, patch
 import pytest
 from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.constants import GEMINI_2_0_FLASH_EXP
 
 
 class TestSupabaseClient:
@@ -695,6 +696,7 @@ class TestSupabaseClient:
                 "status": "Processed",
                 "error_message": None,
                 "reviewed_at": ANY,
+                "reviewed_by": GEMINI_2_0_FLASH_EXP,
             }
         )
         assert response == expected_response
