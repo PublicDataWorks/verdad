@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION search_related_snippets(
+CREATE OR REPLACE FUNCTION search_related_snippets_public(
     snippet_id uuid,
     p_language TEXT DEFAULT 'english',
     match_threshold float DEFAULT 0.7,
