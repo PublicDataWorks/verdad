@@ -2,7 +2,7 @@ import json
 
 GEMINI_1_5_PRO = "gemini-1.5-pro-002"
 GEMINI_1_5_FLASH = "gemini-1.5-flash"
-GEMINI_2_0_FLASH_EXP = "gemini-2.0-flash-exp"
+GEMINI_2_5_PRO = "gemini-2.5-pro-preview-03-25"
 
 
 def get_transcription_prompt_for_stage_1_preprocess():

@@ -1,6 +1,6 @@
 from supabase import create_client
 from datetime import datetime, timezone
-from processing_pipeline.constants import GEMINI_2_0_FLASH_EXP
+from processing_pipeline.constants import GEMINI_2_5_PRO
 
 
 class SupabaseClient:
@@ -252,7 +252,7 @@ class SupabaseClient:
                 "status": "Processed",
                 "error_message": None,
                 "reviewed_at": datetime.now(timezone.utc).isoformat(),
-                "reviewed_by": GEMINI_2_0_FLASH_EXP  # Hardcoded for now
+                "reviewed_by": GEMINI_2_5_PRO  # Hardcoded for now
             })
             .eq("id", id)
             .execute()

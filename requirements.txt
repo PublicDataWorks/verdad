@@ -9,11 +9,11 @@ boto3==1.35.15
 selenium==4.24.0
 webdriver-manager==4.0.2
 google-generativeai==0.8.3
-google-genai==0.3.0
+google-genai==1.11.0
 psutil==6.0.0
 sentry-sdk==2.14.0
 pytest==8.3.3
-supabase==2.9.0
+supabase==2.15.0
 pydub==0.25.1
 openai==1.57.1
 tiktoken==0.8.0

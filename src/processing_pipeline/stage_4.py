@@ -1,21 +1,20 @@
-from datetime import datetime
+import json
 import os
 import time
-import json
-from prefect.task_runners import ConcurrentTaskRunner
+from datetime import datetime
+
 from google import genai
 from google.genai.types import (
-    Tool,
     GenerateContentConfig,
     GoogleSearch,
-    HarmCategory,
-    HarmBlockThreshold,
     SafetySetting,
+    Tool,
 )
+from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import (
     GEMINI_1_5_PRO,
-    GEMINI_2_0_FLASH_EXP,
+    GEMINI_2_5_PRO,
     get_output_schema_for_stage_4,
     get_system_instruction_for_stage_4,
     get_user_prompt_for_stage_4,
@@ -206,7 +205,7 @@ class Stage4Executor:
             raise ValueError("Google Gemini API key was not set!")
 
         client = genai.Client(api_key=gemini_key)
-        model_id = GEMINI_2_0_FLASH_EXP
+        model_id = GEMINI_2_5_PRO
         google_search_tool = Tool(google_search=GoogleSearch())
 
         # Prepare the user prompt
@@ -251,8 +250,19 @@ class Stage4Executor:
             ),
         )
 
-        # Use another prompt to ensure the response is a "valid" json
-        result = Stage4Executor.__ensure_json_format(response.text)
+        # Check if response.text is a good json
+        try:
+            # Find the first { and last } to extract the JSON object
+            start_idx = response.text.find("{")
+            end_idx = response.text.rfind("}")
+            if start_idx == -1 or end_idx == -1:
+                raise ValueError("No JSON object found in response")
+            response_text = response.text[start_idx : end_idx + 1]
+            result = json.loads(response_text)
+        except json.JSONDecodeError:
+            print("[Stage 4] Response from gemini 2.5 pro is not a valid JSON object.")
+            # Use another prompt to ensure the response is a "valid" json
+            result = Stage4Executor.__ensure_json_format(response.text)
 
         # Convert the grounding metadata to a string
         grounding_metadata = str(response.candidates[0].grounding_metadata) if response.candidates else None
