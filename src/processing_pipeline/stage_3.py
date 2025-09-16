@@ -1,15 +1,15 @@
 from datetime import datetime
 import os
 import time
-import google.generativeai as genai
+from google import genai
 import json
 import boto3
 
 from prefect.task_runners import ConcurrentTaskRunner
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.genai.types import HarmCategory, HarmBlockThreshold, GenerateContentConfig, SafetySetting
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
-    GEMINI_1_5_PRO,
+    GEMINI_2_5_PRO,
     get_system_instruction_for_stage_3,
     get_output_schema_for_stage_3,
     get_user_prompt_for_stage_3,
@@ -144,7 +144,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
         print(f"Metadata:\n{json.dumps(metadata, indent=2)}")
 
         pro_response = Stage3Executor.run(
-            gemini_key=gemini_key, model_name=GEMINI_1_5_PRO, audio_file=local_file, metadata=metadata
+            gemini_key=gemini_key, model_name=GEMINI_2_5_PRO, audio_file=local_file, metadata=metadata
         )
 
         pro_response = json.loads(pro_response)
@@ -242,18 +242,14 @@ class Stage3Executor:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(
-            model_name=model_name,
-            system_instruction=cls.SYSTEM_INSTRUCTION,
-        )
+        client = genai.Client(api_key=gemini_key)
 
         # Upload the audio file and wait for it to finish processing
-        audio_file = genai.upload_file(path=audio_file, mime_type="audio/mp3")
+        audio_file = client.files.upload(file=audio_file)
         while audio_file.state.name == "PROCESSING":
             print("Processing the uploaded audio file...")
             time.sleep(1)
-            audio_file = genai.get_file(audio_file.name)
+            audio_file = client.files.get(name=audio_file.name)
 
         # Prepare the user prompt
         user_prompt = (
@@ -261,19 +257,34 @@ class Stage3Executor:
         )
 
         try:
-            result = model.generate_content(
-                [audio_file, user_prompt],
-                generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
+            result = client.models.generate_content(
+                model=model_name,
+                contents=[audio_file, user_prompt],
+                config=GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=cls.OUTPUT_SCHEMA,
+                    system_instruction=cls.SYSTEM_INSTRUCTION,
+                    max_output_tokens=8192,
+                    safety_settings=[
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                    ],
                 ),
-                safety_settings={
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                },
-                request_options={"timeout": 1000},
             )
             return result.text
         finally:
-            audio_file.delete()
+            client.files.delete(name=audio_file.name)
