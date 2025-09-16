@@ -9,10 +9,10 @@ from processing_pipeline.stage_1 import (
     fetch_audio_file_by_id,
     fetch_stage_1_llm_response_by_id,
     download_audio_file_from_s3,
-    transcribe_audio_file_with_gemini_1_5_flash,
+    transcribe_audio_file_with_gemini_2_5_flash,
     transcribe_audio_file_with_custom_timestamped_transcription_generator,
-    initial_disinformation_detection_with_gemini_1_5_pro,
-    disinformation_detection_with_gemini_1_5_pro,
+    initial_disinformation_detection_with_gemini_2_5_pro,
+    disinformation_detection_with_gemini_2_5_pro,
     insert_stage_1_llm_response,
     process_audio_file,
     initial_disinformation_detection,
@@ -21,7 +21,7 @@ from processing_pipeline.stage_1 import (
     regenerate_timestamped_transcript,
     Stage1Executor,
     transcribe_audio_file_with_open_ai_whisper_1,
-    transcribe_audio_file_with_gemini_1206,
+    transcribe_audio_file_with_gemini_2_5_pro,
 )
 
 
@@ -68,12 +68,12 @@ def mock_s3_client():
 
 
 @pytest.fixture
-def mock_gemini_model():
-    """Create a mock Gemini model"""
-    with patch("google.generativeai.GenerativeModel") as mock:
-        model = Mock()
-        model.generate_content.return_value.text = json.dumps({"flagged_snippets": []})
-        mock.return_value = model
+def mock_genai():
+    """Create a mock Gemini client"""
+    with patch("processing_pipeline.stage_1.genai") as mock:
+        client = Mock()
+        client.models.generate_content.return_value.text = json.dumps({"flagged_snippets": []})
+        mock.Client.return_value = client
         yield mock
 
 
@@ -135,52 +135,21 @@ class TestS3Operations:
 
 
 class TestTranscriptionFunctions:
-    def test_transcribe_with_gemini_success(self, mock_gemini_model):
+    def test_transcribe_with_gemini_success(self, mock_environment):
         """Test successful transcription with Gemini"""
-        with patch("google.generativeai.upload_file") as mock_upload, patch(
-            "google.generativeai.get_file"
-        ) as mock_get_file, patch(
-            "time.sleep"
-        ) as mock_sleep:  # Mock sleep to avoid delays
-
-            # Setup mock audio files with processing state transition
-            processing_audio = Mock()
-            processing_audio.state.name = "PROCESSING"
-            processing_audio.name = "test_audio_file"
-
-            processed_audio = Mock()
-            processed_audio.state.name = "PROCESSED"
-            processed_audio.name = "test_audio_file"
-
-            # Set up the upload and get_file responses
-            mock_upload.return_value = processing_audio
-            mock_get_file.side_effect = [processing_audio, processed_audio]
-
-            # Setup mock Gemini model response
-            mock_response = Mock()
-            mock_response.text = json.dumps({"transcription": "Test transcription"})
-            mock_gemini_model.return_value.generate_content.return_value = mock_response
+        with patch("processing_pipeline.stage_1.Stage1PreprocessTranscriptionExecutor") as mock_executor:
+            mock_executor.run.return_value = json.dumps({"transcription": "Test transcription"})
 
             # Call the function
-            result = transcribe_audio_file_with_gemini_1_5_flash("test.mp3")
+            result = transcribe_audio_file_with_gemini_2_5_flash("test.mp3")
 
             # Verify the result
             assert isinstance(result, dict)
             assert "transcription" in result
             assert result["transcription"] == "Test transcription"
 
-            # Verify the calls
-            mock_upload.assert_called_once()
-            assert mock_get_file.call_count == 2  # Called twice: once for processing, once for processed
-            assert mock_sleep.call_count == 2  # Called twice while processing
-            assert mock_sleep.call_args_list == [call(1), call(1)]  # Verify sleep was called with 1 second each time
-            mock_gemini_model.assert_called_once()
-
-            # Verify generate_content was called with correct arguments
-            mock_gemini_model.return_value.generate_content.assert_called_once()
-            args, kwargs = mock_gemini_model.return_value.generate_content.call_args
-            assert len(args[0]) == 2  # Should have audio file and prompt
-            assert args[0][0] == processed_audio  # First argument should be the processed audio file
+            # Verify the executor was called
+            mock_executor.run.assert_called_once_with("test.mp3", "test-key")
 
     def test_transcribe_with_custom_generator_success(self, mock_environment):
         """Test successful transcription with custom generator"""
@@ -192,51 +161,63 @@ class TestTranscriptionFunctions:
             assert result["timestamped_transcription"] == "Test timestamped transcription"
             mock_generator.run.assert_called_once()
 
-    def test_transcribe_with_gemini_1206_success(self, mock_environment):
-        """Test successful transcription with Gemini 1206"""
-        with patch("processing_pipeline.stage_1.Gemini1206TranscriptionGenerator") as mock_generator:
+    def test_transcribe_with_gemini_2_5_pro_success(self, mock_environment):
+        """Test successful transcription with Gemini 2.5 Pro"""
+        with patch("processing_pipeline.stage_1.Gemini25ProTranscriptionGenerator") as mock_generator:
             mock_generator.run.return_value = "Test timestamped transcription"
 
-            result = transcribe_audio_file_with_gemini_1206("test.mp3")
+            result = transcribe_audio_file_with_gemini_2_5_pro("test.mp3")
 
             assert result == {"timestamped_transcription": "Test timestamped transcription"}
             mock_generator.run.assert_called_once_with("test.mp3", os.getenv("GOOGLE_GEMINI_KEY"))
 
-    def test_transcribe_with_gemini_1206_rate_limit(self, mock_environment):
-        """Test transcription with Gemini 1206 hitting rate limit"""
-        with patch("processing_pipeline.stage_1.Gemini1206TranscriptionGenerator") as mock_generator:
+    def test_transcribe_with_gemini_2_5_pro_rate_limit(self, mock_environment):
+        """Test transcription with Gemini 2.5 Pro hitting rate limit"""
+        with patch("processing_pipeline.stage_1.Gemini25ProTranscriptionGenerator") as mock_generator:
             mock_generator.run.side_effect = google_exceptions.ResourceExhausted("Rate limit exceeded")
             with pytest.raises(google_exceptions.ResourceExhausted):
-                transcribe_audio_file_with_gemini_1206("test.mp3")
+                transcribe_audio_file_with_gemini_2_5_pro("test.mp3")
 
 
 class TestDetectionFunctions:
-    def test_initial_detection_success(self, mock_environment, mock_gemini_model):
+    def test_initial_detection_success(self, mock_environment):
         """Test successful initial detection"""
-        result = initial_disinformation_detection_with_gemini_1_5_pro("Test transcription", {"station": "test"})
+        with patch("processing_pipeline.stage_1.Stage1PreprocessDetectionExecutor") as mock_executor:
+            mock_executor.run.return_value = json.dumps({"flagged_snippets": []})
 
-        assert isinstance(result, dict)
-        assert "flagged_snippets" in result
-        mock_gemini_model.assert_called_once()
+            result = initial_disinformation_detection_with_gemini_2_5_pro("Test transcription", {"station": "test"})
 
-    def test_disinformation_detection_success(self, mock_environment, mock_gemini_model):
+            assert isinstance(result, dict)
+            assert "flagged_snippets" in result
+            mock_executor.run.assert_called_once_with("test-key", "Test transcription", {"station": "test"})
+
+    def test_disinformation_detection_success(self, mock_environment):
         """Test successful disinformation detection"""
-        result = disinformation_detection_with_gemini_1_5_pro("Test transcription", {"station": "test"})
+        with patch("processing_pipeline.stage_1.Stage1Executor") as mock_executor:
+            mock_executor.run.return_value = json.dumps({"flagged_snippets": []})
 
-        assert isinstance(result, dict)
-        assert "flagged_snippets" in result
-        mock_gemini_model.assert_called_once()
+            result = disinformation_detection_with_gemini_2_5_pro("Test transcription", {"station": "test"})
+
+            assert isinstance(result, dict)
+            assert "flagged_snippets" in result
+            mock_executor.run.assert_called_once_with(
+                gemini_key="test-key", timestamped_transcription="Test transcription", metadata={"station": "test"}
+            )
 
 
 class TestStage1Executor:
-    def test_run_success(self, mock_environment, mock_gemini_model):
+    def test_run_success(self, mock_environment, mock_genai):
         """Test successful execution of Stage1Executor"""
+        mock_client = mock_genai.Client.return_value
+        mock_client.models.generate_content.return_value.text = json.dumps({"flagged_snippets": []})
+
         result = Stage1Executor.run(
             gemini_key="test-key", timestamped_transcription="Test transcription", metadata={"station": "test"}
         )
 
         assert isinstance(json.loads(result), dict)
-        mock_gemini_model.assert_called_once()
+        mock_genai.Client.assert_called_once_with(api_key="test-key")
+        mock_client.models.generate_content.assert_called_once()
 
     def test_run_without_api_key(self):
         """Test execution without API key"""
@@ -249,11 +230,12 @@ class TestMainFlows:
         """Test the main initial disinformation detection flow"""
         mock_supabase_client.get_a_new_audio_file_and_reserve_it.return_value = {"id": 1, "file_path": "test.mp3"}
 
-        with patch("os.remove"):
+        with patch("os.remove"), patch("processing_pipeline.stage_1.process_audio_file") as mock_process:
             initial_disinformation_detection(audio_file_id=None, limit=1)
 
             mock_supabase_client.get_a_new_audio_file_and_reserve_it.assert_called_once()
             mock_s3_client.download_file.assert_called_once()
+            mock_process.assert_called_once()
 
     def test_undo_disinformation_detection_flow(self, mock_supabase_client):
         """Test the undo disinformation detection flow"""
@@ -263,7 +245,7 @@ class TestMainFlows:
         mock_supabase_client.reset_audio_file_status.assert_called_once_with(audio_file_ids)
         mock_supabase_client.delete_stage_1_llm_responses.assert_called_once_with(audio_file_ids)
 
-    def test_redo_main_detection_flow(self, mock_supabase_client, mock_gemini_model):
+    def test_redo_main_detection_flow(self, mock_supabase_client, mock_genai):
         """Test the redo main detection flow"""
         # Setup mock response
         stage_1_llm_response = {
@@ -284,11 +266,12 @@ class TestMainFlows:
         mock_supabase_client.get_stage_1_llm_response_by_id.return_value = stage_1_llm_response
 
         # Setup Gemini model response
+        mock_client = mock_genai.Client.return_value
         mock_response = Mock()
         mock_response.text = json.dumps(
             {"flagged_snippets": [{"start_time": "00:00", "end_time": "00:30", "transcription": "Updated snippet"}]}
         )
-        mock_gemini_model.return_value.generate_content.return_value = mock_response
+        mock_client.models.generate_content.return_value = mock_response
 
         # Execute the flow
         redo_main_detection([1])
@@ -318,7 +301,7 @@ class TestMainFlows:
         mock_supabase_client.get_stage_1_llm_response_by_id.return_value = stage_1_llm_response
 
         with patch("os.remove") as mock_remove, patch(
-            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1206"
+            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_pro"
         ) as mock_transcribe:
             mock_transcribe.return_value = {"timestamped_transcription": "Test transcription"}
 
@@ -331,7 +314,7 @@ class TestMainFlows:
 
 
 class TestHelperFunctions:
-    def test_process_audio_file_success(self, mock_supabase_client, mock_gemini_model):
+    def test_process_audio_file_success(self, mock_supabase_client):
         """Test successful audio file processing"""
         # Setup test data
         audio_file = {
@@ -345,8 +328,8 @@ class TestHelperFunctions:
         }
 
         # Setup mocks
-        with patch("processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1_5_flash") as mock_transcribe, patch(
-            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_1_5_pro"
+        with patch("processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_flash") as mock_transcribe, patch(
+            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_2_5_pro"
         ) as mock_detect:
 
             # Setup mock responses
@@ -387,7 +370,7 @@ class TestHelperFunctions:
         audio_file = {"id": 1}
 
         with patch(
-            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1_5_flash",
+            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_flash",
             side_effect=Exception("Test error"),
         ):
             process_audio_file(mock_supabase_client, audio_file, "test.mp3")
@@ -478,7 +461,7 @@ class TestHelperFunctions:
             mock_sleep.assert_has_calls([call(60)])  # First sleep when no file found
             mock_process.assert_called_once_with(mock_supabase_client, audio_file, "path.mp3")
 
-    def test_redo_main_detection_multiple_files(self, mock_supabase_client, mock_gemini_model):
+    def test_redo_main_detection_multiple_files(self, mock_supabase_client, mock_genai):
         """Test redo main detection with multiple files"""
         stage_1_llm_responses = [
             {
@@ -508,6 +491,10 @@ class TestHelperFunctions:
                 },
             },
         ]
+
+        # Setup mock client
+        mock_client = mock_genai.Client.return_value
+        mock_client.models.generate_content.return_value.text = json.dumps({"flagged_snippets": []})
 
         for response in stage_1_llm_responses:
             mock_supabase_client.get_stage_1_llm_response_by_id.return_value = response
@@ -548,7 +535,7 @@ class TestHelperFunctions:
         with pytest.raises(Exception, match="Generation failed"):
             transcribe_audio_file_with_custom_timestamped_transcription_generator("test.mp3")
 
-    def test_process_audio_file_with_no_flagged_snippets(self, mock_supabase_client, mock_gemini_model):
+    def test_process_audio_file_with_no_flagged_snippets(self, mock_supabase_client):
         """Test processing audio file with no flagged snippets"""
         audio_file = {
             "id": 1,
@@ -565,9 +552,9 @@ class TestHelperFunctions:
         mock_detection_response = {"flagged_snippets": []}
 
         with patch(
-            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1_5_flash", return_value=mock_flash_response
+            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_flash", return_value=mock_flash_response
         ), patch(
-            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_1_5_pro",
+            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_2_5_pro",
             return_value=mock_detection_response,
         ):
 
@@ -587,27 +574,27 @@ class TestHelperFunctions:
                 status="Processed",
             )
 
-    def test_stage_1_executor(self, mock_gemini_model):
+    def test_stage_1_executor(self, mock_genai):
         """Test Stage1Executor"""
+        mock_client = mock_genai.Client.return_value
         mock_response = Mock()
         mock_response.text = json.dumps({"test": "response"})
-        mock_gemini_model.return_value.generate_content.return_value = mock_response
+        mock_client.models.generate_content.return_value = mock_response
 
-        with patch("google.generativeai.configure"):
-            result = Stage1Executor.run(
-                gemini_key="test-key", timestamped_transcription="Test transcription", metadata={"test": "metadata"}
-            )
+        result = Stage1Executor.run(
+            gemini_key="test-key", timestamped_transcription="Test transcription", metadata={"test": "metadata"}
+        )
 
-            # Verify behavior
-            assert isinstance(json.loads(result), dict)
-            mock_gemini_model.assert_called_once()
-            mock_gemini_model.return_value.generate_content.assert_called_once()
+        # Verify behavior
+        assert isinstance(json.loads(result), dict)
+        mock_genai.Client.assert_called_once_with(api_key="test-key")
+        mock_client.models.generate_content.assert_called_once()
 
-            # Verify the content of the request
-            args, kwargs = mock_gemini_model.return_value.generate_content.call_args
-            assert len(args[0]) == 1  # Should have one argument (user prompt)
-            assert "Test transcription" in args[0][0]  # Should contain the transcription
-            assert json.dumps({"test": "metadata"}, indent=2) in args[0][0]  # Should contain the metadata
+        # Verify the content of the request
+        args, kwargs = mock_client.models.generate_content.call_args
+        assert len(kwargs['contents']) == 1  # Should have one argument (user prompt)
+        assert "Test transcription" in kwargs['contents'][0]  # Should contain the transcription
+        assert json.dumps({"test": "metadata"}, indent=2) in kwargs['contents'][0]  # Should contain the metadata
 
     def test_initial_disinformation_detection_specific_file(self, mock_supabase_client, mock_s3_client):
         """Test initial disinformation detection with specific file"""
@@ -644,13 +631,14 @@ class TestHelperFunctions:
             assert len(result["timestamped_transcription"].split("\n")) == 4  # 3 segments + empty line
             mock_generator.run.assert_called_once_with("test.mp3", os.getenv("GOOGLE_GEMINI_KEY"), 10)
 
-    def test_disinformation_detection_with_unicode_handling(self, mock_supabase_client, mock_gemini_model):
+    def test_disinformation_detection_with_unicode_handling(self, mock_supabase_client, mock_genai):
         """Test disinformation detection with Unicode characters"""
         timestamped_transcription = "Test transcription with Unicode: áéíóú ñ"
         metadata = {"radio_station_name": "Test Station", "time_zone": "UTC"}
 
         # Configure mock response with Unicode characters
-        mock_gemini_model.return_value.generate_content.return_value.text = json.dumps(
+        mock_client = mock_genai.Client.return_value
+        mock_client.models.generate_content.return_value.text = json.dumps(
             {
                 "flagged_snippets": [
                     {
@@ -662,7 +650,7 @@ class TestHelperFunctions:
             }
         )
 
-        result = disinformation_detection_with_gemini_1_5_pro(
+        result = disinformation_detection_with_gemini_2_5_pro(
             timestamped_transcription=timestamped_transcription, metadata=metadata
         )
 
@@ -718,14 +706,14 @@ class TestHelperFunctions:
         )
 
         with patch("os.remove"), patch(
-            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1206"
+            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_pro"
         ) as mock_transcribe, patch(
             "processing_pipeline.stage_1.fetch_stage_1_llm_response_by_id"
         ) as mock_fetch, patch(
             "processing_pipeline.stage_1.download_audio_file_from_s3"
         ) as mock_download, patch(
-            "google.generativeai.GenerativeModel"
-        ) as mock_genai_model:
+            "processing_pipeline.stage_1.genai"
+        ) as mock_genai_sdk:
 
             # Setup mock transcribe
             mock_transcribe.return_value = {"timestamped_transcription": "Test transcription"}
@@ -736,42 +724,40 @@ class TestHelperFunctions:
             # Setup mock download
             mock_download.return_value = "local_file.mp3"
 
-            # Setup mock Gemini model
-            mock_model = Mock()
-            mock_model.generate_content.return_value = mock_gemini_response
-            mock_genai_model.return_value = mock_model
+            # Setup mock Gemini client
+            mock_client = Mock()
+            mock_client.models.generate_content.return_value = mock_gemini_response
+            mock_genai_sdk.Client.return_value = mock_client
 
-            # Mock genai.configure to prevent actual API calls
-            with patch("google.generativeai.configure"):
-                regenerate_timestamped_transcript([1, 2])
+            regenerate_timestamped_transcript([1, 2])
 
-                # Verify fetch was called for each ID
-                assert mock_fetch.call_count == 2
-                mock_fetch.assert_has_calls([call(mock_supabase_client, 1), call(mock_supabase_client, 2)])
+            # Verify fetch was called for each ID
+            assert mock_fetch.call_count == 2
+            mock_fetch.assert_has_calls([call(mock_supabase_client, 1), call(mock_supabase_client, 2)])
 
-                # Verify transcribe was called for each file
-                assert mock_transcribe.call_count == 2
-                mock_transcribe.assert_has_calls([call("local_file.mp3"), call("local_file.mp3")])
+            # Verify transcribe was called for each file
+            assert mock_transcribe.call_count == 2
+            mock_transcribe.assert_has_calls([call("local_file.mp3"), call("local_file.mp3")])
 
-                # Verify Gemini model was called for each file
-                assert mock_model.generate_content.call_count == 2
+            # Verify Gemini model was called for each file
+            assert mock_client.models.generate_content.call_count == 2
 
-                # Verify update was called for each response
-                assert mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.call_count == 2
-                mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_has_calls(
-                    [
-                        call(1, {"timestamped_transcription": "Test transcription"}, "gemini-1206"),
-                        call(2, {"timestamped_transcription": "Test transcription"}, "gemini-1206"),
-                    ]
-                )
+            # Verify update was called for each response
+            assert mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.call_count == 2
+            mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_has_calls(
+                [
+                    call(1, {"timestamped_transcription": "Test transcription"}, "gemini-1206"),
+                    call(2, {"timestamped_transcription": "Test transcription"}, "gemini-1206"),
+                ]
+            )
 
-                # Verify download was called for each file
-                assert mock_download.call_count == 2
-                mock_download.assert_has_calls([call(mock_s3_client, "test1.mp3"), call(mock_s3_client, "test2.mp3")])
+            # Verify download was called for each file
+            assert mock_download.call_count == 2
+            mock_download.assert_has_calls([call(mock_s3_client, "test1.mp3"), call(mock_s3_client, "test2.mp3")])
 
-                # Verify status updates
-                assert mock_supabase_client.reset_stage_1_llm_response_status.call_count == 2
-                mock_supabase_client.reset_stage_1_llm_response_status.assert_has_calls([call(1), call(2)])
+            # Verify status updates
+            assert mock_supabase_client.reset_stage_1_llm_response_status.call_count == 2
+            mock_supabase_client.reset_stage_1_llm_response_status.assert_has_calls([call(1), call(2)])
 
     def test_initial_disinformation_detection_memory_management(self, mock_supabase_client, mock_s3_client):
         """Test memory management during initial disinformation detection"""
@@ -799,8 +785,8 @@ class TestHelperFunctions:
             assert mock_remove.call_count == 3
             assert mock_s3_client.download_file.call_count == 3
 
-    def test_process_audio_file_with_gemini_1206_fallback(self, mock_supabase_client, mock_gemini_model):
-        """Test processing audio file with Gemini 1206 fallback to custom generator"""
+    def test_process_audio_file_with_gemini_2_5_pro_fallback(self, mock_supabase_client):
+        """Test processing audio file with Gemini 2.5 Pro fallback to custom generator"""
         audio_file = {
             "id": 1,
             "radio_station_name": "Test Station",
@@ -811,27 +797,31 @@ class TestHelperFunctions:
             "recording_day_of_week": "Monday",
         }
 
-        with patch("processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1_5_flash") as mock_flash, patch(
-            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_1206"
-        ) as mock_gemini_1206, patch(
+        with patch("processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_flash") as mock_flash, patch(
+            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_pro"
+        ) as mock_gemini_2_5_pro, patch(
             "processing_pipeline.stage_1.transcribe_audio_file_with_custom_timestamped_transcription_generator"
         ) as mock_custom, patch(
-            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_1_5_pro"
-        ) as mock_detect:
+            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_2_5_pro"
+        ) as mock_initial_detect, patch(
+            "processing_pipeline.stage_1.disinformation_detection_with_gemini_2_5_pro"
+        ) as mock_main_detect:
 
             # Setup mock responses
             mock_flash.return_value = {"transcription": "Test transcription"}
-            mock_gemini_1206.side_effect = google_exceptions.ResourceExhausted("Rate limit exceeded")
+            mock_gemini_2_5_pro.side_effect = google_exceptions.ResourceExhausted("Rate limit exceeded")
             mock_custom.return_value = {"timestamped_transcription": "Test custom transcription"}
-            mock_detect.return_value = {"flagged_snippets": [{"uuid": "test-uuid"}]}
+            mock_initial_detect.return_value = {"flagged_snippets": [{"uuid": "test-uuid"}]}
+            mock_main_detect.return_value = {"flagged_snippets": []}
 
             process_audio_file(mock_supabase_client, audio_file, "test.mp3")
 
             # Verify the calls and fallback behavior
             mock_flash.assert_called_once()
-            mock_gemini_1206.assert_called_once()
+            mock_gemini_2_5_pro.assert_called_once()
             mock_custom.assert_called_once()
-            mock_detect.assert_called_once()
+            mock_initial_detect.assert_called_once()
+            mock_main_detect.assert_called_once()
 
             # Verify that custom generator was used as fallback
             calls = mock_supabase_client.insert_stage_1_llm_response.call_args_list
