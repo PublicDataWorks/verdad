@@ -14,7 +14,7 @@ from processing_pipeline.stage_4 import (
     fetch_a_specific_snippet_from_supabase,
     Stage4Executor,
 )
-from processing_pipeline.constants import GEMINI_1_5_PRO, GEMINI_2_5_PRO
+from processing_pipeline.constants import GEMINI_2_5_PRO
 
 
 class TestStage4:
@@ -328,7 +328,7 @@ class TestStage4:
         mock_label = {"id": "test-label-id", "text": "Category 1", "text_spanish": "Categoría 1"}
         mock_supabase_client.create_new_label.return_value = mock_label
 
-        with patch("google.generativeai.configure"), patch(
+        with patch(
             "processing_pipeline.stage_4.Stage4Executor.run", return_value=(mock_response, mock_grounding)
         ), patch(
             "processing_pipeline.stage_4.prepare_snippet_for_review",
@@ -468,17 +468,12 @@ class TestStage4:
         assert isinstance(result, dict)
         assert isinstance(grounding, str)
 
-        # Verify GenerativeModel was called twice with different configurations
-        assert mock_gemini_model.call_count == 2
+        # Verify model was called once for the main analysis
+        assert mock_gemini_model.call_count == 1
 
         # First call should be for main analysis
         assert mock_gemini_model.return_value.models.generate_content.call_args_list[0] == call(
             model=GEMINI_2_5_PRO, contents=ANY, config=ANY
-        )
-
-        # Second call should be for JSON format validation
-        assert mock_gemini_model.return_value.models.generate_content.call_args_list[1] == call(
-            model=GEMINI_1_5_PRO, contents=ANY, config=ANY
         )
 
     def test_stage_4_executor_without_valid_inputs(self):
@@ -547,9 +542,7 @@ class TestStage4:
         mock_label = {"id": "test-label-id", "text": "Category 1", "text_spanish": "Categoría 1"}
         mock_supabase_client.create_new_label.return_value = mock_label
 
-        with patch(
-            "processing_pipeline.stage_4.Stage4Executor.run", return_value=(mock_response, mock_grounding)
-        ), patch("google.generativeai.configure"):
+        with patch("processing_pipeline.stage_4.Stage4Executor.run", return_value=(mock_response, mock_grounding)):
 
             analysis_review(snippet_ids=None, repeat=False)
 
@@ -593,60 +586,68 @@ class TestStage4:
             prepare_snippet_for_review(invalid_snippet)
 
     def test_process_snippet_with_empty_response(self, mock_supabase_client, mock_gemini_model, sample_snippet):
-        """Test processing snippet with empty response"""
-        with patch("google.generativeai.configure"):
-            mock_gemini_model.return_value.models.generate_content.return_value.text = json.dumps(
-                {
-                    "is_convertible": False,
-                    "transcription": "",
-                    "translation": "",
-                    "title": {"english": "", "spanish": ""},
-                    "summary": {"english": "", "spanish": ""},
-                    "explanation": {"english": "", "spanish": ""},
-                    "disinformation_categories": [],
-                    "keywords_detected": [],
-                    "language": {"primary_language": "", "register": ""},
-                    "confidence_scores": {
-                        "overall": 0,
-                        "analysis": {
-                            "claims": [],
-                            "validation_checklist": {
-                                "specific_claims_quoted": False,
-                                "evidence_provided": False,
-                                "scoring_falsity": False,
-                                "defensible_to_factcheckers": False,
-                                "consistent_explanations": False,
-                            },
-                            "score_adjustments": {"initial_score": 0, "final_score": 0, "adjustment_reason": ""},
-                        },
-                        "categories": [],
-                    },
-                    "context": {"before": "", "before_en": "", "after": "", "after_en": "", "main": "", "main_en": ""},
-                    "political_leaning": {
-                        "score": 0.0,
-                        "evidence": {
-                            "policy_positions": [],
-                            "arguments": [],
-                            "rhetoric": [],
-                            "sources": [],
-                            "solutions": [],
-                        },
-                        "explanation": {
-                            "spanish": "",
-                            "english": "",
-                            "score_adjustments": {"initial_score": 0.0, "final_score": 0.0, "reasoning": ""},
-                        },
-                    },
-                }
-            )
-            mock_gemini_model.return_value.generate_content.return_value.candidates = [
-                Mock(grounding_metadata={"sources": []})
-            ]
+        """Test processing snippet with empty response that is not convertible"""
+        mock_first_response = Mock()
+        mock_first_response.text = "Invalid JSON response that cannot be parsed"
+        mock_first_response.candidates = [Mock(grounding_metadata={"sources": []})]
 
-            process_snippet(mock_supabase_client, sample_snippet)
+        mock_second_response = Mock()
+        mock_second_response.text = json.dumps(
+            {
+                "is_convertible": False,
+                "transcription": "",
+                "translation": "",
+                "title": {"english": "", "spanish": ""},
+                "summary": {"english": "", "spanish": ""},
+                "explanation": {"english": "", "spanish": ""},
+                "disinformation_categories": [],
+                "keywords_detected": [],
+                "language": {"primary_language": "", "register": ""},
+                "confidence_scores": {
+                    "overall": 0,
+                    "analysis": {
+                        "claims": [],
+                        "validation_checklist": {
+                            "specific_claims_quoted": False,
+                            "evidence_provided": False,
+                            "scoring_falsity": False,
+                            "defensible_to_factcheckers": False,
+                            "consistent_explanations": False,
+                        },
+                        "score_adjustments": {"initial_score": 0, "final_score": 0, "adjustment_reason": ""},
+                    },
+                    "categories": [],
+                },
+                "context": {"before": "", "before_en": "", "after": "", "after_en": "", "main": "", "main_en": ""},
+                "political_leaning": {
+                    "score": 0.0,
+                    "evidence": {
+                        "policy_positions": [],
+                        "arguments": [],
+                        "rhetoric": [],
+                        "sources": [],
+                        "solutions": [],
+                    },
+                    "explanation": {
+                        "spanish": "",
+                        "english": "",
+                        "score_adjustments": {"initial_score": 0.0, "final_score": 0.0, "reasoning": ""},
+                    },
+                },
+            }
+        )
 
-            mock_supabase_client.submit_snippet_review.assert_not_called()
-            mock_supabase_client.create_new_label.assert_not_called()
+        mock_gemini_model.return_value.models.generate_content.side_effect = [
+            mock_first_response,
+            mock_second_response,
+        ]
+
+        process_snippet(mock_supabase_client, sample_snippet)
+
+        mock_supabase_client.set_snippet_status.assert_called_once_with(sample_snippet["id"], "Error", mock.ANY)
+
+        mock_supabase_client.submit_snippet_review.assert_not_called()
+        mock_supabase_client.create_new_label.assert_not_called()
 
     def test_prepare_snippet_for_review_invalid_date_format(self):
         """Test prepare_snippet_for_review with invalid date format"""
@@ -714,10 +715,9 @@ class TestStage4:
             # Missing other required fields
         }
 
-        with patch("google.generativeai.configure"):
-            process_snippet(mock_supabase_client, incomplete_snippet)
+        process_snippet(mock_supabase_client, incomplete_snippet)
 
-            mock_supabase_client.set_snippet_status.assert_called_with("test-id", "Error", mock.ANY)
+        mock_supabase_client.set_snippet_status.assert_called_with("test-id", "Error", mock.ANY)
 
     def test_analysis_review_with_invalid_snippet(self, mock_sleep, mock_supabase_client):
         """Test analysis review with invalid snippet data"""
@@ -729,10 +729,9 @@ class TestStage4:
 
         mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.return_value = invalid_snippet
 
-        with patch("google.generativeai.configure"):
-            analysis_review(snippet_ids=None, repeat=False)
+        analysis_review(snippet_ids=None, repeat=False)
 
-            mock_supabase_client.set_snippet_status.assert_called_with("test-id", "Error", mock.ANY)
+        mock_supabase_client.set_snippet_status.assert_called_with("test-id", "Error", mock.ANY)
 
     def test_stage_4_executor_invalid_input(self, mock_gemini_model):
         """Test Stage4Executor with invalid input"""
@@ -761,9 +760,7 @@ class TestStage4:
             Exception("Database error"),  # Second snippet causes error
         ]
 
-        with patch("google.generativeai.configure"), patch(
-            "processing_pipeline.stage_4.process_snippet"
-        ) as mock_process:
+        with patch("processing_pipeline.stage_4.process_snippet") as mock_process:
 
             try:
                 analysis_review(snippet_ids=snippet_ids, repeat=False)
@@ -786,9 +783,7 @@ class TestStage4:
         self, mock_supabase_client, mock_gemini_model, sample_snippet
     ):
         """Test processing snippet with empty disinformation categories"""
-        with patch("google.generativeai.configure"), patch(
-            "processing_pipeline.stage_4.Stage4Executor.run"
-        ) as mock_run:
+        with patch("processing_pipeline.stage_4.Stage4Executor.run") as mock_run:
 
             mock_run.return_value = (
                 {

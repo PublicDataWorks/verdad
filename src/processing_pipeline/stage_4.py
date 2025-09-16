@@ -13,7 +13,6 @@ from google.genai.types import (
 from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import (
-    GEMINI_1_5_PRO,
     GEMINI_2_5_PRO,
     get_output_schema_for_stage_4,
     get_system_instruction_for_stage_4,
@@ -276,7 +275,7 @@ class Stage4Executor:
             raise ValueError("Google Gemini API key was not set!")
 
         client = genai.Client(api_key=gemini_key)
-        model_id = GEMINI_1_5_PRO
+        model_id = GEMINI_2_5_PRO
 
         # Prepare the user prompt
         user_prompt = (
