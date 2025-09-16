@@ -1,10 +1,17 @@
 import json
 import time
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
+from google import genai
+from google.genai.types import (
+    GenerateContentConfig,
+    HarmBlockThreshold,
+    HarmCategory,
+    SafetySetting,
+)
+
 from processing_pipeline.constants import (
-    GEMINI_1_5_FLASH,
-    GEMINI_1_5_PRO,
+    GEMINI_2_5_FLASH,
+    GEMINI_2_5_PRO,
     get_transcription_prompt_for_stage_1_preprocess,
     get_system_instruction_for_stage_1_preprocess,
     get_output_schema_for_stage_1_preprocess,
@@ -26,33 +33,52 @@ class Stage1PreprocessTranscriptionExecutor:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name=GEMINI_1_5_FLASH)
+        client = genai.Client(api_key=gemini_key)
+        model_id = GEMINI_2_5_FLASH
 
         # Upload the audio file and wait for it to finish processing
-        audio_file = genai.upload_file(path=audio_file, mime_type="audio/mp3")
+        audio_file = client.files.upload(file=audio_file)
+
         while audio_file.state.name == "PROCESSING":
             print("Processing the uploaded audio file...")
             time.sleep(1)
-            audio_file = genai.get_file(audio_file.name)
+            audio_file = client.files.get(name=audio_file.name)
 
         try:
-            result = model.generate_content(
-                [audio_file, cls.USER_PROMPT],
-                generation_config=genai.GenerationConfig(
-                    response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
+            result = client.models.generate_content(
+                model=model_id,
+                contents=[audio_file, cls.USER_PROMPT],
+                config=GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=cls.OUTPUT_SCHEMA,
+                    max_output_tokens=8192,
+                    safety_settings=[
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                    ],
                 ),
-                safety_settings={
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                },
-                request_options={"timeout": 1000}
             )
             return result.text
         finally:
-            audio_file.delete()
+            client.files.delete(name=audio_file.name)
 
 
 class Stage1PreprocessDetectionExecutor:
@@ -66,11 +92,7 @@ class Stage1PreprocessDetectionExecutor:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(
-            model_name=GEMINI_1_5_PRO,
-            system_instruction=cls.SYSTEM_INSTRUCTION,
-        )
+        client = genai.Client(api_key=gemini_key)
 
         # Prepare the user prompt
         user_prompt = (
@@ -78,17 +100,36 @@ class Stage1PreprocessDetectionExecutor:
             f"Here is the transcription:\n\n{transcription}"
         )
 
-        result = model.generate_content(
-            [user_prompt],
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
+        result = client.models.generate_content(
+            model=GEMINI_2_5_PRO,
+            contents=[user_prompt],
+            config=GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=cls.OUTPUT_SCHEMA,
+                max_output_tokens=8192,
+                system_instruction=cls.SYSTEM_INSTRUCTION,
+                safety_settings=[
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ],
             ),
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            },
-            request_options={"timeout": 1000}
         )
         return result.text
