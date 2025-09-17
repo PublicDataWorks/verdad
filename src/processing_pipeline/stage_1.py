@@ -4,7 +4,6 @@ import time
 import json
 import boto3
 import uuid
-from google.api_core import exceptions as google_exceptions
 from google import genai
 from google.genai.types import (
     GenerateContentConfig,
@@ -242,7 +241,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
             try:
                 transcriptor = "gemini-2.5-pro"
                 timestamped_transcription = transcribe_audio_file_with_gemini_2_5_pro(local_file)
-            except google_exceptions.ResourceExhausted as e:
+            except ValueError as e:
                 print(
                     f"Failed to transcribe the audio file with Gemini 2.5 Pro: {e}\n"
                     "Falling back to the custom timestamped-transcript generator"
@@ -425,7 +424,7 @@ def redo_main_detection(stage_1_llm_response_ids):
             else:
                 timestamped_transcription = stage_1_llm_response["timestamped_transcription"]
 
-                print("Processing the timestamped transcription with Gemini 1.5 Pro")
+                print("Processing the timestamped transcription with Gemini 2.5 Pro")
                 detection_result = disinformation_detection_with_gemini_2_5_pro(
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
@@ -484,9 +483,9 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                 try:
                     transcriptor = "gemini-1206"
                     timestamped_transcription = transcribe_audio_file_with_gemini_2_5_pro(local_file)
-                except google_exceptions.ResourceExhausted as e:
+                except ValueError as e:
                     print(
-                        f"Failed to transcribe the audio file with Gemini 1206 due to Rate Limit: {e}\n"
+                        f"Failed to transcribe the audio file with Gemini 2.5 Pro: {e}\n"
                         "Falling back to the custom timestamped-transcript generator"
                     )
                     transcriptor = "custom"
@@ -497,7 +496,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                     supabase_client, id, timestamped_transcription, transcriptor
                 )
 
-                print("Processing the timestamped transcription with Gemini 1.5 Pro")
+                print("Processing the timestamped transcription with Gemini 2.5 Pro")
                 detection_result = disinformation_detection_with_gemini_2_5_pro(
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,

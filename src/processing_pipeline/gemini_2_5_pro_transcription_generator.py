@@ -20,7 +20,7 @@ class Gemini25ProTranscriptionGenerator:
 
         # Upload the audio file and wait for it to finish processing
         audio_file = client.files.upload(file=audio_file, config={"mime_type": "audio/mp3"})
-        while audio_file.state == "PROCESSING":
+        while audio_file.state.name == "PROCESSING":
             print("Processing the uploaded audio file...")
             time.sleep(1)
             audio_file = client.files.get(name=audio_file.name)
@@ -31,7 +31,7 @@ class Gemini25ProTranscriptionGenerator:
                 contents=[cls.USER_PROMPT, audio_file],
                 config=GenerateContentConfig(
                     max_output_tokens=8192,
-                    thinking_config=ThinkingConfig(include_thoughts=True, thinking_budget=1000),
+                    thinking_config=ThinkingConfig(include_thoughts=False),
                     safety_settings=[
                         SafetySetting(
                             category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
