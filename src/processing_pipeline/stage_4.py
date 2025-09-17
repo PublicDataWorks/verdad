@@ -1,13 +1,21 @@
-from datetime import datetime
+import json
 import os
 import time
-import google.generativeai as genai
-import json
+from datetime import datetime
+
+from google import genai
+from google.genai.types import (
+    GenerateContentConfig,
+    GoogleSearch,
+    HarmBlockThreshold,
+    HarmCategory,
+    SafetySetting,
+    Tool,
+)
 from prefect.task_runners import ConcurrentTaskRunner
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 from processing_pipeline.constants import (
-    GEMINI_1_5_PRO,
+    GEMINI_2_5_PRO,
     get_output_schema_for_stage_4,
     get_system_instruction_for_stage_4,
     get_user_prompt_for_stage_4,
@@ -197,11 +205,9 @@ class Stage4Executor:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(
-            model_name=GEMINI_1_5_PRO,
-            system_instruction=cls.SYSTEM_INSTRUCTION,
-        )
+        client = genai.Client(api_key=gemini_key)
+        model_id = GEMINI_2_5_PRO
+        google_search_tool = Tool(google_search=GoogleSearch())
 
         # Prepare the user prompt
         user_prompt = (
@@ -212,23 +218,52 @@ class Stage4Executor:
             f"### **Analysis JSON:**\n{json.dumps(analysis_json, indent=2)}"
         )
 
-        response = model.generate_content(
-            contents=[user_prompt],
-            tools={
-                "google_search_retrieval": {"dynamic_retrieval_config": {"mode": "dynamic", "dynamic_threshold": 0.6}}
-            },
-            generation_config=genai.GenerationConfig(max_output_tokens=8192),
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            },
-            request_options={"timeout": 1000},
+        response = client.models.generate_content(
+            model=model_id,
+            contents=user_prompt,
+            config=GenerateContentConfig(
+                tools=[google_search_tool],
+                response_modalities=["TEXT"],
+                system_instruction=cls.SYSTEM_INSTRUCTION,
+                max_output_tokens=8192,
+                safety_settings=[
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ],
+            ),
         )
 
-        # Use another prompt to ensure the response is a "valid" json
-        result = Stage4Executor.__ensure_json_format(response.text)
+        # Check if response.text is a good json
+        try:
+            # Find the first { and last } to extract the JSON object
+            start_idx = response.text.find("{")
+            end_idx = response.text.rfind("}")
+            if start_idx == -1 or end_idx == -1:
+                raise ValueError("No JSON object found in response")
+            response_text = response.text[start_idx : end_idx + 1]
+            result = json.loads(response_text)
+        except json.JSONDecodeError:
+            print("[Stage 4] Response from gemini 2.5 pro is not a valid JSON object.")
+            # Use another prompt to ensure the response is a "valid" json
+            result = Stage4Executor.__ensure_json_format(response.text)
 
         # Convert the grounding metadata to a string
         grounding_metadata = str(response.candidates[0].grounding_metadata) if response.candidates else None
@@ -241,8 +276,8 @@ class Stage4Executor:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name=GEMINI_1_5_PRO)
+        client = genai.Client(api_key=gemini_key)
+        model_id = GEMINI_2_5_PRO
 
         # Prepare the user prompt
         user_prompt = (
@@ -260,19 +295,38 @@ Now, please convert the following text into a valid JSON object:\n\n"""
             + text
         )
 
-        response = model.generate_content(
-            contents=[user_prompt],
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
+        response = client.models.generate_content(
+            model=model_id,
+            contents=user_prompt,
+            config=GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=cls.OUTPUT_SCHEMA,
+                max_output_tokens=8192,
+                safety_settings=[
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ],
             ),
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            },
-            request_options={"timeout": 1000},
         )
+
         result = json.loads(response.text)
 
         if result["is_convertible"]:

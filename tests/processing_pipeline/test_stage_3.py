@@ -13,7 +13,7 @@ from processing_pipeline.stage_3 import (
     in_depth_analysis,
     Stage3Executor
 )
-from processing_pipeline.constants import GEMINI_1_5_PRO
+from processing_pipeline.constants import GEMINI_2_5_PRO
 
 class TestStage3:
     @pytest.fixture
@@ -36,27 +36,6 @@ class TestStage3:
             mock.return_value = s3_client
             yield s3_client
 
-    @pytest.fixture
-    def mock_gemini_model(self):
-        """Create a mock Gemini model"""
-        with patch('google.generativeai.GenerativeModel') as mock:
-            model = Mock()
-            model.generate_content.return_value.text = json.dumps({
-                "transcription": "Test transcription",
-                "translation": "Test translation",
-                "title": "Test title",
-                "summary": "Test summary",
-                "explanation": "Test explanation",
-                "disinformation_categories": [{"english": "Category 1", "spanish": "Categoría 1"}],
-                "keywords_detected": ["keyword1", "keyword2"],
-                "language": "es",
-                "confidence_scores": {"accuracy": 0.9},
-                "emotional_tone": "neutral",
-                "context": "Test context",
-                "political_leaning": "neutral"
-            })
-            mock.return_value = model
-            yield mock
 
     @pytest.fixture
     def mock_gemini_response(self):
@@ -181,24 +160,31 @@ class TestStage3:
         assert result["end_time"] == "01:30"
         assert result["duration"] == "01:00"
 
-    def test_process_snippet(self, mock_supabase_client, mock_gemini_model, sample_snippet, mock_gemini_response):
+    @patch('google.genai.Client')
+    def test_process_snippet(self, mock_client_class, mock_supabase_client, sample_snippet, mock_gemini_response):
         """Test processing a snippet"""
-        # Configure mock Gemini model
+        # Configure mock audio file
         mock_audio_file = Mock()
         mock_audio_file.state.name = "PROCESSED"
-        mock_audio_file.delete = Mock()
+        mock_audio_file.name = "test-audio-file"
+
+        # Configure mock client
+        mock_client = Mock()
+        mock_client.files.upload.return_value = mock_audio_file
+        mock_client.files.get.return_value = mock_audio_file
+        mock_client.files.delete = Mock()
 
         # Configure mock response
-        mock_gemini_model.return_value.generate_content.return_value.text = json.dumps(mock_gemini_response)
+        mock_result = Mock()
+        mock_result.text = json.dumps(mock_gemini_response)
+        mock_client.models.generate_content.return_value = mock_result
 
-        with patch('google.generativeai.upload_file', return_value=mock_audio_file), \
-             patch('google.generativeai.get_file', return_value=mock_audio_file), \
-             patch('google.generativeai.configure'):
+        mock_client_class.return_value = mock_client
 
-            process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
 
-            # Verify update_snippet was called
-            mock_supabase_client.update_snippet.assert_called_once_with(
+        # Verify update_snippet was called
+        mock_supabase_client.update_snippet.assert_called_once_with(
                 id=sample_snippet["id"],
                 transcription=mock_gemini_response["transcription"],
                 translation=mock_gemini_response["translation"],
@@ -214,47 +200,63 @@ class TestStage3:
                 political_leaning=mock_gemini_response["political_leaning"],
                 status="Ready for review",
                 error_message=None
-            )
+        )
 
-    def test_process_snippet_error(self, mock_supabase_client, mock_gemini_model, sample_snippet):
+    @patch('google.genai.Client')
+    def test_process_snippet_error(self, mock_client_class, mock_supabase_client, sample_snippet):
         """Test processing snippet with error"""
-        # Configure mock Gemini model
+        # Configure mock audio file
         mock_audio_file = Mock()
         mock_audio_file.state.name = "PROCESSED"
-        mock_audio_file.delete = Mock()
-        mock_gemini_model.return_value.generate_content.side_effect = Exception("Test error")
+        mock_audio_file.name = "test-audio-file"
 
-        with patch('google.generativeai.upload_file', return_value=mock_audio_file), \
-             patch('google.generativeai.get_file', return_value=mock_audio_file), \
-             patch('google.generativeai.configure'):
+        # Configure mock client to raise error
+        mock_client = Mock()
+        mock_client.files.upload.return_value = mock_audio_file
+        mock_client.files.get.return_value = mock_audio_file
+        mock_client.files.delete = Mock()
+        mock_client.models.generate_content.side_effect = Exception("Test error")
 
-            process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+        mock_client_class.return_value = mock_client
 
-            mock_supabase_client.set_snippet_status.assert_called_with(
-                sample_snippet["id"], "Error", "Test error"
-            )
+        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
 
-    def test_stage_3_executor(self, mock_gemini_model):
+        mock_supabase_client.set_snippet_status.assert_called_with(
+            sample_snippet["id"], "Error", "Test error"
+        )
+
+    @patch('google.genai.Client')
+    def test_stage_3_executor(self, mock_client_class):
         """Test Stage3Executor"""
-        with patch('google.generativeai.upload_file') as mock_upload:
-            mock_audio_file = Mock()
-            mock_audio_file.state.name = "PROCESSED"
-            mock_upload.return_value = mock_audio_file
+        mock_audio_file = Mock()
+        mock_audio_file.state.name = "PROCESSED"
+        mock_audio_file.name = "test-audio-file"
 
-            result = Stage3Executor.run(
-                gemini_key="test-key",
-                model_name=GEMINI_1_5_PRO,
-                audio_file="test.mp3",
-                metadata={"test": "metadata"}
-            )
+        # Configure mock client
+        mock_client = Mock()
+        mock_client.files.upload.return_value = mock_audio_file
+        mock_client.files.get.return_value = mock_audio_file
+        mock_client.files.delete = Mock()
 
-            assert isinstance(json.loads(result), dict)
-            mock_gemini_model.assert_called_once()
+        mock_result = Mock()
+        mock_result.text = json.dumps({"test": "response"})
+        mock_client.models.generate_content.return_value = mock_result
+
+        mock_client_class.return_value = mock_client
+
+        result = Stage3Executor.run(
+            gemini_key="test-key",
+            model_name=GEMINI_2_5_PRO,
+            audio_file="test.mp3",
+            metadata={"test": "metadata"}
+        )
+
+        assert isinstance(json.loads(result), dict)
 
     def test_stage_3_executor_without_api_key(self):
         """Test Stage3Executor without API key"""
         with pytest.raises(ValueError, match="Google Gemini API key was not set!"):
-            Stage3Executor.run(None, GEMINI_1_5_PRO, "test.mp3", {})
+            Stage3Executor.run(None, GEMINI_2_5_PRO, "test.mp3", {})
 
     @patch('time.sleep')
     def test_in_depth_analysis_flow(self, mock_sleep, mock_supabase_client, mock_s3_client, sample_snippet):
@@ -310,37 +312,54 @@ class TestStage3:
 
         mock_s3_client.download_file.assert_not_called()
 
-    def test_process_snippet_no_disinformation_categories(self, mock_supabase_client, mock_gemini_model, sample_snippet, mock_gemini_response):
+    @patch('google.genai.Client')
+    def test_process_snippet_no_disinformation_categories(self, mock_client_class, mock_supabase_client, sample_snippet, mock_gemini_response):
         """Test processing snippet without disinformation categories"""
         mock_gemini_response["disinformation_categories"] = []
         mock_audio_file = Mock()
         mock_audio_file.state.name = "PROCESSED"
-        mock_audio_file.delete = Mock()
-        mock_gemini_model.return_value.generate_content.return_value.text = json.dumps(mock_gemini_response)
+        mock_audio_file.name = "test-audio-file"
 
-        with patch('google.generativeai.upload_file', return_value=mock_audio_file), \
-             patch('google.generativeai.get_file', return_value=mock_audio_file), \
-             patch('google.generativeai.configure'):
+        # Configure mock client
+        mock_client = Mock()
+        mock_client.files.upload.return_value = mock_audio_file
+        mock_client.files.get.return_value = mock_audio_file
+        mock_client.files.delete = Mock()
 
-            process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+        mock_result = Mock()
+        mock_result.text = json.dumps(mock_gemini_response)
+        mock_client.models.generate_content.return_value = mock_result
 
-            # Verify the snippet was updated with empty disinformation categories
-            mock_supabase_client.update_snippet.assert_called_once()
-            assert mock_supabase_client.update_snippet.call_args[1]['disinformation_categories'] == []
+        mock_client_class.return_value = mock_client
 
-    def test_process_snippet_invalid_response(self, mock_supabase_client, mock_gemini_model, sample_snippet):
+        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+
+        # Verify the snippet was updated with empty disinformation categories
+        mock_supabase_client.update_snippet.assert_called_once()
+        call_kwargs = mock_supabase_client.update_snippet.call_args.kwargs
+        assert call_kwargs['disinformation_categories'] == []
+
+    @patch('google.genai.Client')
+    def test_process_snippet_invalid_response(self, mock_client_class, mock_supabase_client, sample_snippet):
         """Test processing snippet with invalid Gemini response"""
         mock_audio_file = Mock()
         mock_audio_file.state.name = "PROCESSED"
-        mock_audio_file.delete = Mock()
-        mock_gemini_model.return_value.generate_content.return_value.text = "invalid json"
+        mock_audio_file.name = "test-audio-file"
 
-        with patch('google.generativeai.upload_file', return_value=mock_audio_file), \
-             patch('google.generativeai.get_file', return_value=mock_audio_file), \
-             patch('google.generativeai.configure'):
+        # Configure mock client
+        mock_client = Mock()
+        mock_client.files.upload.return_value = mock_audio_file
+        mock_client.files.get.return_value = mock_audio_file
+        mock_client.files.delete = Mock()
 
-            process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+        mock_result = Mock()
+        mock_result.text = "invalid json"
+        mock_client.models.generate_content.return_value = mock_result
 
-            mock_supabase_client.set_snippet_status.assert_called_with(
-                sample_snippet["id"], "Error", mock.ANY
-            )
+        mock_client_class.return_value = mock_client
+
+        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+
+        mock_supabase_client.set_snippet_status.assert_called_with(
+            sample_snippet["id"], "Error", mock.ANY
+        )

@@ -2,6 +2,8 @@ import json
 
 GEMINI_1_5_PRO = "gemini-1.5-pro-002"
 GEMINI_1_5_FLASH = "gemini-1.5-flash"
+GEMINI_2_5_FLASH = "gemini-2.5-flash"
+GEMINI_2_5_PRO = "gemini-2.5-pro"
 
 
 def get_transcription_prompt_for_stage_1_preprocess():
@@ -43,8 +45,10 @@ def get_system_instruction_for_stage_3():
 def get_output_schema_for_stage_3():
     return json.load(open("prompts/Stage_3_output_schema.json", "r"))
 
+
 def get_timestamped_transcription_generation_prompt():
     return open("prompts/Timestamped_transcription_generation_prompt.md", "r").read()
+
 
 def get_timestamped_transcription_generation_output_schema():
     return json.load(open("prompts/Timestamped_transcription_generation_output_schema.json", "r"))
@@ -62,8 +66,8 @@ def get_output_schema_for_stage_4():
     return json.load(open("prompts/Stage_4_output_schema.json", "r"))
 
 
-def get_gemini_1206_transcription_generation_prompt():
-    return open("prompts/Gemini_1206_transcription_generation_prompt.md", "r").read()
+def get_gemini_2_5_pro_transcription_generation_prompt():
+    return open("prompts/Gemini_2_5_pro_transcription_generation_prompt.md", "r").read()
 
 
 if __name__ == "__main__":
@@ -127,6 +131,6 @@ if __name__ == "__main__":
     # output_schema_for_stage_4 = get_output_schema_for_stage_4()
     # print(json.dumps(output_schema_for_stage_4, indent=2))
 
-    # Print gemini 1206 transcription generation prompt
-    gemini_1206_transcription_generation_prompt = get_gemini_1206_transcription_generation_prompt()
-    print(gemini_1206_transcription_generation_prompt)
+    # Print gemini 2.5 pro transcription generation prompt
+    gemini_2_5_pro_transcription_generation_prompt = get_gemini_2_5_pro_transcription_generation_prompt()
+    print(gemini_2_5_pro_transcription_generation_prompt)

@@ -81,8 +81,8 @@ class TestTimestampedTranscriptionGenerator:
         assert len(audio1) == 10000 # The first part must be rounded down to the nearest multiple of 10 seconds
         assert len(audio2) == 20000 # The remaining part of the audio
 
-    @patch('google.generativeai.GenerativeModel')
-    def test_transcribe_segments(self, mock_generative_model, mock_gemini_response, sample_audio_file):
+    @patch('google.genai.Client')
+    def test_transcribe_segments(self, mock_client_class, mock_gemini_response, sample_audio_file):
         # Create mock segments
         segment_length_ms = 10000
         segments = TimestampedTranscriptionGenerator.split_file_into_segments(
@@ -90,9 +90,11 @@ class TestTimestampedTranscriptionGenerator:
         )
 
         # Setup mock
-        mock_model = Mock()
-        mock_model.generate_content.return_value.text = json.dumps(mock_gemini_response)
-        mock_generative_model.return_value = mock_model
+        mock_client = Mock()
+        mock_response = Mock()
+        mock_response.text = json.dumps(mock_gemini_response)
+        mock_client.models.generate_content.return_value = mock_response
+        mock_client_class.return_value = mock_client
 
         # Run transcription
         result = TimestampedTranscriptionGenerator.transcribe_segments(

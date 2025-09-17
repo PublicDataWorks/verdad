@@ -2,10 +2,17 @@ import json
 import os
 import pathlib
 from pydub import AudioSegment
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google import genai
+from google.genai.types import (
+    SafetySetting,
+    HarmCategory,
+    HarmBlockThreshold,
+    Part,
+    ThinkingConfig,
+    GenerateContentConfig,
+)
 from processing_pipeline.constants import (
-    GEMINI_1_5_PRO,
+    GEMINI_2_5_PRO,
     get_timestamped_transcription_generation_output_schema,
     get_timestamped_transcription_generation_prompt,
 )
@@ -13,7 +20,9 @@ from processing_pipeline.constants import (
 
 class TimestampedTranscriptionGenerator:
 
-    SYSTEM_INSTRUCTION = "You are a specialized language model designed to transcribe audio content in multiple languages."
+    SYSTEM_INSTRUCTION = (
+        "You are a specialized language model designed to transcribe audio content in multiple languages."
+    )
     USER_PROMPT = get_timestamped_transcription_generation_prompt()
     OUTPUT_SCHEMA = get_timestamped_transcription_generation_output_schema()
 
@@ -63,31 +72,42 @@ class TimestampedTranscriptionGenerator:
         if not audio_segments:
             raise ValueError("No audio segments provided!")
 
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(model_name=GEMINI_1_5_PRO, system_instruction=cls.SYSTEM_INSTRUCTION)
+        client = genai.Client(api_key=gemini_key)
 
         segments = []
         for index, segment_path in enumerate(audio_segments):
             segments.extend(
                 [
                     f"\n<Segment {index + 1}>\n",
-                    {"mime_type": "audio/mp3", "data": pathlib.Path(segment_path).read_bytes()},
+                    Part.from_bytes(data=pathlib.Path(segment_path).read_bytes(), mime_type="audio/mp3"),
                     f"\n</Segment {index + 1}>\n\n",
                 ]
             )
 
-        result = model.generate_content(
-            [cls.USER_PROMPT] + segments,
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
+        result = client.models.generate_content(
+            model=GEMINI_2_5_PRO,
+            contents=[cls.USER_PROMPT] + segments,
+            config=GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=cls.OUTPUT_SCHEMA,
+                system_instruction=cls.SYSTEM_INSTRUCTION,
+                max_output_tokens=8192,
+                thinking_config=ThinkingConfig(include_thoughts=True, thinking_budget=1000),
+                safety_settings=[
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                ],
             ),
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            },
-            request_options={"timeout": 1000},
         )
         return json.loads(result.text)["segments"]
 

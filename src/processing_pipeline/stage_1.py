@@ -1,12 +1,16 @@
 from datetime import datetime
 import os
 import time
-import google.generativeai as genai
 import json
 import boto3
 import uuid
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from google.api_core import exceptions as google_exceptions
+from google import genai
+from google.genai.types import (
+    GenerateContentConfig,
+    HarmBlockThreshold,
+    HarmCategory,
+    SafetySetting,
+)
 from openai import OpenAI
 from prefect.task_runners import ConcurrentTaskRunner
 from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
@@ -16,12 +20,12 @@ from processing_pipeline.stage_1_preprocess import (
 )
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
-    GEMINI_1_5_PRO,
+    GEMINI_2_5_PRO,
     get_system_instruction_for_stage_1,
     get_output_schema_for_stage_1,
     get_detection_prompt_for_stage_1,
 )
-from processing_pipeline.gemini_1206_transcription_generator import Gemini1206TranscriptionGenerator
+from processing_pipeline.gemini_2_5_pro_transcription_generator import Gemini25ProTranscriptionGenerator
 from utils import optional_flow, optional_task
 
 
@@ -72,7 +76,7 @@ def __download_audio_file_from_s3(s3_client, file_path):
 
 
 @optional_task(log_prints=True)
-def transcribe_audio_file_with_gemini_1_5_flash(audio_file):
+def transcribe_audio_file_with_gemini_2_5_flash(audio_file):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1PreprocessTranscriptionExecutor.run(audio_file, gemini_key)
     return json.loads(response)
@@ -123,10 +127,10 @@ def __transcribe_audio_file_with_open_ai_whisper_1(audio_file):
 
 
 @optional_task(log_prints=True)
-def transcribe_audio_file_with_gemini_1206(audio_file):
-    print(f"Transcribing the audio file {audio_file} with Gemini 1206")
+def transcribe_audio_file_with_gemini_2_5_pro(audio_file):
+    print(f"Transcribing the audio file {audio_file} with Gemini 2.5 Pro")
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
-    timestamped_transcription = Gemini1206TranscriptionGenerator.run(audio_file, gemini_key)
+    timestamped_transcription = Gemini25ProTranscriptionGenerator.run(audio_file, gemini_key)
     return {"timestamped_transcription": timestamped_transcription}
 
 
@@ -139,14 +143,14 @@ def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_
 
 
 @optional_task(log_prints=True)
-def initial_disinformation_detection_with_gemini_1_5_pro(initial_transcription, metadata):
+def initial_disinformation_detection_with_gemini_2_5_pro(initial_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1PreprocessDetectionExecutor.run(gemini_key, initial_transcription, metadata)
     return json.loads(response)
 
 
 @optional_task(log_prints=True)
-def disinformation_detection_with_gemini_1_5_pro(timestamped_transcription, metadata):
+def disinformation_detection_with_gemini_2_5_pro(timestamped_transcription, metadata):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1Executor.run(
         gemini_key=gemini_key,
@@ -198,8 +202,8 @@ def set_audio_file_status_error(supabase_client, audio_file_id, error_message):
 @optional_task(log_prints=True)
 def process_audio_file(supabase_client, audio_file, local_file):
     try:
-        # Transcribe the audio file with Google Gemini 1.5 Flash
-        flash_response = transcribe_audio_file_with_gemini_1_5_flash(local_file)
+        # Transcribe the audio file with Google Gemini 2.5 Flash
+        flash_response = transcribe_audio_file_with_gemini_2_5_flash(local_file)
         initial_transcription = flash_response["transcription"]
 
         # Get metadata of the transcription
@@ -213,8 +217,8 @@ def process_audio_file(supabase_client, audio_file, local_file):
             "time_zone": "UTC",
         }
 
-        # Detect disinformation from the initial transcription using Gemini 1.5 Pro
-        initial_detection_result = initial_disinformation_detection_with_gemini_1_5_pro(initial_transcription, metadata)
+        # Detect disinformation from the initial transcription using Gemini 2.5 Pro
+        initial_detection_result = initial_disinformation_detection_with_gemini_2_5_pro(initial_transcription, metadata)
         print(f"Initial detection result:\n{json.dumps(initial_detection_result, indent=2)}\n")
         flag_snippets = initial_detection_result["flagged_snippets"]
 
@@ -233,13 +237,13 @@ def process_audio_file(supabase_client, audio_file, local_file):
                 status="Processed",
             )
         else:
-            # Use Gemini 1206 for the timestamped transcription
+            # Use Gemini 2.5 Pro for the timestamped transcription
             try:
-                transcriptor = "gemini-1206"
-                timestamped_transcription = transcribe_audio_file_with_gemini_1206(local_file)
-            except google_exceptions.ResourceExhausted as e:
+                transcriptor = "gemini-2.5-pro"
+                timestamped_transcription = transcribe_audio_file_with_gemini_2_5_pro(local_file)
+            except ValueError as e:
                 print(
-                    f"Failed to transcribe the audio file with Gemini 1206 due to Rate Limit: {e}\n"
+                    f"Failed to transcribe the audio file with Gemini 2.5 Pro: {e}\n"
                     "Falling back to the custom timestamped-transcript generator"
                 )
                 transcriptor = "custom"
@@ -247,8 +251,8 @@ def process_audio_file(supabase_client, audio_file, local_file):
                     local_file
                 )
 
-            print("Processing the timestamped transcription with Gemini 1.5 Pro (Main detection phase)")
-            detection_result = disinformation_detection_with_gemini_1_5_pro(
+            print("Processing the timestamped transcription with Gemini 2.5 Pro (Main detection phase)")
+            detection_result = disinformation_detection_with_gemini_2_5_pro(
                 timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                 metadata=metadata,
             )
@@ -420,8 +424,8 @@ def redo_main_detection(stage_1_llm_response_ids):
             else:
                 timestamped_transcription = stage_1_llm_response["timestamped_transcription"]
 
-                print("Processing the timestamped transcription with Gemini 1.5 Pro")
-                detection_result = disinformation_detection_with_gemini_1_5_pro(
+                print("Processing the timestamped transcription with Gemini 2.5 Pro")
+                detection_result = disinformation_detection_with_gemini_2_5_pro(
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                 )
@@ -478,10 +482,10 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
             else:
                 try:
                     transcriptor = "gemini-1206"
-                    timestamped_transcription = transcribe_audio_file_with_gemini_1206(local_file)
-                except google_exceptions.ResourceExhausted as e:
+                    timestamped_transcription = transcribe_audio_file_with_gemini_2_5_pro(local_file)
+                except ValueError as e:
                     print(
-                        f"Failed to transcribe the audio file with Gemini 1206 due to Rate Limit: {e}\n"
+                        f"Failed to transcribe the audio file with Gemini 2.5 Pro: {e}\n"
                         "Falling back to the custom timestamped-transcript generator"
                     )
                     transcriptor = "custom"
@@ -492,8 +496,8 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                     supabase_client, id, timestamped_transcription, transcriptor
                 )
 
-                print("Processing the timestamped transcription with Gemini 1.5 Pro")
-                detection_result = disinformation_detection_with_gemini_1_5_pro(
+                print("Processing the timestamped transcription with Gemini 2.5 Pro")
+                detection_result = disinformation_detection_with_gemini_2_5_pro(
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                 )
@@ -531,11 +535,7 @@ class Stage1Executor:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel(
-            model_name=GEMINI_1_5_PRO,
-            system_instruction=cls.SYSTEM_INSTRUCTION,
-        )
+        client = genai.Client(api_key=gemini_key)
 
         # Prepare the user prompt
         user_prompt = (
@@ -543,17 +543,36 @@ class Stage1Executor:
             f"Here is the timestamped transcription:\n\n{timestamped_transcription}"
         )
 
-        result = model.generate_content(
-            [user_prompt],
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json", response_schema=cls.OUTPUT_SCHEMA, max_output_tokens=8192
+        result = client.models.generate_content(
+            model=GEMINI_2_5_PRO,
+            contents=[user_prompt],
+            config=GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=cls.OUTPUT_SCHEMA,
+                max_output_tokens=8192,
+                system_instruction=cls.SYSTEM_INSTRUCTION,
+                safety_settings=[
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                        threshold=HarmBlockThreshold.BLOCK_NONE,
+                    ),
+                ],
             ),
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            },
-            request_options={"timeout": 1000},
         )
         return result.text
