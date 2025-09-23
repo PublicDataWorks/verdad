@@ -29,7 +29,33 @@ BEGIN
 
     user_is_admin := COALESCE('admin' = ANY(user_roles), FALSE);
 
-    CREATE TEMP TABLE filtered_snippets AS
+    CREATE TEMP TABLE filtered_snippets AS (
+        -- Pre-compute all label data with upvote counts
+        WITH label_data AS (
+            SELECT 
+                sl.snippet,
+                COALESCE(jsonb_agg(
+                    jsonb_build_object(
+                        'id', l.id,
+                        'text', CASE
+                            WHEN p_language = 'spanish' THEN l.text_spanish
+                            ELSE l.text
+                        END,
+                        'upvote_count', COALESCE(upvote_counts.count, 0),
+                        'upvoted_by_me', COALESCE(upvote_counts.upvoted_by_current_user, false)
+                    )
+                ), '[]'::jsonb) AS labels
+            FROM public.snippet_labels sl
+            JOIN public.labels l ON sl.label = l.id
+            LEFT JOIN LATERAL (
+                SELECT
+                    COUNT(*) AS count,
+                    BOOL_OR(lu.upvoted_by = current_user_id) AS upvoted_by_current_user
+                FROM public.label_upvotes lu
+                WHERE lu.snippet_label = sl.id
+            ) upvote_counts ON TRUE
+            GROUP BY sl.snippet
+        )
         SELECT
             s.id,
             s.recorded_at,
@@ -55,7 +81,7 @@ BEGIN
             s.confidence_scores,
             s.language,
             s.context,
-            (get_snippet_labels(s.id, p_language) -> 'labels') AS labels,
+            COALESCE(ld.labels, '[]'::jsonb) AS labels,
             jsonb_build_object(
                 'id', a.id,
                 'radio_station_name', a.radio_station_name,
@@ -63,16 +89,14 @@ BEGIN
                 'location_state', a.location_state,
                 'location_city', a.location_city
             ) AS audio_file,
-            CASE
-                WHEN us.id IS NOT NULL THEN true
-                ELSE false
-            END AS starred_by_user,
+            us.id IS NOT NULL AS starred_by_user,
             ul.value AS user_like_status,
+            uhs.snippet IS NOT NULL AS hidden,
             like_counts.likes AS like_count,
-            like_counts.dislikes AS dislike_count,
-            uhs.snippet IS NOT NULL AS hidden
+            like_counts.dislikes AS dislike_count
         FROM snippets s
         LEFT JOIN audio_files a ON s.audio_file = a.id
+        LEFT JOIN label_data ld ON ld.snippet = s.id
         LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
         LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
         LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
@@ -88,11 +112,7 @@ BEGIN
             -- If user is admin, show all snippets (including hidden ones)
             -- If user is not admin, only show non-hidden snippets
             user_is_admin OR
-            NOT EXISTS (
-                SELECT 1
-                FROM user_hide_snippets uhs
-                WHERE uhs.snippet = s.id
-            )
+            uhs.snippet IS NULL
         )
         AND (
             p_filter IS NULL OR
@@ -273,14 +293,13 @@ BEGIN
                 WHEN p_order_by = 'upvotes' THEN s.upvote_count + s.like_count
                 WHEN p_order_by = 'comments' THEN s.comment_count 
                 WHEN p_order_by = 'activities' THEN 
-                    CASE 
+                    CASE
                         WHEN s.user_last_activity IS NULL THEN 0
                         ELSE EXTRACT(EPOCH FROM s.user_last_activity)
                     END
-                WHEN p_order_by IS NULL OR p_order_by = 'latest' OR p_order_by = '' THEN EXTRACT(EPOCH FROM s.recorded_at)
-                ELSE EXTRACT(EPOCH FROM s.recorded_at)
             END DESC,
-            s.recorded_at DESC;
+            s.recorded_at DESC -- Default for all other cases, including p_order_by = 'latest'
+    );
         
     SELECT COUNT(*) INTO total_count
     FROM filtered_snippets;
