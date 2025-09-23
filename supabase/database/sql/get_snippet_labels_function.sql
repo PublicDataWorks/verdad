@@ -18,28 +18,19 @@ BEGIN
                 WHEN p_language = 'spanish' THEN l.text_spanish
                 ELSE l.text
             END,
-            'created_by', l.created_by,
-            'is_ai_suggested', l.is_ai_suggested,
-            'applied_by', sl.applied_by,
-            'applied_at', sl.created_at,
-            'upvoted_by', COALESCE(upvote_users, '[]'::jsonb)
+            'upvote_count', COALESCE(upvote_counts.count, 0),
+            'upvoted_by_me', COALESCE(upvote_counts.upvoted_by_current_user, false)
         )), '[]'::jsonb)
     ) INTO result
     FROM public.snippet_labels sl
     JOIN public.labels l ON sl.label = l.id
-    LEFT JOIN (
-        SELECT lu.snippet_label, jsonb_agg(jsonb_build_object(
-            'id', u.id,
-            'email', u.email,
-            'upvoted_at', lu.created_at
-        )) AS upvote_users
+    LEFT JOIN LATERAL (
+        SELECT
+            COUNT(*) AS count,
+            BOOL_OR(lu.upvoted_by = current_user_id) AS upvoted_by_current_user
         FROM public.label_upvotes lu
-        JOIN auth.users u ON lu.upvoted_by = u.id  -- Join to get user email
-        WHERE lu.snippet_label IN (
-            SELECT id FROM public.snippet_labels WHERE snippet = snippet_id
-        )  -- Filter to only include upvotes for the specific snippet
-        GROUP BY lu.snippet_label
-    ) lu ON sl.id = lu.snippet_label
+        WHERE lu.snippet_label = sl.id
+    ) upvote_counts ON TRUE
     WHERE sl.snippet = snippet_id;
 
     RETURN COALESCE(result, jsonb_build_object('snippet_id', snippet_id, 'labels', '[]'::jsonb));
