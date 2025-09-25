@@ -29,43 +29,16 @@ BEGIN
 
     user_is_admin := COALESCE('admin' = ANY(user_roles), FALSE);
 
-    CREATE TEMP TABLE filtered_snippets AS (
-        -- Pre-compute all label data with upvote counts
-        WITH
-        label_summary AS (
-            SELECT 
-                sl.snippet,
-                COALESCE(jsonb_agg(
-                    jsonb_build_object(
-                        'id', l.id,
-                        'text', CASE
-                            WHEN p_language = 'spanish' THEN l.text_spanish
-                            ELSE l.text
-                        END,
-                        'upvote_count', COALESCE(lu.upvote_count, 0),
-                        'upvoted_by_me', COALESCE(lu.upvoted_by_current_user, FALSE)
-                    )
-                ), '[]'::jsonb) AS labels
-            FROM public.snippet_labels sl
-            JOIN public.labels l ON sl.label = l.id
-            LEFT JOIN (
-                SELECT
-                    snippet_label,
-                    COUNT(*) AS upvote_count,
-                    BOOL_OR(upvoted_by = current_user_id) AS upvoted_by_current_user
-                FROM public.label_upvotes lu
-                GROUP BY snippet_label
-            ) lu ON lu.snippet_label = sl.id
-            GROUP BY sl.snippet
-        ),
-        like_summary AS (
-            SELECT
-                snippet,
-                COUNT(*) FILTER (WHERE value = 1) AS likes,
-                COUNT(*) FILTER (WHERE value = -1) AS dislikes
-            FROM user_like_snippets
-            GROUP BY snippet
-        )
+    WITH
+    like_summary AS (
+        SELECT
+            snippet,
+            COUNT(*) FILTER (WHERE value = 1) AS likes,
+            COUNT(*) FILTER (WHERE value = -1) AS dislikes
+        FROM user_like_snippets
+        GROUP BY snippet
+    ),
+    filtered_snippets AS (
         SELECT
             s.id,
             s.recorded_at,
@@ -91,7 +64,8 @@ BEGIN
             s.confidence_scores,
             s.language,
             s.context,
-            COALESCE(ls.labels, '[]'::jsonb) AS labels,
+            s.upvote_count,
+            s.comment_count,
             jsonb_build_object(
                 'id', a.id,
                 'radio_station_name', a.radio_station_name,
@@ -106,7 +80,6 @@ BEGIN
             COALESCE(lk.dislikes, 0) AS dislike_count
         FROM snippets s
         LEFT JOIN audio_files a ON s.audio_file = a.id
-        LEFT JOIN label_summary ls ON ls.snippet = s.id
         LEFT JOIN like_summary lk ON lk.snippet = s.id
         LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
         LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
@@ -292,30 +265,107 @@ BEGIN
                 OR s.translation &@ trimmed_search_term
             )
         )
-        ORDER BY 
+    ),
+    paginated_snippets AS (
+        SELECT fs.*, COUNT(*) OVER() AS num_of_snippets
+        FROM filtered_snippets fs
+        ORDER BY
             CASE
-                WHEN p_order_by = 'upvotes' THEN s.upvote_count + s.like_count
-                WHEN p_order_by = 'comments' THEN s.comment_count 
-                WHEN p_order_by = 'activities' THEN 
+                WHEN p_order_by = 'upvotes' THEN fs.upvote_count + fs.like_count
+                WHEN p_order_by = 'comments' THEN fs.comment_count
+                WHEN p_order_by = 'activities' THEN
                     CASE
-                        WHEN s.user_last_activity IS NULL THEN 0
-                        ELSE EXTRACT(EPOCH FROM s.user_last_activity)
+                        WHEN fs.user_last_activity IS NULL THEN 0
+                        ELSE EXTRACT(EPOCH FROM fs.user_last_activity)
                     END
             END DESC,
-            s.recorded_at DESC -- Default for all other cases, including p_order_by = 'latest'
-    );
-        
-    SELECT COUNT(*) INTO total_count
-    FROM filtered_snippets;
-
-    SELECT jsonb_agg(fs.*) INTO result
-    FROM (
-        SELECT * FROM filtered_snippets
+            fs.recorded_at DESC -- Default for all other cases, including p_order_by = 'latest'
         LIMIT page_size
         OFFSET page * page_size
-    ) fs;
-
-    DROP TABLE filtered_snippets;
+    ),
+    label_summary AS (
+        SELECT
+            l.id,
+            CASE
+                WHEN p_language = 'spanish' THEN l.text_spanish
+                ELSE l.text
+            END AS text,
+            COALESCE(lu.upvote_count, 0) AS upvote_count,
+            COALESCE(lu.upvoted_by_me, FALSE) AS upvoted_by_me,
+            sl.snippet AS snippet_id
+        FROM snippet_labels sl
+        JOIN labels l ON l.id = sl.label
+        LEFT JOIN (
+            SELECT
+                snippet_label,
+                COUNT(*) AS upvote_count,
+                BOOL_OR(upvoted_by = current_user_id) AS upvoted_by_me
+            FROM label_upvotes lu
+            GROUP BY snippet_label
+        ) lu ON lu.snippet_label = sl.id
+        WHERE sl.snippet IN (SELECT id FROM paginated_snippets)
+    ),
+    paginated_snippets_with_labels AS (
+        SELECT
+            ps.*,
+            COALESCE(ld.labels, '[]'::jsonb) AS labels
+        FROM paginated_snippets ps
+        LEFT JOIN (
+            SELECT
+                snippet_id,
+                jsonb_agg(
+                    jsonb_build_object(
+                        'id', id,
+                        'text', text,
+                        'upvote_count', upvote_count,
+                        'upvoted_by_me', upvoted_by_me
+                    )
+                ) as labels
+            FROM label_summary
+            GROUP BY snippet_id
+        ) ld ON ps.id = ld.snippet_id
+        ORDER BY
+            CASE
+                WHEN p_order_by = 'upvotes' THEN ps.upvote_count + ps.like_count
+                WHEN p_order_by = 'comments' THEN ps.comment_count
+                WHEN p_order_by = 'activities' THEN
+                    CASE
+                        WHEN ps.user_last_activity IS NULL THEN 0
+                        ELSE EXTRACT(EPOCH FROM ps.user_last_activity)
+                    END
+            END DESC,
+            ps.recorded_at DESC -- Default for all other cases, including p_order_by = 'latest'
+    )
+    SELECT
+        jsonb_agg(
+            jsonb_build_object(
+                'id', ps.id,
+                'recorded_at', ps.recorded_at,
+                'user_last_activity', ps.user_last_activity,
+                'duration', ps.duration,
+                'start_time', ps.start_time,
+                'end_time', ps.end_time,
+                'file_path', ps.file_path,
+                'file_size', ps.file_size,
+                'political_leaning', ps.political_leaning,
+                'title', ps.title,
+                'summary', ps.summary,
+                'explanation', ps.explanation,
+                'confidence_scores', ps.confidence_scores,
+                'language', ps.language,
+                'context', ps.context,
+                'labels', ps.labels,
+                'audio_file', ps.audio_file,
+                'starred_by_user', ps.starred_by_user,
+                'user_like_status', ps.user_like_status,
+                'hidden', ps.hidden,
+                'like_count', ps.like_count,
+                'dislike_count', ps.dislike_count
+            )
+        ),
+        MAX(ps.num_of_snippets)
+    INTO result, total_count
+    FROM paginated_snippets_with_labels ps;
 
     total_pages := CEIL(total_count::FLOAT / page_size);
 
