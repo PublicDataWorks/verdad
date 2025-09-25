@@ -31,7 +31,8 @@ BEGIN
 
     CREATE TEMP TABLE filtered_snippets AS (
         -- Pre-compute all label data with upvote counts
-        WITH label_data AS (
+        WITH
+        label_summary AS (
             SELECT 
                 sl.snippet,
                 COALESCE(jsonb_agg(
@@ -41,20 +42,29 @@ BEGIN
                             WHEN p_language = 'spanish' THEN l.text_spanish
                             ELSE l.text
                         END,
-                        'upvote_count', COALESCE(upvote_counts.count, 0),
-                        'upvoted_by_me', COALESCE(upvote_counts.upvoted_by_current_user, false)
+                        'upvote_count', COALESCE(lu.upvote_count, 0),
+                        'upvoted_by_me', COALESCE(lu.upvoted_by_current_user, FALSE)
                     )
                 ), '[]'::jsonb) AS labels
             FROM public.snippet_labels sl
             JOIN public.labels l ON sl.label = l.id
-            LEFT JOIN LATERAL (
+            LEFT JOIN (
                 SELECT
-                    COUNT(*) AS count,
-                    BOOL_OR(lu.upvoted_by = current_user_id) AS upvoted_by_current_user
+                    snippet_label,
+                    COUNT(*) AS upvote_count,
+                    BOOL_OR(upvoted_by = current_user_id) AS upvoted_by_current_user
                 FROM public.label_upvotes lu
-                WHERE lu.snippet_label = sl.id
-            ) upvote_counts ON TRUE
+                GROUP BY snippet_label
+            ) lu ON lu.snippet_label = sl.id
             GROUP BY sl.snippet
+        ),
+        like_summary AS (
+            SELECT
+                snippet,
+                COUNT(*) FILTER (WHERE value = 1) AS likes,
+                COUNT(*) FILTER (WHERE value = -1) AS dislikes
+            FROM user_like_snippets
+            GROUP BY snippet
         )
         SELECT
             s.id,
@@ -81,7 +91,7 @@ BEGIN
             s.confidence_scores,
             s.language,
             s.context,
-            COALESCE(ld.labels, '[]'::jsonb) AS labels,
+            COALESCE(ls.labels, '[]'::jsonb) AS labels,
             jsonb_build_object(
                 'id', a.id,
                 'radio_station_name', a.radio_station_name,
@@ -92,21 +102,15 @@ BEGIN
             us.id IS NOT NULL AS starred_by_user,
             ul.value AS user_like_status,
             uhs.snippet IS NOT NULL AS hidden,
-            like_counts.likes AS like_count,
-            like_counts.dislikes AS dislike_count
+            COALESCE(lk.likes, 0) AS like_count,
+            COALESCE(lk.dislikes, 0) AS dislike_count
         FROM snippets s
         LEFT JOIN audio_files a ON s.audio_file = a.id
-        LEFT JOIN label_data ld ON ld.snippet = s.id
+        LEFT JOIN label_summary ls ON ls.snippet = s.id
+        LEFT JOIN like_summary lk ON lk.snippet = s.id
         LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
         LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
         LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
-        CROSS JOIN LATERAL (
-            SELECT
-                COUNT(*) FILTER (WHERE value = 1) AS likes,
-                COUNT(*) FILTER (WHERE value = -1) AS dislikes
-            FROM user_like_snippets uls
-            WHERE uls.snippet = s.id
-        ) like_counts
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (
             -- If user is admin, show all snippets (including hidden ones)
