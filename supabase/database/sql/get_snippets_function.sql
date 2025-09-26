@@ -290,19 +290,12 @@ BEGIN
                 WHEN p_language = 'spanish' THEN l.text_spanish
                 ELSE l.text
             END AS text,
-            COALESCE(lu.upvote_count, 0) AS upvote_count,
-            COALESCE(lu.upvoted_by_me, FALSE) AS upvoted_by_me,
+            sl.upvote_count,
+            lu.id IS NOT NULL AS upvoted_by_me,
             sl.snippet AS snippet_id
         FROM snippet_labels sl
         JOIN labels l ON l.id = sl.label
-        LEFT JOIN (
-            SELECT
-                snippet_label,
-                COUNT(*) AS upvote_count,
-                BOOL_OR(upvoted_by = current_user_id) AS upvoted_by_me
-            FROM label_upvotes lu
-            GROUP BY snippet_label
-        ) lu ON lu.snippet_label = sl.id
+        LEFT JOIN label_upvotes lu ON lu.snippet_label = sl.id AND lu.upvoted_by = current_user_id
         WHERE sl.snippet IN (SELECT id FROM paginated_snippets)
     ),
     paginated_snippets_with_labels AS (
