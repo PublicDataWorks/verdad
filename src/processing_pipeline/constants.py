@@ -1,9 +1,14 @@
 import json
+from enum import StrEnum
 
-GEMINI_1_5_PRO = "gemini-1.5-pro-002"
-GEMINI_1_5_FLASH = "gemini-1.5-flash"
-GEMINI_2_5_FLASH = "gemini-2.5-flash"
-GEMINI_2_5_PRO = "gemini-2.5-pro"
+
+class GeminiModel(StrEnum):
+    GEMINI_1_5_PRO = "gemini-1.5-pro-002"
+    GEMINI_1_5_FLASH = "gemini-1.5-flash"
+    GEMINI_2_5_FLASH = "gemini-2.5-flash"
+    GEMINI_2_5_PRO = "gemini-2.5-pro"
+    GEMINI_FLASH_LATEST = "gemini-flash-latest"
+    GEMINI_FLASH_LITE_LATEST = "gemini-flash-lite-latest"
 
 
 def get_transcription_prompt_for_stage_1_preprocess():

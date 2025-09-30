@@ -10,7 +10,10 @@ from google.genai.types import (
     HarmBlockThreshold,
     HarmCategory,
     SafetySetting,
+    ThinkingConfig,
+    FinishReason,
 )
+from google.genai.errors import ServerError
 from openai import OpenAI
 from prefect.task_runners import ConcurrentTaskRunner
 from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
@@ -20,7 +23,7 @@ from processing_pipeline.stage_1_preprocess import (
 )
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
-    GEMINI_2_5_PRO,
+    GeminiModel,
     get_system_instruction_for_stage_1,
     get_output_schema_for_stage_1,
     get_detection_prompt_for_stage_1,
@@ -75,11 +78,12 @@ def __download_audio_file_from_s3(s3_client, file_path):
     return file_name
 
 
-@optional_task(log_prints=True)
-def transcribe_audio_file_with_gemini_2_5_flash(audio_file):
+@optional_task(log_prints=True, retries=3)
+def transcribe_audio_file_with_gemini(audio_file, model_name=GeminiModel.GEMINI_FLASH_LATEST) -> str:
+    print(f"Transcribing the audio file {audio_file} with {model_name}")
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
-    response = Stage1PreprocessTranscriptionExecutor.run(audio_file, gemini_key)
-    return json.loads(response)
+    response = Stage1PreprocessTranscriptionExecutor.run(audio_file, gemini_key, model_name)
+    return response["transcription"]
 
 
 @optional_task(log_prints=True)
@@ -143,28 +147,36 @@ def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_
 
 
 @optional_task(log_prints=True)
-def initial_disinformation_detection_with_gemini_2_5_pro(initial_transcription, metadata):
+def initial_disinformation_detection_with_gemini(
+    initial_transcription,
+    metadata,
+    model_name=GeminiModel.GEMINI_FLASH_LATEST,
+):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
-    response = Stage1PreprocessDetectionExecutor.run(gemini_key, initial_transcription, metadata)
-    return json.loads(response)
+    response = Stage1PreprocessDetectionExecutor.run(gemini_key, model_name, initial_transcription, metadata)
+    return response
 
 
 @optional_task(log_prints=True)
-def disinformation_detection_with_gemini_2_5_pro(timestamped_transcription, metadata):
+def disinformation_detection_with_gemini(
+    timestamped_transcription,
+    metadata,
+    model_name=GeminiModel.GEMINI_FLASH_LATEST,
+):
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     response = Stage1Executor.run(
         gemini_key=gemini_key,
+        model_name=model_name,
         timestamped_transcription=timestamped_transcription,
         metadata=metadata,
     )
-    json_response = json.loads(response)
-    flagged_snippets = json_response["flagged_snippets"]
+    flagged_snippets = response["flagged_snippets"]
 
     # Generate a uuid for each flagged snippet
     for snippet in flagged_snippets:
         snippet["uuid"] = str(uuid.uuid4())
 
-    return json_response
+    return response
 
 
 @optional_task(log_prints=True, retries=3)
@@ -203,8 +215,7 @@ def set_audio_file_status_error(supabase_client, audio_file_id, error_message):
 def process_audio_file(supabase_client, audio_file, local_file):
     try:
         # Transcribe the audio file with Google Gemini 2.5 Flash
-        flash_response = transcribe_audio_file_with_gemini_2_5_flash(local_file)
-        initial_transcription = flash_response["transcription"]
+        initial_transcription = transcribe_audio_file_with_gemini(local_file)
 
         # Get metadata of the transcription
         recorded_at = datetime.strptime(audio_file["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
@@ -217,8 +228,8 @@ def process_audio_file(supabase_client, audio_file, local_file):
             "time_zone": "UTC",
         }
 
-        # Detect disinformation from the initial transcription using Gemini 2.5 Pro
-        initial_detection_result = initial_disinformation_detection_with_gemini_2_5_pro(initial_transcription, metadata)
+        # Detect disinformation from the initial transcription using Gemini 2.5 Flash
+        initial_detection_result = initial_disinformation_detection_with_gemini(initial_transcription, metadata)
         print(f"Initial detection result:\n{json.dumps(initial_detection_result, indent=2)}\n")
         flag_snippets = initial_detection_result["flagged_snippets"]
 
@@ -241,7 +252,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
             try:
                 transcriptor = "gemini-2.5-pro"
                 timestamped_transcription = transcribe_audio_file_with_gemini_2_5_pro(local_file)
-            except ValueError as e:
+            except ValueError | ServerError as e:
                 print(
                     f"Failed to transcribe the audio file with Gemini 2.5 Pro: {e}\n"
                     "Falling back to the custom timestamped-transcript generator"
@@ -251,10 +262,11 @@ def process_audio_file(supabase_client, audio_file, local_file):
                     local_file
                 )
 
-            print("Processing the timestamped transcription with Gemini 2.5 Pro (Main detection phase)")
-            detection_result = disinformation_detection_with_gemini_2_5_pro(
+            print("Processing the timestamped transcription with Gemini Flash Latest (Main detection phase)")
+            detection_result = disinformation_detection_with_gemini(
                 timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                 metadata=metadata,
+                model_name=GeminiModel.GEMINI_FLASH_LATEST,
             )
             print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
 
@@ -425,7 +437,7 @@ def redo_main_detection(stage_1_llm_response_ids):
                 timestamped_transcription = stage_1_llm_response["timestamped_transcription"]
 
                 print("Processing the timestamped transcription with Gemini 2.5 Pro")
-                detection_result = disinformation_detection_with_gemini_2_5_pro(
+                detection_result = disinformation_detection_with_gemini(
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                 )
@@ -497,7 +509,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                 )
 
                 print("Processing the timestamped transcription with Gemini 2.5 Pro")
-                detection_result = disinformation_detection_with_gemini_2_5_pro(
+                detection_result = disinformation_detection_with_gemini(
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                 )
@@ -531,7 +543,7 @@ class Stage1Executor:
     OUTPUT_SCHEMA = get_output_schema_for_stage_1()
 
     @classmethod
-    def run(cls, gemini_key, timestamped_transcription, metadata):
+    def run(cls, gemini_key, model_name: GeminiModel, timestamped_transcription, metadata):
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
@@ -544,13 +556,14 @@ class Stage1Executor:
         )
 
         result = client.models.generate_content(
-            model=GEMINI_2_5_PRO,
+            model=model_name,
             contents=[user_prompt],
             config=GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=cls.OUTPUT_SCHEMA,
-                max_output_tokens=8192,
+                max_output_tokens=16384,
                 system_instruction=cls.SYSTEM_INSTRUCTION,
+                thinking_config=ThinkingConfig(thinking_budget=4096),
                 safety_settings=[
                     SafetySetting(
                         category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
@@ -575,4 +588,12 @@ class Stage1Executor:
                 ],
             ),
         )
-        return result.text
+
+        if not result.parsed:
+            finish_reason = result.candidates[0].finish_reason
+            if finish_reason == FinishReason.MAX_TOKENS:
+                raise ValueError("The response from Gemini was too long and was cut off.")
+            print(f"Response finish reason: {finish_reason}")
+            raise ValueError("No response from Gemini.")
+
+        return result.parsed

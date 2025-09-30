@@ -9,7 +9,7 @@ from prefect.task_runners import ConcurrentTaskRunner
 from google.genai.types import HarmCategory, HarmBlockThreshold, GenerateContentConfig, SafetySetting
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
-    GEMINI_2_5_PRO,
+    GeminiModel,
     get_system_instruction_for_stage_3,
     get_output_schema_for_stage_3,
     get_user_prompt_for_stage_3,
@@ -144,7 +144,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
         print(f"Metadata:\n{json.dumps(metadata, indent=2)}")
 
         pro_response = Stage3Executor.run(
-            gemini_key=gemini_key, model_name=GEMINI_2_5_PRO, audio_file=local_file, metadata=metadata
+            gemini_key=gemini_key, model_name=GeminiModel.GEMINI_2_5_PRO, audio_file=local_file, metadata=metadata
         )
 
         pro_response = json.loads(pro_response)
