@@ -20,7 +20,42 @@ BEGIN
         RETURN '[]'::jsonb;
     END IF;
 
-    WITH similar_snippets AS (
+    WITH
+    snippets_with_similarity AS (
+        SELECT
+            s.id,
+            1 - (se.embedding <=> source_embedding) as similarity
+        FROM snippet_embeddings se
+        JOIN snippets s ON s.id = se.snippet
+        WHERE
+            se.snippet != snippet_id
+            AND s.status = 'Processed'
+    ),
+    similar_snippets AS (
+        SELECT *
+        FROM snippets_with_similarity
+        WHERE similarity > match_threshold
+        ORDER BY similarity DESC
+        LIMIT match_count
+    ),
+    label_summary AS (
+        SELECT
+            sl.snippet,
+            COALESCE(
+                jsonb_agg(
+                    jsonb_build_object(
+                        'text', l.text,
+                        'text_spanish', l.text_spanish
+                    )
+                ),
+                '[]'::jsonb
+            ) AS labels
+        FROM snippet_labels sl
+        JOIN labels l ON l.id = sl.label
+        WHERE sl.snippet IN (SELECT id FROM similar_snippets)
+        GROUP BY sl.snippet
+    ),
+    final_snippets AS (
         SELECT
             s.id,
             s.title,
@@ -35,50 +70,32 @@ BEGIN
                 WHEN p_language = 'spanish' THEN s.summary ->> 'spanish'
                 ELSE s.summary ->> 'english'
             END AS summary,
-            1 - (se.embedding <=> source_embedding) as similarity,
-            jsonb_agg(l) as labels
-        FROM snippet_embeddings se
-        JOIN snippets s ON s.id = se.snippet
+            ss.similarity,
+            COALESCE(ls.labels, '[]'::jsonb) AS labels
+        FROM similar_snippets ss
+        JOIN snippets s ON s.id = ss.id
         JOIN audio_files a ON a.id = s.audio_file
-        LEFT JOIN snippet_labels sl ON s.id = sl.snippet
-        LEFT JOIN labels l ON sl.label = l.id
-        WHERE
-            se.snippet != snippet_id
-            AND 1 - (se.embedding <=> source_embedding) > match_threshold
-            AND s.status = 'Processed'
-        GROUP BY 
-            s.id,
-            s.title,
-            s.file_path,
-            s.recorded_at,
-            s.comment_count,
-            s.start_time,
-            a.radio_station_name,
-            a.radio_station_code,
-            a.location_state,
-            summary,
-            similarity
-        ORDER BY similarity DESC
-        LIMIT match_count
+        LEFT JOIN label_summary ls ON ss.id = ls.snippet
     )
     SELECT jsonb_agg(
         jsonb_build_object(
-            'id', ss.id,
-            'title', ss.title,
-            'radio_station_name', ss.radio_station_name,
-            'radio_station_code', ss.radio_station_code,
-            'location_state', ss.location_state,
-            'summary', ss.summary,
-            'labels', ss.labels,
-            'recorded_at', ss.recorded_at,
-            'comment_count', ss.comment_count,
-            'similarity', ss.similarity,
-            'file_path', ss.file_path,
-            'start_time', ss.start_time
+            'id', fs.id,
+            'title', fs.title,
+            'radio_station_name', fs.radio_station_name,
+            'radio_station_code', fs.radio_station_code,
+            'location_state', fs.location_state,
+            'summary', fs.summary,
+            'labels', fs.labels,
+            'recorded_at', fs.recorded_at,
+            'comment_count', fs.comment_count,
+            'similarity', fs.similarity,
+            'file_path', fs.file_path,
+            'start_time', fs.start_time
         )
     ) INTO result
-    FROM similar_snippets ss;
+    FROM final_snippets fs;
 
     RETURN COALESCE(result, '[]'::jsonb);
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET statement_timeout TO '30s';
