@@ -1,7 +1,5 @@
-import json
-import os
 from unittest import mock
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 import pytest
 from processing_pipeline.stage_3 import (
     fetch_a_specific_snippet_from_supabase,
@@ -11,15 +9,16 @@ from processing_pipeline.stage_3 import (
     get_metadata,
     process_snippet,
     in_depth_analysis,
-    Stage3Executor
+    Stage3Executor,
 )
 from processing_pipeline.constants import GeminiModel
+
 
 class TestStage3:
     @pytest.fixture
     def mock_supabase_client(self):
         """Create a mock Supabase client"""
-        with patch('processing_pipeline.stage_3.SupabaseClient') as MockSupabaseClient:
+        with patch("processing_pipeline.stage_3.SupabaseClient") as MockSupabaseClient:
             mock_client = Mock()
             mock_client.get_snippet_by_id.return_value = None
             mock_client.get_a_new_snippet_and_reserve_it.return_value = None
@@ -31,11 +30,10 @@ class TestStage3:
     @pytest.fixture
     def mock_s3_client(self):
         """Create a mock S3 client"""
-        with patch('boto3.client') as mock:
+        with patch("boto3.client") as mock:
             s3_client = Mock()
             mock.return_value = s3_client
             yield s3_client
-
 
     @pytest.fixture
     def mock_gemini_response(self):
@@ -49,15 +47,15 @@ class TestStage3:
             "disinformation_categories": [
                 {
                     "english": "Misinformation",
-                    "spanish": "Desinformación"
-                }
+                    "spanish": "Desinformación",
+                },
             ],
             "keywords_detected": ["keyword1", "keyword2"],
             "language": "es",
             "confidence_scores": {"accuracy": 0.9},
             "emotional_tone": "neutral",
             "context": "Test context",
-            "political_leaning": "neutral"
+            "political_leaning": "neutral",
         }
 
     @pytest.fixture
@@ -68,14 +66,16 @@ class TestStage3:
             "file_path": "test/path.mp3",
             "stage_1_llm_response": {
                 "detection_result": {
-                    "flagged_snippets": [{
-                        "uuid": "test-id",
-                        "transcription": "Test transcription",
-                        "keywords_detected": ["keyword1"],
-                        "explanation": "Test explanation",
-                        "start_time": "00:00:30",  # Added this
-                        "end_time": "00:01:30"     # Added this
-                    }]
+                    "flagged_snippets": [
+                        {
+                            "uuid": "test-id",
+                            "transcription": "Test transcription",
+                            "keywords_detected": ["keyword1"],
+                            "explanation": "Test explanation",
+                            "start_time": "00:00:30",  # Added this
+                            "end_time": "00:01:30",  # Added this
+                        }
+                    ]
                 }
             },
             "audio_file": {
@@ -84,12 +84,12 @@ class TestStage3:
                 "location_state": "Test State",
                 "location_city": "Test City",
                 "recorded_at": "2024-01-01T00:00:00Z",
-                "recording_day_of_week": "Monday"
+                "recording_day_of_week": "Monday",
             },
             "start_time": "00:00:30",
             "end_time": "00:01:30",
             "duration": "00:01:00",
-            "recorded_at": "2024-01-01T00:00:00+00:00"
+            "recorded_at": "2024-01-01T00:00:00+00:00",
         }
 
     def test_fetch_specific_snippet(self, mock_supabase_client):
@@ -102,7 +102,7 @@ class TestStage3:
         assert result == expected_response
         mock_supabase_client.get_snippet_by_id.assert_called_once_with(
             id="test-id",
-            select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("detection_result")'
+            select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("detection_result")',
         )
 
     def test_fetch_new_snippet(self, mock_supabase_client):
@@ -123,7 +123,7 @@ class TestStage3:
         mock_s3_client.download_file.assert_called_once_with(
             "test-bucket",
             "test/path.mp3",
-            "path.mp3"
+            "path.mp3",
         )
 
     def test_update_snippet(self, mock_supabase_client):
@@ -144,7 +144,7 @@ class TestStage3:
             context="Test context",
             political_leaning="neutral",
             status="Processed",
-            error_message=None
+            error_message=None,
         )
 
         mock_supabase_client.update_snippet.assert_called_once()
@@ -160,7 +160,7 @@ class TestStage3:
         assert result["end_time"] == "01:30"
         assert result["duration"] == "01:00"
 
-    @patch('google.genai.Client')
+    @patch("google.genai.Client")
     def test_process_snippet(self, mock_client_class, mock_supabase_client, sample_snippet, mock_gemini_response):
         """Test processing a snippet"""
         # Configure mock audio file
@@ -176,7 +176,7 @@ class TestStage3:
 
         # Configure mock response
         mock_result = Mock()
-        mock_result.text = json.dumps(mock_gemini_response)
+        mock_result.parsed = mock_gemini_response
         mock_client.models.generate_content.return_value = mock_result
 
         mock_client_class.return_value = mock_client
@@ -185,24 +185,24 @@ class TestStage3:
 
         # Verify update_snippet was called
         mock_supabase_client.update_snippet.assert_called_once_with(
-                id=sample_snippet["id"],
-                transcription=mock_gemini_response["transcription"],
-                translation=mock_gemini_response["translation"],
-                title=mock_gemini_response["title"],
-                summary=mock_gemini_response["summary"],
-                explanation=mock_gemini_response["explanation"],
-                disinformation_categories=mock_gemini_response["disinformation_categories"],
-                keywords_detected=mock_gemini_response["keywords_detected"],
-                language=mock_gemini_response["language"],
-                confidence_scores=mock_gemini_response["confidence_scores"],
-                emotional_tone=mock_gemini_response["emotional_tone"],
-                context=mock_gemini_response["context"],
-                political_leaning=mock_gemini_response["political_leaning"],
-                status="Ready for review",
-                error_message=None
+            id=sample_snippet["id"],
+            transcription=mock_gemini_response["transcription"],
+            translation=mock_gemini_response["translation"],
+            title=mock_gemini_response["title"],
+            summary=mock_gemini_response["summary"],
+            explanation=mock_gemini_response["explanation"],
+            disinformation_categories=mock_gemini_response["disinformation_categories"],
+            keywords_detected=mock_gemini_response["keywords_detected"],
+            language=mock_gemini_response["language"],
+            confidence_scores=mock_gemini_response["confidence_scores"],
+            emotional_tone=mock_gemini_response["emotional_tone"],
+            context=mock_gemini_response["context"],
+            political_leaning=mock_gemini_response["political_leaning"],
+            status="Ready for review",
+            error_message=None,
         )
 
-    @patch('google.genai.Client')
+    @patch("google.genai.Client")
     def test_process_snippet_error(self, mock_client_class, mock_supabase_client, sample_snippet):
         """Test processing snippet with error"""
         # Configure mock audio file
@@ -221,11 +221,9 @@ class TestStage3:
 
         process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
 
-        mock_supabase_client.set_snippet_status.assert_called_with(
-            sample_snippet["id"], "Error", "Test error"
-        )
+        mock_supabase_client.set_snippet_status.assert_called_with(sample_snippet["id"], "Error", "Test error")
 
-    @patch('google.genai.Client')
+    @patch("google.genai.Client")
     def test_stage_3_executor(self, mock_client_class):
         """Test Stage3Executor"""
         mock_audio_file = Mock()
@@ -239,31 +237,31 @@ class TestStage3:
         mock_client.files.delete = Mock()
 
         mock_result = Mock()
-        mock_result.text = json.dumps({"test": "response"})
+        mock_result.parsed = {"test": "response"}
         mock_client.models.generate_content.return_value = mock_result
 
         mock_client_class.return_value = mock_client
 
         result = Stage3Executor.run(
             gemini_key="test-key",
-            model_name=GeminiModel.GEMINI_2_5_PRO,
+            model_name=GeminiModel.GEMINI_FLASH_LATEST,
             audio_file="test.mp3",
-            metadata={"test": "metadata"}
+            metadata={"test": "metadata"},
         )
 
-        assert isinstance(json.loads(result), dict)
+        assert isinstance(result, dict)
 
     def test_stage_3_executor_without_api_key(self):
         """Test Stage3Executor without API key"""
         with pytest.raises(ValueError, match="Google Gemini API key was not set!"):
-            Stage3Executor.run(None, GeminiModel.GEMINI_2_5_PRO, "test.mp3", {})
+            Stage3Executor.run(None, GeminiModel.GEMINI_FLASH_LATEST, "test.mp3", {})
 
-    @patch('time.sleep')
+    @patch("time.sleep")
     def test_in_depth_analysis_flow(self, mock_sleep, mock_supabase_client, mock_s3_client, sample_snippet):
         """Test in-depth analysis flow"""
         mock_supabase_client.get_a_new_snippet_and_reserve_it.return_value = sample_snippet
 
-        with patch('os.remove'):
+        with patch("os.remove"):
             in_depth_analysis(snippet_ids=None, repeat=False)
 
             mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_called_once()
@@ -273,12 +271,12 @@ class TestStage3:
         """Test in-depth analysis with specific snippet IDs"""
         mock_supabase_client.get_snippet_by_id.return_value = sample_snippet
 
-        with patch('os.remove'):
+        with patch("os.remove"):
             in_depth_analysis(snippet_ids=["test-id"], repeat=False)
 
             mock_supabase_client.get_snippet_by_id.assert_called_once_with(
                 id="test-id",
-                select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("detection_result")'
+                select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("detection_result")',
             )
             mock_s3_client.download_file.assert_called_once()
 
@@ -288,12 +286,12 @@ class TestStage3:
         mock_supabase_client.get_a_new_snippet_and_reserve_it.side_effect = [
             sample_snippet,
             None,  # Second call returns None to end the loop
-            None   # Add an extra None to prevent StopIteration
+            None,  # Add an extra None to prevent StopIteration
         ]
 
-        with patch('os.remove'), \
-            patch('time.sleep') as mock_sleep, \
-            patch('processing_pipeline.stage_3.process_snippet') as mock_process:
+        with patch("os.remove"), \
+             patch("time.sleep") as mock_sleep, \
+             patch("processing_pipeline.stage_3.process_snippet") as mock_process:
 
             try:
                 in_depth_analysis(snippet_ids=None, repeat=True)
@@ -312,8 +310,14 @@ class TestStage3:
 
         mock_s3_client.download_file.assert_not_called()
 
-    @patch('google.genai.Client')
-    def test_process_snippet_no_disinformation_categories(self, mock_client_class, mock_supabase_client, sample_snippet, mock_gemini_response):
+    @patch("google.genai.Client")
+    def test_process_snippet_no_disinformation_categories(
+        self,
+        mock_client_class,
+        mock_supabase_client,
+        sample_snippet,
+        mock_gemini_response,
+    ):
         """Test processing snippet without disinformation categories"""
         mock_gemini_response["disinformation_categories"] = []
         mock_audio_file = Mock()
@@ -327,7 +331,7 @@ class TestStage3:
         mock_client.files.delete = Mock()
 
         mock_result = Mock()
-        mock_result.text = json.dumps(mock_gemini_response)
+        mock_result.parsed = mock_gemini_response
         mock_client.models.generate_content.return_value = mock_result
 
         mock_client_class.return_value = mock_client
@@ -337,9 +341,9 @@ class TestStage3:
         # Verify the snippet was updated with empty disinformation categories
         mock_supabase_client.update_snippet.assert_called_once()
         call_kwargs = mock_supabase_client.update_snippet.call_args.kwargs
-        assert call_kwargs['disinformation_categories'] == []
+        assert call_kwargs["disinformation_categories"] == []
 
-    @patch('google.genai.Client')
+    @patch("google.genai.Client")
     def test_process_snippet_invalid_response(self, mock_client_class, mock_supabase_client, sample_snippet):
         """Test processing snippet with invalid Gemini response"""
         mock_audio_file = Mock()
@@ -354,12 +358,11 @@ class TestStage3:
 
         mock_result = Mock()
         mock_result.text = "invalid json"
+        mock_result.parsed = None
         mock_client.models.generate_content.return_value = mock_result
 
         mock_client_class.return_value = mock_client
 
         process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
 
-        mock_supabase_client.set_snippet_status.assert_called_with(
-            sample_snippet["id"], "Error", mock.ANY
-        )
+        mock_supabase_client.set_snippet_status.assert_called_with(sample_snippet["id"], "Error", mock.ANY)
