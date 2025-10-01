@@ -4,14 +4,15 @@ import pytest
 from google.genai.types import HarmCategory, HarmBlockThreshold
 from processing_pipeline.stage_1_preprocess import (
     Stage1PreprocessTranscriptionExecutor,
-    Stage1PreprocessDetectionExecutor
+    Stage1PreprocessDetectionExecutor,
 )
-from processing_pipeline.constants import GEMINI_2_5_FLASH, GEMINI_2_5_PRO
+from processing_pipeline.constants import GeminiModel
+
 
 class TestStage1PreprocessTranscriptionExecutor:
     @pytest.fixture
     def mock_genai(self):
-        with patch('processing_pipeline.stage_1_preprocess.genai') as mock:
+        with patch("processing_pipeline.stage_1_preprocess.genai") as mock:
             # Mock Client and its methods
             mock_client = Mock()
             mock.Client.return_value = mock_client
@@ -50,15 +51,15 @@ class TestStage1PreprocessTranscriptionExecutor:
         args, kwargs = mock_client.models.generate_content.call_args
 
         # Check model parameter
-        assert kwargs['model'] == GEMINI_2_5_FLASH
+        assert kwargs["model"] == GeminiModel.GEMINI_2_5_FLASH
 
         # Check contents (audio file and prompt)
-        assert len(kwargs['contents']) == 2
-        assert kwargs['contents'][0] == mock_audio_file
-        assert isinstance(kwargs['contents'][1], str)  # USER_PROMPT
+        assert len(kwargs["contents"]) == 2
+        assert kwargs["contents"][0] == mock_audio_file
+        assert isinstance(kwargs["contents"][1], str)  # USER_PROMPT
 
         # Check config
-        config = kwargs['config']
+        config = kwargs["config"]
         assert config.response_mime_type == "application/json"
         assert config.response_schema == Stage1PreprocessTranscriptionExecutor.OUTPUT_SCHEMA
         assert config.max_output_tokens == 8192
@@ -84,7 +85,7 @@ class TestStage1PreprocessTranscriptionExecutor:
         mock_result.text = json.dumps({"transcription": "Test transcription"})
         mock_client.models.generate_content.return_value = mock_result
 
-        with patch('time.sleep') as mock_sleep:
+        with patch("time.sleep") as mock_sleep:
             result = Stage1PreprocessTranscriptionExecutor.run("test.mp3", "fake-api-key")
 
         # Verify sleep was called while processing
@@ -106,10 +107,11 @@ class TestStage1PreprocessTranscriptionExecutor:
         with pytest.raises(Exception, match="Upload failed"):
             Stage1PreprocessTranscriptionExecutor.run("test.mp3", "fake-api-key")
 
+
 class TestStage1PreprocessDetectionExecutor:
     @pytest.fixture
     def mock_genai(self):
-        with patch('processing_pipeline.stage_1_preprocess.genai') as mock:
+        with patch("processing_pipeline.stage_1_preprocess.genai") as mock:
             # Mock Client and its methods
             mock_client = Mock()
             mock.Client.return_value = mock_client
@@ -125,10 +127,7 @@ class TestStage1PreprocessDetectionExecutor:
 
         # Test data
         transcription = "Test transcription"
-        metadata = {
-            "radio_station": "Test Station",
-            "timestamp": "2024-01-01T00:00:00"
-        }
+        metadata = {"radio_station": "Test Station", "timestamp": "2024-01-01T00:00:00"}
 
         # Run the executor
         result = Stage1PreprocessDetectionExecutor.run("fake-api-key", transcription, metadata)
@@ -141,16 +140,16 @@ class TestStage1PreprocessDetectionExecutor:
         args, kwargs = mock_client.models.generate_content.call_args
 
         # Check model parameter
-        assert kwargs['model'] == GEMINI_2_5_PRO
+        assert kwargs["model"] == GeminiModel.GEMINI_2_5_PRO
 
         # Check contents (should have user prompt)
-        assert len(kwargs['contents']) == 1
-        assert isinstance(kwargs['contents'][0], str)  # User prompt
-        assert "Test transcription" in kwargs['contents'][0]
-        assert json.dumps(metadata, indent=2) in kwargs['contents'][0]
+        assert len(kwargs["contents"]) == 1
+        assert isinstance(kwargs["contents"][0], str)  # User prompt
+        assert "Test transcription" in kwargs["contents"][0]
+        assert json.dumps(metadata, indent=2) in kwargs["contents"][0]
 
         # Check config
-        config = kwargs['config']
+        config = kwargs["config"]
         assert config.response_mime_type == "application/json"
         assert config.response_schema == Stage1PreprocessDetectionExecutor.OUTPUT_SCHEMA
         assert config.max_output_tokens == 8192

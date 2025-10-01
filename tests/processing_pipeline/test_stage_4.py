@@ -14,7 +14,7 @@ from processing_pipeline.stage_4 import (
     fetch_a_specific_snippet_from_supabase,
     Stage4Executor,
 )
-from processing_pipeline.constants import GEMINI_2_5_PRO
+from processing_pipeline.constants import GeminiModel
 
 
 class TestStage4:
@@ -473,7 +473,7 @@ class TestStage4:
 
         # First call should be for main analysis
         assert mock_gemini_model.return_value.models.generate_content.call_args_list[0] == call(
-            model=GEMINI_2_5_PRO, contents=ANY, config=ANY
+            model=GeminiModel.GEMINI_2_5_PRO, contents=ANY, config=ANY
         )
 
     def test_stage_4_executor_without_valid_inputs(self):

@@ -252,7 +252,7 @@ def process_audio_file(supabase_client, audio_file, local_file):
             try:
                 transcriptor = "gemini-2.5-pro"
                 timestamped_transcription = transcribe_audio_file_with_gemini_2_5_pro(local_file)
-            except ValueError | ServerError as e:
+            except (ValueError, ServerError) as e:
                 print(
                     f"Failed to transcribe the audio file with Gemini 2.5 Pro: {e}\n"
                     "Falling back to the custom timestamped-transcript generator"
