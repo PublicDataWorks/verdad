@@ -1,8 +1,15 @@
 import time
 from google import genai
-from google.genai.types import SafetySetting, HarmCategory, HarmBlockThreshold, GenerateContentConfig, ThinkingConfig
+from google.genai.types import (
+    SafetySetting,
+    HarmCategory,
+    HarmBlockThreshold,
+    GenerateContentConfig,
+    ThinkingConfig,
+    FinishReason,
+)
 from processing_pipeline.constants import (
-    GEMINI_2_5_PRO,
+    GeminiModel,
     get_gemini_2_5_pro_transcription_generation_prompt,
 )
 
@@ -27,24 +34,30 @@ class Gemini25ProTranscriptionGenerator:
 
         try:
             result = client.models.generate_content(
-                model=GEMINI_2_5_PRO,
+                model=GeminiModel.GEMINI_2_5_PRO,
                 contents=[cls.USER_PROMPT, audio_file],
                 config=GenerateContentConfig(
-                    max_output_tokens=8192,
-                    thinking_config=ThinkingConfig(include_thoughts=False),
+                    max_output_tokens=16384,
+                    thinking_config=ThinkingConfig(thinking_budget=1024),
                     safety_settings=[
                         SafetySetting(
                             category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
                             threshold=HarmBlockThreshold.BLOCK_NONE,
                         ),
                         SafetySetting(
-                            category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=HarmBlockThreshold.BLOCK_NONE
+                            category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
                         ),
                         SafetySetting(
-                            category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_NONE
+                            category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
                         ),
                         SafetySetting(
                             category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
                             threshold=HarmBlockThreshold.BLOCK_NONE,
                         ),
                     ],
@@ -52,7 +65,11 @@ class Gemini25ProTranscriptionGenerator:
             )
 
             if not result.text:
-                raise ValueError("No content in response - likely truncated or blocked")
+                finish_reason = result.candidates[0].finish_reason if result.candidates else None
+                if finish_reason == FinishReason.MAX_TOKENS:
+                    raise ValueError("The response from Gemini was too long and was cut off.")
+                print(f"Response finish reason: {finish_reason}")
+                raise ValueError("No response from Gemini.")
 
             return result.text
         finally:

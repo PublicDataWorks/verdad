@@ -4,15 +4,17 @@ from unittest.mock import Mock, patch, call
 import uuid
 import pytest
 from google.api_core import exceptions as google_exceptions
+from google.genai.errors import ServerError
+from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_1 import (
     fetch_a_new_audio_file_from_supabase,
     fetch_audio_file_by_id,
     fetch_stage_1_llm_response_by_id,
     download_audio_file_from_s3,
-    transcribe_audio_file_with_gemini_2_5_flash,
+    transcribe_audio_file_with_gemini,
     transcribe_audio_file_with_custom_timestamped_transcription_generator,
-    initial_disinformation_detection_with_gemini_2_5_pro,
-    disinformation_detection_with_gemini_2_5_pro,
+    initial_disinformation_detection_with_gemini,
+    disinformation_detection_with_gemini,
     insert_stage_1_llm_response,
     process_audio_file,
     initial_disinformation_detection,
@@ -29,6 +31,7 @@ from processing_pipeline.stage_1 import (
 def mock_environment(monkeypatch):
     """Setup test environment variables"""
     env_vars = {
+        "PYTHONPATH": ".:./src",
         "GOOGLE_GEMINI_KEY": "test-key",
         "OPENAI_API_KEY": "test-key",
         "R2_BUCKET_NAME": "test-bucket",
@@ -72,7 +75,9 @@ def mock_genai():
     """Create a mock Gemini client"""
     with patch("processing_pipeline.stage_1.genai") as mock:
         client = Mock()
-        client.models.generate_content.return_value.text = json.dumps({"flagged_snippets": []})
+        mock_flagged_snippets = {"flagged_snippets": []}
+        client.models.generate_content.return_value.text = json.dumps(mock_flagged_snippets)
+        client.models.generate_content.return_value.parsed = mock_flagged_snippets
         mock.Client.return_value = client
         yield mock
 
@@ -138,18 +143,17 @@ class TestTranscriptionFunctions:
     def test_transcribe_with_gemini_success(self, mock_environment):
         """Test successful transcription with Gemini"""
         with patch("processing_pipeline.stage_1.Stage1PreprocessTranscriptionExecutor") as mock_executor:
-            mock_executor.run.return_value = json.dumps({"transcription": "Test transcription"})
+            mock_executor.run.return_value = {"transcription": "Test transcription"}
 
             # Call the function
-            result = transcribe_audio_file_with_gemini_2_5_flash("test.mp3")
+            result = transcribe_audio_file_with_gemini("test.mp3")
 
             # Verify the result
-            assert isinstance(result, dict)
-            assert "transcription" in result
-            assert result["transcription"] == "Test transcription"
+            assert isinstance(result, str)
+            assert result == "Test transcription"
 
             # Verify the executor was called
-            mock_executor.run.assert_called_once_with("test.mp3", "test-key")
+            mock_executor.run.assert_called_once_with("test.mp3", "test-key", GeminiModel.GEMINI_FLASH_LATEST)
 
     def test_transcribe_with_custom_generator_success(self, mock_environment):
         """Test successful transcription with custom generator"""
@@ -183,25 +187,30 @@ class TestDetectionFunctions:
     def test_initial_detection_success(self, mock_environment):
         """Test successful initial detection"""
         with patch("processing_pipeline.stage_1.Stage1PreprocessDetectionExecutor") as mock_executor:
-            mock_executor.run.return_value = json.dumps({"flagged_snippets": []})
+            mock_executor.run.return_value = {"flagged_snippets": []}
 
-            result = initial_disinformation_detection_with_gemini_2_5_pro("Test transcription", {"station": "test"})
-
-            assert isinstance(result, dict)
-            assert "flagged_snippets" in result
-            mock_executor.run.assert_called_once_with("test-key", "Test transcription", {"station": "test"})
-
-    def test_disinformation_detection_success(self, mock_environment):
-        """Test successful disinformation detection"""
-        with patch("processing_pipeline.stage_1.Stage1Executor") as mock_executor:
-            mock_executor.run.return_value = json.dumps({"flagged_snippets": []})
-
-            result = disinformation_detection_with_gemini_2_5_pro("Test transcription", {"station": "test"})
+            result = initial_disinformation_detection_with_gemini("Test transcription", {"station": "test"})
 
             assert isinstance(result, dict)
             assert "flagged_snippets" in result
             mock_executor.run.assert_called_once_with(
-                gemini_key="test-key", timestamped_transcription="Test transcription", metadata={"station": "test"}
+                "test-key", GeminiModel.GEMINI_FLASH_LATEST, "Test transcription", {"station": "test"}
+            )
+
+    def test_disinformation_detection_success(self, mock_environment):
+        """Test successful disinformation detection"""
+        with patch("processing_pipeline.stage_1.Stage1Executor") as mock_executor:
+            mock_executor.run.return_value = {"flagged_snippets": []}
+
+            result = disinformation_detection_with_gemini("Test transcription", {"station": "test"})
+
+            assert isinstance(result, dict)
+            assert "flagged_snippets" in result
+            mock_executor.run.assert_called_once_with(
+                gemini_key="test-key",
+                model_name=GeminiModel.GEMINI_FLASH_LATEST,
+                timestamped_transcription="Test transcription",
+                metadata={"station": "test"},
             )
 
 
@@ -209,20 +218,23 @@ class TestStage1Executor:
     def test_run_success(self, mock_environment, mock_genai):
         """Test successful execution of Stage1Executor"""
         mock_client = mock_genai.Client.return_value
-        mock_client.models.generate_content.return_value.text = json.dumps({"flagged_snippets": []})
+        mock_client.models.generate_content.return_value.parsed = {"flagged_snippets": []}
 
         result = Stage1Executor.run(
-            gemini_key="test-key", timestamped_transcription="Test transcription", metadata={"station": "test"}
+            gemini_key="test-key",
+            model_name=GeminiModel.GEMINI_FLASH_LATEST,
+            timestamped_transcription="Test transcription",
+            metadata={"station": "test"},
         )
 
-        assert isinstance(json.loads(result), dict)
+        assert isinstance(result, dict)
         mock_genai.Client.assert_called_once_with(api_key="test-key")
         mock_client.models.generate_content.assert_called_once()
 
     def test_run_without_api_key(self):
         """Test execution without API key"""
         with pytest.raises(ValueError, match="Google Gemini API key was not set!"):
-            Stage1Executor.run(None, "test", {})
+            Stage1Executor.run(None, GeminiModel.GEMINI_FLASH_LATEST, "test", {})
 
 
 class TestMainFlows:
@@ -268,9 +280,12 @@ class TestMainFlows:
         # Setup Gemini model response
         mock_client = mock_genai.Client.return_value
         mock_response = Mock()
-        mock_response.text = json.dumps(
-            {"flagged_snippets": [{"start_time": "00:00", "end_time": "00:30", "transcription": "Updated snippet"}]}
-        )
+        mock_response.parsed = {
+            "flagged_snippets": [
+                {"start_time": "00:00", "end_time": "00:30", "transcription": "Updated snippet"},
+            ],
+        }
+
         mock_client.models.generate_content.return_value = mock_response
 
         # Execute the flow
@@ -328,12 +343,12 @@ class TestHelperFunctions:
         }
 
         # Setup mocks
-        with patch("processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_flash") as mock_transcribe, patch(
-            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_2_5_pro"
+        with patch("processing_pipeline.stage_1.transcribe_audio_file_with_gemini") as mock_transcribe, patch(
+            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini"
         ) as mock_detect:
 
             # Setup mock responses
-            mock_transcribe.return_value = {"transcription": "Test transcription"}
+            mock_transcribe.return_value = "Test transcription"
             mock_detect.return_value = {"flagged_snippets": []}
 
             # Execute the function
@@ -370,7 +385,7 @@ class TestHelperFunctions:
         audio_file = {"id": 1}
 
         with patch(
-            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_flash",
+            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini",
             side_effect=Exception("Test error"),
         ):
             process_audio_file(mock_supabase_client, audio_file, "test.mp3")
@@ -494,7 +509,7 @@ class TestHelperFunctions:
 
         # Setup mock client
         mock_client = mock_genai.Client.return_value
-        mock_client.models.generate_content.return_value.text = json.dumps({"flagged_snippets": []})
+        mock_client.models.generate_content.return_value.parsed = {"flagged_snippets": []}
 
         for response in stage_1_llm_responses:
             mock_supabase_client.get_stage_1_llm_response_by_id.return_value = response
@@ -548,13 +563,13 @@ class TestHelperFunctions:
         }
 
         # Mock responses with no flagged snippets
-        mock_flash_response = {"transcription": "Test transcription"}
+        mock_flash_response = "Test transcription"
         mock_detection_response = {"flagged_snippets": []}
 
         with patch(
-            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_flash", return_value=mock_flash_response
+            "processing_pipeline.stage_1.transcribe_audio_file_with_gemini", return_value=mock_flash_response
         ), patch(
-            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_2_5_pro",
+            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini",
             return_value=mock_detection_response,
         ):
 
@@ -578,23 +593,26 @@ class TestHelperFunctions:
         """Test Stage1Executor"""
         mock_client = mock_genai.Client.return_value
         mock_response = Mock()
-        mock_response.text = json.dumps({"test": "response"})
+        mock_response.parsed = {"test": "response"}
         mock_client.models.generate_content.return_value = mock_response
 
         result = Stage1Executor.run(
-            gemini_key="test-key", timestamped_transcription="Test transcription", metadata={"test": "metadata"}
+            gemini_key="test-key",
+            model_name=GeminiModel.GEMINI_FLASH_LATEST,
+            timestamped_transcription="Test transcription",
+            metadata={"test": "metadata"},
         )
 
         # Verify behavior
-        assert isinstance(json.loads(result), dict)
+        assert isinstance(result, dict)
         mock_genai.Client.assert_called_once_with(api_key="test-key")
         mock_client.models.generate_content.assert_called_once()
 
         # Verify the content of the request
         args, kwargs = mock_client.models.generate_content.call_args
-        assert len(kwargs['contents']) == 1  # Should have one argument (user prompt)
-        assert "Test transcription" in kwargs['contents'][0]  # Should contain the transcription
-        assert json.dumps({"test": "metadata"}, indent=2) in kwargs['contents'][0]  # Should contain the metadata
+        assert len(kwargs["contents"]) == 1  # Should have one argument (user prompt)
+        assert "Test transcription" in kwargs["contents"][0]  # Should contain the transcription
+        assert json.dumps({"test": "metadata"}, indent=2) in kwargs["contents"][0]  # Should contain the metadata
 
     def test_initial_disinformation_detection_specific_file(self, mock_supabase_client, mock_s3_client):
         """Test initial disinformation detection with specific file"""
@@ -638,19 +656,17 @@ class TestHelperFunctions:
 
         # Configure mock response with Unicode characters
         mock_client = mock_genai.Client.return_value
-        mock_client.models.generate_content.return_value.text = json.dumps(
-            {
-                "flagged_snippets": [
-                    {
-                        "uuid": str(uuid.uuid4()),
-                        "transcription": "Unicode text: áéíóú",
-                        "explanation": "Test explanation with ñ",
-                    }
-                ]
-            }
-        )
+        mock_client.models.generate_content.return_value.parsed = {
+            "flagged_snippets": [
+                {
+                    "uuid": str(uuid.uuid4()),
+                    "transcription": "Unicode text: áéíóú",
+                    "explanation": "Test explanation with ñ",
+                },
+            ]
+        }
 
-        result = disinformation_detection_with_gemini_2_5_pro(
+        result = disinformation_detection_with_gemini(
             timestamped_transcription=timestamped_transcription, metadata=metadata
         )
 
@@ -693,17 +709,15 @@ class TestHelperFunctions:
         ]
 
         mock_gemini_response = Mock()
-        mock_gemini_response.text = json.dumps(
-            {
-                "flagged_snippets": [
-                    {
-                        "uuid": str(uuid.uuid4()),
-                        "transcription": "Test transcription",
-                        "explanation": "Test explanation",
-                    }
-                ]
-            }
-        )
+        mock_gemini_response.parsed = {
+            "flagged_snippets": [
+                {
+                    "uuid": str(uuid.uuid4()),
+                    "transcription": "Test transcription",
+                    "explanation": "Test explanation",
+                }
+            ]
+        }
 
         with patch("os.remove"), patch(
             "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_pro"
@@ -797,19 +811,19 @@ class TestHelperFunctions:
             "recording_day_of_week": "Monday",
         }
 
-        with patch("processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_flash") as mock_flash, patch(
+        with patch("processing_pipeline.stage_1.transcribe_audio_file_with_gemini") as mock_flash, patch(
             "processing_pipeline.stage_1.transcribe_audio_file_with_gemini_2_5_pro"
         ) as mock_gemini_2_5_pro, patch(
             "processing_pipeline.stage_1.transcribe_audio_file_with_custom_timestamped_transcription_generator"
         ) as mock_custom, patch(
-            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini_2_5_pro"
+            "processing_pipeline.stage_1.initial_disinformation_detection_with_gemini"
         ) as mock_initial_detect, patch(
-            "processing_pipeline.stage_1.disinformation_detection_with_gemini_2_5_pro"
+            "processing_pipeline.stage_1.disinformation_detection_with_gemini"
         ) as mock_main_detect:
 
             # Setup mock responses
-            mock_flash.return_value = {"transcription": "Test transcription"}
-            mock_gemini_2_5_pro.side_effect = google_exceptions.ResourceExhausted("Rate limit exceeded")
+            mock_flash.return_value = "Test transcription"
+            mock_gemini_2_5_pro.side_effect = ServerError(500, {"error": {"message": "Test error"}})
             mock_custom.return_value = {"timestamped_transcription": "Test custom transcription"}
             mock_initial_detect.return_value = {"flagged_snippets": [{"uuid": "test-uuid"}]}
             mock_main_detect.return_value = {"flagged_snippets": []}

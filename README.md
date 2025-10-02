@@ -176,7 +176,7 @@ snippets {
 
 ### Prerequisites
 
--   Python 3.8+
+-   Python 3.11+
 -   PostgreSQL 13+
 -   FFmpeg
 -   PulseAudio

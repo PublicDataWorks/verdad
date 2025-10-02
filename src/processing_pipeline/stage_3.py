@@ -6,10 +6,17 @@ import json
 import boto3
 
 from prefect.task_runners import ConcurrentTaskRunner
-from google.genai.types import HarmCategory, HarmBlockThreshold, GenerateContentConfig, SafetySetting
+from google.genai.types import (
+    FinishReason,
+    GenerateContentConfig,
+    HarmBlockThreshold,
+    HarmCategory,
+    SafetySetting,
+    ThinkingConfig,
+)
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
-    GEMINI_2_5_PRO,
+    GeminiModel,
     get_system_instruction_for_stage_3,
     get_output_schema_for_stage_3,
     get_user_prompt_for_stage_3,
@@ -138,16 +145,17 @@ def __get_metadata(snippet):
 @optional_task(log_prints=True)
 def process_snippet(supabase_client, snippet, local_file, gemini_key):
     try:
-        print(f"Processing snippet: {local_file} with Gemini Pro 1.5")
+        print(f"Processing snippet: {local_file} with Gemini 2.5 Flash")
 
         metadata = get_metadata(snippet)
         print(f"Metadata:\n{json.dumps(metadata, indent=2)}")
 
         pro_response = Stage3Executor.run(
-            gemini_key=gemini_key, model_name=GEMINI_2_5_PRO, audio_file=local_file, metadata=metadata
+            gemini_key=gemini_key,
+            model_name=GeminiModel.GEMINI_FLASH_LATEST,
+            audio_file=local_file,
+            metadata=metadata,
         )
-
-        pro_response = json.loads(pro_response)
 
         update_snippet_in_supabase(
             supabase_client=supabase_client,
@@ -264,7 +272,8 @@ class Stage3Executor:
                     response_mime_type="application/json",
                     response_schema=cls.OUTPUT_SCHEMA,
                     system_instruction=cls.SYSTEM_INSTRUCTION,
-                    max_output_tokens=8192,
+                    max_output_tokens=16384,
+                    thinking_config=ThinkingConfig(thinking_budget=4096),
                     safety_settings=[
                         SafetySetting(
                             category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
@@ -282,9 +291,21 @@ class Stage3Executor:
                             category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
                             threshold=HarmBlockThreshold.BLOCK_NONE,
                         ),
+                        SafetySetting(
+                            category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                            threshold=HarmBlockThreshold.BLOCK_NONE,
+                        ),
                     ],
                 ),
             )
-            return result.text
+
+            if not result.parsed:
+                finish_reason = result.candidates[0].finish_reason
+                if finish_reason == FinishReason.MAX_TOKENS:
+                    raise ValueError("The response from Gemini was too long and was cut off.")
+                print(f"Response finish reason: {finish_reason}")
+                raise ValueError("No response from Gemini.")
+
+            return result.parsed
         finally:
             client.files.delete(name=audio_file.name)
