@@ -436,7 +436,7 @@ def redo_main_detection(stage_1_llm_response_ids):
             else:
                 timestamped_transcription = stage_1_llm_response["timestamped_transcription"]
 
-                print("Processing the timestamped transcription with Gemini 2.5 Pro")
+                print("Processing the timestamped transcription with Gemini Flash Latest")
                 detection_result = disinformation_detection_with_gemini(
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
