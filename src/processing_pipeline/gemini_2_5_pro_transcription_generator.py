@@ -65,7 +65,7 @@ class Gemini25ProTranscriptionGenerator:
             )
 
             if not result.text:
-                finish_reason = result.candidates[0].finish_reason
+                finish_reason = result.candidates[0].finish_reason if result.candidates else None
                 if finish_reason == FinishReason.MAX_TOKENS:
                     raise ValueError("The response from Gemini was too long and was cut off.")
                 print(f"Response finish reason: {finish_reason}")
