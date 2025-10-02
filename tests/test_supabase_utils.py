@@ -696,7 +696,7 @@ class TestSupabaseClient:
                 "status": "Processed",
                 "error_message": None,
                 "reviewed_at": ANY,
-                "reviewed_by": GeminiModel.GEMINI_2_5_PRO,
+                "reviewed_by": GeminiModel.GEMINI_2_5_PRO.value,
             }
         )
         assert response == expected_response
