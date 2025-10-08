@@ -4,15 +4,19 @@ import time
 from google import genai
 import json
 import boto3
+from pydantic import ValidationError
 
 from prefect.task_runners import ConcurrentTaskRunner
 from google.genai.types import (
+    File,
     FinishReason,
     GenerateContentConfig,
+    GoogleSearch,
     HarmBlockThreshold,
     HarmCategory,
     SafetySetting,
     ThinkingConfig,
+    Tool,
 )
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
@@ -21,6 +25,7 @@ from processing_pipeline.constants import (
     get_output_schema_for_stage_3,
     get_user_prompt_for_stage_3,
 )
+from processing_pipeline.stage_3_models import Stage3Output
 from utils import optional_flow, optional_task
 
 
@@ -79,6 +84,7 @@ def update_snippet_in_supabase(
     emotional_tone,
     context,
     political_leaning,
+    grounding_metadata,
     status,
     error_message,
 ):
@@ -96,6 +102,7 @@ def update_snippet_in_supabase(
         emotional_tone=emotional_tone,
         context=context,
         political_leaning=political_leaning,
+        grounding_metadata=grounding_metadata,
         status=status,
         error_message=error_message,
     )
@@ -150,7 +157,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
         metadata = get_metadata(snippet)
         print(f"Metadata:\n{json.dumps(metadata, indent=2)}")
 
-        pro_response = Stage3Executor.run(
+        response, grounding_metadata = Stage3Executor.run(
             gemini_key=gemini_key,
             model_name=GeminiModel.GEMINI_FLASH_LATEST,
             audio_file=local_file,
@@ -160,18 +167,19 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
         update_snippet_in_supabase(
             supabase_client=supabase_client,
             snippet_id=snippet["id"],
-            transcription=pro_response["transcription"],
-            translation=pro_response["translation"],
-            title=pro_response["title"],
-            summary=pro_response["summary"],
-            explanation=pro_response["explanation"],
-            disinformation_categories=pro_response["disinformation_categories"],
-            keywords_detected=pro_response["keywords_detected"],
-            language=pro_response["language"],
-            confidence_scores=pro_response["confidence_scores"],
-            emotional_tone=pro_response["emotional_tone"],
-            context=pro_response["context"],
-            political_leaning=pro_response["political_leaning"],
+            transcription=response["transcription"],
+            translation=response["translation"],
+            title=response["title"],
+            summary=response["summary"],
+            explanation=response["explanation"],
+            disinformation_categories=response["disinformation_categories"],
+            keywords_detected=response["keywords_detected"],
+            language=response["language"],
+            confidence_scores=response["confidence_scores"],
+            emotional_tone=response["emotional_tone"],
+            context=response["context"],
+            political_leaning=response["political_leaning"],
+            grounding_metadata=grounding_metadata,
             status="Ready for review",
             error_message=None,
         )
@@ -246,18 +254,41 @@ class Stage3Executor:
     OUTPUT_SCHEMA = get_output_schema_for_stage_3()
 
     @classmethod
-    def run(cls, gemini_key, model_name, audio_file, metadata):
+    def run(
+        cls,
+        gemini_key: str,
+        model_name: GeminiModel,
+        audio_file: str,
+        metadata: dict,
+    ):
+        """
+        Main execution method for Stage 3 analysis.
+
+        Performs two-stage processing with validation optimization:
+        1. Step 1: Analyze audio with Google Search enabled
+        2. Validate: Try to validate response with Pydantic model
+        3. Step 2 (conditional): If validation fails, restructure with response_schema
+
+        Args:
+            gemini_key: Google Gemini API key
+            model_name: Name of the Gemini model to use
+            audio_file: Path to the audio file
+            metadata: Metadata dictionary for the audio clip
+
+        Returns:
+            dict: Structured and validated analysis output
+        """
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
         client = genai.Client(api_key=gemini_key)
 
         # Upload the audio file and wait for it to finish processing
-        audio_file = client.files.upload(file=audio_file)
-        while audio_file.state.name == "PROCESSING":
+        uploaded_audio_file = client.files.upload(file=audio_file)
+        while uploaded_audio_file.state.name == "PROCESSING":
             print("Processing the uploaded audio file...")
             time.sleep(1)
-            audio_file = client.files.get(name=audio_file.name)
+            uploaded_audio_file = client.files.get(name=uploaded_audio_file.name)
 
         # Prepare the user prompt
         user_prompt = (
@@ -265,47 +296,161 @@ class Stage3Executor:
         )
 
         try:
-            result = client.models.generate_content(
-                model=model_name,
-                contents=[audio_file, user_prompt],
-                config=GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=cls.OUTPUT_SCHEMA,
-                    system_instruction=cls.SYSTEM_INSTRUCTION,
-                    max_output_tokens=16384,
-                    thinking_config=ThinkingConfig(thinking_budget=4096),
-                    safety_settings=[
-                        SafetySetting(
-                            category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                            threshold=HarmBlockThreshold.BLOCK_NONE,
-                        ),
-                        SafetySetting(
-                            category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                            threshold=HarmBlockThreshold.BLOCK_NONE,
-                        ),
-                        SafetySetting(
-                            category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                            threshold=HarmBlockThreshold.BLOCK_NONE,
-                        ),
-                        SafetySetting(
-                            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                            threshold=HarmBlockThreshold.BLOCK_NONE,
-                        ),
-                        SafetySetting(
-                            category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-                            threshold=HarmBlockThreshold.BLOCK_NONE,
-                        ),
-                    ],
-                ),
+            # Step 1: Analyze with Google Search
+            analysis_text, grounding_metadata = cls.__analyze_with_search(
+                client,
+                model_name,
+                user_prompt,
+                uploaded_audio_file,
             )
 
-            if not result.parsed:
-                finish_reason = result.candidates[0].finish_reason
-                if finish_reason == FinishReason.MAX_TOKENS:
-                    raise ValueError("The response from Gemini was too long and was cut off.")
-                print(f"Response finish reason: {finish_reason}")
-                raise ValueError("No response from Gemini.")
+            # Try to validate with Pydantic model first
+            validated_output = cls.__validate_with_pydantic(analysis_text)
 
-            return result.parsed
+            if validated_output:
+                return validated_output, grounding_metadata
+
+            # Step 2: Structure with response_schema (if validation failed)
+            return cls.__structure_with_schema(client, analysis_text), grounding_metadata
         finally:
-            client.files.delete(name=audio_file.name)
+            client.files.delete(name=uploaded_audio_file.name)
+
+    @classmethod
+    def __analyze_with_search(
+        cls,
+        client: genai.Client,
+        model_name: GeminiModel,
+        user_prompt: str,
+        audio_file: File,
+    ):
+        """
+        Step 1: Analyze audio with Google Search tool enabled.
+
+        Returns:
+            str: The response text from Gemini
+        """
+        print("Analyzing audio with web search...")
+
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[user_prompt, audio_file],
+            config=GenerateContentConfig(
+                system_instruction=cls.SYSTEM_INSTRUCTION,
+                max_output_tokens=16384,
+                tools=[Tool(google_search=GoogleSearch())],
+                thinking_config=ThinkingConfig(thinking_budget=4096),
+                safety_settings=cls.__get_safety_settings(),
+            ),
+        )
+
+        grounding_metadata = str(response.candidates[0].grounding_metadata) if response.candidates else None
+
+        if not response.text:
+            finish_reason = response.candidates[0].finish_reason
+            if finish_reason == FinishReason.MAX_TOKENS:
+                raise ValueError("The response from Gemini was too long and was cut off in step 1.")
+            print(f"Response finish reason: {finish_reason}")
+            raise ValueError("No response from Gemini in step 1.")
+
+        return response.text, grounding_metadata
+
+    @classmethod
+    def __validate_with_pydantic(cls, response_text: str):
+        """
+        Attempts to validate the response text with the Pydantic model.
+
+        Returns:
+            dict: Validated and structured output if successful
+            None: If validation fails
+        """
+        try:
+            print("Attempting to validate response with Pydantic model...")
+            start_idx = response_text.find("{")
+            end_idx = response_text.rfind("}")
+
+            if start_idx == -1 or end_idx == -1:
+                print("No JSON object found in the response.")
+                return None
+
+            parsed = Stage3Output.model_validate_json(response_text[start_idx : end_idx + 1])
+            print("Validation successful - returning structured output")
+            return parsed.model_dump()
+        except ValidationError as e:
+            print(f"Validation failed: {e}")
+            return None
+
+    @classmethod
+    def __structure_with_schema(
+        cls,
+        client: genai.Client,
+        analysis_text: str,
+    ):
+        """
+        Step 2: Structure the analysis results using response_schema.
+
+        Returns:
+            dict: Structured and validated output
+        """
+        print("Restructuring response with schema validation...")
+
+        system_instruction = """You are a helpful assistant whose task is to convert provided text into a valid JSON object following a given schema. Your responsibilities are:
+
+1. **Validation**: Check if the provided text can be converted into a valid JSON object that adheres to the specified schema.
+2. **Conversion**:
+    - If the text is convertible, convert it into a valid JSON object according to the schema.
+    - Set field `"is_convertible": true` in the JSON object.
+3. **Error Handling**:
+    - If the text is not convertible (e.g., missing fields, incorrect data types), return a JSON object with the field `"is_convertible": false`."""
+
+        user_prompt = f"Please structure the following analysis text into the required JSON format:\n\n{analysis_text}"
+
+        response = client.models.generate_content(
+            model=GeminiModel.GEMINI_FLASH_LATEST,
+            contents=[user_prompt],
+            config=GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=cls.OUTPUT_SCHEMA,
+                system_instruction=system_instruction,
+                max_output_tokens=8192,
+                thinking_config=ThinkingConfig(thinking_budget=0),
+                safety_settings=cls.__get_safety_settings(),
+            ),
+        )
+
+        parsed_response = response.parsed
+
+        if not parsed_response:
+            finish_reason = response.candidates[0].finish_reason if response.candidates else None
+            if finish_reason == FinishReason.MAX_TOKENS:
+                raise ValueError("The response from Gemini was too long and was cut off in step 2.")
+            raise ValueError(f"No response from Gemini in step 2. Response finished with reason: {finish_reason}")
+
+        if not parsed_response["is_convertible"]:
+            raise ValueError("[Stage 3] The response from Gemini could not be converted to the required schema.")
+
+        return parsed_response
+
+    @classmethod
+    def __get_safety_settings(cls):
+        return [
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=HarmBlockThreshold.BLOCK_NONE,
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=HarmBlockThreshold.BLOCK_NONE,
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=HarmBlockThreshold.BLOCK_NONE,
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=HarmBlockThreshold.BLOCK_NONE,
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                threshold=HarmBlockThreshold.BLOCK_NONE,
+            ),
+        ]

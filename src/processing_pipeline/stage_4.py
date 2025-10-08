@@ -10,6 +10,7 @@ from google.genai.types import (
     HarmBlockThreshold,
     HarmCategory,
     SafetySetting,
+    ThinkingConfig,
     Tool,
 )
 from prefect.task_runners import ConcurrentTaskRunner
@@ -277,7 +278,6 @@ class Stage4Executor:
             raise ValueError("Google Gemini API key was not set!")
 
         client = genai.Client(api_key=gemini_key)
-        model_id = GeminiModel.GEMINI_2_5_PRO
 
         # Prepare the user prompt
         user_prompt = (
@@ -296,12 +296,13 @@ Now, please convert the following text into a valid JSON object:\n\n"""
         )
 
         response = client.models.generate_content(
-            model=model_id,
+            model=GeminiModel.GEMINI_FLASH_LATEST,
             contents=user_prompt,
             config=GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=cls.OUTPUT_SCHEMA,
                 max_output_tokens=8192,
+                thinking_config=ThinkingConfig(thinking_budget=0),
                 safety_settings=[
                     SafetySetting(
                         category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
