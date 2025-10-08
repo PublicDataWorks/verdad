@@ -15,6 +15,10 @@
         "political_leaning"
     ],
     "properties": {
+        "is_convertible": {
+            "type": "boolean",
+            "description": "Indicates whether the provided text can be converted into a valid JSON object according to the given schema. Only use when asked to convert provided text into a valid JSON object."
+        },
         "transcription": {
             "type": "string",
             "description": "Transcription of the entire audio clip in the original language."

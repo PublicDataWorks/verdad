@@ -197,6 +197,7 @@ class SupabaseClient:
         emotional_tone,
         context,
         political_leaning,
+        grounding_metadata,
         status,
         error_message
     ):
@@ -216,6 +217,7 @@ class SupabaseClient:
                     "emotional_tone": emotional_tone,
                     "context": context,
                     "political_leaning": political_leaning,
+                    "grounding_metadata": grounding_metadata,
                     "previous_analysis": None,
                     "status": status,
                     "error_message": error_message,

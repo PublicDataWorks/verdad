@@ -143,6 +143,7 @@ class TestStage3:
             emotional_tone="neutral",
             context="Test context",
             political_leaning="neutral",
+            grounding_metadata=None,
             status="Processed",
             error_message=None,
         )
@@ -160,26 +161,10 @@ class TestStage3:
         assert result["end_time"] == "01:30"
         assert result["duration"] == "01:00"
 
-    @patch("google.genai.Client")
-    def test_process_snippet(self, mock_client_class, mock_supabase_client, sample_snippet, mock_gemini_response):
+    @patch("processing_pipeline.stage_3.Stage3Executor.run")
+    def test_process_snippet(self, mock_run, mock_supabase_client, sample_snippet, mock_gemini_response):
         """Test processing a snippet"""
-        # Configure mock audio file
-        mock_audio_file = Mock()
-        mock_audio_file.state.name = "PROCESSED"
-        mock_audio_file.name = "test-audio-file"
-
-        # Configure mock client
-        mock_client = Mock()
-        mock_client.files.upload.return_value = mock_audio_file
-        mock_client.files.get.return_value = mock_audio_file
-        mock_client.files.delete = Mock()
-
-        # Configure mock response
-        mock_result = Mock()
-        mock_result.parsed = mock_gemini_response
-        mock_client.models.generate_content.return_value = mock_result
-
-        mock_client_class.return_value = mock_client
+        mock_run.return_value = (mock_gemini_response, "test_grounding_metadata")
 
         process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
 
@@ -198,6 +183,7 @@ class TestStage3:
             emotional_tone=mock_gemini_response["emotional_tone"],
             context=mock_gemini_response["context"],
             political_leaning=mock_gemini_response["political_leaning"],
+            grounding_metadata="test_grounding_metadata",
             status="Ready for review",
             error_message=None,
         )
@@ -236,9 +222,17 @@ class TestStage3:
         mock_client.files.get.return_value = mock_audio_file
         mock_client.files.delete = Mock()
 
-        mock_result = Mock()
-        mock_result.parsed = {"test": "response"}
-        mock_client.models.generate_content.return_value = mock_result
+        # Mock the analysis response with grounding metadata
+        mock_analysis_response = Mock()
+        mock_analysis_response.text = '{"test": "response"}'
+        mock_analysis_response.candidates = [Mock(grounding_metadata="test_grounding_metadata")]
+
+        # Mock the structured response
+        mock_structured_response = Mock()
+        mock_structured_response.parsed = {"test": "response", "is_convertible": True}
+
+        # Return different responses for different calls
+        mock_client.models.generate_content.side_effect = [mock_analysis_response, mock_structured_response]
 
         mock_client_class.return_value = mock_client
 
@@ -249,7 +243,12 @@ class TestStage3:
             metadata={"test": "metadata"},
         )
 
-        assert isinstance(result, dict)
+        # Result should be a tuple (response, grounding_metadata)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        response, grounding_metadata = result
+        assert isinstance(response, dict)
+        assert grounding_metadata is not None
 
     def test_stage_3_executor_without_api_key(self):
         """Test Stage3Executor without API key"""
@@ -310,31 +309,18 @@ class TestStage3:
 
         mock_s3_client.download_file.assert_not_called()
 
-    @patch("google.genai.Client")
+    @patch("processing_pipeline.stage_3.Stage3Executor.run")
     def test_process_snippet_no_disinformation_categories(
         self,
-        mock_client_class,
+        mock_run,
         mock_supabase_client,
         sample_snippet,
         mock_gemini_response,
     ):
         """Test processing snippet without disinformation categories"""
         mock_gemini_response["disinformation_categories"] = []
-        mock_audio_file = Mock()
-        mock_audio_file.state.name = "PROCESSED"
-        mock_audio_file.name = "test-audio-file"
-
-        # Configure mock client
-        mock_client = Mock()
-        mock_client.files.upload.return_value = mock_audio_file
-        mock_client.files.get.return_value = mock_audio_file
-        mock_client.files.delete = Mock()
-
-        mock_result = Mock()
-        mock_result.parsed = mock_gemini_response
-        mock_client.models.generate_content.return_value = mock_result
-
-        mock_client_class.return_value = mock_client
+        # Mock Stage3Executor.run to return a tuple (response, grounding_metadata)
+        mock_run.return_value = (mock_gemini_response, "test_grounding_metadata")
 
         process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
 
