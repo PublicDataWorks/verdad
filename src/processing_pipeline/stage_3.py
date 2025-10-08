@@ -425,7 +425,7 @@ class Stage3Executor:
                 raise ValueError("The response from Gemini was too long and was cut off in step 2.")
             raise ValueError(f"No response from Gemini in step 2. Response finished with reason: {finish_reason}")
 
-        if not parsed_response["is_convertible"]:
+        if not parsed_response.get("is_convertible"):
             raise ValueError("[Stage 3] The response from Gemini could not be converted to the required schema.")
 
         return parsed_response
