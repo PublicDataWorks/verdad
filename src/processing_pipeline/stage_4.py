@@ -26,7 +26,7 @@ from utils import optional_flow, optional_task
 
 
 @optional_task(log_prints=True)
-def prepare_snippet_for_review(snippet_json):
+def prepare_snippet_for_review(supabase_client, snippet_json):
     analysis_json = {
         "translation": snippet_json["translation"],
         "title": snippet_json["title"],
@@ -42,9 +42,23 @@ def prepare_snippet_for_review(snippet_json):
 
     recorded_at_str = analysis_json.pop("recorded_at", None)
     recorded_at = datetime.strptime(recorded_at_str, "%Y-%m-%dT%H:%M:%S+00:00")
+
+    # Extract additional audio file metadata
+    audio_file = supabase_client.get_audio_file_by_id(
+        snippet_json["audio_file"],
+        select="location_city,location_state,radio_station_code,radio_station_name",
+    )
+
+    print(f"Audio file metadata: {audio_file}")
+
     metadata = {
         "recorded_at": recorded_at.strftime("%B %-d, %Y %-I:%M %p"),
         "recording_day_of_week": recorded_at.strftime("%A"),
+        "location_city": audio_file.get("location_city"),
+        "location_state": audio_file.get("location_state"),
+        "radio_station_code": audio_file.get("radio_station_code"),
+        "radio_station_name": audio_file.get("radio_station_name"),
+        "time_zone": "UTC",
     }
 
     transcription = snippet_json["transcription"]
@@ -101,7 +115,11 @@ def process_snippet(supabase_client, snippet):
             backup_snippet_analysis(supabase_client, snippet)
             previous_analysis = snippet
 
-        transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(previous_analysis)
+        transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(
+            supabase_client,
+            previous_analysis,
+        )
+
         print(
             f"TRANSCRIPTION:\n{transcription}\n\n"
             f"DISINFORMATION SNIPPET:\n{disinformation_snippet}\n\n"
