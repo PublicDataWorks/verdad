@@ -24,7 +24,12 @@ You will receive **four inputs**:
     ```json
     {
         "recorded_at": "Month DD, YYYY HH:MM AM/PM", // Time is in UTC, e.g., "December 3, 2024 11:59 AM"
-        "recording_day_of_week": "Day of the Week" // e.g., "Tuesday"
+        "recording_day_of_week": "Day of the Week", // e.g., "Tuesday"
+        "location_city": "City",
+        "location_state": "State",
+        "radio_station_code": "Station Code",
+        "radio_station_name": "Station Name",
+        "time_zone": "UTC"
     }
     ```
 
