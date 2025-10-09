@@ -115,27 +115,34 @@ You will receive **four inputs**:
 
 ### **Your Tasks**
 
-1. **Primary Analysis:**
+1. **Review Snippet Metadata**
+
+    - Utilize the metadata provided and familiarize yourself with the context in which the snippet was flagged.
+    - **Remember the recording date, time, and location** of the audio clip, as these details are crucial for content verification.
+
+2. **Primary Analysis:**
 
     - **Review the provided analysis** in the **Analysis JSON**.
 
-2. **Accuracy Determination:**
+3. **Accuracy Determination:**
 
     - **Determine the accuracy** of each component of the analysis.
     - Identify any discrepancies or inaccuracies.
 
-3. **Verification:**
+4. **Verification:**
 
-    - **Utilize the grounded results from internet searches** to verify claims as needed.
-    - Cross-reference with up-to-date news and factual data.
+    - Conduct web searches to fact-check the snippet's claims using information that matches its **recording date, time, and location** for contextual accuracy.
+    - Avoid using data from different time periods to incorrectly label it as disinformation.
+    - Avoid looking up comparable events from different time periods (e.g., if the audio is from 2025, don't reference information from 2000).
     - Ensure external sources are relevant and support the Transcription.
+    - Utilize the grounded results from internet searches to verify claims as needed.
 
-4. **Content Adjustment:**
+5. **Content Adjustment:**
 
     - **Modify the content** within the Analysis JSON fields based on your findings.
     - Ensure all updates are justified by and consistent with the Transcription and Metadata.
 
-5. **Output Generation:**
+6. **Output Generation:**
 
     - **Produce a new JSON object** that **exactly mirrors the structure** of the input Analysis JSON.
     - **Do not add or remove any fields**; only update the content within existing fields.

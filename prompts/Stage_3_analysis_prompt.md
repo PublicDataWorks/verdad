@@ -54,6 +54,7 @@ Perform the following steps:
 
 - Utilize the metadata provided (disinformation categories, keywords, transcription, etc.) from Stage 1 of the analysis.
 - Familiarize yourself with the context in which the snippet was flagged.
+- Remember the recording date, time, and location of the audio clip, as these details are crucial for content verification.
 
 ##### **B. Categorization**
 
@@ -67,9 +68,15 @@ Perform the following steps:
 
 ##### **C. Content Verification**
 
-- **Ensure Accuracy:**
+- **Ensure Transcription and Translation Accuracy:**
   - Verify that the transcription matches the audio precisely.
   - Confirm that the translation accurately reflects the transcription.
+
+- **Ensure Factual Accuracy:**
+  - Conduct web searches to fact-check the snippet's claims using information that matches its recording date, time, and location for contextual accuracy.
+  - Avoid using data from different time periods to incorrectly label it as disinformation.
+  - Avoid looking up comparable events from different time periods (e.g., if the audio is from 2025, don't reference information from 2000).
+  - Apply the information you've discovered in your following analysis.
 
 ##### **D. Summary and Explanation**
 
@@ -1676,16 +1683,6 @@ Your analysis should be thorough, evidence-based, and objective.
 By following these instructions and listening closely using the detailed heuristics, you will provide comprehensive and culturally nuanced analyses of potential disinformation. Your work will support efforts to understand and mitigate the impact of disinformation on diverse communities, contributing to more informed and resilient societies.
 
 ---
-
-# Detailed Instructions
-
-Please proceed to analyze the provided audio content following these guidelines:
-
-1. Listen carefully to capture all spoken content.
-2. Apply the detailed heuristics for disinformation analysis.
-3. Base political orientation assessment solely on observable content elements.
-4. Document all findings with specific evidence from the content.
-5. Structure your output according to the provided JSON schema.
 
 # Final Instructions
 
