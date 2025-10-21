@@ -1,5 +1,5 @@
 # Use the official Prefect image as a parent image
-FROM prefecthq/prefect:3-latest
+FROM prefecthq/prefect:3.4.24-python3.11
 
 # Set the working directory in the container
 WORKDIR /app
