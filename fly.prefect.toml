@@ -24,3 +24,16 @@ primary_region = "sea"
   memory = "1gb"
   cpu_kind = "shared"
   cpus = 4
+
+# Health checks for the Prefect server
+# Fly.io will automatically restart the machine if the process crashes.
+[checks]
+  [checks.prefect_api]
+    grace_period = "30s"
+    interval = "30s"
+    method = "get"
+    path = "/api/health"
+    port = 4200
+    timeout = "10s"
+    type = "http"
+    processes = ["server"]
