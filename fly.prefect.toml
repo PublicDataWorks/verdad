@@ -21,9 +21,16 @@ primary_region = "sea"
   PREFECT_SERVER_API_PORT = "4200"
 
 [[vm]]
+  processes = ["server"]
   memory = "1gb"
   cpu_kind = "shared"
   cpus = 4
+
+[[vm]]
+  processes = ["cron"]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
 
 # Health checks for the Prefect server
 # Fly.io will automatically restart the machine if the process crashes.
