@@ -4,11 +4,17 @@ primary_region = "sea"
 [build]
   dockerfile = "Dockerfile.prefect"
 
+# Define process groups
+[processes]
+  server = "/app/start_prefect_server.sh"
+  cron = "/app/start_cron.sh"
+
 [http_service]
   internal_port = 4200
   force_https = true
   auto_stop_machines = true
   min_machines_running = 1
+  processes = ["server"]
 
 [env]
   PREFECT_SERVER_API_HOST = "0.0.0.0"
