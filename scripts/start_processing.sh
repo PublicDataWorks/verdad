@@ -49,22 +49,16 @@ start_deployment_instances() {
     for i in $(seq 1 $num_flow_runs); do
         log "  Starting instance $i/$num_flow_runs..."
 
+        local cmd_args=()
         if [[ -n "$params" ]]; then
-            if prefect deployment run "$deployment" --params "$params"; then
-                log "  Successfully started instance $i/$num_flow_runs"
-                success_count=$((success_count + 1))
-            else
-                log "  Failed to start instance $i/$num_flow_runs"
-                fail_count=$((fail_count + 1))
-            fi
+            cmd_args+=(--params "$params")
+        fi
+        if prefect deployment run "$deployment" "${cmd_args[@]}"; then
+            log "  Successfully started instance $i/$num_flow_runs"
+            success_count=$((success_count + 1))
         else
-            if prefect deployment run "$deployment"; then
-                log "  Successfully started instance $i/$num_flow_runs"
-                success_count=$((success_count + 1))
-            else
-                log "  Failed to start instance $i/$num_flow_runs"
-                fail_count=$((fail_count + 1))
-            fi
+            log "  Failed to start instance $i/$num_flow_runs"
+            fail_count=$((fail_count + 1))
         fi
 
         log ""
