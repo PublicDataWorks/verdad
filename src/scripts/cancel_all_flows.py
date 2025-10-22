@@ -37,7 +37,6 @@ async def cancel_all_runs():
                     await client.set_flow_run_state(
                         run.id,
                         state=Cancelled(message="Cancelled by scheduled restart"),
-                        force=True,
                     )
                     print(f"- Cancelled: {run.name} ({run.id})")
                     cancelled_count += 1
