@@ -40,6 +40,7 @@ COPY scripts/start_processing.sh /app
 COPY scripts/restart_all.sh /app
 COPY scripts/start_cron.sh /app
 COPY src/scripts/cancel_all_flows.py /app
+COPY src/scripts/delete_cancelled_flows.py /app
 
 # Make all scripts executable
 RUN chmod +x /app/*.sh /app/*.py
