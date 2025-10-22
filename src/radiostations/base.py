@@ -1,7 +1,6 @@
 import re
 import subprocess
 import time
-from prefect import task
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options

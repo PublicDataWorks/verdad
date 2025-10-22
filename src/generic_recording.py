@@ -3,7 +3,7 @@ import os
 import time
 import boto3
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from prefect import serve
 from prefect.task_runners import ConcurrentTaskRunner
@@ -13,12 +13,7 @@ import psutil
 import sentry_sdk
 
 from processing_pipeline.supabase_utils import SupabaseClient
-from radiostations.khot import Khot
-from radiostations.kisf import Kisf
-from radiostations.krgt import Krgt
-from radiostations.wado import Wado
-from radiostations.waqi import Waqi
-from radiostations.wkaq import Wkaq
+from radiostations import RadioStation, Khot, Kisf, Krgt, Wado, Waqi, Wkaq
 from utils import optional_flow, optional_task
 
 load_dotenv()
@@ -112,7 +107,7 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
 
 @optional_flow(name="Generic Audio Recording", log_prints=True, task_runner=ConcurrentTaskRunner)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
-    RADIO_STATIONS = {
+    RADIO_STATIONS: dict[str, type[RadioStation]] = {
         Khot.code: Khot,
         Kisf.code: Kisf,
         Krgt.code: Krgt,
@@ -128,42 +123,43 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
 
     station = station_class()
 
-    station.setup_virtual_audio()
-    station.start_browser()
+    try:
+        station.setup_virtual_audio()
+        station.start_browser()
 
-    while True:
-        # Check current memory usage
-        memory_usage = psutil.virtual_memory().percent
-        print(f"Current memory usage: {memory_usage}%")
+        while True:
+            # Check current memory usage
+            memory_usage = psutil.virtual_memory().percent
+            print(f"Current memory usage: {memory_usage}%")
 
-        # If memory usage is above 95%, restart the browser
-        if memory_usage > 95:
-            print("Memory usage is high. Restarting browser...")
-            station.stop(unload_modules=False)
-            time.sleep(5)  # Wait for browser to fully close
-            station.start_browser()
-            print(f"Current memory usage: {psutil.virtual_memory().percent}%")
+            # If memory usage is above 95%, restart the browser
+            if memory_usage > 95:
+                print("Memory usage is high. Restarting browser...")
+                station.stop(unload_modules=False)
+                time.sleep(5)  # Wait for browser to fully close
+                station.start_browser()
+                print(f"Current memory usage: {psutil.virtual_memory().percent}%")
 
-        if not station.is_audio_playing():
-            print("Playback stopped playing for some reason. Restarting browser...")
-            station.stop(unload_modules=False)
-            time.sleep(5)  # Wait for browser to fully close
-            station.start_browser()
+            if not station.is_audio_playing():
+                print("Playback stopped playing for some reason. Restarting browser...")
+                station.stop(unload_modules=False)
+                time.sleep(5)  # Wait for browser to fully close
+                station.start_browser()
 
-        output = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
+            output = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
 
-        if output and output["file_name"]:
-            uploaded_path = upload_to_r2_and_clean_up(station.url, output["file_name"])
-            if uploaded_path:
-                insert_recorded_audio_file_into_database(output, uploaded_path)
+            if output and output["file_name"]:
+                uploaded_path = upload_to_r2_and_clean_up(station.url, output["file_name"])
+                if uploaded_path:
+                    insert_recorded_audio_file_into_database(output, uploaded_path)
 
-        # Stop the flow if it should not be repeated
-        if not repeat:
-            break
-
-    print("Stopping the radio station and cleaning up...")
-    station.stop()
-    print("Cleanup finished")
+            # Stop the flow if it should not be repeated
+            if not repeat:
+                break
+    finally:
+        print("Stopping the radio station and cleaning up...")
+        station.stop()
+        print("Cleanup finished")
 
 
 def get_url_hash(url):
@@ -196,12 +192,14 @@ if __name__ == "__main__":
     audio_channels = 1  # Default to single channel (mono audio)
 
     deployment = generic_audio_processing_pipeline.to_deployment(
-        f"{station.code}",
+        name=station.code,
         tags=[station.state, get_url_hash(station.url), "Generic"],
+        interval=timedelta(minutes=30),
+        concurrency_limit=5,
         parameters=dict(
             station_code=station.code,
             duration_seconds=duration_seconds,
-            repeat=True,
+            repeat=False,
             audio_birate=audio_birate,
             audio_channels=audio_channels,
         ),
