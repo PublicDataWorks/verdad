@@ -13,12 +13,7 @@ import psutil
 import sentry_sdk
 
 from processing_pipeline.supabase_utils import SupabaseClient
-from radiostations.khot import Khot
-from radiostations.kisf import Kisf
-from radiostations.krgt import Krgt
-from radiostations.wado import Wado
-from radiostations.waqi import Waqi
-from radiostations.wkaq import Wkaq
+from radiostations import RadioStation, Khot, Kisf, Krgt, Wado, Waqi, Wkaq
 from utils import optional_flow, optional_task
 
 load_dotenv()
@@ -112,7 +107,7 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
 
 @optional_flow(name="Generic Audio Recording", log_prints=True, task_runner=ConcurrentTaskRunner)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
-    RADIO_STATIONS = {
+    RADIO_STATIONS: dict[str, type[RadioStation]] = {
         Khot.code: Khot,
         Kisf.code: Kisf,
         Krgt.code: Krgt,
