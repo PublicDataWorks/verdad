@@ -195,6 +195,7 @@ if __name__ == "__main__":
         name=station.code,
         tags=[station.state, get_url_hash(station.url), "Generic"],
         interval=timedelta(minutes=30),
+        concurrency_limit=5,
         parameters=dict(
             station_code=station.code,
             duration_seconds=duration_seconds,
