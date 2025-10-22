@@ -1,7 +1,8 @@
 import os
 from prefect import task
+from prefect.cache_policies import NO_CACHE
 
-def optional_task(*args, **kwargs):
+def optional_task(func=None, **kwargs):
     """Decorator that applies Prefect task decorator unless explicitly disabled
 
     Supports both @optional_task and @optional_task(param=value) syntax
@@ -10,7 +11,7 @@ def optional_task(*args, **kwargs):
     ENABLE_PREFECT_DECORATOR=false in environment variables.
 
     Args:
-        *args: Variable positional arguments to pass to Prefect task
+        func: The function to decorate (provided automatically when used as @optional_task)
         **kwargs: Variable keyword arguments to pass to Prefect task
 
     Returns:
@@ -21,22 +22,21 @@ def optional_task(*args, **kwargs):
 
     if not enable_prefect:
         # If Prefect decorator is disabled, return the function as-is
-        if len(args) == 1 and callable(args[0]) and not kwargs:
-            return args[0]
-        def wrapper(func):
-            return func
-        return wrapper
+        def wrapper(f):
+            return f
     else:
         # If Prefect decorator is enabled (default), apply Prefect task decorator
-        def wrapper(func):
-            return task(*args, **kwargs)(func)
+        if 'cache_policy' not in kwargs:
+            kwargs['cache_policy'] = NO_CACHE
+        def wrapper(f):
+            return task(**kwargs)(f)
 
-        # Handle both @optional_task and @optional_task() syntax
-        if len(args) == 1 and callable(args[0]) and not kwargs:
-            # @optional_task
-            return task()(args[0])
-        # @optional_task(param=value)
-        return wrapper
+    # Handle both @optional_task and @optional_task() syntax
+    if func is not None and callable(func):
+        # @optional_task
+        return wrapper(func)
+    # @optional_task(param=value)
+    return wrapper
 
 def optional_flow(*args, **kwargs):
     """Decorator that applies Prefect flow decorator unless explicitly disabled

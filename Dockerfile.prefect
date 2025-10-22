@@ -1,10 +1,29 @@
 # Use the official Prefect image as a parent image
-FROM prefecthq/prefect:3-latest
+FROM prefecthq/prefect:3.4.24-python3.11
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Install required packages
+# Install curl for downloading supercronic
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install supercronic
+ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.38/supercronic-linux-amd64 \
+    SUPERCRONIC_SHA1SUM=bc072eba2ae083849d5f86c6bd1f345f6ed902d0 \
+    SUPERCRONIC=supercronic-linux-amd64
+
+RUN curl -fsSLO "$SUPERCRONIC_URL" \
+    && echo "${SUPERCRONIC_SHA1SUM}  ${SUPERCRONIC}" | sha1sum -c - \
+    && chmod +x "$SUPERCRONIC" \
+    && mv "$SUPERCRONIC" "/usr/local/bin/${SUPERCRONIC}" \
+    && ln -s "/usr/local/bin/${SUPERCRONIC}" /usr/local/bin/supercronic
+
+# Install flyctl (Fly.io CLI)
+RUN curl -L https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
+
+# Install required Python packages
 RUN pip install --no-cache-dir \
     "asyncpg==0.30.0" \
     "sqlalchemy==2.0.36"
@@ -14,16 +33,15 @@ ENV PREFECT_SERVER_API_HOST=0.0.0.0
 ENV PREFECT_SERVER_API_PORT=4200
 ENV PREFECT_API_URL="https://prefect.fly.dev/api"
 
-# Copy the start_prefect_server.sh script into the container at /app
+# Copy necessary scripts into the container
 COPY scripts/start_prefect_server.sh /app
-
-# Copy the start_recording.sh script into the container at /app
 COPY scripts/start_recording.sh /app
+COPY scripts/start_processing.sh /app
+COPY scripts/restart_all.sh /app
+COPY scripts/start_cron.sh /app
+COPY src/scripts/cancel_all_flows.py /app
 
-# Make sure all the scripts are executable
-RUN chmod +x /app/start_prefect_server.sh
-RUN chmod +x /app/start_recording.sh
+# Make all scripts executable
+RUN chmod +x /app/*.sh /app/*.py
 
-# Set the entrypoint script
-ENTRYPOINT ["/app/start_prefect_server.sh"]
-
+CMD ["/app/start_prefect_server.sh"]

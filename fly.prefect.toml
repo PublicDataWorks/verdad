@@ -4,17 +4,43 @@ primary_region = "sea"
 [build]
   dockerfile = "Dockerfile.prefect"
 
+# Define process groups
+[processes]
+  server = "/app/start_prefect_server.sh"
+  cron = "/app/start_cron.sh"
+
 [http_service]
   internal_port = 4200
   force_https = true
   auto_stop_machines = true
   min_machines_running = 1
+  processes = ["server"]
 
 [env]
   PREFECT_SERVER_API_HOST = "0.0.0.0"
   PREFECT_SERVER_API_PORT = "4200"
 
 [[vm]]
+  processes = ["server"]
   memory = "1gb"
   cpu_kind = "shared"
   cpus = 4
+
+[[vm]]
+  processes = ["cron"]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# Health checks for the Prefect server
+# Fly.io will automatically restart the machine if the process crashes.
+[checks]
+  [checks.prefect_api]
+    grace_period = "30s"
+    interval = "30s"
+    method = "get"
+    path = "/api/health"
+    port = 4200
+    timeout = "10s"
+    type = "http"
+    processes = ["server"]

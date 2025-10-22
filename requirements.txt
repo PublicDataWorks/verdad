@@ -4,19 +4,19 @@ python-dotenv==1.0.1
 black==24.8.0
 flake8==7.1.1
 isort==5.13.2
-prefect==3.0.1
+prefect==3.4.24
 boto3==1.35.15
 selenium==4.24.0
 webdriver-manager==4.0.2
-google-genai==1.11.0
+google-genai==1.45.0
 psutil==6.0.0
 sentry-sdk==2.14.0
 pytest==8.3.3
-supabase==2.15.0
+supabase==2.22.0
 pydub==0.25.1
 openai==1.57.1
 tiktoken==0.8.0
-pydantic==2.7.1
+pydantic==2.10.1
 pytest-cov==6.0.0
 # google-cloud-bigquery-storage==2.26.0
 # fastavro==1.9.7
