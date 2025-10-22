@@ -128,42 +128,43 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
 
     station = station_class()
 
-    station.setup_virtual_audio()
-    station.start_browser()
+    try:
+        station.setup_virtual_audio()
+        station.start_browser()
 
-    while True:
-        # Check current memory usage
-        memory_usage = psutil.virtual_memory().percent
-        print(f"Current memory usage: {memory_usage}%")
+        while True:
+            # Check current memory usage
+            memory_usage = psutil.virtual_memory().percent
+            print(f"Current memory usage: {memory_usage}%")
 
-        # If memory usage is above 95%, restart the browser
-        if memory_usage > 95:
-            print("Memory usage is high. Restarting browser...")
-            station.stop(unload_modules=False)
-            time.sleep(5)  # Wait for browser to fully close
-            station.start_browser()
-            print(f"Current memory usage: {psutil.virtual_memory().percent}%")
+            # If memory usage is above 95%, restart the browser
+            if memory_usage > 95:
+                print("Memory usage is high. Restarting browser...")
+                station.stop(unload_modules=False)
+                time.sleep(5)  # Wait for browser to fully close
+                station.start_browser()
+                print(f"Current memory usage: {psutil.virtual_memory().percent}%")
 
-        if not station.is_audio_playing():
-            print("Playback stopped playing for some reason. Restarting browser...")
-            station.stop(unload_modules=False)
-            time.sleep(5)  # Wait for browser to fully close
-            station.start_browser()
+            if not station.is_audio_playing():
+                print("Playback stopped playing for some reason. Restarting browser...")
+                station.stop(unload_modules=False)
+                time.sleep(5)  # Wait for browser to fully close
+                station.start_browser()
 
-        output = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
+            output = capture_audio_stream(station, duration_seconds, audio_birate, audio_channels)
 
-        if output and output["file_name"]:
-            uploaded_path = upload_to_r2_and_clean_up(station.url, output["file_name"])
-            if uploaded_path:
-                insert_recorded_audio_file_into_database(output, uploaded_path)
+            if output and output["file_name"]:
+                uploaded_path = upload_to_r2_and_clean_up(station.url, output["file_name"])
+                if uploaded_path:
+                    insert_recorded_audio_file_into_database(output, uploaded_path)
 
-        # Stop the flow if it should not be repeated
-        if not repeat:
-            break
-
-    print("Stopping the radio station and cleaning up...")
-    station.stop()
-    print("Cleanup finished")
+            # Stop the flow if it should not be repeated
+            if not repeat:
+                break
+    finally:
+        print("Stopping the radio station and cleaning up...")
+        station.stop()
+        print("Cleanup finished")
 
 
 def get_url_hash(url):
