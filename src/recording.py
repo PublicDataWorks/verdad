@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import time
 import hashlib
@@ -146,10 +146,11 @@ def serve_deployments(radio_stations, flow_function):
         deployment = flow_function.to_deployment(
             f'{station["code"]}',
             tags=[station["state"], get_url_hash(station["url"])],
+            interval=timedelta(minutes=30),
             parameters=dict(
                 url=station["url"],
                 duration_seconds=duration_seconds,
-                repeat=True,
+                repeat=False,
                 audio_birate=audio_birate,
                 audio_channels=audio_channels,
             ),

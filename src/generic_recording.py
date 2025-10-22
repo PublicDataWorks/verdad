@@ -3,7 +3,7 @@ import os
 import time
 import boto3
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from prefect import serve
 from prefect.task_runners import ConcurrentTaskRunner
@@ -198,10 +198,11 @@ if __name__ == "__main__":
     deployment = generic_audio_processing_pipeline.to_deployment(
         f"{station.code}",
         tags=[station.state, get_url_hash(station.url), "Generic"],
+        interval=timedelta(minutes=30),
         parameters=dict(
             station_code=station.code,
             duration_seconds=duration_seconds,
-            repeat=True,
+            repeat=False,
             audio_birate=audio_birate,
             audio_channels=audio_channels,
         ),
