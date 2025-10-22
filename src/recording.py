@@ -144,7 +144,7 @@ def serve_deployments(radio_stations, flow_function):
 
     for station in radio_stations:
         deployment = flow_function.to_deployment(
-            f'{station["code"]}',
+            name=station["code"],
             tags=[station["state"], get_url_hash(station["url"])],
             interval=timedelta(minutes=30),
             parameters=dict(

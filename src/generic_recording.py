@@ -192,7 +192,7 @@ if __name__ == "__main__":
     audio_channels = 1  # Default to single channel (mono audio)
 
     deployment = generic_audio_processing_pipeline.to_deployment(
-        f"{station.code}",
+        name=station.code,
         tags=[station.state, get_url_hash(station.url), "Generic"],
         interval=timedelta(minutes=30),
         parameters=dict(
