@@ -48,8 +48,8 @@ done
 
 # Create the crontab file
 cat > /app/crontab << 'EOF'
-# Restart all Prefect flows every 12 hours (midnight and noon UTC)
-0 */12 * * * /app/restart_all.sh
+# Restart all Prefect flows every 6 hours
+0 */6 * * * /app/restart_all.sh
 
 # Delete cancelled flow runs daily at 1 AM UTC
 0 1 * * * python3 /app/delete_cancelled_flows.py
