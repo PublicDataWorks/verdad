@@ -11,6 +11,7 @@ from prefect.client.schemas.filters import (
     FlowRunFilterStateType,
 )
 from prefect.client.schemas.objects import FlowRun, StateType
+from prefect.client.schemas.sorting import FlowRunSort
 
 # Configuration - can be overridden via environment variables
 BATCH_SIZE = max(
@@ -47,6 +48,7 @@ async def delete_flow_runs(state_types: list[StateType]) -> None:
             # Get all cancelled flows
             runs = await client.read_flow_runs(
                 flow_run_filter=FlowRunFilter(state=FlowRunFilterState(type=FlowRunFilterStateType(any_=state_types))),
+                sort=FlowRunSort.START_TIME_ASC,
             )
 
             if len(runs) == 0:
