@@ -41,21 +41,12 @@ async def delete_flow_run_safe(client: PrefectClient, run: FlowRun) -> dict:
         }
 
 
-async def delete_cancelled_runs() -> None:
+async def delete_flow_runs(state_types: list[StateType]) -> None:
     try:
         async with get_client() as client:
             # Get all cancelled flows
             runs = await client.read_flow_runs(
-                flow_run_filter=FlowRunFilter(
-                    state=FlowRunFilterState(
-                        type=FlowRunFilterStateType(
-                            any_=[
-                                StateType.CANCELLED,
-                                # StateType.CRASHED,
-                            ]
-                        )
-                    )
-                )
+                flow_run_filter=FlowRunFilter(state=FlowRunFilterState(type=FlowRunFilterStateType(any_=state_types))),
             )
 
             if len(runs) == 0:
@@ -103,4 +94,4 @@ async def delete_cancelled_runs() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(delete_cancelled_runs())
+    asyncio.run(delete_flow_runs(state_types=[StateType.CANCELLED]))

@@ -35,7 +35,7 @@ check_script() {
 # List of required scripts for cron jobs
 REQUIRED_SCRIPTS=(
     "/app/restart_all.sh"
-    "/app/delete_cancelled_flows.py"
+    "/app/delete_flow_runs.py"
 )
 
 # Validate all required scripts
@@ -52,7 +52,7 @@ cat > /app/crontab << 'EOF'
 0 */6 * * * /app/restart_all.sh
 
 # Delete cancelled flow runs daily at 1 AM UTC
-0 1 * * * python3 /app/delete_cancelled_flows.py
+0 1 * * * python3 /app/delete_flow_runs.py
 EOF
 
 echo "Cron schedule:"
