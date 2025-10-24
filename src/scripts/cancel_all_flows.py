@@ -22,7 +22,6 @@ async def cancel_all_runs():
                             any_=[
                                 StateType.RUNNING,
                                 StateType.PENDING,
-                                StateType.SCHEDULED,
                             ]
                         )
                     )

@@ -105,7 +105,12 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
     )
 
 
-@optional_flow(name="Generic Audio Recording", log_prints=True, task_runner=ConcurrentTaskRunner)
+@optional_flow(
+    name="Generic Audio Recording",
+    log_prints=True,
+    task_runner=ConcurrentTaskRunner,
+    timeout_seconds=45*60, # 45 min
+)
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
     RADIO_STATIONS: dict[str, type[RadioStation]] = {
         Khot.code: Khot,
