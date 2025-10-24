@@ -29,12 +29,14 @@ async def delete_flow_run_safe(client: PrefectClient, run: FlowRun) -> dict:
 
     try:
         await client.delete_flow_run(run.id)
+        print(f"  ✓ Deleted: {run.name} ({run.id})")
         return {
             **base_result,
             "success": True,
             "error": None,
         }
     except Exception as e:
+        print(f"  ✗ Failed: {run.name} ({run.id}) - {str(e)}")
         return {
             **base_result,
             "success": False,
@@ -43,20 +45,22 @@ async def delete_flow_run_safe(client: PrefectClient, run: FlowRun) -> dict:
 
 
 async def delete_flow_runs(state_types: list[StateType]) -> None:
+    print(f"Starting deletion process for state types: {state_types}")
+
     try:
         async with get_client() as client:
-            # Get all cancelled flows
+            # Get filtered flow runs
             runs = await client.read_flow_runs(
                 flow_run_filter=FlowRunFilter(state=FlowRunFilterState(type=FlowRunFilterStateType(any_=state_types))),
                 sort=FlowRunSort.START_TIME_ASC,
             )
 
             if len(runs) == 0:
-                print("No cancelled flow runs found")
+                print("No flow runs found")
                 return
 
-            print(f"Found {len(runs)} cancelled flow runs to delete")
-            print(f"Using batch size: {BATCH_SIZE}\n")
+            print(f"Found {len(runs)} flow runs to delete")
+            print(f"Using batch size: {BATCH_SIZE}, delay between batches: {DELAY_BETWEEN_BATCHES}s")
 
             deleted_count = 0
             failed_count = 0
@@ -73,13 +77,17 @@ async def delete_flow_runs(state_types: list[StateType]) -> None:
                 results = await asyncio.gather(*tasks)
 
                 # Process results
+                batch_success = 0
+                batch_failed = 0
                 for result in results:
                     if result["success"]:
-                        print(f"  ✓ Deleted: {result['run_name']} ({result['run_id']})")
-                        deleted_count += 1
+                        batch_success += 1
                     else:
-                        print(f"  ✗ Failed: {result['run_name']} ({result['run_id']}): {result['error']}")
-                        failed_count += 1
+                        batch_failed += 1
+
+                print(f"Batch {batch_num} completed: {batch_success} succeeded, {batch_failed} failed")
+                deleted_count += batch_success
+                failed_count += batch_failed
 
                 # Rate limiting between batches
                 if i + BATCH_SIZE < len(runs):
