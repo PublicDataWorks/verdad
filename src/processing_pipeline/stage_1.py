@@ -23,8 +23,8 @@ from processing_pipeline.constants import (
     get_detection_prompt_for_stage_1,
     get_gemini_timestamped_transcription_generation_prompt,
 )
-from processing_pipeline.utils import get_safety_settings
-from src.utils import optional_flow, optional_task
+from processing_pipeline.processing_utils import get_safety_settings
+from utils import optional_flow, optional_task
 
 
 @optional_task(log_prints=True, retries=3)
