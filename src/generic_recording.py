@@ -3,7 +3,7 @@ import os
 import time
 import boto3
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
 from prefect import serve
 from prefect.task_runners import ConcurrentTaskRunner
@@ -109,7 +109,6 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
     name="Generic Audio Recording",
     log_prints=True,
     task_runner=ConcurrentTaskRunner,
-    timeout_seconds=45*60, # 45 min
 )
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
     RADIO_STATIONS: dict[str, type[RadioStation]] = {
@@ -199,12 +198,11 @@ if __name__ == "__main__":
     deployment = generic_audio_processing_pipeline.to_deployment(
         name=station.code,
         tags=[station.state, get_url_hash(station.url), "Generic"],
-        interval=timedelta(minutes=30),
         concurrency_limit=5,
         parameters=dict(
             station_code=station.code,
             duration_seconds=duration_seconds,
-            repeat=False,
+            repeat=True,
             audio_birate=audio_birate,
             audio_channels=audio_channels,
         ),
