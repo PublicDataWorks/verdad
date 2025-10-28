@@ -149,7 +149,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
 
         response, grounding_metadata = Stage3Executor.run(
             gemini_key=gemini_key,
-            model_name=GeminiModel.GEMINI_FLASH_LATEST,
+            model_name=GeminiModel.GEMINI_2_5_PRO,
             audio_file=local_file,
             metadata=metadata,
         )
