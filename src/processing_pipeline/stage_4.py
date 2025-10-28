@@ -7,9 +7,6 @@ from google import genai
 from google.genai.types import (
     GenerateContentConfig,
     GoogleSearch,
-    HarmBlockThreshold,
-    HarmCategory,
-    SafetySetting,
     ThinkingConfig,
     Tool,
 )
@@ -22,6 +19,9 @@ from processing_pipeline.constants import (
     get_user_prompt_for_stage_4,
 )
 from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.processing_utils import (
+    get_safety_settings,
+)
 from utils import optional_flow, optional_task
 
 
@@ -245,28 +245,7 @@ class Stage4Executor:
                 response_modalities=["TEXT"],
                 system_instruction=cls.SYSTEM_INSTRUCTION,
                 max_output_tokens=8192,
-                safety_settings=[
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                ],
+                safety_settings=get_safety_settings(),
             ),
         )
 
@@ -321,28 +300,7 @@ Now, please convert the following text into a valid JSON object:\n\n"""
                 response_schema=cls.OUTPUT_SCHEMA,
                 max_output_tokens=8192,
                 thinking_config=ThinkingConfig(thinking_budget=0),
-                safety_settings=[
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                ],
+                safety_settings=get_safety_settings(),
             ),
         )
 

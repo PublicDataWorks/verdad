@@ -12,13 +12,13 @@ from google.genai.types import (
     FinishReason,
     GenerateContentConfig,
     GoogleSearch,
-    HarmBlockThreshold,
-    HarmCategory,
-    SafetySetting,
     ThinkingConfig,
     Tool,
 )
 from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.processing_utils import (
+    get_safety_settings,
+)
 from processing_pipeline.constants import (
     GeminiModel,
     get_system_instruction_for_stage_3,
@@ -321,7 +321,7 @@ class Stage3Executor:
         client: genai.Client,
         model_name: GeminiModel,
         user_prompt: str,
-        audio_file: File,
+        uploaded_audio_file: File,
     ):
         """
         Step 1: Analyze audio with Google Search tool enabled.
@@ -333,22 +333,24 @@ class Stage3Executor:
 
         response = client.models.generate_content(
             model=model_name,
-            contents=[user_prompt, audio_file],
+            contents=[user_prompt, uploaded_audio_file],
             config=GenerateContentConfig(
                 system_instruction=cls.SYSTEM_INSTRUCTION,
                 max_output_tokens=16384,
                 tools=[Tool(google_search=GoogleSearch())],
                 thinking_config=ThinkingConfig(thinking_budget=4096),
-                safety_settings=cls.__get_safety_settings(),
+                safety_settings=get_safety_settings(),
             ),
         )
 
         grounding_metadata = str(response.candidates[0].grounding_metadata) if response.candidates else None
 
         if not response.text:
-            finish_reason = response.candidates[0].finish_reason
+            finish_reason = response.candidates[0].finish_reason if response.candidates else None
+
             if finish_reason == FinishReason.MAX_TOKENS:
                 raise ValueError("The response from Gemini was too long and was cut off in step 1.")
+
             print(f"Response finish reason: {finish_reason}")
             raise ValueError("No response from Gemini in step 1.")
 
@@ -413,7 +415,7 @@ class Stage3Executor:
                 system_instruction=system_instruction,
                 max_output_tokens=8192,
                 thinking_config=ThinkingConfig(thinking_budget=0),
-                safety_settings=cls.__get_safety_settings(),
+                safety_settings=get_safety_settings(),
             ),
         )
 
@@ -421,36 +423,13 @@ class Stage3Executor:
 
         if not parsed_response:
             finish_reason = response.candidates[0].finish_reason if response.candidates else None
+
             if finish_reason == FinishReason.MAX_TOKENS:
                 raise ValueError("The response from Gemini was too long and was cut off in step 2.")
+
             raise ValueError(f"No response from Gemini in step 2. Response finished with reason: {finish_reason}")
 
         if not parsed_response.get("is_convertible"):
             raise ValueError("[Stage 3] The response from Gemini could not be converted to the required schema.")
 
         return parsed_response
-
-    @classmethod
-    def __get_safety_settings(cls):
-        return [
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-        ]
