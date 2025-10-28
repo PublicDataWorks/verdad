@@ -18,6 +18,7 @@ from google.genai.types import (
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.processing_utils import (
     get_safety_settings,
+    postprocess_snippet,
 )
 from processing_pipeline.constants import (
     GeminiModel,
@@ -72,36 +73,25 @@ def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
 def update_snippet_in_supabase(
     supabase_client,
     snippet_id,
-    transcription,
-    translation,
-    title,
-    summary,
-    explanation,
-    disinformation_categories,
-    keywords_detected,
-    language,
-    confidence_scores,
-    emotional_tone,
-    context,
-    political_leaning,
+    gemini_response,
     grounding_metadata,
     status,
     error_message,
 ):
     supabase_client.update_snippet(
         id=snippet_id,
-        transcription=transcription,
-        translation=translation,
-        title=title,
-        summary=summary,
-        explanation=explanation,
-        disinformation_categories=disinformation_categories,
-        keywords_detected=keywords_detected,
-        language=language,
-        confidence_scores=confidence_scores,
-        emotional_tone=emotional_tone,
-        context=context,
-        political_leaning=political_leaning,
+        transcription=gemini_response["transcription"],
+        translation=gemini_response["translation"],
+        title=gemini_response["title"],
+        summary=gemini_response["summary"],
+        explanation=gemini_response["explanation"],
+        disinformation_categories=gemini_response["disinformation_categories"],
+        keywords_detected=gemini_response["keywords_detected"],
+        language=gemini_response["language"],
+        confidence_scores=gemini_response["confidence_scores"],
+        emotional_tone=gemini_response["emotional_tone"],
+        context=gemini_response["context"],
+        political_leaning=gemini_response["political_leaning"],
         grounding_metadata=grounding_metadata,
         status=status,
         error_message=error_message,
@@ -150,7 +140,7 @@ def __get_metadata(snippet):
 
 
 @optional_task(log_prints=True)
-def process_snippet(supabase_client, snippet, local_file, gemini_key):
+def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_review: bool):
     try:
         print(f"Processing snippet: {local_file} with Gemini 2.5 Flash")
 
@@ -164,27 +154,29 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
             metadata=metadata,
         )
 
-        update_snippet_in_supabase(
-            supabase_client=supabase_client,
-            snippet_id=snippet["id"],
-            transcription=response["transcription"],
-            translation=response["translation"],
-            title=response["title"],
-            summary=response["summary"],
-            explanation=response["explanation"],
-            disinformation_categories=response["disinformation_categories"],
-            keywords_detected=response["keywords_detected"],
-            language=response["language"],
-            confidence_scores=response["confidence_scores"],
-            emotional_tone=response["emotional_tone"],
-            context=response["context"],
-            political_leaning=response["political_leaning"],
-            grounding_metadata=grounding_metadata,
-            status="Ready for review",
-            error_message=None,
-        )
+        if skip_review:
+            update_snippet_in_supabase(
+                supabase_client=supabase_client,
+                snippet_id=snippet["id"],
+                gemini_response=response,
+                grounding_metadata=grounding_metadata,
+                status="Processed",
+                error_message=None,
+            )
 
-        print(f"Processing completed for {local_file}")
+            postprocess_snippet(supabase_client, snippet["id"], response["disinformation_categories"])
+
+        else:
+            update_snippet_in_supabase(
+                supabase_client=supabase_client,
+                snippet_id=snippet["id"],
+                gemini_response=response,
+                grounding_metadata=grounding_metadata,
+                status="Ready for review",
+                error_message=None,
+            )
+
+        print(f"Processing completed for audio file {local_file} - snippet ID: {snippet['id']}")
 
     except Exception as e:
         print(f"Failed to process {local_file}: {e}")
@@ -192,7 +184,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
 
 
 @optional_flow(name="Stage 3: In-depth Analysis", log_prints=True, task_runner=ConcurrentTaskRunner)
-def in_depth_analysis(snippet_ids, repeat):
+def in_depth_analysis(snippet_ids, repeat, skip_review=True):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
     s3_client = boto3.client(
@@ -217,7 +209,7 @@ def in_depth_analysis(snippet_ids, repeat):
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet
-                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY)
+                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY, skip_review=skip_review)
 
                 print(f"Delete the downloaded snippet clip: {local_file}")
                 os.remove(local_file)
@@ -229,7 +221,7 @@ def in_depth_analysis(snippet_ids, repeat):
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet
-                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY)
+                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY, skip_review=skip_review)
 
                 print(f"Delete the downloaded snippet clip: {local_file}")
                 os.remove(local_file)
@@ -315,6 +307,7 @@ class Stage3Executor:
         finally:
             client.files.delete(name=uploaded_audio_file.name)
 
+    @optional_task(log_prints=True, retries=3)
     @classmethod
     def __analyze_with_search(
         cls,
