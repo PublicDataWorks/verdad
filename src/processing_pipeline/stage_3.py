@@ -184,7 +184,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
 
 
 @optional_flow(name="Stage 3: In-depth Analysis", log_prints=True, task_runner=ConcurrentTaskRunner)
-def in_depth_analysis(snippet_ids, repeat, skip_review=True):
+def in_depth_analysis(snippet_ids, skip_review, repeat):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
     s3_client = boto3.client(
