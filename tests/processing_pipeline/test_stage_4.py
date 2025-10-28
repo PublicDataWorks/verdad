@@ -6,8 +6,6 @@ import re
 from processing_pipeline.stage_4 import (
     prepare_snippet_for_review,
     submit_snippet_review_result,
-    create_new_label_and_assign_to_snippet,
-    delete_vector_embedding_of_snippet,
     process_snippet,
     analysis_review,
     fetch_a_ready_for_review_snippet_from_supabase,
@@ -27,6 +25,12 @@ class TestStage4:
             mock_client.get_a_ready_for_review_snippet_and_reserve_it.return_value = None
             mock_client.set_snippet_status.return_value = None
             mock_client.submit_snippet_review.return_value = None
+            mock_client.get_audio_file_by_id.return_value = {
+                "location_city": "Test City",
+                "location_state": "Test State",
+                "radio_station_code": "TEST-FM",
+                "radio_station_name": "Test Station",
+            }
             MockSupabaseClient.return_value = mock_client
             yield mock_client
 
@@ -158,6 +162,7 @@ class TestStage4:
                 },
             },
             "recorded_at": "2024-01-01T00:00:00+00:00",
+            "audio_file": "test-audio-file-id",
             "previous_analysis": {
                 "id": "test-id",
                 "transcription": "Test transcription",
@@ -215,6 +220,7 @@ class TestStage4:
                     },
                 },
                 "recorded_at": "2024-01-01T00:00:00+00:00",
+                "audio_file": "test-audio-file-id",
             },
         }
 
@@ -224,9 +230,19 @@ class TestStage4:
         with patch("time.sleep") as mock:
             yield mock
 
-    def test_prepare_snippet_for_review(self, sample_snippet):
+    def test_prepare_snippet_for_review(self, mock_supabase_client, sample_snippet):
         """Test preparing snippet for review"""
-        transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(sample_snippet)
+        # Mock the get_audio_file_by_id response
+        mock_supabase_client.get_audio_file_by_id.return_value = {
+            "location_city": "Test City",
+            "location_state": "Test State",
+            "radio_station_code": "TEST-FM",
+            "radio_station_name": "Test Station",
+        }
+
+        transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(
+            mock_supabase_client, sample_snippet
+        )
 
         assert isinstance(transcription, str)
         assert isinstance(disinformation_snippet, str)
@@ -256,27 +272,8 @@ class TestStage4:
 
         mock_supabase_client.submit_snippet_review.assert_called_once()
 
-    def test_create_new_label_and_assign_to_snippet(self, mock_supabase_client):
-        """Test creating and assigning new label"""
-        label = {"english": "Test Label", "spanish": "Etiqueta de Prueba"}
-        mock_supabase_client.create_new_label.return_value = {"id": 1}
-
-        create_new_label_and_assign_to_snippet(mock_supabase_client, "test-id", label)
-
-        mock_supabase_client.create_new_label.assert_called_once_with(label["english"], label["spanish"])
-        mock_supabase_client.assign_label_to_snippet.assert_called_once()
-
-    def test_delete_vector_embedding_of_snippet(self, mock_supabase_client):
-        """Test deleting vector embedding"""
-        delete_vector_embedding_of_snippet(mock_supabase_client, "test-id")
-
-        mock_supabase_client.delete_vector_embedding_of_snippet.assert_called_once_with("test-id")
-
     def test_process_snippet(self, mock_supabase_client, mock_gemini_model, sample_snippet):
         """Test processing a snippet"""
-        # First, let's create a proper response that matches what prepare_snippet_for_review expects
-        transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(sample_snippet)
-
         mock_response = {
             "translation": "Test translation",
             "title": {"english": "Test title", "spanish": "Título de prueba"},
@@ -324,20 +321,13 @@ class TestStage4:
         }
         mock_grounding = {"sources": ["test-source"]}
 
-        # Set up the return value for create_new_label
-        mock_label = {"id": "test-label-id", "text": "Category 1", "text_spanish": "Categoría 1"}
-        mock_supabase_client.create_new_label.return_value = mock_label
-
         with patch(
             "processing_pipeline.stage_4.Stage4Executor.run", return_value=(mock_response, mock_grounding)
-        ), patch(
-            "processing_pipeline.stage_4.prepare_snippet_for_review",
-            return_value=(transcription, disinformation_snippet, metadata, analysis_json),
-        ):
+        ), patch("processing_pipeline.stage_4.postprocess_snippet") as mock_postprocess:
 
             process_snippet(mock_supabase_client, sample_snippet)
 
-            # Verify the calls in order
+            # Verify submit_snippet_review was called
             mock_supabase_client.submit_snippet_review.assert_called_once_with(
                 id=sample_snippet["id"],
                 translation=mock_response["translation"],
@@ -352,14 +342,10 @@ class TestStage4:
                 grounding_metadata=mock_grounding,
             )
 
-            # Verify label creation for each disinformation category
-            mock_supabase_client.create_new_label.assert_called_once_with("Category 1", "Categoría 1")
-            mock_supabase_client.assign_label_to_snippet.assert_called_once_with(
-                label_id="test-label-id", snippet_id=sample_snippet["id"]
+            # Verify postprocess_snippet was called
+            mock_postprocess.assert_called_once_with(
+                mock_supabase_client, sample_snippet["id"], mock_response["disinformation_categories"]
             )
-
-            # Verify vector embedding deletion
-            mock_supabase_client.delete_vector_embedding_of_snippet.assert_called_once_with(sample_snippet["id"])
 
     def test_process_snippet_error(self, mock_supabase_client, sample_snippet):
         """Test processing snippet with error"""
@@ -538,20 +524,18 @@ class TestStage4:
         }
         mock_grounding = {"sources": ["test-source"]}
 
-        # Set up the return value for create_new_label
-        mock_label = {"id": "test-label-id", "text": "Category 1", "text_spanish": "Categoría 1"}
-        mock_supabase_client.create_new_label.return_value = mock_label
-
-        with patch("processing_pipeline.stage_4.Stage4Executor.run", return_value=(mock_response, mock_grounding)):
+        with patch(
+            "processing_pipeline.stage_4.Stage4Executor.run", return_value=(mock_response, mock_grounding)
+        ), patch("processing_pipeline.stage_4.postprocess_snippet") as mock_postprocess:
 
             analysis_review(snippet_ids=None, repeat=False)
 
             # Verify process_snippet was called with the correct snippet
             mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.assert_called_once()
             mock_supabase_client.submit_snippet_review.assert_called_once()
-            mock_supabase_client.create_new_label.assert_called_once()
-            mock_supabase_client.assign_label_to_snippet.assert_called_once()
-            mock_supabase_client.delete_vector_embedding_of_snippet.assert_called_once()
+            mock_postprocess.assert_called_once_with(
+                mock_supabase_client, sample_snippet["id"], mock_response["disinformation_categories"]
+            )
 
             # Since repeat=False, sleep should not be called
             mock_sleep.assert_not_called()
@@ -566,7 +550,7 @@ class TestStage4:
             mock_supabase_client.get_snippet_by_id.assert_called_once_with(id="test-id")
             mock_process.assert_called_once_with(mock_supabase_client, sample_snippet)
 
-    def test_prepare_snippet_for_review_invalid_date(self):
+    def test_prepare_snippet_for_review_invalid_date(self, mock_supabase_client):
         """Test preparing snippet with invalid date"""
         invalid_snippet = {
             "recorded_at": "invalid-date",
@@ -580,10 +564,12 @@ class TestStage4:
             "language": "es",
             "confidence_scores": {},
             "political_leaning": "neutral",
+            "context": {"main": "Test"},
+            "audio_file": "test-audio-id",
         }
 
         with pytest.raises(ValueError):
-            prepare_snippet_for_review(invalid_snippet)
+            prepare_snippet_for_review(mock_supabase_client, invalid_snippet)
 
     def test_process_snippet_with_empty_response(self, mock_supabase_client, mock_gemini_model, sample_snippet):
         """Test processing snippet with empty response that is not convertible"""
@@ -649,7 +635,7 @@ class TestStage4:
         mock_supabase_client.submit_snippet_review.assert_not_called()
         mock_supabase_client.create_new_label.assert_not_called()
 
-    def test_prepare_snippet_for_review_invalid_date_format(self):
+    def test_prepare_snippet_for_review_invalid_date_format(self, mock_supabase_client):
         """Test prepare_snippet_for_review with invalid date format"""
         invalid_snippet = {
             "recorded_at": "invalid-date",
@@ -662,14 +648,15 @@ class TestStage4:
             "keywords_detected": None,
             "language": None,
             "confidence_scores": None,
-            "context": None,
+            "context": {"main": "Test"},
             "political_leaning": None,
+            "audio_file": "test-audio-id",
         }
 
         with pytest.raises(ValueError):
-            prepare_snippet_for_review(invalid_snippet)
+            prepare_snippet_for_review(mock_supabase_client, invalid_snippet)
 
-    def test_prepare_snippet_for_review_missing_fields(self):
+    def test_prepare_snippet_for_review_missing_fields(self, mock_supabase_client):
         """Test prepare_snippet_for_review with missing fields"""
         incomplete_snippet = {
             "recorded_at": "2024-01-01T00:00:00+00:00"
@@ -677,7 +664,7 @@ class TestStage4:
         }
 
         with pytest.raises(KeyError):
-            prepare_snippet_for_review(incomplete_snippet)
+            prepare_snippet_for_review(mock_supabase_client, incomplete_snippet)
 
     def test_submit_snippet_review_result_with_none_values(self, mock_supabase_client):
         """Test submitting snippet review with None values"""
@@ -697,15 +684,6 @@ class TestStage4:
         submit_snippet_review_result(mock_supabase_client, "test-id", response, grounding_metadata)
 
         mock_supabase_client.submit_snippet_review.assert_called_once()
-
-    def test_create_new_label_and_assign_error_handling(self, mock_supabase_client):
-        """Test error handling in label creation and assignment"""
-        mock_supabase_client.create_new_label.side_effect = Exception("Label creation failed")
-
-        with pytest.raises(Exception):
-            create_new_label_and_assign_to_snippet(
-                mock_supabase_client, "test-id", {"english": "Test Label", "spanish": "Etiqueta de Prueba"}
-            )
 
     def test_process_snippet_with_missing_fields(self, mock_supabase_client, mock_gemini_model):
         """Test processing snippet with missing required fields"""
@@ -783,7 +761,9 @@ class TestStage4:
         self, mock_supabase_client, mock_gemini_model, sample_snippet
     ):
         """Test processing snippet with empty disinformation categories"""
-        with patch("processing_pipeline.stage_4.Stage4Executor.run") as mock_run:
+        with patch("processing_pipeline.stage_4.Stage4Executor.run") as mock_run, patch(
+            "processing_pipeline.stage_4.postprocess_snippet"
+        ) as mock_postprocess:
 
             mock_run.return_value = (
                 {
@@ -801,9 +781,9 @@ class TestStage4:
                 {"sources": []},
             )
 
-            process_snippet(mock_supabase_client, sample_snippet)  # Use sample_snippet instead of self.sample_snippet
+            process_snippet(mock_supabase_client, sample_snippet)
 
-            # Verify no labels were created
-            mock_supabase_client.create_new_label.assert_not_called()
+            # Verify postprocess_snippet was called with empty categories
+            mock_postprocess.assert_called_once_with(mock_supabase_client, sample_snippet["id"], [])
             # Verify other expected calls
             mock_supabase_client.submit_snippet_review.assert_called_once()

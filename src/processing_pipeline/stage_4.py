@@ -7,9 +7,6 @@ from google import genai
 from google.genai.types import (
     GenerateContentConfig,
     GoogleSearch,
-    HarmBlockThreshold,
-    HarmCategory,
-    SafetySetting,
     ThinkingConfig,
     Tool,
 )
@@ -22,6 +19,10 @@ from processing_pipeline.constants import (
     get_user_prompt_for_stage_4,
 )
 from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.processing_utils import (
+    get_safety_settings,
+    postprocess_snippet,
+)
 from utils import optional_flow, optional_task
 
 
@@ -84,23 +85,6 @@ def submit_snippet_review_result(supabase_client, snippet_id, response, groundin
 
 
 @optional_task(log_prints=True, retries=3)
-def create_new_label_and_assign_to_snippet(supabase_client, snippet_id, label):
-    english_label_text = label["english"]
-    spanish_label_text = label["spanish"]
-
-    # Create the label
-    label = supabase_client.create_new_label(english_label_text, spanish_label_text)
-
-    # Assign the label to the snippet
-    supabase_client.assign_label_to_snippet(label_id=label["id"], snippet_id=snippet_id)
-
-
-@optional_task(log_prints=True, retries=3)
-def delete_vector_embedding_of_snippet(supabase_client, snippet_id):
-    supabase_client.delete_vector_embedding_of_snippet(snippet_id)
-
-
-@optional_task(log_prints=True, retries=3)
 def backup_snippet_analysis(supabase_client, snippet):
     supabase_client.update_snippet_previous_analysis(snippet["id"], snippet)
 
@@ -137,12 +121,7 @@ def process_snippet(supabase_client, snippet):
         print("Review completed. Updating the snippet in Supabase")
         submit_snippet_review_result(supabase_client, snippet["id"], response, grounding_metadata)
 
-        # Create new labels based on the response and assign them to the snippet
-        for category in response["disinformation_categories"]:
-            create_new_label_and_assign_to_snippet(supabase_client, snippet["id"], category)
-
-        # Delete the vector embedding of the old snippet (if any) to trigger a new embedding
-        delete_vector_embedding_of_snippet(supabase_client, snippet["id"])
+        postprocess_snippet(supabase_client, snippet["id"], response["disinformation_categories"])
         print(f"Processing completed for snippet {snippet['id']}")
 
     except Exception as e:
@@ -245,28 +224,7 @@ class Stage4Executor:
                 response_modalities=["TEXT"],
                 system_instruction=cls.SYSTEM_INSTRUCTION,
                 max_output_tokens=8192,
-                safety_settings=[
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                ],
+                safety_settings=get_safety_settings(),
             ),
         )
 
@@ -321,28 +279,7 @@ Now, please convert the following text into a valid JSON object:\n\n"""
                 response_schema=cls.OUTPUT_SCHEMA,
                 max_output_tokens=8192,
                 thinking_config=ThinkingConfig(thinking_budget=0),
-                safety_settings=[
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                    SafetySetting(
-                        category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-                        threshold=HarmBlockThreshold.BLOCK_NONE,
-                    ),
-                ],
+                safety_settings=get_safety_settings(),
             ),
         )
 

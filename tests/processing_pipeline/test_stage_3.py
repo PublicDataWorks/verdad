@@ -126,23 +126,12 @@ class TestStage3:
             "path.mp3",
         )
 
-    def test_update_snippet(self, mock_supabase_client):
+    def test_update_snippet(self, mock_supabase_client, mock_gemini_response):
         """Test updating snippet"""
         update_snippet_in_supabase(
             supabase_client=mock_supabase_client,
             snippet_id="test-id",
-            transcription="Test transcription",
-            translation="Test translation",
-            title="Test title",
-            summary="Test summary",
-            explanation="Test explanation",
-            disinformation_categories=["category1"],
-            keywords_detected=["keyword1"],
-            language="es",
-            confidence_scores={"score": 0.9},
-            emotional_tone="neutral",
-            context="Test context",
-            political_leaning="neutral",
+            gemini_response=mock_gemini_response,
             grounding_metadata=None,
             status="Processed",
             error_message=None,
@@ -162,13 +151,15 @@ class TestStage3:
         assert result["duration"] == "01:00"
 
     @patch("processing_pipeline.stage_3.Stage3Executor.run")
-    def test_process_snippet(self, mock_run, mock_supabase_client, sample_snippet, mock_gemini_response):
-        """Test processing a snippet"""
+    def test_process_snippet_skip_review_false(
+        self, mock_run, mock_supabase_client, sample_snippet, mock_gemini_response
+    ):
+        """Test processing a snippet with skip_review=False"""
         mock_run.return_value = (mock_gemini_response, "test_grounding_metadata")
 
-        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=False)
 
-        # Verify update_snippet was called
+        # Verify update_snippet was called with "Ready for review" status
         mock_supabase_client.update_snippet.assert_called_once_with(
             id=sample_snippet["id"],
             transcription=mock_gemini_response["transcription"],
@@ -188,6 +179,41 @@ class TestStage3:
             error_message=None,
         )
 
+    @patch("processing_pipeline.stage_3.postprocess_snippet")
+    @patch("processing_pipeline.stage_3.Stage3Executor.run")
+    def test_process_snippet_skip_review_true(
+        self, mock_run, mock_postprocess, mock_supabase_client, sample_snippet, mock_gemini_response
+    ):
+        """Test processing a snippet with skip_review=True"""
+        mock_run.return_value = (mock_gemini_response, "test_grounding_metadata")
+
+        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=True)
+
+        # Verify update_snippet was called with "Processed" status
+        mock_supabase_client.update_snippet.assert_called_once_with(
+            id=sample_snippet["id"],
+            transcription=mock_gemini_response["transcription"],
+            translation=mock_gemini_response["translation"],
+            title=mock_gemini_response["title"],
+            summary=mock_gemini_response["summary"],
+            explanation=mock_gemini_response["explanation"],
+            disinformation_categories=mock_gemini_response["disinformation_categories"],
+            keywords_detected=mock_gemini_response["keywords_detected"],
+            language=mock_gemini_response["language"],
+            confidence_scores=mock_gemini_response["confidence_scores"],
+            emotional_tone=mock_gemini_response["emotional_tone"],
+            context=mock_gemini_response["context"],
+            political_leaning=mock_gemini_response["political_leaning"],
+            grounding_metadata="test_grounding_metadata",
+            status="Processed",
+            error_message=None,
+        )
+
+        # Verify postprocess_snippet was called
+        mock_postprocess.assert_called_once_with(
+            mock_supabase_client, sample_snippet["id"], mock_gemini_response["disinformation_categories"]
+        )
+
     @patch("google.genai.Client")
     def test_process_snippet_error(self, mock_client_class, mock_supabase_client, sample_snippet):
         """Test processing snippet with error"""
@@ -205,7 +231,7 @@ class TestStage3:
 
         mock_client_class.return_value = mock_client
 
-        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=False)
 
         mock_supabase_client.set_snippet_status.assert_called_with(sample_snippet["id"], "Error", "Test error")
 
@@ -261,7 +287,7 @@ class TestStage3:
         mock_supabase_client.get_a_new_snippet_and_reserve_it.return_value = sample_snippet
 
         with patch("os.remove"):
-            in_depth_analysis(snippet_ids=None, repeat=False)
+            in_depth_analysis(snippet_ids=None, repeat=False, skip_review=True)
 
             mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_called_once()
             mock_s3_client.download_file.assert_called_once()
@@ -271,7 +297,7 @@ class TestStage3:
         mock_supabase_client.get_snippet_by_id.return_value = sample_snippet
 
         with patch("os.remove"):
-            in_depth_analysis(snippet_ids=["test-id"], repeat=False)
+            in_depth_analysis(snippet_ids=["test-id"], repeat=False, skip_review=True)
 
             mock_supabase_client.get_snippet_by_id.assert_called_once_with(
                 id="test-id",
@@ -288,12 +314,12 @@ class TestStage3:
             None,  # Add an extra None to prevent StopIteration
         ]
 
-        with patch("os.remove"), \
-             patch("time.sleep") as mock_sleep, \
-             patch("processing_pipeline.stage_3.process_snippet") as mock_process:
+        with patch("os.remove"), patch("time.sleep") as mock_sleep, patch(
+            "processing_pipeline.stage_3.process_snippet"
+        ) as mock_process:
 
             try:
-                in_depth_analysis(snippet_ids=None, repeat=True)
+                in_depth_analysis(snippet_ids=None, repeat=True, skip_review=True)
             except StopIteration:
                 pass  # Ignore StopIteration as we expect it
 
@@ -305,7 +331,7 @@ class TestStage3:
         """Test in-depth analysis when no snippets are found"""
         mock_supabase_client.get_snippet_by_id.return_value = None
 
-        in_depth_analysis(snippet_ids=["test-id"], repeat=False)
+        in_depth_analysis(snippet_ids=["test-id"], repeat=False, skip_review=True)
 
         mock_s3_client.download_file.assert_not_called()
 
@@ -322,7 +348,7 @@ class TestStage3:
         # Mock Stage3Executor.run to return a tuple (response, grounding_metadata)
         mock_run.return_value = (mock_gemini_response, "test_grounding_metadata")
 
-        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=False)
 
         # Verify the snippet was updated with empty disinformation categories
         mock_supabase_client.update_snippet.assert_called_once()
@@ -349,6 +375,6 @@ class TestStage3:
 
         mock_client_class.return_value = mock_client
 
-        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key")
+        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=False)
 
         mock_supabase_client.set_snippet_status.assert_called_with(sample_snippet["id"], "Error", mock.ANY)

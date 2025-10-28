@@ -12,13 +12,14 @@ from google.genai.types import (
     FinishReason,
     GenerateContentConfig,
     GoogleSearch,
-    HarmBlockThreshold,
-    HarmCategory,
-    SafetySetting,
     ThinkingConfig,
     Tool,
 )
 from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.processing_utils import (
+    get_safety_settings,
+    postprocess_snippet,
+)
 from processing_pipeline.constants import (
     GeminiModel,
     get_system_instruction_for_stage_3,
@@ -72,36 +73,25 @@ def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
 def update_snippet_in_supabase(
     supabase_client,
     snippet_id,
-    transcription,
-    translation,
-    title,
-    summary,
-    explanation,
-    disinformation_categories,
-    keywords_detected,
-    language,
-    confidence_scores,
-    emotional_tone,
-    context,
-    political_leaning,
+    gemini_response,
     grounding_metadata,
     status,
     error_message,
 ):
     supabase_client.update_snippet(
         id=snippet_id,
-        transcription=transcription,
-        translation=translation,
-        title=title,
-        summary=summary,
-        explanation=explanation,
-        disinformation_categories=disinformation_categories,
-        keywords_detected=keywords_detected,
-        language=language,
-        confidence_scores=confidence_scores,
-        emotional_tone=emotional_tone,
-        context=context,
-        political_leaning=political_leaning,
+        transcription=gemini_response["transcription"],
+        translation=gemini_response["translation"],
+        title=gemini_response["title"],
+        summary=gemini_response["summary"],
+        explanation=gemini_response["explanation"],
+        disinformation_categories=gemini_response["disinformation_categories"],
+        keywords_detected=gemini_response["keywords_detected"],
+        language=gemini_response["language"],
+        confidence_scores=gemini_response["confidence_scores"],
+        emotional_tone=gemini_response["emotional_tone"],
+        context=gemini_response["context"],
+        political_leaning=gemini_response["political_leaning"],
         grounding_metadata=grounding_metadata,
         status=status,
         error_message=error_message,
@@ -150,41 +140,34 @@ def __get_metadata(snippet):
 
 
 @optional_task(log_prints=True)
-def process_snippet(supabase_client, snippet, local_file, gemini_key):
+def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_review: bool):
     try:
         print(f"Processing snippet: {local_file} with Gemini 2.5 Flash")
 
         metadata = get_metadata(snippet)
-        print(f"Metadata:\n{json.dumps(metadata, indent=2)}")
+        print(f"Metadata:\n{json.dumps(metadata, indent=2, ensure_ascii=False)}")
 
         response, grounding_metadata = Stage3Executor.run(
             gemini_key=gemini_key,
-            model_name=GeminiModel.GEMINI_FLASH_LATEST,
+            model_name=GeminiModel.GEMINI_2_5_PRO,
             audio_file=local_file,
             metadata=metadata,
         )
 
+        status = "Processed" if skip_review else "Ready for review"
         update_snippet_in_supabase(
             supabase_client=supabase_client,
             snippet_id=snippet["id"],
-            transcription=response["transcription"],
-            translation=response["translation"],
-            title=response["title"],
-            summary=response["summary"],
-            explanation=response["explanation"],
-            disinformation_categories=response["disinformation_categories"],
-            keywords_detected=response["keywords_detected"],
-            language=response["language"],
-            confidence_scores=response["confidence_scores"],
-            emotional_tone=response["emotional_tone"],
-            context=response["context"],
-            political_leaning=response["political_leaning"],
+            gemini_response=response,
             grounding_metadata=grounding_metadata,
-            status="Ready for review",
+            status=status,
             error_message=None,
         )
 
-        print(f"Processing completed for {local_file}")
+        if skip_review:
+            postprocess_snippet(supabase_client, snippet["id"], response["disinformation_categories"])
+
+        print(f"Processing completed for audio file {local_file} - snippet ID: {snippet['id']}")
 
     except Exception as e:
         print(f"Failed to process {local_file}: {e}")
@@ -192,7 +175,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key):
 
 
 @optional_flow(name="Stage 3: In-depth Analysis", log_prints=True, task_runner=ConcurrentTaskRunner)
-def in_depth_analysis(snippet_ids, repeat):
+def in_depth_analysis(snippet_ids, skip_review, repeat):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
     s3_client = boto3.client(
@@ -217,7 +200,7 @@ def in_depth_analysis(snippet_ids, repeat):
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet
-                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY)
+                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY, skip_review=skip_review)
 
                 print(f"Delete the downloaded snippet clip: {local_file}")
                 os.remove(local_file)
@@ -229,7 +212,7 @@ def in_depth_analysis(snippet_ids, repeat):
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet
-                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY)
+                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY, skip_review=skip_review)
 
                 print(f"Delete the downloaded snippet clip: {local_file}")
                 os.remove(local_file)
@@ -315,13 +298,14 @@ class Stage3Executor:
         finally:
             client.files.delete(name=uploaded_audio_file.name)
 
+    @optional_task(log_prints=True, retries=3)
     @classmethod
     def __analyze_with_search(
         cls,
         client: genai.Client,
         model_name: GeminiModel,
         user_prompt: str,
-        audio_file: File,
+        uploaded_audio_file: File,
     ):
         """
         Step 1: Analyze audio with Google Search tool enabled.
@@ -333,22 +317,24 @@ class Stage3Executor:
 
         response = client.models.generate_content(
             model=model_name,
-            contents=[user_prompt, audio_file],
+            contents=[user_prompt, uploaded_audio_file],
             config=GenerateContentConfig(
                 system_instruction=cls.SYSTEM_INSTRUCTION,
                 max_output_tokens=16384,
                 tools=[Tool(google_search=GoogleSearch())],
                 thinking_config=ThinkingConfig(thinking_budget=4096),
-                safety_settings=cls.__get_safety_settings(),
+                safety_settings=get_safety_settings(),
             ),
         )
 
         grounding_metadata = str(response.candidates[0].grounding_metadata) if response.candidates else None
 
         if not response.text:
-            finish_reason = response.candidates[0].finish_reason
+            finish_reason = response.candidates[0].finish_reason if response.candidates else None
+
             if finish_reason == FinishReason.MAX_TOKENS:
                 raise ValueError("The response from Gemini was too long and was cut off in step 1.")
+
             print(f"Response finish reason: {finish_reason}")
             raise ValueError("No response from Gemini in step 1.")
 
@@ -413,7 +399,7 @@ class Stage3Executor:
                 system_instruction=system_instruction,
                 max_output_tokens=8192,
                 thinking_config=ThinkingConfig(thinking_budget=0),
-                safety_settings=cls.__get_safety_settings(),
+                safety_settings=get_safety_settings(),
             ),
         )
 
@@ -421,36 +407,13 @@ class Stage3Executor:
 
         if not parsed_response:
             finish_reason = response.candidates[0].finish_reason if response.candidates else None
+
             if finish_reason == FinishReason.MAX_TOKENS:
                 raise ValueError("The response from Gemini was too long and was cut off in step 2.")
+
             raise ValueError(f"No response from Gemini in step 2. Response finished with reason: {finish_reason}")
 
         if not parsed_response.get("is_convertible"):
             raise ValueError("[Stage 3] The response from Gemini could not be converted to the required schema.")
 
         return parsed_response
-
-    @classmethod
-    def __get_safety_settings(cls):
-        return [
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-                threshold=HarmBlockThreshold.BLOCK_NONE,
-            ),
-        ]
