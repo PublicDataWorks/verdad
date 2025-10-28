@@ -145,7 +145,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
         print(f"Processing snippet: {local_file} with Gemini 2.5 Flash")
 
         metadata = get_metadata(snippet)
-        print(f"Metadata:\n{json.dumps(metadata, indent=2)}")
+        print(f"Metadata:\n{json.dumps(metadata, indent=2, ensure_ascii=False)}")
 
         response, grounding_metadata = Stage3Executor.run(
             gemini_key=gemini_key,
