@@ -154,27 +154,18 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
             metadata=metadata,
         )
 
+        status = "Processed" if skip_review else "Ready for review"
+        update_snippet_in_supabase(
+            supabase_client=supabase_client,
+            snippet_id=snippet["id"],
+            gemini_response=response,
+            grounding_metadata=grounding_metadata,
+            status=status,
+            error_message=None,
+        )
+
         if skip_review:
-            update_snippet_in_supabase(
-                supabase_client=supabase_client,
-                snippet_id=snippet["id"],
-                gemini_response=response,
-                grounding_metadata=grounding_metadata,
-                status="Processed",
-                error_message=None,
-            )
-
             postprocess_snippet(supabase_client, snippet["id"], response["disinformation_categories"])
-
-        else:
-            update_snippet_in_supabase(
-                supabase_client=supabase_client,
-                snippet_id=snippet["id"],
-                gemini_response=response,
-                grounding_metadata=grounding_metadata,
-                status="Ready for review",
-                error_message=None,
-            )
 
         print(f"Processing completed for audio file {local_file} - snippet ID: {snippet['id']}")
 
