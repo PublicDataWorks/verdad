@@ -13,8 +13,8 @@ class Summary(BaseModel):
 
 
 class Explanation(BaseModel):
-    spanish: str = Field(description="Explanation of the snippet in Spanish")
-    english: str = Field(description="Explanation of the snippet in English")
+    spanish: str = Field(description="Explanation of the analysis findings in Spanish")
+    english: str = Field(description="Explanation of the analysis findings in English")
 
 
 class DisinformationCategory(BaseModel):
@@ -49,6 +49,7 @@ class ValidationChecklist(BaseModel):
     scoring_falsity: bool
     defensible_to_factcheckers: bool
     consistent_explanations: bool
+    uncertain_claims_scored_low: bool
 
 
 class ScoreAdjustments(BaseModel):
@@ -137,7 +138,7 @@ class Stage3Output(BaseModel):
     translation: str = Field(description="Translation of the transcription into English")
     title: Title = Field(description="Descriptive title of the snippet")
     summary: Summary = Field(description="Objective summary of the snippet")
-    explanation: Explanation = Field(description="Detailed explanation of why the snippet constitutes disinformation")
+    explanation: Explanation = Field(description="Detailed explanation of the analysis findings, including why content is scored as disinformation or verified as accurate")
     disinformation_categories: list[DisinformationCategory] = Field(
         description="Disinformation categories that the snippet belongs to"
     )
