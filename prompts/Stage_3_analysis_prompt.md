@@ -158,7 +158,7 @@ Example: "Immigrants are causing crime rates to spike" (when data shows no corre
 Example: "The government is hiding the truth about inflation"
 
 4. **Zero Confidence Score (0) applies when:**
-- Web search confirms claims are true (verified by reputable sources like CNN, BBC, Reuters, AP, Variety, Deadline)
+- Web search confirms claims are true (verified by reputable sources like CNN, BBC, Reuters, AP)
 - Content makes no demonstrably false claims
 - Content expresses opinions without misrepresenting facts
 - Content may be partisan or controversial but is factually accurate
