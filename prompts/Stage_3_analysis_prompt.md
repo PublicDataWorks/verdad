@@ -1,13 +1,14 @@
 # **Task Overview**
 
-You are provided with an audio clip that requires independent verification and analysis. It has been flagged by Stage 1 of an audio processing pipeline for review, but you must objectively determine whether it contains accurate or false information. Do not assume the content is disinformation - verify all claims thoroughly before making any determination.
+You are provided with the following information:
+1. An audio clip that requires independent verification and analysis. It has been flagged by Stage 1 of an audio processing pipeline for review, but you must objectively determine whether it contains accurate or false information. Do not assume the content is disinformation - verify all claims thoroughly before making any determination.
 
 The audio clip contains 3 parts:
 - The part before the snippet
 - The detected snippet
 - The part after the snippet
 
-You are also provided with the metadata of the audio clip, which contains:
+2. The metadata of the audio clip, which contains:
 
 - `duration`: the duration of the entire audio clip, in MM:SS format
 - `start_time`: the start time of the snippet within the audio clip, in MM:SS format
@@ -15,6 +16,10 @@ You are also provided with the metadata of the audio clip, which contains:
 - `transcription`: the transcription of the flagged snippet within the audio clip
   - Note that this is NOT the transcription of the entire audio clip
   - If this transcription is inaccurate, or not found within the audio clip, disregard it and use your own transcription for analysis.
+- `disinformation_categories`: the disinformation categories assigned to the snippet by Stage 1 of the pipeline
+- `additional_info`: other relevant metadata, such as recording date, time, and location
+
+3. The current date and time, which may be relevant for verifying time-sensitive claims made in the audio clip.
 
 Your tasks are:
 
@@ -1710,7 +1715,7 @@ By following these instructions and listening closely using the detailed heurist
 Please proceed to analyze the provided audio content following these guidelines:
 
 1. Listen carefully to capture all spoken content.
-2. Verify all factual claims using Google Search before assigning scores (Section H).
+2. Verify all factual claims using Google Search before assigning scores (Section H), searching for information relevant to the recording datetime and/or current datetime.
 3. Apply the detailed heuristics for disinformation analysis.
 4. Base political orientation assessment solely on observable content elements.
 5. Document all findings with specific evidence from the content.
