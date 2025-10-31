@@ -103,7 +103,7 @@ start_deployment_instances "$STAGE_2_CLIPPING" "$STAGE_2_FLOW_RUNS" "Stage 2"
 start_deployment_instances "$STAGE_3_IN_DEPTH" "$STAGE_3_FLOW_RUNS" "Stage 3"
 
 # Stage 4: Analysis Review
-start_deployment_instances "$STAGE_4_REVIEW" "$STAGE_4_FLOW_RUNS" "Stage 4"
+# start_deployment_instances "$STAGE_4_REVIEW" "$STAGE_4_FLOW_RUNS" "Stage 4"
 
 # Stage 5: Embedding
 start_deployment_instances "$STAGE_5_EMBEDDING" "$STAGE_5_FLOW_RUNS" "Stage 5"
