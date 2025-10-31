@@ -34,13 +34,13 @@ primary_region = 'sea'
 
 
 [[vm]]
-  processes = ["analysis_review", "analysis_review_2"]
+  processes = ["in_depth_analysis", "analysis_review", "analysis_review_2"]
   memory = '2gb'
   cpu_kind = 'shared'
   cpus = 8
 
 [[vm]]
-  processes = ["regenerate_timestamped_transcript", "in_depth_analysis", "embedding"]
+  processes = ["regenerate_timestamped_transcript", "embedding"]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 4
