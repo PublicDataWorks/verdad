@@ -1,7 +1,9 @@
 from datetime import datetime
+from http import HTTPStatus
 import os
 import time
 from google import genai
+from google.genai import errors
 import json
 import boto3
 from pydantic import ValidationError
@@ -140,16 +142,52 @@ def __get_metadata(snippet):
 
 
 @optional_task(log_prints=True)
-def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_review: bool):
-    try:
-        print(f"Processing snippet: {local_file} with Gemini 2.5 Flash")
+def analyze_snippet(gemini_key, audio_file, metadata):
+    main_model = GeminiModel.GEMINI_2_5_PRO
+    fallback_model = GeminiModel.GEMINI_FLASH_LATEST
 
+    try:
+        print(f"Attempting analysis with {main_model}")
+        return Stage3Executor.run(
+            gemini_key=gemini_key,
+            model_name=main_model,
+            audio_file=audio_file,
+            metadata=metadata,
+        )
+    except errors.ServerError as e:
+        print(f"Server error with {main_model} (code {e.code}): {e.message}")
+        print(f"Falling back to {fallback_model}")
+        return Stage3Executor.run(
+            gemini_key=gemini_key,
+            model_name=fallback_model,
+            audio_file=audio_file,
+            metadata=metadata,
+        )
+    except errors.ClientError as e:
+        if e.code in [HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN]:
+            print(f"Auth error with {main_model} (code {e.code}): {e.message}")
+            raise
+        else:
+            print(f"Client error with {main_model} (code {e.code}): {e.message}")
+            print(f"Falling back to {fallback_model}")
+            return Stage3Executor.run(
+                gemini_key=gemini_key,
+                model_name=fallback_model,
+                audio_file=audio_file,
+                metadata=metadata,
+            )
+
+
+@optional_task(log_prints=True)
+def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_review: bool):
+    print(f"Processing snippet: {local_file}")
+
+    try:
         metadata = get_metadata(snippet)
         print(f"Metadata:\n{json.dumps(metadata, indent=2, ensure_ascii=False)}")
 
-        response, grounding_metadata = Stage3Executor.run(
+        response, grounding_metadata = analyze_snippet(
             gemini_key=gemini_key,
-            model_name=GeminiModel.GEMINI_2_5_PRO,
             audio_file=local_file,
             metadata=metadata,
         )
