@@ -70,7 +70,7 @@
                     "description": "Explanation in English."
                 }
             },
-            "description": "Detailed explanation of why the snippet constitutes disinformation."
+            "description": "Detailed explanation of the analysis findings, including why content is scored as disinformation or verified as accurate."
         },
         "disinformation_categories": {
             "type": "array",
@@ -185,14 +185,16 @@
                                 "evidence_provided",
                                 "scoring_falsity",
                                 "defensible_to_factcheckers",
-                                "consistent_explanations"
+                                "consistent_explanations",
+                                "uncertain_claims_scored_low"
                             ],
                             "properties": {
                                 "specific_claims_quoted": { "type": "boolean" },
                                 "evidence_provided": { "type": "boolean" },
                                 "scoring_falsity": { "type": "boolean" },
                                 "defensible_to_factcheckers": { "type": "boolean" },
-                                "consistent_explanations": { "type": "boolean" }
+                                "consistent_explanations": { "type": "boolean" },
+                                "uncertain_claims_scored_low": { "type": "boolean" }
                             }
                         },
                         "score_adjustments": {
