@@ -313,7 +313,9 @@ class Stage3Executor:
 
         # Prepare the user prompt
         user_prompt = (
-            f"{cls.USER_PROMPT}\n\nHere is the metadata of the attached audio clip:\n{json.dumps(metadata, indent=2)}"
+            f"{cls.USER_PROMPT}\n\n"
+            f"Here is the metadata of the attached audio clip:\n{json.dumps(metadata, indent=2)}\n\n"
+            f"Here is the current date and time: {datetime.now(timezone.utc).strftime('%B %-d, %Y %-I:%M %p UTC')}\n\n"
         )
 
         try:
