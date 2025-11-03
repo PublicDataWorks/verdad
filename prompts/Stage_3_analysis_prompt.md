@@ -1,20 +1,25 @@
 # **Task Overview**
 
-You are provided with an audio clip containing a potential disinformation snippet that has been flagged by Stage 1 of an audio processing pipeline.
+You are provided with the following information:
+1. An audio clip that requires independent verification and analysis. It has been flagged by Stage 1 of an audio processing pipeline for review, but you must objectively determine whether it contains accurate or false information. Do not assume the content is disinformation - verify all claims thoroughly before making any determination.
 
 The audio clip contains 3 parts:
 - The part before the snippet
 - The detected snippet
 - The part after the snippet
 
-You are also provided with the metadata of the audio clip, which contains:
+2. The metadata of the audio clip, which contains:
 
 - `duration`: the duration of the entire audio clip, in MM:SS format
 - `start_time`: the start time of the snippet within the audio clip, in MM:SS format
 - `end_time`: the end time of the snippet within the audio clip, in MM:SS format
-- `transcription`: the transcription of the disinformation snippet within the audio clip
+- `transcription`: the transcription of the flagged snippet within the audio clip
   - Note that this is NOT the transcription of the entire audio clip
   - If this transcription is inaccurate, or not found within the audio clip, disregard it and use your own transcription for analysis.
+- `disinformation_categories`: the disinformation categories assigned to the snippet by Stage 1 of the pipeline
+- `additional_info`: other relevant metadata, such as recording date, time, and location
+
+3. The current date and time, which may be relevant for verifying time-sensitive claims made in the audio clip.
 
 Your tasks are:
 
@@ -85,7 +90,7 @@ Perform the following steps:
   - Highlight the main points discussed.
 
 - **Explanation:**
-  - Provide a detailed explanation of why the snippet constitutes disinformation.
+  - Provide a detailed explanation of your analysis findings. If disinformation is detected, explain why the content is false or misleading.
   - Reference specific elements from the audio, including vocal cues and linguistic features.
   - Use the detailed heuristics and examples to support your analysis.
   - Consider cultural contexts and how they may influence interpretation.
@@ -121,38 +126,52 @@ Perform the following steps:
   - Ensure that the `main` part of the `context` matches with the transcription in the provided metadata.
   - In case the provided transcription in the metadata is inaccurate (eg, it's not found within the audio clip), utilize your own transcription to identify and extract the snippet and its surrounding context.
 
-##### **H. Confidence Scoring and Self-Review Process**
+##### **H. Confidence Scoring and Verification Requirements**
 
 The confidence score represents your degree of certainty that the content contains demonstrably false or misleading claims. This is NOT:
 - A measure of confidence in your analysis
 - A measure of how controversial or partisan the content is
 - A measure of whether you agree with the positions expressed
 
-**Initial Scoring Framework:**
+**Verification Requirement:**
 
-High Confidence Scores (80-100) require:
+Before assigning confidence scores, verify all factual claims using Grounding with Google Search. The verification outcome determines the maximum possible score.
+
+**Scoring Framework Based on Verification:**
+
+1. **High Confidence Scores (80-100) require:**
+- Strong contradictory evidence from reputable sources (news articles, official statements, fact-checkers stating claim is false)
 - Specific factual claims that can be definitively proven false
 - Direct contradictions of well-documented facts
 - Demonstrably false statements or deliberate misrepresentation
-Example: "The COVID vaccine contains microchips for mind control"
+Example: "The COVID vaccine contains microchips for mind control" OR search finds recent news showing person alive when death claimed
 
-Medium Confidence Scores (40-79) require:
+2. **Medium Confidence Scores (40-79) require:**
+- Some contradictory evidence found, but not definitive
 - Misleading claims that omit crucial context
 - Deceptive presentation of real facts
 - Misrepresentation of causation vs correlation
+**IMPORTANT**: If NO contradictory evidence is found, maximum score is 40, not higher
 Example: "Immigrants are causing crime rates to spike" (when data shows no correlation)
 
-Low Confidence Scores (1-39) apply to:
+3. **Low Confidence Scores (1-39) apply when:**
+- No contradictory evidence found via web search (no search results or only old/unrelated information)
 - Unsubstantiated claims without clear evidence
 - Exaggerated interpretations of real events
 - Misleading but not entirely false statements
+- Limited coverage (common for recent events or local news)
 Example: "The government is hiding the truth about inflation"
 
-Zero Confidence Score (0) applies when:
+4. **Zero Confidence Score (0) applies when:**
+- Web search confirms claims are true (verified by reputable sources like CNN, BBC, Reuters, AP)
 - Content makes no demonstrably false claims
 - Content expresses opinions without misrepresenting facts
 - Content may be partisan or controversial but is factually accurate
 Example: "We need stricter immigration policies"
+
+**Key Principle: Absence of evidence is not evidence of absence.**
+
+No search results does NOT mean the claim is false. Unusual or surprising claims can be true. Recent events may have limited coverage. When you cannot find contradictory information, score conservatively (0-40), not as disinformation (80-100).
 
 ##### **I. Required Self-Review Process**
 
@@ -172,10 +191,13 @@ After completing your initial analysis, perform this structured review:
    - [ ] Am I scoring falsity rather than controversy?
    - [ ] Would these scores be defensible to fact-checkers?
    - [ ] Are my explanations consistent with my scores?
+   - [ ] For uncertain claims: Did I score them 0-40 maximum?
 
 3. **Score Adjustment Protocol**
    If any validation fails:
-   - Reduce score to 0 if you cannot cite specific false claims
+   - Reduce to 0 if you cannot cite specific false claims
+   - Reduce to 0 if web search confirms claims are true
+   - Reduce to 0-40 if you found no reliable information (uncertainty)
    - Adjust scores to match available evidence
    - Document reasoning for any score changes
    - Ensure final scores reflect only demonstrably false content
@@ -186,6 +208,7 @@ After completing your initial analysis, perform this structured review:
    - Confusing controversial content with false content
    - Treating bias as equivalent to disinformation
    - Scoring based on disagreement rather than falsity
+   - Treating "no search results" as evidence of falsity (it is uncertainty)
 
 ##### **J. Emotional Tone Analysis**
 The emotional tone analysis identifies and measures emotions expressed in the content. Like our confidence scoring, this requires evidence-based assessment:
@@ -422,7 +445,7 @@ Ensure your output strictly adheres to this schema.
                     "description": "Explanation in English."
                 }
             },
-            "description": "Detailed explanation of why the snippet constitutes disinformation."
+            "description": "Detailed explanation of the analysis findings, including why content is scored as disinformation or verified as accurate."
         },
         "disinformation_categories": {
             "type": "array",
@@ -537,14 +560,16 @@ Ensure your output strictly adheres to this schema.
                                 "evidence_provided",
                                 "scoring_falsity",
                                 "defensible_to_factcheckers",
-                                "consistent_explanations"
+                                "consistent_explanations",
+                                "uncertain_claims_scored_low"
                             ],
                             "properties": {
                                 "specific_claims_quoted": { "type": "boolean" },
                                 "evidence_provided": { "type": "boolean" },
                                 "scoring_falsity": { "type": "boolean" },
                                 "defensible_to_factcheckers": { "type": "boolean" },
-                                "consistent_explanations": { "type": "boolean" }
+                                "consistent_explanations": { "type": "boolean" },
+                                "uncertain_claims_scored_low": { "type": "boolean" }
                             }
                         },
                         "score_adjustments": {
@@ -1514,7 +1539,8 @@ Below is a complete example showing all required fields:
         "evidence_provided": true,
         "scoring_falsity": true,
         "defensible_to_factcheckers": true,
-        "consistent_explanations": true
+        "consistent_explanations": true,
+        "uncertain_claims_scored_low": true
       },
       "score_adjustments": {
         "initial_score": 95,
@@ -1689,14 +1715,15 @@ By following these instructions and listening closely using the detailed heurist
 Please proceed to analyze the provided audio content following these guidelines:
 
 1. Listen carefully to capture all spoken content.
-2. Apply the detailed heuristics for disinformation analysis.
-3. Base political orientation assessment solely on observable content elements.
-4. Document all findings with specific evidence from the content.
-5. Structure your output according to the provided JSON schema.
-6. Confidence scores must be based on demonstrably false claims, not controversy.
-7. Each non-zero score requires specific evidence.
-8. Complete the self-review process for every analysis.
-9. When in doubt, score conservatively (lower).
+2. Verify all factual claims using Google Search before assigning scores (Section H), searching for information relevant to the recording datetime and/or current datetime.
+3. Apply the detailed heuristics for disinformation analysis.
+4. Base political orientation assessment solely on observable content elements.
+5. Document all findings with specific evidence from the content.
+6. Structure your output according to the provided JSON schema.
+7. Confidence scores must be based on contradictory evidence and demonstrably false claims, not absence of confirmation or controversy.
+8. Each non-zero score requires specific evidence.
+9. Complete the self-review process for every analysis.
+10. When in doubt, score conservatively (0-40 for uncertain claims).
 
 # Important Note
 
