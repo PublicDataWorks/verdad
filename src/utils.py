@@ -121,7 +121,7 @@ def fetch_radio_stations():
         },
         {
             "code": "KBNL - 89.9 FM",
-            "url": "http://wrn.streamguys1.com/kbnl",
+            "url": "https://ais-sa15.cdnstream1.com/5061_64.aac",
             "state": "Texas",
             "name": "Manantial FM",
         },
@@ -151,7 +151,7 @@ def fetch_radio_stations():
         },
         {
             "code": "KENO - 1460 AM",
-            "url": "https://23023.live.streamtheworld.com/KENOAMAAC_SC",
+            "url": "https://24863.live.streamtheworld.com/KENOAMAAC_SC",
             "state": "Nevada",
             "name": "Deportes Vegas",
         },
@@ -175,19 +175,19 @@ def fetch_radio_stations():
         },
         {
             "code": "KCMT - 92.1 FM",
-            "url": "https://23023.live.streamtheworld.com/KCMTFMAAC_SC",
+            "url": "https://14933.live.streamtheworld.com/KCMTFMAAC_SC",
             "state": "Arizona",
             "name": "LA Caliente",
         },
         {
             "code": "KRMC - 91.7 FM",
-            "url": "http://wrn.streamguys1.com/krmc",
+            "url": "https://ais-sa15.cdnstream1.com/5064_64.aac",
             "state": "Arizona",
             "name": "Radio Cadena Manantial",
         },
         {
             "code": "KNOG - 91.7 FM",
-            "url": "http://wrn.streamguys1.com/knog",
+            "url": "https://ais-sa15.cdnstream1.com/5063_64.aac",
             "state": "Arizona",
             "name": "KNOG",
         },
@@ -212,7 +212,7 @@ def fetch_radio_stations():
         },
         {
             "code": "WSUA - 1260 AM",
-            "url": "https://dvrfl04.tulix.tv/americana2-audio/tracks-a1/mono.m3u8",
+            "url": "https://stream-171.zeno.fm/ulo8qv9wsnntv",
             "state": "Florida",
             "name": "America Radio Miami",
         },
@@ -359,7 +359,7 @@ def fetch_radio_stations():
         },
         {
             "code": "WIST",
-            "url": "https://sonos.norsanmedia.com/razatriad",
+            "url": "https://stream-153.zeno.fm/wspmwfvneg8uv",
             "state": "North Carolina",
             "name": "La Raza Triad"
         },
@@ -377,13 +377,13 @@ def fetch_radio_stations():
         },
         {
             "code": "WGSP",
-            "url": "https://stream-163.zeno.fm/xaz83f7uapjtv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJ4YXo4M2Y3dWFwanR2IiwiaG9zdCI6InN0cmVhbS0xNjMuemVuby5mbSIsInJ0dGwiOjUsImp0aSI6Ik10emkySllfU0F5bHlOZ0lqcTYtOFEiLCJpYXQiOjE3MzMzNjUzMTgsImV4cCI6MTczMzM2NTM3OH0.mL7rTxPUFj3-toPAXR4l7X1iOYMsRD47dImyMi8jFrU",
+            "url": "https://stream-163.zeno.fm/xaz83f7uapjtv",
             "state": "North Carolina",
             "name": "Latina tu Musica"
         },
         {
             "code": "WYMY",
-            "url": "https://18813.live.streamtheworld.com/WYMYPRIVATEAAC_SC?dist=triton-web&pname=StandardPlayerV4",
+            "url": "https://29263.live.streamtheworld.com/WYMYPRIVATEAAC_SC?dist=triton-web&pname=StandardPlayerV4",
             "state": "North Carolina",
             "name": "La Ley"
         },
@@ -395,7 +395,7 @@ def fetch_radio_stations():
         },
         {
             "code": "KVNR",
-            "url": "https://stream-146.zeno.fm/2znsmu8d8zquv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiIyem5zbXU4ZDh6cXV2IiwiaG9zdCI6InN0cmVhbS0xNDYuemVuby5mbSIsInJ0dGwiOjUsImp0aSI6IjZ5Q3RJRmN5UlVXaU9YaEVoTU9YcHciLCJpYXQiOjE3MzMzNzc0MTQsImV4cCI6MTczMzM3NzQ3NH0.E_1JOM9UODLnbrEjxdjAGDrVGqEZUbe1CwNI7zP7PRk",
+            "url": "https://stream-146.zeno.fm/2znsmu8d8zquv",
             "state": "California",
             "name": "Little Saigon Radio"
         }
