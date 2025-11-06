@@ -1,5 +1,5 @@
 import os
-from prefect import flow,task
+from prefect import flow, task
 from prefect.cache_policies import NO_CACHE
 
 
@@ -19,16 +19,18 @@ def optional_task(func=None, **kwargs):
         Function: Original function if Prefect decorator is disabled,
                  or Prefect task-decorated function if enabled
     """
-    enable_prefect = os.getenv('ENABLE_PREFECT_DECORATOR', 'true').lower() == 'true'
+    enable_prefect = os.getenv("ENABLE_PREFECT_DECORATOR", "true").lower() == "true"
 
     if not enable_prefect:
         # If Prefect decorator is disabled, return the function as-is
         def wrapper(f):
             return f
+
     else:
         # If Prefect decorator is enabled (default), apply Prefect task decorator
-        if 'cache_policy' not in kwargs:
-            kwargs['cache_policy'] = NO_CACHE
+        if "cache_policy" not in kwargs:
+            kwargs["cache_policy"] = NO_CACHE
+
         def wrapper(f):
             return task(**kwargs)(f)
 
@@ -56,12 +58,13 @@ def optional_flow(func=None, **kwargs):
         Function: Original function if Prefect decorator is disabled,
                  or Prefect flow-decorated function if enabled
     """
-    enable_prefect = os.getenv('ENABLE_PREFECT_DECORATOR', 'true').lower() == 'true'
+    enable_prefect = os.getenv("ENABLE_PREFECT_DECORATOR", "true").lower() == "true"
 
     if not enable_prefect:
         # If Prefect decorator is disabled, return the function as-is
         def wrapper(f):
             return f
+
     else:
         # If Prefect decorator is enabled (default), apply Prefect flow decorator
         def wrapper(f):
@@ -349,54 +352,54 @@ def fetch_radio_stations():
             "code": "WOLS",
             "url": "https://sonos.norsanmedia.com/wols",
             "state": "North Carolina",
-            "name": "La Raza"
+            "name": "La Raza",
         },
         {
             "code": "WSRP",
             "url": "https://radioenhd.com:7108/;",
             "state": "North Carolina",
-            "name": "La Grande"
+            "name": "La Grande",
         },
         {
             "code": "WIST",
             "url": "https://stream-153.zeno.fm/wspmwfvneg8uv",
             "state": "North Carolina",
-            "name": "La Raza Triad"
+            "name": "La Raza Triad",
         },
         {
             "code": "KMRO",
             "url": "https://ice10.securenetsystems.net/KMRO",
             "state": "North Carolina",
-            "name": "Radio Nueva Vida"
+            "name": "Radio Nueva Vida",
         },
         {
             "code": "WGOS",
             "url": "https://stream10.usastreams.com/8040/stream",
             "state": "North Carolina",
-            "name": "Radio Vida Nueva"
+            "name": "Radio Vida Nueva",
         },
         {
             "code": "WGSP",
             "url": "https://stream-163.zeno.fm/xaz83f7uapjtv",
             "state": "North Carolina",
-            "name": "Latina tu Musica"
+            "name": "Latina tu Musica",
         },
         {
             "code": "WYMY",
             "url": "https://29263.live.streamtheworld.com/WYMYPRIVATEAAC_SC?dist=triton-web&pname=StandardPlayerV4",
             "state": "North Carolina",
-            "name": "La Ley"
+            "name": "La Ley",
         },
         {
             "code": "WSGH",
             "url": "https://ice7.securenetsystems.net/MOVIDITA",
             "state": "North Carolina",
-            "name": "Activa"
+            "name": "Activa",
         },
         {
             "code": "KVNR",
             "url": "https://stream-146.zeno.fm/2znsmu8d8zquv",
             "state": "California",
-            "name": "Little Saigon Radio"
-        }
+            "name": "Little Saigon Radio",
+        },
     ]
