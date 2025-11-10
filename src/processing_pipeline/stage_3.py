@@ -6,6 +6,8 @@ from google import genai
 from google.genai import errors
 import json
 import boto3
+from prefect.flows import Flow
+from prefect.client.schemas import FlowRun, State
 from pydantic import ValidationError
 
 from prefect.task_runners import ConcurrentTaskRunner
@@ -24,6 +26,7 @@ from processing_pipeline.processing_utils import (
 )
 from processing_pipeline.constants import (
     GeminiModel,
+    ProcessingStatus,
     get_system_instruction_for_stage_3,
     get_output_schema_for_stage_3,
     get_user_prompt_for_stage_3,
@@ -212,7 +215,26 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
         supabase_client.set_snippet_status(snippet["id"], "Error", str(e))
 
 
-@optional_flow(name="Stage 3: In-depth Analysis", log_prints=True, task_runner=ConcurrentTaskRunner)
+def reset_snippet_status_hook(flow: Flow, flow_run: FlowRun, state: State):
+    snippet_ids = flow_run.parameters.get("snippet_ids", None)
+
+    if not snippet_ids:
+        return
+
+    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    for snippet_id in snippet_ids:
+        snippet = fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id)
+        if snippet and snippet["status"] == ProcessingStatus.PROCESSING:
+            supabase_client.set_snippet_status(snippet_id, ProcessingStatus.NEW)
+
+
+@optional_flow(
+    name="Stage 3: In-depth Analysis",
+    log_prints=True,
+    task_runner=ConcurrentTaskRunner,
+    on_crashed=[reset_snippet_status_hook],
+    on_cancellation=[reset_snippet_status_hook],
+)
 def in_depth_analysis(snippet_ids, skip_review, repeat):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")

@@ -8,7 +8,7 @@ from prefect.client.schemas.filters import (
     FlowRunFilterStateType,
 )
 from prefect.client.schemas.objects import StateType
-from prefect.states import Cancelled
+from prefect.states import Cancelling
 
 
 async def cancel_all_runs():
@@ -35,7 +35,7 @@ async def cancel_all_runs():
                 try:
                     await client.set_flow_run_state(
                         run.id,
-                        state=Cancelled(message="Cancelled by scheduled restart"),
+                        state=Cancelling(message="Cancelled by scheduled restart"),
                     )
                     print(f"- Cancelled: {run.name} ({run.id})")
                     cancelled_count += 1
