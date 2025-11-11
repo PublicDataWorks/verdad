@@ -269,7 +269,9 @@ def reset_audio_file_status_hook(flow: Flow, flow_run: FlowRun, state: State):
         return
 
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
-    set_audio_file_status(supabase_client, audio_file_id, ProcessingStatus.NEW)
+    audio_file = supabase_client.get_audio_file_by_id(audio_file_id)
+    if audio_file and audio_file.get("status") == ProcessingStatus.PROCESSING:
+        set_audio_file_status(supabase_client, audio_file_id, ProcessingStatus.NEW)
 
 
 @optional_flow(
