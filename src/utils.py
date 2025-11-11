@@ -1,5 +1,5 @@
 import os
-from prefect import flow,task
+from prefect import flow, task
 from prefect.cache_policies import NO_CACHE
 
 
@@ -19,16 +19,18 @@ def optional_task(func=None, **kwargs):
         Function: Original function if Prefect decorator is disabled,
                  or Prefect task-decorated function if enabled
     """
-    enable_prefect = os.getenv('ENABLE_PREFECT_DECORATOR', 'true').lower() == 'true'
+    enable_prefect = os.getenv("ENABLE_PREFECT_DECORATOR", "true").lower() == "true"
 
     if not enable_prefect:
         # If Prefect decorator is disabled, return the function as-is
         def wrapper(f):
             return f
+
     else:
         # If Prefect decorator is enabled (default), apply Prefect task decorator
-        if 'cache_policy' not in kwargs:
-            kwargs['cache_policy'] = NO_CACHE
+        if "cache_policy" not in kwargs:
+            kwargs["cache_policy"] = NO_CACHE
+
         def wrapper(f):
             return task(**kwargs)(f)
 
@@ -56,12 +58,13 @@ def optional_flow(func=None, **kwargs):
         Function: Original function if Prefect decorator is disabled,
                  or Prefect flow-decorated function if enabled
     """
-    enable_prefect = os.getenv('ENABLE_PREFECT_DECORATOR', 'true').lower() == 'true'
+    enable_prefect = os.getenv("ENABLE_PREFECT_DECORATOR", "true").lower() == "true"
 
     if not enable_prefect:
         # If Prefect decorator is disabled, return the function as-is
         def wrapper(f):
             return f
+
     else:
         # If Prefect decorator is enabled (default), apply Prefect flow decorator
         def wrapper(f):
@@ -121,7 +124,7 @@ def fetch_radio_stations():
         },
         {
             "code": "KBNL - 89.9 FM",
-            "url": "http://wrn.streamguys1.com/kbnl",
+            "url": "https://ais-sa15.cdnstream1.com/5061_64.aac",
             "state": "Texas",
             "name": "Manantial FM",
         },
@@ -151,7 +154,7 @@ def fetch_radio_stations():
         },
         {
             "code": "KENO - 1460 AM",
-            "url": "https://23023.live.streamtheworld.com/KENOAMAAC_SC",
+            "url": "https://24863.live.streamtheworld.com/KENOAMAAC_SC",
             "state": "Nevada",
             "name": "Deportes Vegas",
         },
@@ -175,19 +178,19 @@ def fetch_radio_stations():
         },
         {
             "code": "KCMT - 92.1 FM",
-            "url": "https://23023.live.streamtheworld.com/KCMTFMAAC_SC",
+            "url": "https://14933.live.streamtheworld.com/KCMTFMAAC_SC",
             "state": "Arizona",
             "name": "LA Caliente",
         },
         {
             "code": "KRMC - 91.7 FM",
-            "url": "http://wrn.streamguys1.com/krmc",
+            "url": "https://ais-sa15.cdnstream1.com/5064_64.aac",
             "state": "Arizona",
             "name": "Radio Cadena Manantial",
         },
         {
             "code": "KNOG - 91.7 FM",
-            "url": "http://wrn.streamguys1.com/knog",
+            "url": "https://ais-sa15.cdnstream1.com/5063_64.aac",
             "state": "Arizona",
             "name": "KNOG",
         },
@@ -212,7 +215,7 @@ def fetch_radio_stations():
         },
         {
             "code": "WSUA - 1260 AM",
-            "url": "https://dvrfl04.tulix.tv/americana2-audio/tracks-a1/mono.m3u8",
+            "url": "https://stream-171.zeno.fm/ulo8qv9wsnntv",
             "state": "Florida",
             "name": "America Radio Miami",
         },
@@ -242,7 +245,7 @@ def fetch_radio_stations():
         },
         {
             "code": "WZHF",
-            "url": "https://icecast-rian.cdnvideo.ru/voiceusa",
+            "url": "https://icecast-rian.cdnvideo.ru/voicerus",
             "state": "Russia",
             "name": "Radio Sputnik",
         },
@@ -349,54 +352,54 @@ def fetch_radio_stations():
             "code": "WOLS",
             "url": "https://sonos.norsanmedia.com/wols",
             "state": "North Carolina",
-            "name": "La Raza"
+            "name": "La Raza",
         },
         {
             "code": "WSRP",
             "url": "https://radioenhd.com:7108/;",
             "state": "North Carolina",
-            "name": "La Grande"
+            "name": "La Grande",
         },
         {
             "code": "WIST",
-            "url": "https://sonos.norsanmedia.com/razatriad",
+            "url": "https://stream-153.zeno.fm/wspmwfvneg8uv",
             "state": "North Carolina",
-            "name": "La Raza Triad"
+            "name": "La Raza Triad",
         },
         {
             "code": "KMRO",
             "url": "https://ice10.securenetsystems.net/KMRO",
             "state": "North Carolina",
-            "name": "Radio Nueva Vida"
+            "name": "Radio Nueva Vida",
         },
         {
             "code": "WGOS",
             "url": "https://stream10.usastreams.com/8040/stream",
             "state": "North Carolina",
-            "name": "Radio Vida Nueva"
+            "name": "Radio Vida Nueva",
         },
         {
             "code": "WGSP",
-            "url": "https://stream-163.zeno.fm/xaz83f7uapjtv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJ4YXo4M2Y3dWFwanR2IiwiaG9zdCI6InN0cmVhbS0xNjMuemVuby5mbSIsInJ0dGwiOjUsImp0aSI6Ik10emkySllfU0F5bHlOZ0lqcTYtOFEiLCJpYXQiOjE3MzMzNjUzMTgsImV4cCI6MTczMzM2NTM3OH0.mL7rTxPUFj3-toPAXR4l7X1iOYMsRD47dImyMi8jFrU",
+            "url": "https://stream-163.zeno.fm/xaz83f7uapjtv",
             "state": "North Carolina",
-            "name": "Latina tu Musica"
+            "name": "Latina tu Musica",
         },
         {
             "code": "WYMY",
-            "url": "https://18813.live.streamtheworld.com/WYMYPRIVATEAAC_SC?dist=triton-web&pname=StandardPlayerV4",
+            "url": "https://29263.live.streamtheworld.com/WYMYPRIVATEAAC_SC?dist=triton-web&pname=StandardPlayerV4",
             "state": "North Carolina",
-            "name": "La Ley"
+            "name": "La Ley",
         },
         {
             "code": "WSGH",
             "url": "https://ice7.securenetsystems.net/MOVIDITA",
             "state": "North Carolina",
-            "name": "Activa"
+            "name": "Activa",
         },
         {
             "code": "KVNR",
-            "url": "https://stream-146.zeno.fm/2znsmu8d8zquv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiIyem5zbXU4ZDh6cXV2IiwiaG9zdCI6InN0cmVhbS0xNDYuemVuby5mbSIsInJ0dGwiOjUsImp0aSI6IjZ5Q3RJRmN5UlVXaU9YaEVoTU9YcHciLCJpYXQiOjE3MzMzNzc0MTQsImV4cCI6MTczMzM3NzQ3NH0.E_1JOM9UODLnbrEjxdjAGDrVGqEZUbe1CwNI7zP7PRk",
+            "url": "https://stream-146.zeno.fm/2znsmu8d8zquv",
             "state": "California",
-            "name": "Little Saigon Radio"
-        }
+            "name": "Little Saigon Radio",
+        },
     ]
