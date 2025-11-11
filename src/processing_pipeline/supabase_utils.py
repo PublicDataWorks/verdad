@@ -198,6 +198,7 @@ class SupabaseClient:
         context,
         political_leaning,
         grounding_metadata,
+        analyzed_by,
         status,
         error_message
     ):
@@ -218,6 +219,7 @@ class SupabaseClient:
                     "context": context,
                     "political_leaning": political_leaning,
                     "grounding_metadata": grounding_metadata,
+                    "analyzed_by": analyzed_by,
                     "previous_analysis": None,
                     "status": status,
                     "error_message": error_message,
