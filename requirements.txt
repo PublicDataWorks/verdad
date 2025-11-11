@@ -13,6 +13,8 @@ psutil==6.0.0
 sentry-sdk==2.14.0
 pytest==8.3.3
 supabase==2.22.0
+supabase-auth==2.22.0 # Pin to match supabase version
+supabase-functions==2.22.0
 pydub==0.25.1
 openai==1.57.1
 tiktoken==0.8.0
