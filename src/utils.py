@@ -245,7 +245,7 @@ def fetch_radio_stations():
         },
         {
             "code": "WZHF",
-            "url": "https://icecast-rian.cdnvideo.ru/voiceusa",
+            "url": "https://icecast-rian.cdnvideo.ru/voicerus",
             "state": "Russia",
             "name": "Radio Sputnik",
         },
