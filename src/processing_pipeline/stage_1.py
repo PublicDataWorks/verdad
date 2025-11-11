@@ -13,11 +13,14 @@ from google.genai.types import (
     ThinkingConfig,
 )
 from openai import OpenAI
+from prefect.flows import Flow
+from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
     GeminiModel,
+    ProcessingStatus,
     get_system_instruction_for_stage_1,
     get_output_schema_for_stage_1,
     get_detection_prompt_for_stage_1,
@@ -202,13 +205,8 @@ def insert_stage_1_llm_response(
 
 
 @optional_task(log_prints=True, retries=3)
-def set_audio_file_status_success(supabase_client, audio_file_id):
-    supabase_client.set_audio_file_status(audio_file_id, "Processed")
-
-
-@optional_task(log_prints=True, retries=3)
-def set_audio_file_status_error(supabase_client, audio_file_id, error_message):
-    supabase_client.set_audio_file_status(audio_file_id, "Error", error_message)
+def set_audio_file_status(supabase_client, audio_file_id, status: ProcessingStatus, error_message=None):
+    supabase_client.set_audio_file_status(audio_file_id, status, error_message)
 
 
 @optional_task(log_prints=True)
@@ -257,14 +255,32 @@ def process_audio_file(supabase_client, audio_file, local_file):
             )
 
         print(f"Processing completed for {local_file}")
-        set_audio_file_status_success(supabase_client, audio_file["id"])
+        set_audio_file_status(supabase_client, audio_file["id"], ProcessingStatus.PROCESSED)
 
     except Exception as e:
         print(f"Failed to process audio file {local_file}: {e}")
-        set_audio_file_status_error(supabase_client, audio_file["id"], str(e))
+        set_audio_file_status(supabase_client, audio_file["id"], ProcessingStatus.ERROR, str(e))
 
 
-@optional_flow(name="Stage 1: Initial Disinformation Detection", log_prints=True, task_runner=ConcurrentTaskRunner)
+def reset_audio_file_status_hook(flow: Flow, flow_run: FlowRun, state: State):
+    audio_file_id = flow_run.parameters.get("audio_file_id", None)
+
+    if not audio_file_id:
+        return
+
+    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    audio_file = supabase_client.get_audio_file_by_id(audio_file_id)
+    if audio_file and audio_file.get("status") == ProcessingStatus.PROCESSING:
+        set_audio_file_status(supabase_client, audio_file_id, ProcessingStatus.NEW)
+
+
+@optional_flow(
+    name="Stage 1: Initial Disinformation Detection",
+    log_prints=True,
+    task_runner=ConcurrentTaskRunner,
+    on_crashed=[reset_audio_file_status_hook],
+    on_cancellation=[reset_audio_file_status_hook],
+)
 def initial_disinformation_detection(audio_file_id, limit):
     # Setup S3 Client
     s3_client = boto3.client(

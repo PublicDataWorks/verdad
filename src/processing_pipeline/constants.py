@@ -11,6 +11,15 @@ class GeminiModel(StrEnum):
     GEMINI_FLASH_LITE_LATEST = "gemini-flash-lite-latest"
 
 
+class ProcessingStatus(StrEnum):
+    NEW = "New"
+    PROCESSING = "Processing"
+    PROCESSED = "Processed"
+    ERROR = "Error"
+    READY_FOR_REVIEW = "Ready for review"
+    REVIEWING = "Reviewing"
+
+
 def get_transcription_prompt_for_stage_1_preprocess():
     return open("prompts/Stage_1_Preprocess_transcription_prompt.md", "r").read()
 
