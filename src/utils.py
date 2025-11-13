@@ -31,6 +31,9 @@ def optional_task(func=None, **kwargs):
         if "cache_policy" not in kwargs:
             kwargs["cache_policy"] = NO_CACHE
 
+        if "cache_result_in_memory" not in kwargs:
+            kwargs["cache_result_in_memory"] = False
+
         def wrapper(f):
             return task(**kwargs)(f)
 
