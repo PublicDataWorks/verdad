@@ -412,7 +412,9 @@ class Stage3Executor:
             ),
         )
 
-        grounding_metadata = str(response.candidates[0].grounding_metadata) if response.candidates else None
+        grounding_metadata = (
+            response.candidates[0].grounding_metadata.model_dump_json(indent=2) if response.candidates else None
+        )
 
         if not response.text:
             finish_reason = response.candidates[0].finish_reason if response.candidates else None
