@@ -80,6 +80,7 @@ def update_snippet_in_supabase(
     snippet_id,
     gemini_response,
     grounding_metadata,
+    thought_summaries,
     analyzed_by,
     status,
     error_message,
@@ -99,6 +100,7 @@ def update_snippet_in_supabase(
         context=gemini_response["context"],
         political_leaning=gemini_response["political_leaning"],
         grounding_metadata=grounding_metadata,
+        thought_summaries=thought_summaries,
         analyzed_by=analyzed_by,
         status=status,
         error_message=error_message,
@@ -215,6 +217,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
             snippet_id=snippet["id"],
             gemini_response=analyzing_response["response"],
             grounding_metadata=analyzing_response["grounding_metadata"],
+            thought_summaries=analyzing_response["thought_summaries"],
             analyzed_by=analyzing_response["analyzed_by"],
             status=status,
             error_message=None,
@@ -359,12 +362,15 @@ class Stage3Executor:
 
         try:
             # Step 1: Analyze with Google Search
-            analysis_text, grounding_metadata = cls.__analyze_with_search(
+            analysis_result = cls.__analyze_with_search(
                 client,
                 model_name,
                 user_prompt,
                 uploaded_audio_file,
             )
+            analysis_text = analysis_result["text"]
+            grounding_metadata = analysis_result["grounding_metadata"]
+            thought_summaries = analysis_result["thought_summaries"]
 
             # Try to validate with Pydantic model first
             validated_output = cls.__validate_with_pydantic(analysis_text)
@@ -373,12 +379,14 @@ class Stage3Executor:
                 return {
                     "response": validated_output,
                     "grounding_metadata": grounding_metadata,
+                    "thought_summaries": thought_summaries,
                 }
 
             # Step 2: Structure with response_schema (if validation failed)
             return {
                 "response": cls.__structure_with_schema(client, analysis_text),
                 "grounding_metadata": grounding_metadata,
+                "thought_summaries": thought_summaries,
             }
         finally:
             client.files.delete(name=uploaded_audio_file.name)
@@ -407,10 +415,15 @@ class Stage3Executor:
                 system_instruction=cls.SYSTEM_INSTRUCTION,
                 max_output_tokens=16384,
                 tools=[Tool(google_search=GoogleSearch())],
-                thinking_config=ThinkingConfig(thinking_budget=4096),
+                thinking_config=ThinkingConfig(thinking_budget=4096, include_thoughts=True),
                 safety_settings=get_safety_settings(),
             ),
         )
+
+        thoughts = ""
+        for part in response.candidates[0].content.parts:
+            if part.thought and part.text:
+                thoughts += part.text
 
         grounding_metadata = (
             response.candidates[0].grounding_metadata.model_dump_json(indent=2) if response.candidates else None
@@ -425,7 +438,11 @@ class Stage3Executor:
             print(f"Response finish reason: {finish_reason}")
             raise ValueError("No response from Gemini in step 1.")
 
-        return response.text, grounding_metadata
+        return {
+            "text": response.text,
+            "grounding_metadata": grounding_metadata,
+            "thought_summaries": thoughts,
+        }
 
     @classmethod
     def __validate_with_pydantic(cls, response_text: str):
