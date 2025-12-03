@@ -43,46 +43,12 @@ BEGIN
             s.id,
             s.recorded_at,
             s.user_last_activity,
-            s.duration,
-            s.start_time,
-            s.end_time,
-            s.file_path,
-            s.file_size,
-            s.political_leaning,
-            CASE
-                WHEN p_language = 'spanish' THEN s.title ->> 'spanish'
-                ELSE s.title ->> 'english'
-            END AS title,
-            CASE
-                WHEN p_language = 'spanish' THEN s.summary ->> 'spanish'
-                ELSE s.summary ->> 'english'
-            END AS summary,
-            CASE
-                WHEN p_language = 'spanish' THEN s.explanation ->> 'spanish'
-                ELSE s.explanation ->> 'english'
-            END AS explanation,
-            s.confidence_scores,
-            s.language,
-            s.context,
             s.upvote_count,
             s.comment_count,
-            jsonb_build_object(
-                'id', a.id,
-                'radio_station_name', a.radio_station_name,
-                'radio_station_code', a.radio_station_code,
-                'location_state', a.location_state,
-                'location_city', a.location_city
-            ) AS audio_file,
-            us.id IS NOT NULL AS starred_by_user,
-            ul.value AS user_like_status,
-            uhs.snippet IS NOT NULL AS hidden,
-            COALESCE(lk.likes, 0) AS like_count,
-            COALESCE(lk.dislikes, 0) AS dislike_count
+            COALESCE(lk.likes, 0) AS like_count
         FROM snippets s
         LEFT JOIN audio_files a ON s.audio_file = a.id
         LEFT JOIN like_summary lk ON lk.snippet = s.id
-        LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
-        LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
         LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (
@@ -261,13 +227,16 @@ BEGIN
                 ((s.title ->> 'english') || ' ' || (s.title ->> 'spanish')) &@ trimmed_search_term
                 OR ((s.explanation ->> 'english') || ' ' || (s.explanation ->> 'spanish')) &@ trimmed_search_term
                 OR ((s.summary ->> 'english') || ' ' || (s.summary ->> 'spanish')) &@ trimmed_search_term
-                OR s.transcription &@ trimmed_search_term                 
+                OR s.transcription &@ trimmed_search_term
                 OR s.translation &@ trimmed_search_term
             )
         )
     ),
-    paginated_snippets AS (
-        SELECT fs.*, COUNT(*) OVER() AS num_of_snippets
+    total_count_cte AS (
+        SELECT COUNT(*) AS cnt FROM filtered_snippets
+    ),
+    paginated_ids AS (
+        SELECT id
         FROM filtered_snippets fs
         ORDER BY
             CASE
@@ -296,38 +265,81 @@ BEGIN
         FROM snippet_labels sl
         JOIN labels l ON l.id = sl.label
         LEFT JOIN label_upvotes lu ON lu.snippet_label = sl.id AND lu.upvoted_by = current_user_id
-        WHERE sl.snippet IN (SELECT id FROM paginated_snippets)
+        WHERE sl.snippet IN (SELECT id FROM paginated_ids)
     ),
-    paginated_snippets_with_labels AS (
+    paginated_snippets AS (
         SELECT
-            ps.*,
+            s.id,
+            s.recorded_at,
+            s.user_last_activity,
+            s.duration,
+            s.start_time,
+            s.end_time,
+            s.file_path,
+            s.file_size,
+            s.political_leaning,
+            CASE
+                WHEN p_language = 'spanish' THEN s.title ->> 'spanish'
+                ELSE s.title ->> 'english'
+            END AS title,
+            CASE
+                WHEN p_language = 'spanish' THEN s.summary ->> 'spanish'
+                ELSE s.summary ->> 'english'
+            END AS summary,
+            CASE
+                WHEN p_language = 'spanish' THEN s.explanation ->> 'spanish'
+                ELSE s.explanation ->> 'english'
+            END AS explanation,
+            s.confidence_scores,
+            s.language,
+            s.context,
+            s.upvote_count,
+            s.comment_count,
+            jsonb_build_object(
+                'id', a.id,
+                'radio_station_name', a.radio_station_name,
+                'radio_station_code', a.radio_station_code,
+                'location_state', a.location_state,
+                'location_city', a.location_city
+            ) AS audio_file,
+            us.id IS NOT NULL AS starred_by_user,
+            ul.value AS user_like_status,
+            uhs.snippet IS NOT NULL AS hidden,
+            COALESCE(lk.likes, 0) AS like_count,
+            COALESCE(lk.dislikes, 0) AS dislike_count,
             COALESCE(ld.labels, '[]'::jsonb) AS labels
-        FROM paginated_snippets ps
+        FROM paginated_ids p
+        JOIN snippets s ON s.id = p.id
+        LEFT JOIN audio_files a ON s.audio_file = a.id
+        LEFT JOIN like_summary lk ON lk.snippet = s.id
+        LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
+        LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
+        LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
         LEFT JOIN (
             SELECT
                 snippet_id,
                 jsonb_agg(
                     jsonb_build_object(
-                        'id', id,
-                        'text', text,
-                        'upvote_count', upvote_count,
-                        'upvoted_by_me', upvoted_by_me
+                        'id', ls.id,
+                        'text', ls.text,
+                        'upvote_count', ls.upvote_count,
+                        'upvoted_by_me', ls.upvoted_by_me
                     )
                 ) as labels
-            FROM label_summary
+            FROM label_summary ls
             GROUP BY snippet_id
-        ) ld ON ps.id = ld.snippet_id
+        ) ld ON p.id = ld.snippet_id
         ORDER BY
             CASE
-                WHEN p_order_by = 'upvotes' THEN ps.upvote_count + ps.like_count
-                WHEN p_order_by = 'comments' THEN ps.comment_count
+                WHEN p_order_by = 'upvotes' THEN s.upvote_count + s.like_count
+                WHEN p_order_by = 'comments' THEN s.comment_count
                 WHEN p_order_by = 'activities' THEN
                     CASE
-                        WHEN ps.user_last_activity IS NULL THEN 0
-                        ELSE EXTRACT(EPOCH FROM ps.user_last_activity)
+                        WHEN s.user_last_activity IS NULL THEN 0
+                        ELSE EXTRACT(EPOCH FROM s.user_last_activity)
                     END
             END DESC,
-            ps.recorded_at DESC -- Default for all other cases, including p_order_by = 'latest'
+            s.recorded_at DESC -- Default for all other cases, including p_order_by = 'latest'
     )
     SELECT
         jsonb_agg(
@@ -356,9 +368,9 @@ BEGIN
                 'dislike_count', ps.dislike_count
             )
         ),
-        MAX(ps.num_of_snippets)
+        (SELECT cnt FROM total_count_cte)
     INTO result, total_count
-    FROM paginated_snippets_with_labels ps;
+    FROM paginated_snippets ps;
 
     total_pages := CEIL(total_count::FLOAT / page_size);
 
