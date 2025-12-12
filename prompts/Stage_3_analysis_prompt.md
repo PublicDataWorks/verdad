@@ -366,6 +366,43 @@ Avoid inferring political leanings from adjacent topics or assumptions about the
    - Acknowledge when content contains mixed or ambiguous political signals
 
 
+##### **L. Thought Summaries**
+
+Document your analytical reasoning process in the `thought_summaries` field. This field captures your thinking methodology and key observations made during the analysis.
+
+**What to Include:**
+
+1. **Initial Observations:**
+   - First impressions of the audio content
+   - Notable linguistic or vocal features observed
+   - Initial hypotheses about the content's nature
+
+2. **Verification Process:**
+   - Key searches performed and their outcomes
+   - Sources consulted for fact-checking
+   - How search results influenced your analysis
+
+3. **Analytical Reasoning:**
+   - How you arrived at your confidence scores
+   - Reasoning behind category assignments
+   - Factors considered in political leaning assessment
+
+4. **Challenges and Uncertainties:**
+   - Any ambiguities encountered
+   - Areas where evidence was limited
+   - How you handled uncertain claims
+
+5. **Conclusion Summary:**
+   - Key findings from your analysis
+   - Most significant observations
+   - Overall assessment rationale
+
+**Format Guidelines:**
+- Write in clear, concise prose
+- Focus on the reasoning process, not just conclusions
+- Include specific examples from the content that informed your analysis
+- Document any score adjustments and why they were made
+
 #### **3. Assemble Structured Output**
 
 Organize all the information into a structured output conforming to the provided OpenAPI JSON schema.
@@ -391,7 +428,8 @@ Ensure your output strictly adheres to this schema.
         "context",
         "confidence_scores",
         "emotional_tone",
-        "political_leaning"
+        "political_leaning",
+        "thought_summaries"
     ],
     "properties": {
         "transcription": {
@@ -718,6 +756,10 @@ Ensure your output strictly adheres to this schema.
                     }
                 }
             }
+        },
+        "thought_summaries": {
+            "type": "string",
+            "description": "A summary of your reasoning process, key observations, and analytical steps taken during the analysis."
         }
     }
 }
@@ -1642,7 +1684,8 @@ Below is a complete example showing all required fields:
         "reasoning": "Adjusted the score to reflect the moderate nature of the content and lack of explicit policy advocacy."
       }
     }
-  }
+  },
+  "thought_summaries": "Initial observations revealed a Spanish-language audio clip discussing economic concerns and vaccination policies. The speaker's tone conveyed fear and distrust, with notable emphasis on phrases like 'controlar nuestras mentes' (control our minds). During verification, I searched for evidence supporting claims about vaccines being used for mind control and found no credible scientific support - this is a well-documented conspiracy theory. The claim about mandatory vaccinations being pushed for control purposes contradicts public health evidence showing vaccination programs aim to achieve herd immunity. I assigned high confidence scores (90-95) because the mind control claim is demonstrably false and the content promotes unfounded conspiracy theories. The political leaning was assessed as slightly conservative (0.2) based on the emphasis on individual autonomy and government distrust, though the score was adjusted from 0.3 due to lack of explicit policy advocacy. Key challenges included distinguishing between legitimate economic concerns (which don't constitute disinformation) and the conspiracy claims about vaccines (which do). The overall assessment is that this content contains significant disinformation in the COVID-19/vaccination category."
 }
 ```
 

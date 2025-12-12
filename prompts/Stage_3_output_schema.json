@@ -12,7 +12,8 @@
         "context",
         "confidence_scores",
         "emotional_tone",
-        "political_leaning"
+        "political_leaning",
+        "thought_summaries"
     ],
     "properties": {
         "is_convertible": {
@@ -343,6 +344,10 @@
                     }
                 }
             }
+        },
+        "thought_summaries": {
+            "type": "string",
+            "description": "A summary of your reasoning process, key observations, and analytical steps taken during the analysis."
         }
     }
 }

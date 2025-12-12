@@ -387,12 +387,15 @@ class Stage3Executor:
         try:
             analysis_text = analysis_result["text"]
             grounding_metadata = analysis_result["grounding_metadata"]
-            thought_summaries = analysis_result["thought_summaries"]
+            # SDK method returns thought_summaries from thinking_config, CLI method doesn't
+            thought_summaries_from_api = analysis_result.get("thought_summaries")
 
             # Try to validate with Pydantic model first
             validated_output = cls.__validate_with_pydantic(analysis_text)
 
             if validated_output:
+                # Use thought_summaries from API if available (SDK), otherwise from JSON response (CLI)
+                thought_summaries = thought_summaries_from_api or validated_output.get("thought_summaries")
                 return {
                     "response": validated_output,
                     "grounding_metadata": grounding_metadata,
@@ -400,8 +403,10 @@ class Stage3Executor:
                 }
 
             # Step 2: Structure with response_schema (if validation failed)
+            structured_output = cls.__structure_with_schema(client, analysis_text)
+            thought_summaries = thought_summaries_from_api or structured_output.get("thought_summaries")
             return {
-                "response": cls.__structure_with_schema(client, analysis_text),
+                "response": structured_output,
                 "grounding_metadata": grounding_metadata,
                 "thought_summaries": thought_summaries,
             }
