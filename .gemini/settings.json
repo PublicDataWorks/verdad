@@ -1,0 +1,22 @@
+{
+  "context": {
+    "fileFiltering": {
+      "respectGitIgnore": false
+    }
+  },
+  "tools": {
+    "core": [],
+    "exclude": ["google_web_search", "web_fetch"]
+  },
+  "mcp": {
+    "allowed": ["skydeckai-code"]
+  },
+  "mcpServers": {
+    "skydeckai-code": {
+      "command": "uvx",
+      "args": ["skydeckai-code"],
+      "includeTools": ["web_fetch", "web_search"],
+      "trust": true
+    }
+  }
+}

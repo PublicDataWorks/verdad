@@ -1,11 +1,14 @@
 from datetime import datetime, timezone
 from http import HTTPStatus
+import json
 import os
+import subprocess
 import time
+from typing import Any
+
+import boto3
 from google import genai
 from google.genai import errors
-import json
-import boto3
 from prefect.flows import Flow
 from prefect.client.schemas import FlowRun, State
 from pydantic import ValidationError
@@ -25,6 +28,7 @@ from processing_pipeline.processing_utils import (
     postprocess_snippet,
 )
 from processing_pipeline.constants import (
+    GeminiCLIEventType,
     GeminiModel,
     ProcessingStatus,
     get_system_instruction_for_stage_3,
@@ -315,6 +319,7 @@ class Stage3Executor:
     SYSTEM_INSTRUCTION = get_system_instruction_for_stage_3()
     USER_PROMPT = get_user_prompt_for_stage_3()
     OUTPUT_SCHEMA = get_output_schema_for_stage_3()
+    SYSTEM_INSTRUCTION_PATH = "prompts/Stage_3_system_instruction.md"
 
     @classmethod
     def run(
@@ -327,8 +332,8 @@ class Stage3Executor:
         """
         Main execution method for Stage 3 analysis.
 
-        Performs two-stage processing with validation optimization:
-        1. Step 1: Analyze audio with Google Search enabled
+        Processing strategy:
+        1. Step 1: Try Gemini CLI with custom search, fallback to Google Genai SDK with Google Search grounding if CLI fails
         2. Validate: Try to validate response with Pydantic model
         3. Step 2 (conditional): If validation fails, restructure with response_schema
 
@@ -346,13 +351,6 @@ class Stage3Executor:
 
         client = genai.Client(api_key=gemini_key)
 
-        # Upload the audio file and wait for it to finish processing
-        uploaded_audio_file = client.files.upload(file=audio_file)
-        while uploaded_audio_file.state.name == "PROCESSING":
-            print("Processing the uploaded audio file...")
-            time.sleep(1)
-            uploaded_audio_file = client.files.get(name=uploaded_audio_file.name)
-
         # Prepare the user prompt
         user_prompt = (
             f"{cls.USER_PROMPT}\n\n"
@@ -360,14 +358,33 @@ class Stage3Executor:
             f"Here is the current date and time: {datetime.now(timezone.utc).strftime('%B %-d, %Y %-I:%M %p UTC')}\n\n"
         )
 
+        # Strategy: Try CLI first, fallback to SDK
+        analysis_result = None
+        uploaded_audio_file = None
+
         try:
-            # Step 1: Analyze with Google Search
-            analysis_result = cls.__analyze_with_search(
+            user_prompt_with_file = user_prompt + f"Here is the audio file attached: @{os.path.basename(audio_file)}"
+            analysis_result = cls.__analyze_with_custom_search(
+                model_name=model_name,
+                user_prompt=user_prompt_with_file,
+            )
+        except RuntimeError as e:
+            print("Falling back to Google Search grounding with SDK...")
+
+            uploaded_audio_file = client.files.upload(file=audio_file)
+            while uploaded_audio_file.state.name == "PROCESSING":
+                print("Processing the uploaded audio file...")
+                time.sleep(1)
+                uploaded_audio_file = client.files.get(name=uploaded_audio_file.name)
+
+            analysis_result = cls.__analyze_with_google_search_grounding(
                 client,
                 model_name,
                 user_prompt,
                 uploaded_audio_file,
             )
+
+        try:
             analysis_text = analysis_result["text"]
             grounding_metadata = analysis_result["grounding_metadata"]
             thought_summaries = analysis_result["thought_summaries"]
@@ -389,11 +406,101 @@ class Stage3Executor:
                 "thought_summaries": thought_summaries,
             }
         finally:
-            client.files.delete(name=uploaded_audio_file.name)
+            if uploaded_audio_file:
+                client.files.delete(name=uploaded_audio_file.name)
 
     @optional_task(log_prints=True, retries=3)
     @classmethod
-    def __analyze_with_search(
+    def __analyze_with_custom_search(
+        cls,
+        model_name: GeminiModel,
+        user_prompt: str,
+    ):
+        """
+        Analyze using Gemini CLI with custom search tools (MCP-based).
+
+        This method uses the Gemini CLI which provides:
+        - Custom search via MCP tools
+        - Streaming JSON output
+        - System instruction from file
+
+        Returns:
+            dict: {"text": str, "grounding_metadata": str|None, "thought_summaries": str|None}
+
+        Raises:
+            RuntimeError: If CLI execution fails (for fallback to SDK method)
+        """
+        print("Analyzing with Gemini CLI (custom search)...")
+
+        events: list[dict[str, Any]] = []
+        final_response = ""
+        tool_outputs = ""
+        timeout = 300
+
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": os.environ.get("HOME", ""),
+            "GEMINI_API_KEY": os.environ["GOOGLE_GEMINI_KEY"],
+            "GEMINI_SYSTEM_MD": cls.SYSTEM_INSTRUCTION_PATH,
+        }
+
+        cmd = [
+            "gemini",
+            "--model",
+            model_name,
+            "--output-format",
+            "stream-json",
+            user_prompt,
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=timeout,
+            )
+
+            # Parse JSONL output
+            for line in result.stdout.strip().split("\n"):
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    events.append(event)
+
+                    # Concatenate assistant message content
+                    if event.get("type") == GeminiCLIEventType.MESSAGE and event.get("role") == "assistant":
+                        content = event.get("content")
+                        if content and isinstance(content, str):
+                            final_response += content
+
+                    # Concatenate tool result outputs
+                    if event.get("type") == GeminiCLIEventType.TOOL_RESULT:
+                        output = event.get("output")
+                        if output and isinstance(output, str):
+                            tool_outputs += output
+                except json.JSONDecodeError:
+                    pass
+
+            if result.returncode != 0:
+                raise RuntimeError(f"Gemini CLI exited with code {result.returncode}: {result.stderr}")
+
+            if not final_response:
+                raise RuntimeError("Gemini CLI returned no response")
+
+            return {
+                "text": final_response,
+                "grounding_metadata": tool_outputs if tool_outputs else None,
+            }
+
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"Gemini CLI timed out after {timeout} seconds") from e
+
+    @optional_task(log_prints=True, retries=3)
+    @classmethod
+    def __analyze_with_google_search_grounding(
         cls,
         client: genai.Client,
         model_name: GeminiModel,
