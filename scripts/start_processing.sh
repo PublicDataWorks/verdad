@@ -10,7 +10,7 @@ STAGE_4_REVIEW="Stage 4: Analysis Review/Stage 4: Analysis Review"
 STAGE_5_EMBEDDING="Stage 5: Embedding/Stage 5: Embedding"
 
 # Number of flow runs to trigger per stage
-STAGE_1_FLOW_RUNS=2
+STAGE_1_FLOW_RUNS=3
 STAGE_2_FLOW_RUNS=1
 STAGE_3_FLOW_RUNS=2
 STAGE_4_FLOW_RUNS=2
