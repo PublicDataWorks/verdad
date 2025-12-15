@@ -9,13 +9,12 @@
     "exclude": ["google_web_search", "web_fetch"]
   },
   "mcp": {
-    "allowed": ["skydeckai-code"]
+    "allowed": ["ddg-search"]
   },
   "mcpServers": {
-    "skydeckai-code": {
+    "ddg-search": {
       "command": "uvx",
-      "args": ["skydeckai-code"],
-      "includeTools": ["web_fetch", "web_search"],
+      "args": ["duckduckgo-mcp-server"],
       "trust": true
     }
   }
