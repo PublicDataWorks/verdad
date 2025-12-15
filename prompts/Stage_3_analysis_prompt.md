@@ -78,10 +78,10 @@ Perform the following steps:
   - Confirm that the translation accurately reflects the transcription.
 
 - **Ensure Factual Accuracy:**
-  - Conduct web searches to fact-check the snippet's claims using information that matches its recording date, time, and location for contextual accuracy.
-  - Avoid using data from different time periods to incorrectly label it as disinformation.
-  - Avoid looking up comparable events from different time periods (e.g., if the audio is from 2025, don't reference information from 2000).
-  - Apply the information you've discovered in your following analysis.
+  - **Search**: Use the web search tool to fact-check claims, ensuring search queries match the audio's recording date, time, and location for contextual accuracy.
+  - **Fetch**: For important claims, use the content fetch tool to read full articles from authoritative sources (news outlets, fact-checkers, official statements). Do not rely solely on search snippets for high-stakes determinations.
+  - **Verify**: Look for multiple sources to corroborate or contradict claims. Avoid using information from different time periods (e.g., if the audio is from 2025, don't reference data from 2000).
+  - **Apply**: Incorporate your findings into the analysis that follows.
 
 ##### **D. Summary and Explanation**
 
@@ -135,7 +135,7 @@ The confidence score represents your degree of certainty that the content contai
 
 **Verification Requirement:**
 
-Before assigning confidence scores, verify all factual claims using Grounding with Google Search. The verification outcome determines the maximum possible score.
+Before assigning confidence scores, verify all factual claims using the available web search tool. For claims that significantly impact the confidence score, fetch and read the full content of authoritative sources rather than relying on search snippets alone. The verification outcome determines the maximum possible score.
 
 **Scoring Framework Based on Verification:**
 
@@ -1758,7 +1758,7 @@ By following these instructions and listening closely using the detailed heurist
 Please proceed to analyze the provided audio content following these guidelines:
 
 1. Listen carefully to capture all spoken content.
-2. Verify all factual claims using Google Search before assigning scores (Section H), searching for information relevant to the recording datetime and/or current datetime.
+2. Verify all factual claims using the web search tool before assigning scores (Section H), searching for information relevant to the recording datetime and/or current datetime. For important claims, use the content fetch tool to read full articles.
 3. Apply the detailed heuristics for disinformation analysis.
 4. Base political orientation assessment solely on observable content elements.
 5. Document all findings with specific evidence from the content.
