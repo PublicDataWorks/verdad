@@ -439,7 +439,7 @@ class Stage3Executor:
 
         events: list[dict[str, Any]] = []
         final_response = ""
-        tool_outputs = ""
+        tool_calls: dict[str, dict[str, Any]] = {}  # Dict to match tool_use with tool_result by tool_id
         timeout = 300
 
         env = {
@@ -481,11 +481,41 @@ class Stage3Executor:
                         if content and isinstance(content, str):
                             final_response += content
 
-                    # Concatenate tool result outputs
+                    # Capture tool use events
+                    if event.get("type") == GeminiCLIEventType.TOOL_USE:
+                        tool_id = event.get("tool_id")
+                        tool_name = event.get("tool_name")
+                        parameters = event.get("parameters")
+
+                        if tool_id in tool_calls:
+                            tool_calls[tool_id]["tool_name"] = tool_name
+                            tool_calls[tool_id]["parameters"] = parameters
+                        else:
+                            tool_calls[tool_id] = {
+                                "tool_id": tool_id,
+                                "tool_name": tool_name,
+                                "parameters": parameters,
+                                "output": None,
+                                "status": None,
+                            }
+
+                    # Capture tool result events and pair with tool_use
                     if event.get("type") == GeminiCLIEventType.TOOL_RESULT:
+                        tool_id = event.get("tool_id")
                         output = event.get("output")
-                        if output and isinstance(output, str):
-                            tool_outputs += output
+                        status = event.get("status")
+
+                        if tool_id in tool_calls:
+                            tool_calls[tool_id]["output"] = output
+                            tool_calls[tool_id]["status"] = status
+                        else:
+                            tool_calls[tool_id] = {
+                                "tool_id": tool_id,
+                                "tool_name": None,
+                                "parameters": None,
+                                "output": output,
+                                "status": status,
+                            }
                 except json.JSONDecodeError:
                     pass
 
@@ -495,9 +525,11 @@ class Stage3Executor:
             if not final_response:
                 raise RuntimeError("Gemini CLI returned no response")
 
+            # Convert tool_calls dict to list and serialize as JSON
+            tool_calls_list = list(tool_calls.values()) if tool_calls else None
             return {
                 "text": final_response,
-                "grounding_metadata": tool_outputs if tool_outputs else None,
+                "grounding_metadata": json.dumps(tool_calls_list) if tool_calls_list else None,
             }
 
         except subprocess.TimeoutExpired as e:
