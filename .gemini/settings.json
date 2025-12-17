@@ -9,13 +9,15 @@
     "exclude": ["google_web_search", "web_fetch"]
   },
   "mcp": {
-    "allowed": ["ddg-search"]
+    "allowed": ["searxng"]
   },
   "mcpServers": {
-    "ddg-search": {
-      "command": "uvx",
-      "args": ["duckduckgo-mcp-server"],
-      "trust": true
+    "searxng": {
+      "command": "npx",
+      "args": ["-y", "mcp-searxng"],
+      "env": {
+        "SEARXNG_URL": "$SEARXNG_URL"
+      }
     }
   }
 }
