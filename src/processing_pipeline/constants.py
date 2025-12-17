@@ -11,6 +11,17 @@ class GeminiModel(StrEnum):
     GEMINI_FLASH_LITE_LATEST = "gemini-flash-lite-latest"
 
 
+class GeminiCLIEventType(StrEnum):
+    """Event types emitted by Gemini CLI stream-json output format."""
+
+    INIT = "init"
+    MESSAGE = "message"
+    TOOL_USE = "tool_use"
+    TOOL_RESULT = "tool_result"
+    ERROR = "error"
+    RESULT = "result"
+
+
 class ProcessingStatus(StrEnum):
     NEW = "New"
     PROCESSING = "Processing"

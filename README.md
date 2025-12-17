@@ -177,6 +177,7 @@ snippets {
 ### Prerequisites
 
 -   Python 3.11+
+-   Node.js 20+ (for Gemini CLI)
 -   PostgreSQL 13+
 -   FFmpeg
 -   PulseAudio
@@ -198,13 +199,25 @@ python3 -m venv venv
 source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
 ```
 
-3. Install dependencies:
+3. Install Python dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
+4. Install Gemini CLI:
+
+```bash
+npm install -g @google/gemini-cli
+```
+
+Verify installation:
+
+```bash
+gemini --version
+```
+
+5. Set up environment variables:
 
 ```bash
 cp .env.sample .env

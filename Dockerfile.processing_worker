@@ -1,11 +1,8 @@
 # Use an official Python runtime as a parent image
-FROM python:3.12-slim
+FROM nikolaik/python-nodejs:python3.12-nodejs22-slim
 
 # Set the working directory in the container
 WORKDIR /app
-
-# Copy the current directory contents into the container at /app
-COPY . /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -13,8 +10,18 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+COPY requirements.txt /app/
+
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+
+ARG GEMINI_CLI_VERSION=0.20.0
+
+# Install Gemini CLI
+RUN npm install -g @google/gemini-cli@${GEMINI_CLI_VERSION}
+
+# Copy the current directory contents into the container at /app
+COPY . /app
 
 # Make sure the entrypoint script is executable
 RUN chmod +x /app/scripts/trigger_processing_worker.sh
