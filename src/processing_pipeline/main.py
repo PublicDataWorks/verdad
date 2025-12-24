@@ -1,12 +1,14 @@
 import os
 from dotenv import load_dotenv
 from prefect import serve
+from prefect.schedules import Cron
 import sentry_sdk
 from processing_pipeline.stage_1 import initial_disinformation_detection, redo_main_detection, regenerate_timestamped_transcript, undo_disinformation_detection
 from processing_pipeline.stage_2 import audio_clipping, undo_audio_clipping
 from processing_pipeline.stage_3 import in_depth_analysis
 from processing_pipeline.stage_5 import embedding
 from processing_pipeline.stage_4 import analysis_review
+from processing_pipeline.snippet_feedback_validation import snippet_feedback_validation
 load_dotenv()
 
 # Setup Sentry
@@ -88,5 +90,13 @@ if __name__ == "__main__":
                 parameters=dict(repeat=True),
             )
             serve(deployment, limit=100)
+        case "snippet_feedback_validation":
+            deployment = snippet_feedback_validation.to_deployment(
+                name="Snippet Feedback Validation",
+                concurrency_limit=1,
+                parameters=dict(lookback_days=1, limit=None),
+                schedule=Cron("0 6 * * *", timezone="UTC"),
+            )
+            serve(deployment, limit=1)
         case _:
             raise ValueError(f"Invalid process group: {process_group}")
