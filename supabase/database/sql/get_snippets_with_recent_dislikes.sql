@@ -28,7 +28,18 @@ BEGIN
             )
     ),
     limited_snippets AS (
-        SELECT s.*, fs.dislike_count
+        SELECT
+            s.id,
+            s.recorded_at,
+            s.transcription,
+            s.translation,
+            s.title,
+            s.summary,
+            s.explanation,
+            s.disinformation_categories,
+            s.confidence_scores,
+            s.audio_file,
+            fs.dislike_count
         FROM filtered_snippets fs
         JOIN snippets s ON s.id = fs.snippet
         ORDER BY fs.dislike_count DESC, s.recorded_at DESC
@@ -39,12 +50,9 @@ BEGIN
             sl.snippet,
             jsonb_agg(
                 jsonb_build_object(
-                    'label', jsonb_build_object(
-                        'text', l.text,
-                        'text_spanish', l.text_spanish,
-                        'is_ai_suggested', l.is_ai_suggested
-                    ),
-                    'created_at', sl.created_at
+                    'text', l.text,
+                    'created_at', sl.created_at,
+                    'upvote_count', sl.upvote_count
                 )
             ) AS labels
         FROM snippet_labels sl
@@ -52,6 +60,20 @@ BEGIN
         WHERE sl.snippet IN (SELECT id FROM limited_snippets)
           AND sl.applied_by IS NOT NULL
         GROUP BY sl.snippet
+    ),
+    comments_agg AS (
+        SELECT
+            c.room_id AS snippet,
+            jsonb_agg(
+                jsonb_build_object(
+                    'body', c.body,
+                    'comment_at', c.comment_at
+                )
+                ORDER BY c.comment_at ASC
+            ) AS comments
+        FROM comments c
+        WHERE c.room_id IN (SELECT id FROM limited_snippets)
+        GROUP BY c.room_id
     )
     SELECT COALESCE(
         jsonb_agg(
@@ -59,10 +81,10 @@ BEGIN
                 'audio_file', jsonb_build_object(
                     'radio_station_name', af.radio_station_name,
                     'radio_station_code', af.radio_station_code,
-                    'location_state', af.location_state,
-                    'location_city', af.location_city
+                    'location_state', af.location_state
                 ),
-                'labels', COALESCE(sla.labels, '[]'::jsonb)
+                'labels', COALESCE(sla.labels, '[]'::jsonb),
+                'comments', COALESCE(ca.comments, '[]'::jsonb)
             )
             ORDER BY ls.dislike_count DESC, ls.recorded_at DESC
         ),
@@ -71,7 +93,8 @@ BEGIN
     INTO result
     FROM limited_snippets ls
     LEFT JOIN audio_files af ON af.id = ls.audio_file
-    LEFT JOIN snippet_labels_agg sla ON sla.snippet = ls.id;
+    LEFT JOIN snippet_labels_agg sla ON sla.snippet = ls.id
+    LEFT JOIN comments_agg ca ON ca.snippet = ls.id;
 
     RETURN result;
 END;

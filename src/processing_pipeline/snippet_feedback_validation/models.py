@@ -36,6 +36,20 @@ class ValidationDecision(BaseModel):
     primary_reason: str = Field(description="Main reason for this decision")
 
 
+class ErrorPatternDetected(BaseModel):
+    """Classification of the error type Stage 3 made."""
+
+    error_type: Literal[
+        "knowledge_cutoff",      # Stage 3 claimed something doesn't exist that was created after cutoff
+        "temporal_confusion",    # Stage 3 applied wrong time context
+        "insufficient_search",   # Stage 3 didn't search deeply enough
+        "misinterpretation",     # Stage 3 misunderstood the content
+        "correct_detection",     # No error - Stage 3 was right (use for true_positive)
+        "ambiguous",             # Cannot determine error type
+    ] = Field(description="Type of error Stage 3 made, if any")
+    explanation: str = Field(description="Brief explanation of why this error type was identified")
+
+
 class FeedbackValidationOutput(BaseModel):
     """Output schema for feedback validation task."""
 
@@ -57,6 +71,17 @@ class FeedbackValidationOutput(BaseModel):
 
     # Final decision
     validation_decision: ValidationDecision
+
+    # Error pattern classification
+    error_pattern: ErrorPatternDetected = Field(
+        description="Classification of what type of error Stage 3 made (if any)"
+    )
+
+    # Prompt improvement suggestion for Phase 2
+    prompt_improvement_suggestion: str | None = Field(
+        default=None,
+        description="If false_positive, what specific improvement to Stage 3 prompt could prevent this error in future"
+    )
 
     # Thought process (reasoning captured here instead of separate field)
     thought_summaries: str = Field(
