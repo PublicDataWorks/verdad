@@ -86,11 +86,6 @@ def fetch_snippets_with_dislikes(supabase_client: SupabaseClient, since_date, li
     return snippets
 
 
-@optional_task(log_prints=True, retries=3)
-def fetch_snippet_comments(supabase_client: SupabaseClient, snippet_id):
-    return supabase_client.get_snippet_comments(snippet_id)
-
-
 @optional_task(log_prints=True)
 def build_validation_prompt(snippet, comments):
     template = get_user_prompt_for_feedback_validation()
@@ -124,7 +119,10 @@ def build_validation_prompt(snippet, comments):
     # Format user labels
     user_labels = snippet["labels"]
     if user_labels:
-        parsed_labels = [f"- {label['label']['text']} (applied at: {label['created_at']})" for label in user_labels]
+        parsed_labels = [
+            f"- {label['text']} (applied at: {label['created_at']}, upvotes: {label['upvote_count']})"
+            for label in user_labels
+        ]
         labels_text = "\n".join(parsed_labels)
     else:
         labels_text = "No user-applied labels"
@@ -209,24 +207,27 @@ def save_validation_result(
     input_user_feedback,
     dislike_count,
 ):
-    """Save the validation result to the database."""
-    decision = parsed_response.get("validation_decision", {})
+    decision = parsed_response["validation_decision"]
+    error_pattern = parsed_response["error_pattern"]
 
     supabase_client.insert_feedback_validation_result(
         snippet_id=snippet_id,
-        validation_status=decision.get("status", "needs_review"),
-        validation_confidence=decision.get("confidence", 0),
-        original_claim_summary=parsed_response.get("original_claim_summary", ""),
-        user_feedback_summary=parsed_response.get("user_feedback_summary", ""),
+        validation_status=decision["status"],
+        validation_confidence=decision["confidence"],
+        original_claim_summary=parsed_response["original_claim_summary"],
+        user_feedback_summary=parsed_response["user_feedback_summary"],
         input_snippet_data=input_snippet_data,
         input_user_feedback=input_user_feedback,
         validated_by=model_name,
         grounding_metadata=grounding_metadata,
-        thought_summaries=thought_summaries or parsed_response.get("thought_summaries", ""),
+        thought_summaries=thought_summaries or parsed_response["thought_summaries"],
         dislike_count_at_validation=dislike_count,
+        error_pattern=error_pattern["error_type"],
+        error_pattern_explanation=error_pattern["explanation"],
+        prompt_improvement_suggestion=parsed_response["prompt_improvement_suggestion"],
     )
 
-    print(f"Saved validation result: {decision.get('status')} (confidence: {decision.get('confidence')})")
+    print(f"Saved validation result: {decision['status']} (confidence: {decision['confidence']})")
 
 
 @optional_task(log_prints=True)
@@ -240,14 +241,15 @@ def process_snippet(
     print(f"Processing snippet: {snippet_id}")
 
     try:
-        comments = fetch_snippet_comments(supabase_client, snippet_id)
-        user_prompt = build_validation_prompt(snippet, comments)
+        user_prompt = build_validation_prompt(snippet, snippet["comments"])
         gemini_response = validate_with_gemini(gemini_client, model_name, user_prompt)
         parsed_response = parse_validation_response(gemini_response["text"])
 
-        # Prepare input data for audit (remove sensitive fields)
+        # Prepare input data for audit
         input_snippet_data = {
-            k: v for k, v in snippet.items() if k not in ["grounding_metadata", "thought_summaries", "labels"]
+            k: v
+            for k, v in snippet.items()
+            if k not in ["grounding_metadata", "thought_summaries", "labels", "comments"]
         }
 
         # Save result
@@ -259,11 +261,17 @@ def process_snippet(
             thought_summaries=gemini_response["thought_summaries"],
             model_name=model_name,
             input_snippet_data=input_snippet_data,
-            input_user_feedback={"labels": snippet.get("labels", []), "comments": comments},
-            dislike_count=snippet.get("dislike_count", 0),
+            input_user_feedback={
+                "labels": snippet["labels"],
+                "comments": snippet["comments"],
+            },
+            dislike_count=snippet["dislike_count"],
         )
 
-        print(f"Validation complete for snippet {snippet_id}: {parsed_response['validation_decision']['status']}")
+        print(
+            f"Validation complete for snippet {snippet_id}: {parsed_response['validation_decision']['status']}\n\n"
+            f"Error pattern: {parsed_response['error_pattern']['error_type']}"
+        )
         return True
 
     except Exception as e:

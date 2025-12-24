@@ -421,16 +421,6 @@ class SupabaseClient:
         ).execute()
         return response.data or []
 
-    def get_snippet_comments(self, snippet_id):
-        response = (
-            self.client.table("comments")
-            .select("body, comment_at")
-            .eq("room_id", snippet_id)
-            .order("comment_at", desc=False)
-            .execute()
-        )
-        return response.data or []
-
     def insert_feedback_validation_result(
         self,
         snippet_id,
@@ -444,6 +434,9 @@ class SupabaseClient:
         grounding_metadata,
         thought_summaries,
         dislike_count_at_validation,
+        error_pattern,
+        error_pattern_explanation,
+        prompt_improvement_suggestion,
     ):
         response = (
             self.client.table("snippet_feedback_validation_results")
@@ -459,6 +452,9 @@ class SupabaseClient:
                 "grounding_metadata": grounding_metadata,
                 "thought_summaries": thought_summaries,
                 "dislike_count_at_validation": dislike_count_at_validation,
+                "error_pattern": error_pattern,
+                "error_pattern_explanation": error_pattern_explanation,
+                "prompt_improvement_suggestion": prompt_improvement_suggestion,
             })
             .execute()
         )
