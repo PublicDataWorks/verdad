@@ -95,6 +95,16 @@ def get_gemini_timestamped_transcription_generation_prompt():
     return open("prompts/Gemini_timestamped_transcription_generation_prompt.md", "r").read()
 
 
+def get_system_instruction_for_feedback_validation():
+    with open("prompts/snippet_feedback_validation/system_instruction.md", "r") as f:
+        return f.read()
+
+
+def get_user_prompt_for_feedback_validation():
+    with open("prompts/snippet_feedback_validation/user_prompt.md", "r") as f:
+        return f.read()
+
+
 if __name__ == "__main__":
     # Print the transcription prompt for stage 1 Preprocess
     # transcription_prompt_for_stage_1_preprocess = get_transcription_prompt_for_stage_1_preprocess()
