@@ -1,0 +1,107 @@
+{
+  "type": "object",
+  "required": [
+    "original_claim_summary",
+    "user_feedback_summary",
+    "claim_verifications",
+    "user_feedback_assessment",
+    "validation_decision",
+    "thought_summaries"
+  ],
+  "properties": {
+    "original_claim_summary": {
+      "type": "string",
+      "description": "Brief summary of what Stage 3 flagged as misinformation"
+    },
+    "user_feedback_summary": {
+      "type": "string",
+      "description": "Brief summary of user feedback and their apparent reasoning"
+    },
+    "claim_verifications": {
+      "type": "array",
+      "description": "Verification of each major claim from the original analysis",
+      "items": {
+        "type": "object",
+        "required": [
+          "claim",
+          "original_assessment",
+          "verification_finding",
+          "is_claim_actually_false",
+          "confidence"
+        ],
+        "properties": {
+          "claim": {
+            "type": "string",
+            "description": "The specific claim being verified"
+          },
+          "original_assessment": {
+            "type": "string",
+            "description": "What Stage 3 concluded about this claim"
+          },
+          "verification_finding": {
+            "type": "string",
+            "description": "What web search reveals about this claim"
+          },
+          "is_claim_actually_false": {
+            "type": "boolean",
+            "description": "Whether the claim is demonstrably false"
+          },
+          "confidence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Confidence in this verification"
+          }
+        }
+      }
+    },
+    "user_feedback_assessment": {
+      "type": "object",
+      "required": [
+        "feedback_quality",
+        "feedback_reasoning",
+        "appears_adversarial"
+      ],
+      "properties": {
+        "feedback_quality": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "Quality of user-provided feedback"
+        },
+        "feedback_reasoning": {
+          "type": "string",
+          "description": "Assessment of why user disliked/labeled the snippet"
+        },
+        "appears_adversarial": {
+          "type": "boolean",
+          "description": "Whether feedback appears to be bad-faith or coordinated"
+        }
+      }
+    },
+    "validation_decision": {
+      "type": "object",
+      "required": ["status", "confidence", "primary_reason"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["false_positive", "true_positive", "needs_review"],
+          "description": "Validation outcome: false_positive (Stage 3 wrong, user right), true_positive (Stage 3 correct, user wrong), needs_review (ambiguous)"
+        },
+        "confidence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Confidence in this decision"
+        },
+        "primary_reason": {
+          "type": "string",
+          "description": "Main reason for this decision"
+        }
+      }
+    },
+    "thought_summaries": {
+      "type": "string",
+      "description": "Detailed reasoning process including searches performed, evidence found, and how the decision was reached"
+    }
+  }
+}
