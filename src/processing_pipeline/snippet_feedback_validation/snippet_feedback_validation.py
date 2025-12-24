@@ -17,6 +17,78 @@ from .models import FeedbackValidationOutput
 from utils import optional_flow, optional_task
 
 
+def format_grounding_metadata(grounding_metadata) -> str:
+    """Format grounding metadata into a readable summary of searches performed."""
+    if not grounding_metadata:
+        return "No search evidence available from Stage 3."
+
+    if isinstance(grounding_metadata, str):
+        try:
+            grounding_metadata = json.loads(grounding_metadata)
+        except json.JSONDecodeError:
+            return grounding_metadata
+
+    # Handle different formats of grounding metadata
+    lines = []
+
+    # If it's a list of tool calls (CLI method format)
+    if isinstance(grounding_metadata, list):
+        for i, item in enumerate(grounding_metadata, 1):
+            if isinstance(item, dict):
+                params = item.get("parameters", item.get("input", {}))
+                output = item.get("output", item.get("result", ""))
+
+                # Extract search query if present
+                query = None
+                if isinstance(params, dict):
+                    query = params.get("query", params.get("q", params.get("search_query")))
+                elif isinstance(params, str):
+                    query = params
+
+                if query:
+                    lines.append(f"**Search {i}:** {query}")
+                    if output and len(str(output)) < 500:
+                        lines.append(f"  Result: {output[:500]}...")
+                    elif output:
+                        lines.append(f"  Result: [truncated - {len(str(output))} chars]")
+
+    # If it's a dict with search_queries or similar structure (SDK method format)
+    elif isinstance(grounding_metadata, dict):
+        # Handle Google Search grounding format
+        if "search_entry_point" in grounding_metadata:
+            rendered_content = grounding_metadata.get("search_entry_point", {}).get("rendered_content", "")
+            if rendered_content:
+                lines.append(f"**Search context:** {rendered_content[:500]}")
+
+        if "grounding_chunks" in grounding_metadata:
+            chunks = grounding_metadata["grounding_chunks"]
+            for i, chunk in enumerate(chunks[:10], 1):  # Limit to first 10 chunks
+                web = chunk.get("web", {})
+                uri = web.get("uri", "")
+                title = web.get("title", "")
+                if uri or title:
+                    lines.append(f"**Source {i}:** [{title}]({uri})" if title else f"**Source {i}:** {uri}")
+
+        if "grounding_supports" in grounding_metadata:
+            supports = grounding_metadata["grounding_supports"]
+            for support in supports[:5]:  # Limit to first 5
+                segment = support.get("segment", {})
+                text = segment.get("text", "")
+                if text:
+                    lines.append(f"- Supported claim: \"{text[:200]}...\"" if len(text) > 200 else f"- Supported claim: \"{text}\"")
+
+        # Fallback: just dump key info
+        if not lines:
+            for key, value in grounding_metadata.items():
+                if value and key not in ["search_entry_point"]:
+                    lines.append(f"**{key}:** {str(value)[:300]}")
+
+    if not lines:
+        return "Stage 3 search metadata format not recognized. Raw data available but could not be parsed."
+
+    return "\n".join(lines)
+
+
 def stringify_liveblocks_body(body) -> str:
     if not body:
         return ""
@@ -49,7 +121,7 @@ def stringify_liveblocks_body(body) -> str:
         text = element.get("text") or url
         return f"[{text}]({url})"
 
-    def stringify_mention(element: dict) -> str:
+    def stringify_mention(_element: dict) -> str:
         return "@[user]"
 
     def stringify_inline(inline: dict) -> str:
@@ -136,6 +208,26 @@ def build_validation_prompt(snippet, comments):
     else:
         comments_text = "No comments"
 
+    # Format context (before/main/after)
+    context = snippet.get("context", {})
+    context_before = context.get("before", "Not available")
+    context_before_en = context.get("before_en", "Not available")
+    context_main = context.get("main", "Not available")
+    context_main_en = context.get("main_en", "Not available")
+    context_after = context.get("after", "Not available")
+    context_after_en = context.get("after_en", "Not available")
+
+    # Format keywords detected
+    keywords = snippet.get("keywords_detected", [])
+    keywords_text = ", ".join(keywords) if keywords else "None detected"
+
+    # Format grounding metadata (Stage 3 search evidence)
+    grounding_metadata = snippet.get("grounding_metadata")
+    grounding_metadata_text = format_grounding_metadata(grounding_metadata)
+
+    # Get Stage 3 thought summaries
+    thought_summaries_stage3 = snippet.get("thought_summaries", "Not available")
+
     # Fill template
     prompt = template.format(
         snippet_id=snippet["id"],
@@ -145,6 +237,12 @@ def build_validation_prompt(snippet, comments):
         location_state=audio_file["location_state"],
         transcription=snippet["transcription"],
         translation=snippet["translation"],
+        context_before=context_before,
+        context_before_en=context_before_en,
+        context_main=context_main,
+        context_main_en=context_main_en,
+        context_after=context_after,
+        context_after_en=context_after_en,
         title_spanish=title["spanish"],
         title_english=title["english"],
         summary_spanish=summary["spanish"],
@@ -155,6 +253,9 @@ def build_validation_prompt(snippet, comments):
         confidence_overall=confidence_scores["overall"],
         category_scores=json.dumps(confidence_scores["categories"], indent=2),
         claims_analysis=claims_text,
+        keywords_detected=keywords_text,
+        grounding_metadata=grounding_metadata_text,
+        thought_summaries_stage3=thought_summaries_stage3,
         dislike_count=snippet["dislike_count"],
         user_labels=labels_text,
         user_comments=comments_text,
