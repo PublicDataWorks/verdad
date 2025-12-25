@@ -6,6 +6,7 @@ primary_region = 'sea'
 
 [env]
   PREFECT_API_URL = 'https://prefect.fly.dev/api'
+  SEARXNG_URL = 'https://verdad-searxng.fly.dev'
 
 [processes]
   initial_disinformation_detection = ''
