@@ -1,0 +1,70 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "VERDAD SearXNG"
+  enable_metrics: false
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "${SEARXNG_SECRET}"
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+search:
+  formats:
+    - html
+    - json
+  safe_search: 0
+  default_lang: "en"
+  autocomplete: ""
+
+outgoing:
+  request_timeout: 5.0
+  pool_connections: 100
+  pool_maxsize: 20
+  enable_http2: true
+
+engines:
+  # Web Search
+  - name: google
+    engine: google
+    disabled: false
+  - name: bing
+    engine: bing
+    disabled: false
+  - name: duckduckgo
+    engine: duckduckgo
+    disabled: false
+  - name: brave
+    engine: brave
+    disabled: false
+  - name: qwant
+    engine: qwant
+    disabled: false
+
+  # News Sources
+  - name: google news
+    engine: google_news
+    disabled: false
+  - name: bing news
+    engine: bing_news
+    disabled: false
+  - name: yahoo news
+    engine: yahoo_news
+    disabled: false
+
+  # Reference Sources
+  - name: wikipedia
+    engine: wikipedia
+    disabled: false
+  - name: wikidata
+    engine: wikidata
+    disabled: false
+
+  # Academic Sources
+  - name: google scholar
+    engine: google_scholar
+    disabled: false
