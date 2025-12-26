@@ -4,10 +4,6 @@
       "respectGitIgnore": false
     }
   },
-  "tools": {
-    "core": [],
-    "exclude": ["google_web_search", "web_fetch"]
-  },
   "mcp": {
     "allowed": ["searxng"]
   },
