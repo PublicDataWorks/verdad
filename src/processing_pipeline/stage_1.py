@@ -21,10 +21,7 @@ from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
     GeminiModel,
     ProcessingStatus,
-    get_system_instruction_for_stage_1,
-    get_output_schema_for_stage_1,
-    get_detection_prompt_for_stage_1,
-    get_gemini_timestamped_transcription_generation_prompt,
+    PromptStage,
 )
 from processing_pipeline.processing_utils import get_safety_settings
 from utils import optional_flow, optional_task
@@ -139,6 +136,7 @@ def __transcribe_audio_file_with_open_ai_whisper_1(audio_file):
 @optional_task(log_prints=True)
 def transcribe_audio_file_with_timestamp_with_gemini(
     audio_file: str,
+    prompt_version: dict,
     model_name=GeminiModel.GEMINI_FLASH_LATEST,
 ):
     print(f"Transcribing the audio file {audio_file} using {model_name}")
@@ -147,6 +145,7 @@ def transcribe_audio_file_with_timestamp_with_gemini(
         audio_file=audio_file,
         gemini_key=gemini_key,
         model_name=model_name,
+        user_prompt=prompt_version["user_prompt"],
     )
     return {"timestamped_transcription": timestamped_transcription}
 
@@ -163,6 +162,7 @@ def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_
 def disinformation_detection_with_gemini(
     timestamped_transcription: str,
     metadata: dict,
+    prompt_version: dict,
     model_name=GeminiModel.GEMINI_FLASH_LATEST,
 ):
     print(f"Processing the timestamped transcription with {model_name}")
@@ -172,6 +172,7 @@ def disinformation_detection_with_gemini(
         model_name=model_name,
         timestamped_transcription=timestamped_transcription,
         metadata=metadata,
+        prompt_version=prompt_version,
     )
     flagged_snippets = response["flagged_snippets"]
 
@@ -192,6 +193,8 @@ def insert_stage_1_llm_response(
     timestamped_transcription,
     detection_result,
     status,
+    detection_prompt_version_id=None,
+    transcription_prompt_version_id=None,
 ):
     supabase_client.insert_stage_1_llm_response(
         audio_file_id=audio_file_id,
@@ -201,6 +204,8 @@ def insert_stage_1_llm_response(
         timestamped_transcription=timestamped_transcription,
         detection_result=detection_result,
         status=status,
+        detection_prompt_version_id=detection_prompt_version_id,
+        transcription_prompt_version_id=transcription_prompt_version_id,
     )
 
 
@@ -210,19 +215,30 @@ def set_audio_file_status(supabase_client, audio_file_id, status: ProcessingStat
 
 
 @optional_task(log_prints=True)
-def process_audio_file(supabase_client, audio_file, local_file):
+def process_audio_file(
+    supabase_client,
+    audio_file,
+    local_file,
+    transcription_prompt_version: dict,
+    detection_prompt_version: dict,
+):
     metadata = get_audio_file_metadata(audio_file)
     print(f"Metadata of the audio file:\n{json.dumps(metadata, indent=2)}\n")
 
     try:
         # Transcribe the audio file with timestamp
         transcriptor = GeminiModel.GEMINI_FLASH_LATEST
-        timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(local_file, transcriptor)
+        timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(
+            local_file,
+            prompt_version=transcription_prompt_version,
+            model_name=transcriptor,
+        )
 
         # Main detection phase
         detection_result = disinformation_detection_with_gemini(
             timestamped_transcription=timestamped_transcription["timestamped_transcription"],
             metadata=metadata,
+            prompt_version=detection_prompt_version,
             model_name=GeminiModel.GEMINI_FLASH_LATEST,
         )
         print(f"Detection result:\n{json.dumps(detection_result, indent=2, ensure_ascii=False)}\n")
@@ -240,6 +256,8 @@ def process_audio_file(supabase_client, audio_file, local_file):
                 timestamped_transcription=timestamped_transcription,
                 detection_result=detection_result,
                 status="Processed",
+                detection_prompt_version_id=detection_prompt_version["id"],
+                transcription_prompt_version_id=transcription_prompt_version["id"],
             )
         else:
             "Flagged snippets found, inserting the llm response with status 'New'"
@@ -252,6 +270,8 @@ def process_audio_file(supabase_client, audio_file, local_file):
                 timestamped_transcription=timestamped_transcription,
                 detection_result=detection_result,
                 status="New",
+                detection_prompt_version_id=detection_prompt_version["id"],
+                transcription_prompt_version_id=transcription_prompt_version["id"],
             )
 
         print(f"Processing completed for {local_file}")
@@ -293,6 +313,10 @@ def initial_disinformation_detection(audio_file_id, limit):
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
+    # Load prompt versions once at flow start
+    transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.GEMINI_TIMESTAMPED_TRANSCRIPTION)
+    detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1)
+
     # Track the number of audio files processed
     processed_audio_files = 0
 
@@ -306,7 +330,13 @@ def initial_disinformation_detection(audio_file_id, limit):
             local_file = download_audio_file_from_s3(s3_client, audio_file["file_path"])
 
             # Process the audio file
-            process_audio_file(supabase_client, audio_file, local_file)
+            process_audio_file(
+                supabase_client,
+                audio_file,
+                local_file,
+                transcription_prompt_version,
+                detection_prompt_version,
+            )
             processed_audio_files += 1
             print(f"Processed {processed_audio_files}/{limit} audio files")
 
@@ -385,6 +415,9 @@ def redo_main_detection(stage_1_llm_response_ids):
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
+    # Load prompt version
+    detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1)
+
     for id in stage_1_llm_response_ids:
         stage_1_llm_response = fetch_stage_1_llm_response_by_id(supabase_client, id)
 
@@ -415,6 +448,7 @@ def redo_main_detection(stage_1_llm_response_ids):
                 detection_result = disinformation_detection_with_gemini(
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
+                    prompt_version=detection_prompt_version,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
                 update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
@@ -441,6 +475,10 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
         aws_access_key_id=os.getenv("R2_ACCESS_KEY_ID"),
         aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
     )
+
+    # Load prompt versions
+    transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.GEMINI_TIMESTAMPED_TRANSCRIPTION)
+    detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1)
 
     for id in stage_1_llm_response_ids:
         stage_1_llm_response = fetch_stage_1_llm_response_by_id(supabase_client, id)
@@ -469,7 +507,10 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
             else:
                 try:
                     transcriptor = "gemini-1206"
-                    timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(local_file)
+                    timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(
+                        local_file,
+                        prompt_version=transcription_prompt_version,
+                    )
                 except ValueError as e:
                     print(
                         f"Failed to transcribe the audio file with Gemini 2.5 Pro: {e}\n"
@@ -487,6 +528,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                 detection_result = disinformation_detection_with_gemini(
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
+                    prompt_version=detection_prompt_version,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
                 update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
@@ -513,10 +555,6 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
 
 class Stage1Executor:
 
-    SYSTEM_INSTRUCTION = get_system_instruction_for_stage_1()
-    DETECTION_PROMPT = get_detection_prompt_for_stage_1()
-    OUTPUT_SCHEMA = get_output_schema_for_stage_1()
-
     @classmethod
     def run(
         cls,
@@ -524,6 +562,7 @@ class Stage1Executor:
         model_name: GeminiModel,
         timestamped_transcription: str,
         metadata: dict,
+        prompt_version: dict,
     ):
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
@@ -532,7 +571,7 @@ class Stage1Executor:
 
         # Prepare the user prompt
         user_prompt = (
-            f"{cls.DETECTION_PROMPT}\n\n"
+            f"{prompt_version['user_prompt']}\n\n"
             f"Here is the metadata of the transcription:\n\n{json.dumps(metadata, indent=2)}\n\n"
             f"Here is the timestamped transcription:\n\n{timestamped_transcription}"
         )
@@ -542,9 +581,9 @@ class Stage1Executor:
             contents=[user_prompt],
             config=GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=cls.OUTPUT_SCHEMA,
+                response_schema=prompt_version["output_schema"],
                 max_output_tokens=16384,
-                system_instruction=cls.SYSTEM_INSTRUCTION,
+                system_instruction=prompt_version["system_instruction"],
                 thinking_config=ThinkingConfig(thinking_budget=4096),
                 safety_settings=get_safety_settings(),
             ),
@@ -562,14 +601,13 @@ class Stage1Executor:
 
 class GeminiTimestampTranscriptionGenerator:
 
-    USER_PROMPT = get_gemini_timestamped_transcription_generation_prompt()
-
     @classmethod
     def run(
         cls,
         audio_file: str,
         gemini_key: str,
         model_name: GeminiModel,
+        user_prompt: str,
     ):
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
@@ -584,7 +622,7 @@ class GeminiTimestampTranscriptionGenerator:
             uploaded_audio_file = client.files.get(name=uploaded_audio_file.name)
 
         try:
-            return cls.transcribe(client, uploaded_audio_file, model_name)
+            return cls.transcribe(client, uploaded_audio_file, model_name, user_prompt)
         finally:
             client.files.delete(name=uploaded_audio_file.name)
 
@@ -595,12 +633,13 @@ class GeminiTimestampTranscriptionGenerator:
         client: genai.Client,
         uploaded_audio_file: File,
         model_name: GeminiModel,
+        user_prompt: str,
     ):
         thinking_budget = 128 if model_name == GeminiModel.GEMINI_2_5_PRO else 0
 
         result = client.models.generate_content(
             model=model_name,
-            contents=[cls.USER_PROMPT, uploaded_audio_file],
+            contents=[user_prompt, uploaded_audio_file],
             config=GenerateContentConfig(
                 max_output_tokens=16384,
                 thinking_config=ThinkingConfig(thinking_budget=thinking_budget),

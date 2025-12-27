@@ -31,6 +31,12 @@ class ProcessingStatus(StrEnum):
     REVIEWING = "Reviewing"
 
 
+class PromptStage(StrEnum):
+    STAGE_1 = "stage_1"
+    STAGE_3 = "stage_3"
+    GEMINI_TIMESTAMPED_TRANSCRIPTION = "gemini_timestamped_transcription"
+
+
 def get_transcription_prompt_for_stage_1_preprocess():
     return open("prompts/Stage_1_Preprocess_transcription_prompt.md", "r").read()
 
