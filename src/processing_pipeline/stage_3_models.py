@@ -150,3 +150,6 @@ class Stage3Output(BaseModel):
     confidence_scores: ConfidenceScores
     emotional_tone: list[EmotionalToneItem]
     political_leaning: PoliticalLeaning
+    thought_summaries: str = Field(
+        description="A summary of your reasoning process, key observations, and analytical steps taken during the analysis"
+    )

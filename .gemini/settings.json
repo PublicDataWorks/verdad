@@ -1,0 +1,23 @@
+{
+  "context": {
+    "fileFiltering": {
+      "respectGitIgnore": false
+    }
+  },
+  "tools": {
+    "core": [],
+    "exclude": ["google_web_search", "web_fetch"]
+  },
+  "mcp": {
+    "allowed": ["searxng"]
+  },
+  "mcpServers": {
+    "searxng": {
+      "command": "npx",
+      "args": ["-y", "mcp-searxng"],
+      "env": {
+        "SEARXNG_URL": "$SEARXNG_URL"
+      }
+    }
+  }
+}

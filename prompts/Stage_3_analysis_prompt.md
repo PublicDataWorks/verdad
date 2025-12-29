@@ -78,10 +78,10 @@ Perform the following steps:
   - Confirm that the translation accurately reflects the transcription.
 
 - **Ensure Factual Accuracy:**
-  - Conduct web searches to fact-check the snippet's claims using information that matches its recording date, time, and location for contextual accuracy.
-  - Avoid using data from different time periods to incorrectly label it as disinformation.
-  - Avoid looking up comparable events from different time periods (e.g., if the audio is from 2025, don't reference information from 2000).
-  - Apply the information you've discovered in your following analysis.
+  - **Search**: Use the web search tool to fact-check claims, ensuring search queries match the audio's recording date, time, and location for contextual accuracy.
+  - **Fetch**: For important claims, use the content fetch tool to read full articles from authoritative sources (news outlets, fact-checkers, official statements). Do not rely solely on search snippets for high-stakes determinations.
+  - **Verify**: Look for multiple sources to corroborate or contradict claims. Avoid using information from different time periods (e.g., if the audio is from 2025, don't reference data from 2000).
+  - **Apply**: Incorporate your findings into the analysis that follows.
 
 ##### **D. Summary and Explanation**
 
@@ -135,7 +135,7 @@ The confidence score represents your degree of certainty that the content contai
 
 **Verification Requirement:**
 
-Before assigning confidence scores, verify all factual claims using Grounding with Google Search. The verification outcome determines the maximum possible score.
+Before assigning confidence scores, verify all factual claims using the available web search tool. For claims that significantly impact the confidence score, fetch and read the full content of authoritative sources rather than relying on search snippets alone. The verification outcome determines the maximum possible score.
 
 **Scoring Framework Based on Verification:**
 
@@ -366,6 +366,43 @@ Avoid inferring political leanings from adjacent topics or assumptions about the
    - Acknowledge when content contains mixed or ambiguous political signals
 
 
+##### **L. Thought Summaries**
+
+Document your analytical reasoning process in the `thought_summaries` field. This field captures your thinking methodology and key observations made during the analysis.
+
+**What to Include:**
+
+1. **Initial Observations:**
+   - First impressions of the audio content
+   - Notable linguistic or vocal features observed
+   - Initial hypotheses about the content's nature
+
+2. **Verification Process:**
+   - Key searches performed and their outcomes
+   - Sources consulted for fact-checking
+   - How search results influenced your analysis
+
+3. **Analytical Reasoning:**
+   - How you arrived at your confidence scores
+   - Reasoning behind category assignments
+   - Factors considered in political leaning assessment
+
+4. **Challenges and Uncertainties:**
+   - Any ambiguities encountered
+   - Areas where evidence was limited
+   - How you handled uncertain claims
+
+5. **Conclusion Summary:**
+   - Key findings from your analysis
+   - Most significant observations
+   - Overall assessment rationale
+
+**Format Guidelines:**
+- Write in clear, concise prose
+- Focus on the reasoning process, not just conclusions
+- Include specific examples from the content that informed your analysis
+- Document any score adjustments and why they were made
+
 #### **3. Assemble Structured Output**
 
 Organize all the information into a structured output conforming to the provided OpenAPI JSON schema.
@@ -391,7 +428,8 @@ Ensure your output strictly adheres to this schema.
         "context",
         "confidence_scores",
         "emotional_tone",
-        "political_leaning"
+        "political_leaning",
+        "thought_summaries"
     ],
     "properties": {
         "transcription": {
@@ -718,6 +756,10 @@ Ensure your output strictly adheres to this schema.
                     }
                 }
             }
+        },
+        "thought_summaries": {
+            "type": "string",
+            "description": "A summary of your reasoning process, key observations, and analytical steps taken during the analysis."
         }
     }
 }
@@ -1642,7 +1684,8 @@ Below is a complete example showing all required fields:
         "reasoning": "Adjusted the score to reflect the moderate nature of the content and lack of explicit policy advocacy."
       }
     }
-  }
+  },
+  "thought_summaries": "Initial observations revealed a Spanish-language audio clip discussing economic concerns and vaccination policies. The speaker's tone conveyed fear and distrust, with notable emphasis on phrases like 'controlar nuestras mentes' (control our minds). During verification, I searched for evidence supporting claims about vaccines being used for mind control and found no credible scientific support - this is a well-documented conspiracy theory. The claim about mandatory vaccinations being pushed for control purposes contradicts public health evidence showing vaccination programs aim to achieve herd immunity. I assigned high confidence scores (90-95) because the mind control claim is demonstrably false and the content promotes unfounded conspiracy theories. The political leaning was assessed as slightly conservative (0.2) based on the emphasis on individual autonomy and government distrust, though the score was adjusted from 0.3 due to lack of explicit policy advocacy. Key challenges included distinguishing between legitimate economic concerns (which don't constitute disinformation) and the conspiracy claims about vaccines (which do). The overall assessment is that this content contains significant disinformation in the COVID-19/vaccination category."
 }
 ```
 
@@ -1715,7 +1758,7 @@ By following these instructions and listening closely using the detailed heurist
 Please proceed to analyze the provided audio content following these guidelines:
 
 1. Listen carefully to capture all spoken content.
-2. Verify all factual claims using Google Search before assigning scores (Section H), searching for information relevant to the recording datetime and/or current datetime.
+2. Verify all factual claims using the web search tool before assigning scores (Section H), searching for information relevant to the recording datetime and/or current datetime. For important claims, use the content fetch tool to read full articles.
 3. Apply the detailed heuristics for disinformation analysis.
 4. Base political orientation assessment solely on observable content elements.
 5. Document all findings with specific evidence from the content.
