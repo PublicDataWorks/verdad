@@ -1,6 +1,6 @@
 from supabase import create_client
 from datetime import datetime, timezone
-from processing_pipeline.constants import GeminiModel
+from processing_pipeline.constants import GeminiModel, PromptStage
 
 
 class SupabaseClient:
@@ -105,6 +105,30 @@ class SupabaseClient:
         )
         return response.data[0]
 
+    def get_active_prompt(self, stage: PromptStage):
+        response = (
+            self.client.table("prompt_versions")
+            .select("*")
+            .eq("stage", stage.value)
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            raise ValueError(f"No active prompt version found for stage: {stage}")
+        return response.data[0]
+
+    def get_prompt_by_id(self, prompt_version_id: str):
+        response = (
+            self.client.table("prompt_versions")
+            .select("*")
+            .eq("id", prompt_version_id)
+            .execute()
+        )
+        if not response.data:
+            raise ValueError(f"Prompt version not found: {prompt_version_id}")
+        return response.data[0]
+
     def insert_stage_1_llm_response(
         self,
         audio_file_id,
@@ -114,6 +138,8 @@ class SupabaseClient:
         timestamped_transcription,
         detection_result,
         status,
+        detection_prompt_version_id=None,
+        transcription_prompt_version_id=None,
     ):
         response = (
             self.client.table("stage_1_llm_responses")
@@ -125,7 +151,9 @@ class SupabaseClient:
                     "transcriptor": transcriptor,
                     "timestamped_transcription": timestamped_transcription,
                     "detection_result": detection_result,
-                    "status": status
+                    "status": status,
+                    "detection_prompt_version_id": detection_prompt_version_id,
+                    "transcription_prompt_version_id": transcription_prompt_version_id,
                 }
             )
             .execute()
@@ -201,7 +229,8 @@ class SupabaseClient:
         thought_summaries,
         analyzed_by,
         status,
-        error_message
+        error_message,
+        stage_3_prompt_version_id=None,
     ):
         response = (
             self.client.table("snippets")
@@ -225,6 +254,7 @@ class SupabaseClient:
                     "previous_analysis": None,
                     "status": status,
                     "error_message": error_message,
+                    "stage_3_prompt_version_id": stage_3_prompt_version_id,
                 }
             )
             .eq("id", id)

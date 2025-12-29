@@ -3,6 +3,7 @@ from http import HTTPStatus
 import json
 import os
 import subprocess
+import tempfile
 import time
 from typing import Any
 
@@ -31,9 +32,7 @@ from processing_pipeline.constants import (
     GeminiCLIEventType,
     GeminiModel,
     ProcessingStatus,
-    get_system_instruction_for_stage_3,
-    get_output_schema_for_stage_3,
-    get_user_prompt_for_stage_3,
+    PromptStage,
 )
 from processing_pipeline.stage_3_models import Stage3Output
 from utils import optional_flow, optional_task
@@ -88,6 +87,7 @@ def update_snippet_in_supabase(
     analyzed_by,
     status,
     error_message,
+    stage_3_prompt_version_id=None,
 ):
     supabase_client.update_snippet(
         id=snippet_id,
@@ -108,6 +108,7 @@ def update_snippet_in_supabase(
         analyzed_by=analyzed_by,
         status=status,
         error_message=error_message,
+        stage_3_prompt_version_id=stage_3_prompt_version_id,
     )
 
 
@@ -153,7 +154,7 @@ def __get_metadata(snippet):
 
 
 @optional_task(log_prints=True)
-def analyze_snippet(gemini_key, audio_file, metadata):
+def analyze_snippet(gemini_key, audio_file, metadata, prompt_version: dict):
     main_model = GeminiModel.GEMINI_2_5_PRO
     fallback_model = GeminiModel.GEMINI_FLASH_LATEST
 
@@ -164,6 +165,7 @@ def analyze_snippet(gemini_key, audio_file, metadata):
             model_name=main_model,
             audio_file=audio_file,
             metadata=metadata,
+            prompt_version=prompt_version,
         )
         return {
             **analyzing_response,
@@ -177,6 +179,7 @@ def analyze_snippet(gemini_key, audio_file, metadata):
             model_name=fallback_model,
             audio_file=audio_file,
             metadata=metadata,
+            prompt_version=prompt_version,
         )
         return {
             **analyzing_response,
@@ -194,6 +197,7 @@ def analyze_snippet(gemini_key, audio_file, metadata):
                 model_name=fallback_model,
                 audio_file=audio_file,
                 metadata=metadata,
+                prompt_version=prompt_version,
             )
             return {
                 **analyzing_response,
@@ -202,7 +206,7 @@ def analyze_snippet(gemini_key, audio_file, metadata):
 
 
 @optional_task(log_prints=True)
-def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_review: bool):
+def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_review: bool, prompt_version: dict):
     print(f"Processing snippet: {local_file}")
 
     try:
@@ -213,6 +217,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
             gemini_key=gemini_key,
             audio_file=local_file,
             metadata=metadata,
+            prompt_version=prompt_version,
         )
 
         status = ProcessingStatus.PROCESSED if skip_review else ProcessingStatus.READY_FOR_REVIEW
@@ -225,6 +230,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
             analyzed_by=analyzing_response["analyzed_by"],
             status=status,
             error_message=None,
+            stage_3_prompt_version_id=prompt_version["id"],
         )
 
         if skip_review:
@@ -275,6 +281,9 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
 
+    # Load prompt version
+    prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_3)
+
     if snippet_ids:
         for id in snippet_ids:
             snippet = fetch_a_specific_snippet_from_supabase(supabase_client, id)
@@ -284,7 +293,14 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet
-                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY, skip_review=skip_review)
+                process_snippet(
+                    supabase_client,
+                    snippet,
+                    local_file,
+                    GEMINI_KEY,
+                    skip_review=skip_review,
+                    prompt_version=prompt_version,
+                )
 
                 print(f"Delete the downloaded snippet clip: {local_file}")
                 os.remove(local_file)
@@ -296,7 +312,14 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet
-                process_snippet(supabase_client, snippet, local_file, GEMINI_KEY, skip_review=skip_review)
+                process_snippet(
+                    supabase_client,
+                    snippet,
+                    local_file,
+                    GEMINI_KEY,
+                    skip_review=skip_review,
+                    prompt_version=prompt_version,
+                )
 
                 print(f"Delete the downloaded snippet clip: {local_file}")
                 os.remove(local_file)
@@ -315,11 +338,7 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
 
 
 class Stage3Executor:
-
-    SYSTEM_INSTRUCTION = get_system_instruction_for_stage_3()
-    USER_PROMPT = get_user_prompt_for_stage_3()
-    OUTPUT_SCHEMA = get_output_schema_for_stage_3()
-    SYSTEM_INSTRUCTION_PATH = "prompts/Stage_3_system_instruction.md"
+    """Executor for Stage 3 in-depth analysis."""
 
     @classmethod
     def run(
@@ -328,6 +347,7 @@ class Stage3Executor:
         model_name: GeminiModel,
         audio_file: str,
         metadata: dict,
+        prompt_version: dict,
     ):
         """
         Main execution method for Stage 3 analysis.
@@ -342,6 +362,7 @@ class Stage3Executor:
             model_name: Name of the Gemini model to use
             audio_file: Path to the audio file
             metadata: Metadata dictionary for the audio clip
+            prompt_version: The prompt version to use for analysis
 
         Returns:
             dict: Structured and validated analysis output
@@ -351,9 +372,9 @@ class Stage3Executor:
 
         client = genai.Client(api_key=gemini_key)
 
-        # Prepare the user prompt
+        # Prepare the user prompt using the prompt version
         user_prompt = (
-            f"{cls.USER_PROMPT}\n\n"
+            f"{prompt_version['user_prompt']}\n\n"
             f"Here is the metadata of the attached audio clip:\n{json.dumps(metadata, indent=2)}\n\n"
             f"Here is the current date and time: {datetime.now(timezone.utc).strftime('%B %-d, %Y %-I:%M %p UTC')}\n\n"
         )
@@ -367,6 +388,7 @@ class Stage3Executor:
             analysis_result = cls.__analyze_with_custom_search(
                 model_name=model_name,
                 user_prompt=user_prompt_with_file,
+                system_instruction=prompt_version["system_instruction"],
             )
         except RuntimeError as e:
             print("Falling back to Google Search grounding with SDK...")
@@ -382,6 +404,7 @@ class Stage3Executor:
                 model_name,
                 user_prompt,
                 uploaded_audio_file,
+                system_instruction=prompt_version["system_instruction"],
             )
 
         try:
@@ -403,7 +426,7 @@ class Stage3Executor:
                 }
 
             # Step 2: Structure with response_schema (if validation failed)
-            structured_output = cls.__structure_with_schema(client, analysis_text)
+            structured_output = cls.__structure_with_schema(client, analysis_text, prompt_version["output_schema"])
             thought_summaries = thought_summaries_from_api or structured_output.get("thought_summaries")
             return {
                 "response": structured_output,
@@ -420,6 +443,7 @@ class Stage3Executor:
         cls,
         model_name: GeminiModel,
         user_prompt: str,
+        system_instruction: str,
     ):
         """
         Analyze using Gemini CLI with custom search tools (MCP-based).
@@ -442,11 +466,16 @@ class Stage3Executor:
         tool_calls: dict[str, dict[str, Any]] = {}  # Dict to match tool_use with tool_result by tool_id
         timeout = 300
 
+        # Write system instruction to a temporary file for CLI
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp_file:
+            tmp_file.write(system_instruction)
+            system_instruction_path = tmp_file.name
+
         env = {
             "PATH": os.environ.get("PATH", ""),
             "HOME": os.environ.get("HOME", ""),
             "GEMINI_API_KEY": os.environ["GOOGLE_GEMINI_KEY"],
-            "GEMINI_SYSTEM_MD": cls.SYSTEM_INSTRUCTION_PATH,
+            "GEMINI_SYSTEM_MD": system_instruction_path,
         }
 
         cmd = [
@@ -534,6 +563,9 @@ class Stage3Executor:
 
         except subprocess.TimeoutExpired as e:
             raise RuntimeError(f"Gemini CLI timed out after {timeout} seconds") from e
+        finally:
+            if os.path.exists(system_instruction_path):
+                os.remove(system_instruction_path)
 
     @optional_task(log_prints=True, retries=3)
     @classmethod
@@ -543,20 +575,15 @@ class Stage3Executor:
         model_name: GeminiModel,
         user_prompt: str,
         uploaded_audio_file: File,
+        system_instruction: str,
     ):
-        """
-        Step 1: Analyze audio with Google Search tool enabled.
-
-        Returns:
-            str: The response text from Gemini
-        """
         print("Analyzing audio with web search...")
 
         response = client.models.generate_content(
             model=model_name,
             contents=[user_prompt, uploaded_audio_file],
             config=GenerateContentConfig(
-                system_instruction=cls.SYSTEM_INSTRUCTION,
+                system_instruction=system_instruction,
                 max_output_tokens=16384,
                 tools=[Tool(google_search=GoogleSearch())],
                 thinking_config=ThinkingConfig(thinking_budget=4096, include_thoughts=True),
@@ -590,13 +617,6 @@ class Stage3Executor:
 
     @classmethod
     def __validate_with_pydantic(cls, response_text: str):
-        """
-        Attempts to validate the response text with the Pydantic model.
-
-        Returns:
-            dict: Validated and structured output if successful
-            None: If validation fails
-        """
         try:
             print("Attempting to validate response with Pydantic model...")
             start_idx = response_text.find("{")
@@ -618,13 +638,8 @@ class Stage3Executor:
         cls,
         client: genai.Client,
         analysis_text: str,
+        output_schema: dict,
     ):
-        """
-        Step 2: Structure the analysis results using response_schema.
-
-        Returns:
-            dict: Structured and validated output
-        """
         print("Restructuring response with schema validation...")
 
         system_instruction = """You are a helpful assistant whose task is to convert provided text into a valid JSON object following a given schema. Your responsibilities are:
@@ -643,7 +658,7 @@ class Stage3Executor:
             contents=[user_prompt],
             config=GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=cls.OUTPUT_SCHEMA,
+                response_schema=output_schema,
                 system_instruction=system_instruction,
                 max_output_tokens=8192,
                 thinking_config=ThinkingConfig(thinking_budget=0),

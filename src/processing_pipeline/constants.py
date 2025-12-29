@@ -31,32 +31,22 @@ class ProcessingStatus(StrEnum):
     REVIEWING = "Reviewing"
 
 
-def get_transcription_prompt_for_stage_1_preprocess():
-    return open("prompts/Stage_1_Preprocess_transcription_prompt.md", "r").read()
+class PromptStage(StrEnum):
+    STAGE_1 = "stage_1"
+    STAGE_3 = "stage_3"
+    GEMINI_TIMESTAMPED_TRANSCRIPTION = "gemini_timestamped_transcription"
 
 
 def get_detection_prompt_for_stage_1():
     return open("prompts/Stage_1_detection_prompt.md", "r").read()
 
 
-def get_detection_prompt_for_stage_1_preprocess():
-    return open("prompts/Stage_1_Preprocess_detection_prompt.md", "r").read()
-
-
 def get_system_instruction_for_stage_1():
     return open("prompts/Stage_1_system_instruction.md", "r").read()
 
 
-def get_system_instruction_for_stage_1_preprocess():
-    return open("prompts/Stage_1_Preprocess_system_instruction.md", "r").read()
-
-
 def get_output_schema_for_stage_1():
     return json.load(open("prompts/Stage_1_output_schema.json", "r"))
-
-
-def get_output_schema_for_stage_1_preprocess():
-    return json.load(open("prompts/Stage_1_Preprocess_output_schema.json", "r"))
 
 
 def get_user_prompt_for_stage_3():
@@ -96,22 +86,6 @@ def get_gemini_timestamped_transcription_generation_prompt():
 
 
 if __name__ == "__main__":
-    # Print the transcription prompt for stage 1 Preprocess
-    # transcription_prompt_for_stage_1_preprocess = get_transcription_prompt_for_stage_1_preprocess()
-    # print(transcription_prompt_for_stage_1_preprocess)
-
-    # Print the output schema for stage 1 preprocess
-    # output_schema_for_stage_1_preprocess = get_output_schema_for_stage_1_preprocess()
-    # print(json.dumps(output_schema_for_stage_1_preprocess, indent=2))
-
-    # Print system instruction for stage 1 preprocess
-    # system_instruction_for_stage_1_preprocess = get_system_instruction_for_stage_1_preprocess()
-    # print(system_instruction_for_stage_1_preprocess)
-
-    # Print the detection prompt for stage 1 preprocess
-    # detection_prompt_for_stage_1_preprocess = get_detection_prompt_for_stage_1_preprocess()
-    # print(detection_prompt_for_stage_1_preprocess)
-
     # Print the output schema for stage 1
     # output_schema_for_stage_1 = get_output_schema_for_stage_1()
     # print(json.dumps(output_schema_for_stage_1, indent=2))
