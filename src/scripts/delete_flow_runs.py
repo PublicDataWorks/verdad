@@ -104,4 +104,4 @@ async def delete_flow_runs(state_types: list[StateType]) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(delete_flow_runs(state_types=[StateType.CANCELLED]))
+    asyncio.run(delete_flow_runs(state_types=[StateType.CANCELLED, StateType.CANCELLING]))
