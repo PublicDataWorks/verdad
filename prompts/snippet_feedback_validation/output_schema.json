@@ -6,6 +6,7 @@
     "claim_verifications",
     "user_feedback_assessment",
     "validation_decision",
+    "error_pattern",
     "thought_summaries"
   ],
   "properties": {
@@ -98,6 +99,33 @@
           "description": "Main reason for this decision"
         }
       }
+    },
+    "error_pattern": {
+      "type": "object",
+      "description": "Classification of what type of error Stage 3 made (if any)",
+      "required": ["error_type", "explanation"],
+      "properties": {
+        "error_type": {
+          "type": "string",
+          "enum": [
+            "knowledge_cutoff",
+            "temporal_confusion",
+            "insufficient_search",
+            "misinterpretation",
+            "correct_detection",
+            "ambiguous"
+          ],
+          "description": "Type of error Stage 3 made, if any"
+        },
+        "explanation": {
+          "type": "string",
+          "description": "Brief explanation of why this error type was identified"
+        }
+      }
+    },
+    "prompt_improvement_suggestion": {
+      "type": ["string", "null"],
+      "description": "If false_positive, what specific improvement to Stage 3 prompt could prevent this error in future"
     },
     "thought_summaries": {
       "type": "string",
