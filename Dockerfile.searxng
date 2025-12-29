@@ -1,0 +1,5 @@
+FROM searxng/searxng:2025.12.26-fa9729226
+
+COPY searxng/config/settings.yml /etc/searxng/settings.yml
+
+RUN chown searxng:searxng /etc/searxng/settings.yml
