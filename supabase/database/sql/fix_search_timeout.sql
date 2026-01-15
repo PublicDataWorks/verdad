@@ -1,9 +1,18 @@
+-- Fix for search timeout issues
+-- The search_related_snippets function was doing sequential scans on 121K+ embeddings
+-- This rewrites it to use a two-stage search pattern like search_related_snippets_public:
+-- 1. First stage: Use sub_vector(512) with the existing HNSW index to get candidates fast
+-- 2. Second stage: Re-rank candidates using full 3072-dim embedding similarity
+
+-- Drop the old function signature first
+DROP FUNCTION IF EXISTS search_related_snippets(uuid, text, double precision, integer);
+
 CREATE OR REPLACE FUNCTION search_related_snippets(
     p_snippet_id uuid,
     p_language TEXT DEFAULT 'english',
     match_threshold float DEFAULT 0.7,
     match_count int DEFAULT 5,
-    candidate_multiplier int DEFAULT 8
+    candidate_multiplier int DEFAULT 8  -- How many candidates to fetch in first pass
 )
 RETURNS jsonb
 SECURITY DEFINER AS $$
