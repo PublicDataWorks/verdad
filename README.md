@@ -32,7 +32,7 @@ VERDAD employs a multi-stage pipeline architecture designed for scalability and 
 
 **Process:**
 
--   Uses Gemini 1.5 Flash LLM for rapid initial screening
+-   Uses Gemini (1.5 or 2.5 Flash) LLM for rapid initial screening
 -   Applies simplified heuristics for high-recall detection
 -   Generates timestamped transcriptions using OpenAI Whisper
 
@@ -71,7 +71,7 @@ VERDAD employs a multi-stage pipeline architecture designed for scalability and 
 
 **Process:**
 
--   Utilizes Gemini 1.5 Pro LLM for detailed analysis
+-   Utilizes Gemini (1.5 or 2.5 Pro) LLM for detailed analysis
 -   Performs multi-dimensional content evaluation
 -   Generates comprehensive annotations
 
@@ -298,5 +298,18 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 VERDAD is a project of Public Data Works, developed in collaboration with the Invisible Institute and supported by various organizations working to combat disinformation in Spanish-language media.
 
 ## Contact
+
+
+## Documentation
+
+Full documentation is available in the [docs/](docs/index.md) directory. The documentation is organized as follows:
+
+- **Getting Started:** Introduction and quick start guides
+- **Architecture:** System architecture and data lifecycle
+- **Pipeline Stages:** Detailed documentation for each stage of the AI pipeline
+- **Integration:** API, collaboration, notifications, and database schema
+- **Configuration:** Deployment, containerization, prompts, and adapters
+- **Maintenance:** Archival and maintenance scripts
+- **Testing:** Test suite and coverage
 
 For questions or support, please open an issue on GitHub or contact the maintainers at [contact information].
