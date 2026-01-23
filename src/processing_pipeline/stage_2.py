@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 import os
 import time
-import boto3
 from prefect.task_runners import ConcurrentTaskRunner
 from pydub import AudioSegment
-from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.postgres_client import PostgresClient
+from processing_pipeline.local_storage import LocalStorage
 from utils import optional_flow, optional_task
 
 
@@ -20,25 +20,25 @@ def fetch_a_new_stage_1_llm_response_from_supabase(supabase_client):
 
 
 @optional_task(log_prints=True, retries=3)
-def download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
-    return __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path)
+def download_audio_file_from_s3(storage_client, file_path):
+    return __download_audio_file_from_s3(storage_client, file_path)
 
 
-def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
+def __download_audio_file_from_s3(storage_client, file_path):
     file_name = os.path.basename(file_path)
-    s3_client.download_file(r2_bucket_name, file_path, file_name)
+    storage_client.download_file(None, file_path, file_name)
     return file_name
 
 
 @optional_task(log_prints=True, retries=3)
-def upload_to_r2_and_clean_up(s3_client, r2_bucket_name, folder_name, file_path):
+def upload_to_r2_and_clean_up(storage_client, folder_name, file_path):
     if not os.path.isfile(file_path):
         raise FileNotFoundError(f"File {file_path} does not exist.")
 
     file_name = os.path.basename(file_path)
     destination_path = f"{folder_name}/snippets/{file_name}"
-    s3_client.upload_file(file_path, r2_bucket_name, destination_path)
-    print(f"File {file_path} uploaded to R2 as {destination_path}")
+    storage_client.upload_file(file_path, None, destination_path)
+    print(f"File {file_path} uploaded to storage as {destination_path}")
     os.remove(file_path)
     return destination_path
 
@@ -177,8 +177,7 @@ def process_llm_response(
     supabase_client,
     llm_response,
     local_file,
-    s3_client,
-    r2_bucket_name,
+    storage_client,
     context_before_seconds,
     context_after_seconds,
 ):
@@ -211,7 +210,7 @@ def process_llm_response(
             )
             file_size = os.path.getsize(output_file)
 
-            uploaded_path = upload_to_r2_and_clean_up(s3_client, r2_bucket_name, folder_name, output_file)
+            uploaded_path = upload_to_r2_and_clean_up(storage_client, folder_name, output_file)
             insert_new_snippet_to_snippets_table_in_supabase(
                 supabase_client=supabase_client,
                 snippet_uuid=uuid,
@@ -238,17 +237,11 @@ def process_llm_response(
 
 @optional_flow(name="Stage 2: Audio Clipping", log_prints=True, task_runner=ConcurrentTaskRunner)
 def audio_clipping(context_before_seconds, context_after_seconds, repeat):
-    # Setup S3 Client
-    R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=os.getenv("R2_ENDPOINT_URL"),
-        aws_access_key_id=os.getenv("R2_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
-    )
+    # Setup Storage Client
+    storage_client = LocalStorage()
 
-    # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    # Setup PostgreSQL client
+    supabase_client = PostgresClient()
 
     while True:
         llm_response = fetch_a_new_stage_1_llm_response_from_supabase(
@@ -256,15 +249,14 @@ def audio_clipping(context_before_seconds, context_after_seconds, repeat):
         )  # TODO: Retry failed llm responses (Error)
 
         if llm_response:
-            local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, llm_response["audio_file"]["file_path"])
+            local_file = download_audio_file_from_s3(storage_client, llm_response["audio_file"]["file_path"])
 
             # Process the stage-1 LLM response
             process_llm_response(
                 supabase_client,
                 llm_response,
                 local_file,
-                s3_client,
-                R2_BUCKET_NAME,
+                storage_client,
                 context_before_seconds,
                 context_after_seconds,
             )
@@ -307,8 +299,8 @@ def fetch_snippets_from_supabase(supabase_client, snippet_ids):
 
 
 @optional_task(log_prints=True, retries=3)
-def delete_snippet_from_r2(s3_client, r2_bucket_name, file_path):
-    s3_client.delete_object(Bucket=r2_bucket_name, Key=file_path)
+def delete_snippet_from_r2(storage_client, file_path):
+    storage_client.delete_object(Bucket=None, Key=file_path)
 
 
 @optional_task(log_prints=True, retries=3)
@@ -323,17 +315,11 @@ def reset_status_of_stage_1_llm_response(supabase_client, stage_1_llm_response_i
 
 @optional_flow(name="Stage 2: Undo Audio Clipping", log_prints=True, task_runner=ConcurrentTaskRunner)
 def undo_audio_clipping(stage_1_llm_response_ids):
-    # Setup S3 Client
-    R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=os.getenv("R2_ENDPOINT_URL"),
-        aws_access_key_id=os.getenv("R2_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
-    )
+    # Setup Storage Client
+    storage_client = LocalStorage()
 
-    # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    # Setup PostgreSQL client
+    supabase_client = PostgresClient()
 
     for id in stage_1_llm_response_ids:
         stage_1_llm_response = fetch_stage_1_llm_response_from_supabase(supabase_client, id)
@@ -357,7 +343,7 @@ def undo_audio_clipping(stage_1_llm_response_ids):
                 # 2. Delete the snippet from Supabase
                 for snippet in snippets:
                     print(f"Deleting snippet file from R2: {snippet['file_path']}")
-                    delete_snippet_from_r2(s3_client, R2_BUCKET_NAME, snippet["file_path"])
+                    delete_snippet_from_r2(storage_client, snippet["file_path"])
 
                     print(f"Deleting snippet from Supabase: {snippet['id']}")
                     delete_snippet_from_supabase(supabase_client, snippet["id"])

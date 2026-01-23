@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 
 from processing_pipeline.stage_4 import Stage4Executor, prepare_snippet_for_review
-from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.postgres_client import PostgresClient
 
 load_dotenv()
 
@@ -13,7 +13,7 @@ GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
 
 
 def test_stage_4():
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    supabase_client = PostgresClient()
     snippet = supabase_client.get_snippet_by_id(id="3b39f536-7466-44da-9772-b10dcf72c6be")
     previous_analysis = snippet["previous_analysis"]
     transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(previous_analysis)

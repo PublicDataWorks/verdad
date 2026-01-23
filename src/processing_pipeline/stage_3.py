@@ -7,7 +7,6 @@ import tempfile
 import time
 from typing import Any
 
-import boto3
 from google import genai
 from google.genai import errors
 from prefect.flows import Flow
@@ -23,7 +22,8 @@ from google.genai.types import (
     ThinkingConfig,
     Tool,
 )
-from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.postgres_client import PostgresClient
+from processing_pipeline.local_storage import LocalStorage
 from processing_pipeline.processing_utils import (
     get_safety_settings,
     postprocess_snippet,
@@ -67,13 +67,13 @@ def __fetch_a_new_snippet_from_supabase(supabase_client):
 
 
 @optional_task(log_prints=True, retries=3)
-def download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
-    return __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path)
+def download_audio_file_from_s3(storage_client, file_path):
+    return __download_audio_file_from_s3(storage_client, file_path)
 
 
-def __download_audio_file_from_s3(s3_client, r2_bucket_name, file_path):
+def __download_audio_file_from_s3(storage_client, file_path):
     file_name = os.path.basename(file_path)
-    s3_client.download_file(r2_bucket_name, file_path, file_name)
+    storage_client.download_file(None, file_path, file_name)
     return file_name
 
 
@@ -251,7 +251,7 @@ def reset_snippet_status_hook(flow: Flow, flow_run: FlowRun, state: State):
     if not snippet_ids:
         return
 
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    supabase_client = PostgresClient()
     for snippet_id in snippet_ids:
         snippet = fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id)
         if snippet and snippet["status"] == ProcessingStatus.PROCESSING:
@@ -267,19 +267,13 @@ def reset_snippet_status_hook(flow: Flow, flow_run: FlowRun, state: State):
 )
 def in_depth_analysis(snippet_ids, skip_review, repeat):
     # Setup S3 Client
-    R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=os.getenv("R2_ENDPOINT_URL"),
-        aws_access_key_id=os.getenv("R2_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
-    )
+    storage_client = LocalStorage()
 
     # Setup Gemini Key
     GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
 
-    # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    # Setup PostgreSQL client
+    supabase_client = PostgresClient()
 
     # Load prompt version
     prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_3)
@@ -290,7 +284,7 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
             if snippet:
                 supabase_client.set_snippet_status(snippet["id"], ProcessingStatus.PROCESSING)
                 print(f"Found the snippet: {snippet['id']}")
-                local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
+                local_file = download_audio_file_from_s3(storage_client, snippet["file_path"])
 
                 # Process the snippet
                 process_snippet(
@@ -309,7 +303,7 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
             snippet = fetch_a_new_snippet_from_supabase(supabase_client)  # TODO: Retry failed snippets (status: Error)
 
             if snippet:
-                local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
+                local_file = download_audio_file_from_s3(storage_client, snippet["file_path"])
 
                 # Process the snippet
                 process_snippet(

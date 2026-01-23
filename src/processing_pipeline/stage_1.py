@@ -2,8 +2,8 @@ from datetime import datetime
 import os
 import time
 import json
-import boto3
 import uuid
+from dotenv import load_dotenv
 from google import genai
 from google.genai.types import (
     File,
@@ -17,7 +17,8 @@ from prefect.flows import Flow
 from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
-from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.postgres_client import PostgresClient
+from processing_pipeline.local_storage import LocalStorage
 from processing_pipeline.constants import (
     GeminiModel,
     ProcessingStatus,
@@ -25,6 +26,10 @@ from processing_pipeline.constants import (
 )
 from processing_pipeline.processing_utils import get_safety_settings
 from utils import optional_flow, optional_task
+
+# Load environment variables
+load_dotenv()
+
 
 
 @optional_task(log_prints=True, retries=3)
@@ -50,7 +55,15 @@ def fetch_audio_file_by_id(supabase_client, audio_file_id):
 
 @optional_task(log_prints=True)
 def get_audio_file_metadata(audio_file):
-    recorded_at = datetime.strptime(audio_file["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
+    # Handle both ISO format strings and datetime objects
+    recorded_at_str = audio_file["recorded_at"]
+    if isinstance(recorded_at_str, str):
+        # Parse ISO 8601 format with timezone (handles microseconds and offsets)
+        from dateutil import parser
+        recorded_at = parser.isoparse(recorded_at_str)
+    else:
+        recorded_at = recorded_at_str
+    
     return {
         "radio_station_name": audio_file["radio_station_name"],
         "radio_station_code": audio_file["radio_station_code"],
@@ -78,14 +91,13 @@ def fetch_stage_1_llm_response_by_id(supabase_client, stage_1_llm_response_id):
 
 
 @optional_task(log_prints=True, retries=3)
-def download_audio_file_from_s3(s3_client, file_path):
-    return __download_audio_file_from_s3(s3_client, file_path)
+def download_audio_file_from_s3(storage_client, file_path):
+    return __download_audio_file_from_s3(storage_client, file_path)
 
 
-def __download_audio_file_from_s3(s3_client, file_path):
-    r2_bucket_name = os.getenv("R2_BUCKET_NAME")
+def __download_audio_file_from_s3(storage_client, file_path):
     file_name = os.path.basename(file_path)
-    s3_client.download_file(r2_bucket_name, file_path, file_name)
+    storage_client.download_file(None, file_path, file_name)
     return file_name
 
 
@@ -145,7 +157,7 @@ def transcribe_audio_file_with_timestamp_with_gemini(
         audio_file=audio_file,
         gemini_key=gemini_key,
         model_name=model_name,
-        user_prompt=prompt_version["user_prompt"],
+        user_prompt=prompt_version["prompt_text"],
     )
     return {"timestamped_transcription": timestamped_transcription}
 
@@ -288,7 +300,7 @@ def reset_audio_file_status_hook(flow: Flow, flow_run: FlowRun, state: State):
     if not audio_file_id:
         return
 
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    supabase_client = PostgresClient()
     audio_file = supabase_client.get_audio_file_by_id(audio_file_id)
     if audio_file and audio_file.get("status") == ProcessingStatus.PROCESSING:
         set_audio_file_status(supabase_client, audio_file_id, ProcessingStatus.NEW)
@@ -302,16 +314,11 @@ def reset_audio_file_status_hook(flow: Flow, flow_run: FlowRun, state: State):
     on_cancellation=[reset_audio_file_status_hook],
 )
 def initial_disinformation_detection(audio_file_id, limit):
-    # Setup S3 Client
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=os.getenv("R2_ENDPOINT_URL"),
-        aws_access_key_id=os.getenv("R2_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
-    )
+    # Setup Storage Client
+    storage_client = LocalStorage()
 
-    # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    # Setup PostgreSQL client
+    supabase_client = PostgresClient()
 
     # Load prompt versions once at flow start
     transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.GEMINI_TIMESTAMPED_TRANSCRIPTION)
@@ -327,7 +334,7 @@ def initial_disinformation_detection(audio_file_id, limit):
             audio_file = fetch_a_new_audio_file_from_supabase(supabase_client)  # TODO: Retry failed audio files (Error)
 
         if audio_file:
-            local_file = download_audio_file_from_s3(s3_client, audio_file["file_path"])
+            local_file = download_audio_file_from_s3(storage_client, audio_file["file_path"])
 
             # Process the audio file
             process_audio_file(
@@ -396,8 +403,8 @@ def undo_disinformation_detection(audio_file_ids):
         print("No audio file ids were provided!")
         return
 
-    # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    # Setup PostgreSQL client
+    supabase_client = PostgresClient()
 
     # Reset the status of the audio files
     reset_status_of_audio_files(supabase_client, audio_file_ids)
@@ -412,8 +419,8 @@ def redo_main_detection(stage_1_llm_response_ids):
         print("No stage 1 llm response ids were provided!")
         return
 
-    # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    # Setup PostgreSQL client
+    supabase_client = PostgresClient()
 
     # Load prompt version
     detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1)
@@ -465,16 +472,11 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
         print("No stage 1 llm response ids were provided!")
         return
 
-    # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    # Setup PostgreSQL client
+    supabase_client = PostgresClient()
 
-    # Setup S3 Client
-    s3_client = boto3.client(
-        "s3",
-        endpoint_url=os.getenv("R2_ENDPOINT_URL"),
-        aws_access_key_id=os.getenv("R2_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
-    )
+    # Setup Storage Client
+    storage_client = LocalStorage()
 
     # Load prompt versions
     transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.GEMINI_TIMESTAMPED_TRANSCRIPTION)
@@ -488,7 +490,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
 
             # Get metadata of the transcription
             audio_file = stage_1_llm_response["audio_file"]
-            local_file = download_audio_file_from_s3(s3_client, audio_file["file_path"])
+            local_file = download_audio_file_from_s3(storage_client, audio_file["file_path"])
             recorded_at = datetime.strptime(audio_file["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
             metadata = {
                 "radio_station_name": audio_file["radio_station_name"],
@@ -571,7 +573,7 @@ class Stage1Executor:
 
         # Prepare the user prompt
         user_prompt = (
-            f"{prompt_version['user_prompt']}\n\n"
+            f"{prompt_version['prompt_text']}\n\n"
             f"Here is the metadata of the transcription:\n\n{json.dumps(metadata, indent=2)}\n\n"
             f"Here is the timestamped transcription:\n\n{timestamped_transcription}"
         )

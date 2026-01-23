@@ -18,7 +18,7 @@ from processing_pipeline.constants import (
     get_system_instruction_for_stage_4,
     get_user_prompt_for_stage_4,
 )
-from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.postgres_client import PostgresClient
 from processing_pipeline.processing_utils import (
     get_safety_settings,
     postprocess_snippet,
@@ -153,7 +153,7 @@ def fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id):
 @optional_flow(name="Stage 4: Analysis Review", log_prints=True, task_runner=ConcurrentTaskRunner)
 def analysis_review(snippet_ids, repeat):
     # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    supabase_client = PostgresClient()
 
     if snippet_ids:
         for id in snippet_ids:

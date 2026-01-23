@@ -3,7 +3,7 @@ import time
 
 from openai import OpenAI
 from tiktoken import encoding_for_model
-from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.postgres_client import PostgresClient
 from utils import optional_flow, optional_task
 from prefect.task_runners import ConcurrentTaskRunner
 
@@ -99,7 +99,7 @@ def generate_snippet_embedding(supabase_client, snippet_id, snippet_document):
 @optional_flow(name="Stage 5: Embedding", log_prints=True, task_runner=ConcurrentTaskRunner)
 def embedding(repeat):
     # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    supabase_client = PostgresClient()
 
     while True:
         snippet = fetch_a_snippet_that_has_no_embedding(supabase_client)  # TODO: Retry failed snippets (status: Error)

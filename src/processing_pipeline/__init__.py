@@ -9,11 +9,12 @@ This module orchestrates the 5-stage pipeline for political debate fact-checking
 5. Stage 5: Vector Embedding Generation
 
 The pipeline is distributed across multiple workers using Prefect,
-with task reservation coordinated via Supabase RPC functions.
+with task reservation coordinated via PostgreSQL RPC functions.
 """
 
 # Core utilities
-from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.postgres_client import PostgresClient
+from processing_pipeline.local_storage import LocalStorage
 
 # Constants and enums
 from processing_pipeline.constants import (
@@ -70,7 +71,8 @@ from processing_pipeline.stage_5 import (
 
 __all__ = [
     # Core
-    "SupabaseClient",
+    "PostgresClient",
+    "LocalStorage",
     
     # Constants
     "GeminiModel",
