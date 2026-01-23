@@ -1,3 +1,40 @@
+[tool.poetry]
+name = "political-debate-fact-checking-system"
+version = "0.1.0"
+description = "Multi-stage pipeline for political debate fact-checking with AI analysis"
+authors = [
+    "JsNcAr <jn.arias@uniandes.edu.co>"
+]
+readme = "README.md"
+packages = [
+    { include = "processing_pipeline", from = "src" },
+]
+include = [
+    "prompts/",
+]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+requests = ">=2.32.5,<3.0.0"
+python-ffmpeg = ">=2.0.12,<3.0.0"
+python-dotenv = ">=1.2.1,<2.0.0"
+black = ">=26.1.0,<27.0.0"
+flake8 = ">=7.3.0,<8.0.0"
+isort = ">=7.0.0,<8.0.0"
+prefect = ">=3.6.12,<4.0.0"
+boto3 = ">=1.42.31,<2.0.0"
+google-genai = ">=1.59.0,<2.0.0"
+sentry-sdk = ">=2.50.0,<3.0.0"
+pytest = ">=9.0.2,<10.0.0"
+supabase = ">=2.27.2,<3.0.0"
+supabase-auth = ">=2.27.2,<3.0.0"
+supabase-functions = ">=2.27.2,<3.0.0"
+pydub = ">=0.25.1,<0.26.0"
+openai = ">=2.15.0,<3.0.0"
+tiktoken = ">=0.12.0,<0.13.0"
+pydantic = ">=2.12.5,<3.0.0"
+pytest-cov = ">=7.0.0,<8.0.0"
+
 [tool.pytest.ini_options]
 addopts = "--cov=src --cov-report=html --cov-report=term-missing"
 testpaths = ["tests"]
@@ -27,3 +64,7 @@ directory = "htmlcov"
 
 [tool.coverage.xml]
 output = "coverage.xml"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
