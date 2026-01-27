@@ -4,18 +4,20 @@ import time
 import json
 import boto3
 import uuid
+import pathlib
 from google import genai
 from google.genai.types import (
-    File,
-    FileState,
     FinishReason,
     GenerateContentConfig,
     ThinkingConfig,
+    Part,
 )
 from openai import OpenAI
 from prefect.flows import Flow
 from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
+from prefect.tasks import exponential_backoff
+from pydub import AudioSegment
 from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import (
@@ -145,7 +147,9 @@ def transcribe_audio_file_with_timestamp_with_gemini(
         audio_file=audio_file,
         gemini_key=gemini_key,
         model_name=model_name,
-        user_prompt=prompt_version["user_prompt"],
+        prompt_version=prompt_version,
+        segment_length=30,
+        batch_size=20,
     )
     return {"timestamped_transcription": timestamped_transcription}
 
@@ -607,53 +611,126 @@ class GeminiTimestampTranscriptionGenerator:
         audio_file: str,
         gemini_key: str,
         model_name: GeminiModel,
-        user_prompt: str,
-    ):
+        prompt_version: dict,
+        segment_length: int = 30,
+        batch_size: int = 20,
+    ) -> str:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
 
         client = genai.Client(api_key=gemini_key)
 
-        # Upload the audio file and wait for it to finish processing
-        uploaded_audio_file = client.files.upload(file=audio_file, config={"mime_type": "audio/mp3"})
-        while uploaded_audio_file.state == FileState.PROCESSING:
-            print("Processing the uploaded audio file...")
-            time.sleep(1)
-            uploaded_audio_file = client.files.get(name=uploaded_audio_file.name)
+        # Split audio into segments
+        segment_paths = cls.split_audio_into_segments(audio_file, segment_length * 1000)
+        total_segments = len(segment_paths)
+        print(f"Split audio into {total_segments} segments of {segment_length}s each")
+
+        all_transcripts = {}  # segment_number -> transcript
 
         try:
-            return cls.transcribe(client, uploaded_audio_file, model_name, user_prompt)
-        finally:
-            client.files.delete(name=uploaded_audio_file.name)
+            for batch_start in range(0, total_segments, batch_size):
+                batch_end = min(batch_start + batch_size, total_segments)
+                batch_paths = segment_paths[batch_start:batch_end]
 
-    @optional_task(log_prints=True, retries=3)
+                print(f"Processing batch: segments {batch_start + 1}-{batch_end} of {total_segments}")
+
+                result = cls.transcribe_batch(
+                    client,
+                    batch_paths,
+                    model_name,
+                    prompt_version,
+                )
+
+                # Validate segment count
+                returned_segments = result.get("segments", [])
+                expected_count = len(batch_paths)
+                actual_count = len(returned_segments)
+                if actual_count != expected_count:
+                    print(f"Warning: Expected {expected_count} segments, got {actual_count}")
+
+                for segment in returned_segments:
+                    segment_num = segment["segment_number"]
+                    absolute_segment_num = batch_start + segment_num
+                    all_transcripts[absolute_segment_num] = segment["transcript"]
+
+                print(f"Batch complete: transcribed {actual_count} segments")
+
+        finally:
+            for segment_path in segment_paths:
+                if os.path.exists(segment_path):
+                    os.remove(segment_path)
+
+        return cls.format_final_transcription(all_transcripts, segment_length)
+
     @classmethod
-    def transcribe(
+    @optional_task(log_prints=True, retries=3, retry_delay_seconds=exponential_backoff(backoff_factor=2))
+    def transcribe_batch(
         cls,
         client: genai.Client,
-        uploaded_audio_file: File,
+        segment_paths: list,
         model_name: GeminiModel,
-        user_prompt: str,
+        prompt_version: dict,
     ):
+        segments = []
+        for i, segment_path in enumerate(segment_paths):
+            segment_num = i + 1
+            segments.extend(
+                [
+                    f"\n<Segment {segment_num}>\n",
+                    Part.from_bytes(data=pathlib.Path(segment_path).read_bytes(), mime_type="audio/mp3"),
+                    f"\n</Segment {segment_num}>\n\n",
+                ]
+            )
+
         thinking_budget = 128 if model_name == GeminiModel.GEMINI_2_5_PRO else 0
 
         result = client.models.generate_content(
             model=model_name,
-            contents=[user_prompt, uploaded_audio_file],
+            contents=[prompt_version["user_prompt"]] + segments,
             config=GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=prompt_version["output_schema"],
+                system_instruction=prompt_version["system_instruction"],
                 max_output_tokens=16384,
                 thinking_config=ThinkingConfig(thinking_budget=thinking_budget),
                 safety_settings=get_safety_settings(),
             ),
         )
 
-        if not result.text:
-            finish_reason = result.candidates[0].finish_reason if result.candidates else None
+        return result.parsed
 
-            if finish_reason == FinishReason.MAX_TOKENS:
-                raise ValueError("The response from Gemini was too long and was cut off.")
+    @classmethod
+    def format_final_transcription(cls, transcripts: dict, segment_length: int) -> str:
+        result = ""
 
-            print(f"Response finish reason: {finish_reason}")
-            raise ValueError("No response from Gemini.")
+        for segment_num in sorted(transcripts.keys()):
+            transcript = transcripts[segment_num]
 
-        return result.text
+            total_seconds = (segment_num - 1) * segment_length
+            minutes = total_seconds // 60
+            seconds = total_seconds % 60
+
+            result += f"[{minutes:02}:{seconds:02}] {transcript}\n"
+
+        return result
+
+    @classmethod
+    def split_audio_into_segments(cls, audio_file: str, segment_length_ms: int) -> list:
+        audio = AudioSegment.from_mp3(audio_file)
+        segments = []
+
+        audio_length_ms = len(audio)
+        print(f"Audio duration: {audio_length_ms / 1000:.1f} seconds")
+
+        for i in range(0, audio_length_ms, segment_length_ms):
+            # Slice the audio segment
+            subclip = audio[i : min(i + segment_length_ms, audio_length_ms)]
+
+            # Export the subclip
+            output_file = f"{audio_file}_segment_{(i // segment_length_ms) + 1}.mp3"
+            subclip.export(output_file, format="mp3")
+
+            segments.append(output_file)
+
+        del audio
+        return segments
