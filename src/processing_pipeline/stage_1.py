@@ -705,6 +705,12 @@ class GeminiTimestampTranscriptionGenerator:
             ),
         )
 
+        if not result.parsed:
+            finish_reason = result.candidates[0].finish_reason if result.candidates else None
+            if finish_reason == FinishReason.MAX_TOKENS:
+                raise ValueError("The response from Gemini was too long and was cut off.")
+            raise ValueError(f"No response from Gemini. Finish reason: {finish_reason}.")
+
         return result.parsed
 
     @classmethod
