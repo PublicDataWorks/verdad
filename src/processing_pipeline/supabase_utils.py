@@ -434,3 +434,58 @@ class SupabaseClient:
     def delete_vector_embedding_of_snippet(self, snippet_id):
         response = self.client.table("snippet_embeddings").delete().eq("snippet", snippet_id).execute()
         return response.data
+
+    def get_snippets_with_recent_dislikes(
+        self,
+        since_date: datetime | None = None,
+        exclude_validated: bool = True,
+        limit: int | None = None,
+    ):
+        response = self.client.rpc(
+            "get_snippets_with_recent_dislikes",
+            {
+                "p_since_date": since_date.isoformat() if since_date else None,
+                "p_exclude_validated": exclude_validated,
+                "p_limit": limit,
+            }
+        ).execute()
+        return response.data or []
+
+    def insert_feedback_validation_result(
+        self,
+        snippet_id,
+        validation_status,
+        validation_confidence,
+        original_claim_summary,
+        user_feedback_summary,
+        input_snippet_data,
+        input_user_feedback,
+        validated_by,
+        grounding_metadata,
+        thought_summaries,
+        dislike_count_at_validation,
+        error_pattern,
+        error_pattern_explanation,
+        prompt_improvement_suggestion,
+    ):
+        response = (
+            self.client.table("snippet_feedback_validation_results")
+            .insert({
+                "snippet": snippet_id,
+                "validation_status": validation_status,
+                "validation_confidence": validation_confidence,
+                "original_claim_summary": original_claim_summary,
+                "user_feedback_summary": user_feedback_summary,
+                "input_snippet_data": input_snippet_data,
+                "input_user_feedback": input_user_feedback,
+                "validated_by": validated_by,
+                "grounding_metadata": grounding_metadata,
+                "thought_summaries": thought_summaries,
+                "dislike_count_at_validation": dislike_count_at_validation,
+                "error_pattern": error_pattern,
+                "error_pattern_explanation": error_pattern_explanation,
+                "prompt_improvement_suggestion": prompt_improvement_suggestion,
+            })
+            .execute()
+        )
+        return response.data[0] if response.data else None
