@@ -646,10 +646,18 @@ class GeminiTimestampTranscriptionGenerator:
                 expected_count = len(batch_paths)
                 actual_count = len(returned_segments)
                 if actual_count != expected_count:
-                    print(f"Warning: Expected {expected_count} segments, got {actual_count}")
+                    raise ValueError(
+                        f"Segment count mismatch: expected {expected_count} segments, "
+                        f"got {actual_count} (batch_start={batch_start})"
+                    )
 
                 for segment in returned_segments:
                     segment_num = segment["segment_number"]
+                    if segment_num < 1 or segment_num > expected_count:
+                        raise ValueError(
+                            f"Invalid segment_number {segment_num}: expected range 1-{expected_count} "
+                            f"(batch_start={batch_start})"
+                        )
                     absolute_segment_num = batch_start + segment_num
                     all_transcripts[absolute_segment_num] = segment["transcript"]
 
