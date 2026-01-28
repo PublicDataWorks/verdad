@@ -148,8 +148,8 @@ def transcribe_audio_file_with_timestamp_with_gemini(
         gemini_key=gemini_key,
         model_name=model_name,
         prompt_version=prompt_version,
-        segment_length=30,
-        batch_size=20,
+        segment_length=20,
+        batch_size=30,
     )
     return {"timestamped_transcription": timestamped_transcription}
 
@@ -612,8 +612,8 @@ class GeminiTimestampTranscriptionGenerator:
         gemini_key: str,
         model_name: GeminiModel,
         prompt_version: dict,
-        segment_length: int = 30,
-        batch_size: int = 20,
+        segment_length: int = 20,
+        batch_size: int = 30,
     ) -> str:
         if not gemini_key:
             raise ValueError("Google Gemini API key was not set!")
