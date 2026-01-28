@@ -39,7 +39,9 @@ PROMPT_MAPPING = {
         "output_schema": "prompts/Stage_4_output_schema.json",
     },
     "gemini_timestamped_transcription": {
+        "system_instruction": "prompts/Gemini_timestamped_transcription_system_instruction.md",
         "user_prompt": "prompts/Gemini_timestamped_transcription_generation_prompt.md",
+        "output_schema": "prompts/Gemini_timestamped_transcription_output_schema.json",
     },
 }
 

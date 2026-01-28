@@ -1,0 +1,24 @@
+{
+    "type": "object",
+    "required": ["segments"],
+    "properties": {
+        "segments": {
+            "type": "array",
+            "description": "Array of transcribed segments in order",
+            "items": {
+                "type": "object",
+                "required": ["segment_number", "transcript"],
+                "properties": {
+                    "segment_number": {
+                        "type": "integer",
+                        "description": "The segment number (1-indexed, matching the order provided)"
+                    },
+                    "transcript": {
+                        "type": "string",
+                        "description": "The transcript for this segment."
+                    }
+                }
+            }
+        }
+    }
+}
