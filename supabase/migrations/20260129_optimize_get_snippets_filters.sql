@@ -1,9 +1,6 @@
-DROP FUNCTION IF EXISTS get_snippets;
-
--- Optimized get_snippets function
--- Key optimization: Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries
--- for starred/labeled/upvotedBy filters. This reduces query time from timeout (>30s) to <1s
--- by starting from the smaller filter tables (~200 rows) instead of scanning 119k+ snippets.
+-- Optimize get_snippets function to fix timeout issues with starred/labeled/upvotedBy filters
+-- The main issue is EXISTS subqueries being evaluated for every row (119k+ snippets)
+-- Solution: Use JOINs with pre-filtered CTEs instead of EXISTS subqueries
 --
 -- Performance improvements:
 -- - starredBy filter: timeout (>30s) -> <1s
@@ -308,7 +305,7 @@ BEGIN
             l.id,
             CASE WHEN p_language = 'spanish' THEN l.text_spanish ELSE l.text END AS text,
             sl.upvote_count,
-            lu.id IS NOT NULL AS upvoted_by_me,
+            lu.id IS NOT NULL AS filter_upvoted_by_me,
             sl.snippet AS snippet_id
         FROM snippet_labels sl
         JOIN labels l ON l.id = sl.label
@@ -321,7 +318,7 @@ BEGIN
             COALESCE(ld.labels, '[]'::jsonb) AS labels
         FROM filtered_snippets fs
         LEFT JOIN (
-            SELECT snippet_id, jsonb_agg(jsonb_build_object('id', id, 'text', text, 'upvote_count', upvote_count, 'upvoted_by_me', upvoted_by_me)) as labels
+            SELECT snippet_id, jsonb_agg(jsonb_build_object('id', id, 'text', text, 'upvote_count', upvote_count, 'filter_upvoted_by_me', filter_upvoted_by_me)) as labels
             FROM label_summary
             GROUP BY snippet_id
         ) ld ON fs.id = ld.snippet_id
