@@ -33,20 +33,11 @@ class ProcessingStatus(StrEnum):
 
 class PromptStage(StrEnum):
     STAGE_1 = "stage_1"
+    STAGE_1_INITIAL_TRANSCRIPTION = "stage_1_initial_transcription"
+    STAGE_1_INITIAL_DETECTION = "stage_1_initial_detection"
     STAGE_3 = "stage_3"
+    STAGE_4 = "stage_4"
     GEMINI_TIMESTAMPED_TRANSCRIPTION = "gemini_timestamped_transcription"
-
-
-def get_detection_prompt_for_stage_1():
-    return open("prompts/Stage_1_detection_prompt.md", "r").read()
-
-
-def get_system_instruction_for_stage_1():
-    return open("prompts/Stage_1_system_instruction.md", "r").read()
-
-
-def get_output_schema_for_stage_1():
-    return json.load(open("prompts/Stage_1_output_schema.json", "r"))
 
 
 def get_user_prompt_for_stage_3():

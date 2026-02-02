@@ -17,31 +17,42 @@ import re
 from dotenv import load_dotenv
 from supabase import create_client
 
+from src.processing_pipeline.constants import PromptStage
+
 load_dotenv()
 
 ALLOWED_PROMPT_DIR = "prompts"
 MAX_DESCRIPTION_LENGTH = 500
 
 PROMPT_MAPPING = {
-    "stage_1": {
-        "system_instruction": "prompts/Stage_1_system_instruction.md",
-        "user_prompt": "prompts/Stage_1_detection_prompt.md",
-        "output_schema": "prompts/Stage_1_output_schema.json",
+    PromptStage.STAGE_1: {
+        "system_instruction": "prompts/stage_1/main/detection_system_instruction.md",
+        "user_prompt": "prompts/stage_1/main/detection_user_prompt.md",
+        "output_schema": "prompts/stage_1/main/detection_output_schema.json",
     },
-    "stage_3": {
+    PromptStage.STAGE_1_INITIAL_TRANSCRIPTION: {
+        "user_prompt": "prompts/stage_1/preprocess/initial_transcription_user_prompt.md",
+        "output_schema": "prompts/stage_1/preprocess/initial_transcription_output_schema.json",
+    },
+    PromptStage.STAGE_1_INITIAL_DETECTION: {
+        "system_instruction": "prompts/stage_1/preprocess/initial_detection_system_instruction.md",
+        "user_prompt": "prompts/stage_1/preprocess/initial_detection_user_prompt.md",
+        "output_schema": "prompts/stage_1/preprocess/initial_detection_output_schema.json",
+    },
+    PromptStage.STAGE_3: {
         "system_instruction": "prompts/Stage_3_system_instruction.md",
         "user_prompt": "prompts/Stage_3_analysis_prompt.md",
         "output_schema": "prompts/Stage_3_output_schema.json",
     },
-    "stage_4": {
+    PromptStage.STAGE_4: {
         "system_instruction": "prompts/Stage_4_system_instruction.md",
         "user_prompt": "prompts/Stage_4_review_prompt.md",
         "output_schema": "prompts/Stage_4_output_schema.json",
     },
-    "gemini_timestamped_transcription": {
-        "system_instruction": "prompts/Gemini_timestamped_transcription_system_instruction.md",
-        "user_prompt": "prompts/Gemini_timestamped_transcription_generation_prompt.md",
-        "output_schema": "prompts/Gemini_timestamped_transcription_output_schema.json",
+    PromptStage.GEMINI_TIMESTAMPED_TRANSCRIPTION: {
+        "system_instruction": "prompts/stage_1/main/timestamped_transcription_system_instruction.md",
+        "user_prompt": "prompts/stage_1/main/timestamped_transcription_user_prompt.md",
+        "output_schema": "prompts/stage_1/main/timestamped_transcription_output_schema.json",
     },
 }
 
