@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "required": ["transcription"],
+  "properties": {
+    "transcription": {
+      "type": "string",
+      "description": "The complete transcription of the audio content."
+    }
+  }
+}
