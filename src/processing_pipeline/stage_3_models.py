@@ -71,6 +71,9 @@ class CategoryScore(BaseModel):
 
 class ConfidenceScores(BaseModel):
     overall: int = Field(ge=0, le=100, description="Overall confidence score of the analysis, ranging from 0 to 100")
+    verification_status: Literal["verified_false", "verified_true", "uncertain", "insufficient_evidence"] = Field(
+        description="Overall verification status based on evidence quality"
+    )
     analysis: Analysis
     categories: list[CategoryScore]
 
@@ -131,6 +134,43 @@ class PoliticalLeaning(BaseModel):
     explanation: PoliticalExplanation
 
 
+class SearchResult(BaseModel):
+    url: str = Field(description="Full URL of the source")
+    source_name: str = Field(description="Name of the publication or website (e.g., Reuters, AP News, BBC)")
+    source_type: Literal[
+        "tier1_wire_service", "tier1_factchecker", "tier2_major_news",
+        "tier3_regional_news", "official_source", "other"
+    ] = Field(description="Classification of source reliability tier")
+    publication_date: str | None = Field(default=None, description="Publication date (YYYY-MM-DD) or None if unknown")
+    title: str | None = Field(default=None, description="Title or headline of the article/page")
+    relevant_excerpt: str = Field(description="Direct quote from the source relevant to the claim (50-200 words)")
+    relevance_to_claim: Literal["supports_claim", "contradicts_claim", "provides_context", "inconclusive"] = Field(
+        description="How this result relates to the claim being verified"
+    )
+    content_fetched: bool = Field(default=False, description="Whether the full article content was fetched")
+
+
+class SearchPerformed(BaseModel):
+    query: str = Field(description="The exact search query used")
+    search_intent: str = Field(description="What claim or fact this search was attempting to verify")
+    result_status: Literal["results_found", "no_results", "results_inconclusive"] = Field(
+        description="Whether the search returned actionable results"
+    )
+    results: list[SearchResult] = Field(default_factory=list, description="Individual search results")
+
+
+class VerificationSummary(BaseModel):
+    total_searches: int = Field(description="Total number of web searches performed")
+    claims_contradicted: int = Field(description="Number of claims found to be false based on search evidence")
+    claims_unverifiable: int = Field(description="Number of claims that could not be verified")
+    key_findings: str = Field(description="Narrative summary of the most important verification findings")
+
+
+class VerificationEvidence(BaseModel):
+    searches_performed: list[SearchPerformed] = Field(description="Record of all web searches")
+    verification_summary: VerificationSummary = Field(description="Summary of verification activities")
+
+
 class Stage3Output(BaseModel):
     """Main model for Stage 3 output."""
 
@@ -152,4 +192,7 @@ class Stage3Output(BaseModel):
     political_leaning: PoliticalLeaning
     thought_summaries: str = Field(
         description="A summary of your reasoning process, key observations, and analytical steps taken during the analysis"
+    )
+    verification_evidence: VerificationEvidence = Field(
+        description="Complete documentation of all web searches performed during fact-checking"
     )
