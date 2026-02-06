@@ -476,6 +476,7 @@ class Stage3Executor:
             "HOME": os.environ.get("HOME", ""),
             "GEMINI_API_KEY": os.environ["GOOGLE_GEMINI_KEY"],
             "GEMINI_SYSTEM_MD": system_instruction_path,
+            "SEARXNG_URL": os.environ.get("SEARXNG_URL", ""),
         }
 
         cmd = [

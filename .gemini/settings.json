@@ -15,7 +15,8 @@
         "SEARXNG_URL": "$SEARXNG_URL"
       },
       "includeTools": ["searxng_web_search", "web_url_read"],
-      "trust": true
+      "trust": true,
+      "timeout": 60000
     }
   }
 }
