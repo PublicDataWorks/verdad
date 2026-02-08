@@ -18,7 +18,7 @@ class TestStage3:
     @pytest.fixture
     def mock_supabase_client(self):
         """Create a mock Supabase client"""
-        with patch("processing_pipeline.stage_3.SupabaseClient") as MockSupabaseClient:
+        with patch("processing_pipeline.stage_3.flows.SupabaseClient") as MockSupabaseClient:
             mock_client = Mock()
             mock_client.get_snippet_by_id.return_value = None
             mock_client.get_a_new_snippet_and_reserve_it.return_value = None
@@ -179,7 +179,7 @@ class TestStage3:
             error_message=None,
         )
 
-    @patch("processing_pipeline.stage_3.postprocess_snippet")
+    @patch("processing_pipeline.stage_3.tasks.postprocess_snippet")
     @patch("processing_pipeline.stage_3.Stage3Executor.run")
     def test_process_snippet_skip_review_true(
         self, mock_run, mock_postprocess, mock_supabase_client, sample_snippet, mock_gemini_response
@@ -315,7 +315,7 @@ class TestStage3:
         ]
 
         with patch("os.remove"), patch("time.sleep") as mock_sleep, patch(
-            "processing_pipeline.stage_3.process_snippet"
+            "processing_pipeline.stage_3.flows.process_snippet"
         ) as mock_process:
 
             try:
