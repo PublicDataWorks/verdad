@@ -34,7 +34,7 @@ from processing_pipeline.constants import (
     ProcessingStatus,
     PromptStage,
 )
-from processing_pipeline.stage_3_models import Stage3Output
+from processing_pipeline.stage_3.models import Stage3Output
 from utils import optional_flow, optional_task
 
 
