@@ -380,12 +380,13 @@ class Stage3Executor:
         )
 
         # Strategy: Try CLI first, fallback to SDK
-        analysis_result = None
+        analysis_text = None
+        thought_summaries_from_api = None
         uploaded_audio_file = None
 
         try:
             user_prompt_with_file = user_prompt + f"Here is the audio file attached: @{os.path.basename(audio_file)}"
-            analysis_result = cls.__analyze_with_custom_search(
+            analysis_text = cls.__analyze_with_custom_search(
                 model_name=model_name,
                 user_prompt=user_prompt_with_file,
                 system_instruction=prompt_version["system_instruction"],
@@ -399,26 +400,23 @@ class Stage3Executor:
                 time.sleep(1)
                 uploaded_audio_file = client.files.get(name=uploaded_audio_file.name)
 
-            analysis_result = cls.__analyze_with_google_search_grounding(
+            sdk_result = cls.__analyze_with_google_search_grounding(
                 client,
                 model_name,
                 user_prompt,
                 uploaded_audio_file,
                 system_instruction=prompt_version["system_instruction"],
             )
+            analysis_text = sdk_result["text"]
+            thought_summaries_from_api = sdk_result.get("thought_summaries")
 
         try:
-            analysis_text = analysis_result["text"]
-            grounding_metadata = analysis_result["grounding_metadata"]
-            # SDK method returns thought_summaries from thinking_config, CLI method doesn't
-            thought_summaries_from_api = analysis_result.get("thought_summaries")
-
             # Try to validate with Pydantic model first
             validated_output = cls.__validate_with_pydantic(analysis_text)
 
             if validated_output:
-                # Use thought_summaries from API if available (SDK), otherwise from JSON response (CLI)
                 thought_summaries = thought_summaries_from_api or validated_output.get("thought_summaries")
+                grounding_metadata = json.dumps(validated_output.get("verification_evidence"), indent=2)
                 return {
                     "response": validated_output,
                     "grounding_metadata": grounding_metadata,
@@ -428,6 +426,7 @@ class Stage3Executor:
             # Step 2: Structure with response_schema (if validation failed)
             structured_output = cls.__structure_with_schema(client, analysis_text, prompt_version["output_schema"])
             thought_summaries = thought_summaries_from_api or structured_output.get("thought_summaries")
+            grounding_metadata = json.dumps(structured_output.get("verification_evidence"), indent=2)
             return {
                 "response": structured_output,
                 "grounding_metadata": grounding_metadata,
@@ -454,7 +453,7 @@ class Stage3Executor:
         - System instruction from file
 
         Returns:
-            dict: {"text": str, "grounding_metadata": str|None, "thought_summaries": str|None}
+            str: Final response text from Gemini CLI
 
         Raises:
             RuntimeError: If CLI execution fails (for fallback to SDK method)
@@ -463,7 +462,6 @@ class Stage3Executor:
 
         events: list[dict[str, Any]] = []
         final_response = ""
-        tool_calls: dict[str, dict[str, Any]] = {}  # Dict to match tool_use with tool_result by tool_id
         timeout = 300
 
         # Write system instruction to a temporary file for CLI
@@ -510,42 +508,6 @@ class Stage3Executor:
                         content = event.get("content")
                         if content and isinstance(content, str):
                             final_response += content
-
-                    # Capture tool use events
-                    if event.get("type") == GeminiCLIEventType.TOOL_USE:
-                        tool_id = event.get("tool_id")
-                        tool_name = event.get("tool_name")
-                        parameters = event.get("parameters")
-
-                        if tool_id in tool_calls:
-                            tool_calls[tool_id]["tool_name"] = tool_name
-                            tool_calls[tool_id]["parameters"] = parameters
-                        else:
-                            tool_calls[tool_id] = {
-                                "tool_id": tool_id,
-                                "tool_name": tool_name,
-                                "parameters": parameters,
-                                "output": None,
-                                "status": None,
-                            }
-
-                    # Capture tool result events and pair with tool_use
-                    if event.get("type") == GeminiCLIEventType.TOOL_RESULT:
-                        tool_id = event.get("tool_id")
-                        output = event.get("output")
-                        status = event.get("status")
-
-                        if tool_id in tool_calls:
-                            tool_calls[tool_id]["output"] = output
-                            tool_calls[tool_id]["status"] = status
-                        else:
-                            tool_calls[tool_id] = {
-                                "tool_id": tool_id,
-                                "tool_name": None,
-                                "parameters": None,
-                                "output": output,
-                                "status": status,
-                            }
                 except json.JSONDecodeError:
                     pass
 
@@ -555,12 +517,7 @@ class Stage3Executor:
             if not final_response:
                 raise RuntimeError("Gemini CLI returned no response")
 
-            # Convert tool_calls dict to list and serialize as JSON
-            tool_calls_list = list(tool_calls.values()) if tool_calls else None
-            return {
-                "text": final_response,
-                "grounding_metadata": json.dumps(tool_calls_list) if tool_calls_list else None,
-            }
+            return final_response
 
         except subprocess.TimeoutExpired as e:
             raise RuntimeError(f"Gemini CLI timed out after {timeout} seconds") from e
@@ -597,10 +554,6 @@ class Stage3Executor:
             if part.thought and part.text:
                 thoughts += part.text
 
-        grounding_metadata = (
-            response.candidates[0].grounding_metadata.model_dump_json(indent=2) if response.candidates else None
-        )
-
         if not response.text:
             finish_reason = response.candidates[0].finish_reason if response.candidates else None
 
@@ -612,7 +565,6 @@ class Stage3Executor:
 
         return {
             "text": response.text,
-            "grounding_metadata": grounding_metadata,
             "thought_summaries": thoughts,
         }
 
