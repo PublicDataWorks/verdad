@@ -385,7 +385,7 @@
                                 "description": "Individual search results with full details.",
                                 "items": {
                                     "type": "object",
-                                    "required": ["url", "source_name", "source_type", "relevant_excerpt", "relevance_to_claim"],
+                                    "required": ["url", "source_name", "source_type", "publication_date", "title", "relevant_excerpt", "relevance_to_claim"],
                                     "properties": {
                                         "url": {
                                             "type": "string",
@@ -401,8 +401,8 @@
                                             "description": "Classification of source reliability tier."
                                         },
                                         "publication_date": {
-                                            "type": "string",
-                                            "description": "Publication date in ISO 8601 format (YYYY-MM-DD) or 'unknown' if not available."
+                                            "type": ["string", "null"],
+                                            "description": "Publication date in ISO 8601 format (YYYY-MM-DD), or null if not available."
                                         },
                                         "title": {
                                             "type": "string",

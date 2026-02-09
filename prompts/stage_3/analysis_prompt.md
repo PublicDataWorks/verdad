@@ -139,7 +139,7 @@ For EVERY factual claim that could be verified or disproven, you MUST:
      - `tier3_regional_news`: Local newspapers, regional TV stations, El Nacional, Efecto Cocuyo
      - `official_source`: Government websites (.gov), official institutional sites
      - `other`: All other sources
-   - **Publication Date**: When the article was published (critical for time-sensitive claims)
+   - **Publication Date**: When the article was published in YYYY-MM-DD format, or null if not available (critical for time-sensitive claims)
    - **Title**: The headline or title of the source
    - **Relevant Excerpt**: A DIRECT QUOTE (50-200 words) from the source that relates to the claim. Do NOT paraphrase - copy the exact text.
    - **Relevance Assessment**: How this result relates to the claim:
@@ -147,6 +147,7 @@ For EVERY factual claim that could be verified or disproven, you MUST:
      - `contradicts_claim`: Evidence that the claim is false or misleading
      - `provides_context`: Relevant background but doesn't directly verify/contradict
      - `inconclusive`: Cannot determine relationship to claim
+   - **Content Fetched** (optional): Whether the full article content was fetched via `web_url_read` (boolean, defaults to false)
 
 4. **Categorize Search Outcome**:
    - `results_found`: Search returned relevant, actionable results
@@ -990,12 +991,12 @@ Ensure your output strictly adheres to this schema.
                                 "type": "array",
                                 "items": {
                                     "type": "object",
-                                    "required": ["url", "source_name", "source_type", "relevant_excerpt", "relevance_to_claim"],
+                                    "required": ["url", "source_name", "source_type", "publication_date", "title", "relevant_excerpt", "relevance_to_claim"],
                                     "properties": {
                                         "url": { "type": "string" },
                                         "source_name": { "type": "string" },
                                         "source_type": { "type": "string", "enum": ["tier1_wire_service", "tier1_factchecker", "tier2_major_news", "tier3_regional_news", "official_source", "other"] },
-                                        "publication_date": { "type": "string" },
+                                        "publication_date": { "type": ["string", "null"] },
                                         "title": { "type": "string" },
                                         "relevant_excerpt": { "type": "string" },
                                         "relevance_to_claim": { "type": "string", "enum": ["supports_claim", "contradicts_claim", "provides_context", "inconclusive"] },

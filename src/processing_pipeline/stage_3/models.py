@@ -141,8 +141,8 @@ class SearchResult(BaseModel):
         "tier1_wire_service", "tier1_factchecker", "tier2_major_news",
         "tier3_regional_news", "official_source", "other"
     ] = Field(description="Classification of source reliability tier")
-    publication_date: str | None = Field(default=None, description="Publication date (YYYY-MM-DD) or None if unknown")
-    title: str | None = Field(default=None, description="Title or headline of the article/page")
+    publication_date: str | None = Field(description="Publication date in ISO 8601 format (YYYY-MM-DD), or null if not available")
+    title: str = Field(description="Title or headline of the article/page")
     relevant_excerpt: str = Field(description="Direct quote from the source relevant to the claim (50-200 words)")
     relevance_to_claim: Literal["supports_claim", "contradicts_claim", "provides_context", "inconclusive"] = Field(
         description="How this result relates to the claim being verified"
