@@ -115,6 +115,7 @@ Perform the following steps:
      - source_type: "tier1_wire_service"
      - relevant_excerpt: "[exact quote from article]"
      - relevance_to_claim: "contradicts_claim"
+     - content_fetched: true  (because we used web_url_read in step 2)
   ```
 
   **Without reliable sources contradicting the claim, maximum confidence score is 40 (out of 100).**
@@ -147,7 +148,7 @@ For EVERY factual claim that could be verified or disproven, you MUST:
      - `contradicts_claim`: Evidence that the claim is false or misleading
      - `provides_context`: Relevant background but doesn't directly verify/contradict
      - `inconclusive`: Cannot determine relationship to claim
-   - **Content Fetched** (optional): Whether the full article content was fetched via `web_url_read` (boolean, defaults to false)
+   - **Content Fetched**: Set to `true` when you used `web_url_read` to retrieve the full page content (meaning `relevant_excerpt` is a direct quote from the article), or `false` when only the search snippet/metadata from `searxng_web_search` was available (meaning `relevant_excerpt` comes from the search result summary, not the full article)
 
 4. **Categorize Search Outcome**:
    - `results_found`: Search returned relevant, actionable results
