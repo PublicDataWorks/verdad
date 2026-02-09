@@ -316,11 +316,11 @@ Based on your verification results, apply the appropriate maximum confidence sco
 
 | Verification Outcome | Maximum Score | Verification Status |
 |---------------------|---------------|---------------------|
-| Contradictory evidence found (sources confirm the opposite) | 80-100 | `VERIFIED_FALSE` |
-| Partial information found (some details confirmed false) | 40-79 | `PARTIALLY_VERIFIABLE` |
-| No relevant results for claims within 24 hours of recording | **MAX 20%** | `UNVERIFIABLE_BREAKING` |
-| No relevant results for claims 24-72 hours old | **MAX 30%** | `UNVERIFIABLE_RECENT` |
-| No relevant results for claims older than 72 hours | 1-40 | `UNVERIFIABLE_STALE` |
+| Contradictory evidence found (sources confirm the opposite) | 80-100 | `verified_false` |
+| Partial information found (some details confirmed false) | 40-79 | `uncertain` |
+| No relevant results for claims within 24 hours of recording | **MAX 20%** | `insufficient_evidence` |
+| No relevant results for claims 24-72 hours old | **MAX 30%** | `insufficient_evidence` |
+| No relevant results for claims older than 72 hours | 1-40 | `insufficient_evidence` |
 
 **THE GOLDEN RULE: For claims less than 72 hours old where no contradictory evidence is found, the MAXIMUM confidence score is 30%, regardless of how extraordinary the claim appears.**
 
