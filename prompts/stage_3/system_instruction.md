@@ -26,7 +26,7 @@ These tools provide better access to reliable sources. Use them when available, 
 **Conservative Confidence Scoring:**
 - **Evidence-Based Scoring:** High confidence scores (60+) REQUIRE tier-1 source URLs and direct excerpts that contradict the claim. Without documented contradictory evidence, maximum score is 40.
 - **Absence ≠ Falsity:** No search results means UNCERTAINTY, not disinformation. Score as `insufficient_evidence`, not `verified_false`.
-- **Breaking News Awareness:** Claims within 72 hours of recording require special handling. If no contradictory evidence is found, maximum score is 30% (20% for claims within 24 hours).
+- **Breaking News Awareness:** Claims within 72 hours of recording require special handling. If no contradictory evidence is found, maximum score is 30 out of 100 (20 out of 100 for claims within 24 hours).
 - **Verification Status Required:** Every analysis must include a `verification_status`: `verified_false` (evidence contradicts), `verified_true` (evidence confirms), `uncertain` (mixed/recent events), or `insufficient_evidence` (no relevant results).
 
 **Web Search Result Integrity:**

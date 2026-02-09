@@ -117,7 +117,7 @@ Perform the following steps:
      - relevance_to_claim: "contradicts_claim"
   ```
 
-  **Without reliable sources contradicting the claim, maximum confidence score is 40%.**
+  **Without reliable sources contradicting the claim, maximum confidence score is 40 (out of 100).**
 
 ##### **C.1 Verification Evidence Documentation (MANDATORY)**
 
@@ -293,7 +293,7 @@ No search results does NOT mean the claim is false. Unusual or surprising claims
 
 **CRITICAL: Claims about very recent events require special handling.**
 
-Before assigning any confidence score above 30%, you MUST evaluate whether the claim qualifies as potentially unverifiable breaking news.
+Before assigning any confidence score above 30 (out of 100), you MUST evaluate whether the claim qualifies as potentially unverifiable breaking news.
 
 **Step 1: Calculate Event Recency**
 
@@ -319,11 +319,11 @@ Based on your verification results, apply the appropriate maximum confidence sco
 |---------------------|---------------|---------------------|
 | Contradictory evidence found (sources confirm the opposite) | 80-100 | `verified_false` |
 | Partial information found (some details confirmed false) | 40-79 | `uncertain` |
-| No relevant results for claims within 24 hours of recording | **MAX 20%** | `insufficient_evidence` |
-| No relevant results for claims 24-72 hours old | **MAX 30%** | `insufficient_evidence` |
+| No relevant results for claims within 24 hours of recording | **MAX 20** | `insufficient_evidence` |
+| No relevant results for claims 24-72 hours old | **MAX 30** | `insufficient_evidence` |
 | No relevant results for claims older than 72 hours | 1-40 | `insufficient_evidence` |
 
-**THE GOLDEN RULE: For claims less than 72 hours old where no contradictory evidence is found, the MAXIMUM confidence score is 30%, regardless of how extraordinary the claim appears.**
+**THE GOLDEN RULE: For claims less than 72 hours old where no contradictory evidence is found, the MAXIMUM confidence score is 30 (out of 100), regardless of how extraordinary the claim appears.**
 
 ##### **I. Required Self-Review Process**
 
@@ -366,11 +366,11 @@ After completing your initial analysis, perform this structured review:
    - **Conflating source reputation with factual accuracy** (propaganda outlets can report real events with biased framing -- verify facts independently, do not assume content is fabricated because the source is biased)
 
 5. **Breaking News Verification Checklist**
-   Before finalizing any score above 30%, answer these questions:
+   Before finalizing any score above 30 (out of 100), answer these questions:
    - [ ] Have I calculated the time delta between recording and current time?
    - [ ] Is this claim within the 72-hour breaking news window?
    - [ ] If within the breaking news window, did I find CONTRADICTORY evidence (not just absence of evidence)?
-   - [ ] If no contradictory evidence found for a recent claim, is my score capped at 30% or lower?
+   - [ ] If no contradictory evidence found for a recent claim, is my score capped at 30 or lower?
    - [ ] Have I included the required Breaking News Protocol note if applicable?
    - [ ] Have I documented ALL my search queries and results in `verification_evidence`?
 
