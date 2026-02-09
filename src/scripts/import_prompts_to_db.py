@@ -40,9 +40,9 @@ PROMPT_MAPPING = {
         "output_schema": "prompts/stage_1/preprocess/initial_detection_output_schema.json",
     },
     PromptStage.STAGE_3: {
-        "system_instruction": "prompts/Stage_3_system_instruction.md",
-        "user_prompt": "prompts/Stage_3_analysis_prompt.md",
-        "output_schema": "prompts/Stage_3_output_schema.json",
+        "system_instruction": "prompts/stage_3/system_instruction.md",
+        "user_prompt": "prompts/stage_3/analysis_prompt.md",
+        "output_schema": "prompts/stage_3/output_schema.json",
     },
     PromptStage.STAGE_4: {
         "system_instruction": "prompts/Stage_4_system_instruction.md",

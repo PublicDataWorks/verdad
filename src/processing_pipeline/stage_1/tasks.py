@@ -14,7 +14,6 @@ from processing_pipeline.stage_1.executors import (
     Stage1PreprocessTranscriptionExecutor,
 )
 from processing_pipeline.supabase_utils import SupabaseClient
-from processing_pipeline.timestamped_transcription_generator import TimestampedTranscriptionGenerator
 from utils import optional_task
 
 
@@ -183,14 +182,6 @@ def transcribe_audio_file_with_timestamp_with_gemini(
         segment_length=20,
         batch_size=30,
     )
-    return {"timestamped_transcription": timestamped_transcription}
-
-
-@optional_task(log_prints=True)
-def transcribe_audio_file_with_custom_timestamped_transcription_generator(audio_file):
-    print(f"Transcribing the audio file {audio_file} with the custom timestamped-transcription-generator")
-    gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
-    timestamped_transcription = TimestampedTranscriptionGenerator.run(audio_file, gemini_key, 10)
     return {"timestamped_transcription": timestamped_transcription}
 
 

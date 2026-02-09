@@ -11,7 +11,6 @@ from processing_pipeline.stage_1 import (
     fetch_stage_1_llm_response_by_id,
     download_audio_file_from_s3,
     transcribe_audio_file_with_timestamp_with_gemini,
-    transcribe_audio_file_with_custom_timestamped_transcription_generator,
     disinformation_detection_with_gemini,
     insert_stage_1_llm_response,
     process_audio_file,
@@ -156,17 +155,6 @@ class TestTranscriptionFunctions:
                 gemini_key="test-key",
                 model_name=GeminiModel.GEMINI_FLASH_LATEST
             )
-
-    def test_transcribe_with_custom_generator_success(self, mock_environment):
-        """Test successful transcription with custom generator"""
-        with patch("processing_pipeline.stage_1.TimestampedTranscriptionGenerator") as mock_generator:
-            mock_generator.run.return_value = "Test timestamped transcription"
-
-            result = transcribe_audio_file_with_custom_timestamped_transcription_generator("test.mp3")
-
-            assert result["timestamped_transcription"] == "Test timestamped transcription"
-            mock_generator.run.assert_called_once()
-
 
 
 class TestDetectionFunctions:
@@ -685,15 +673,6 @@ class TestHelperFunctions:
         mock_supabase_client.reset_audio_file_status.assert_called_once_with([1, 2])
         mock_supabase_client.delete_stage_1_llm_responses.assert_called_once_with([1, 2])
 
-    @patch("processing_pipeline.stage_1.TimestampedTranscriptionGenerator")
-    def test_transcribe_audio_file_with_custom_generator_error(self, mock_generator):
-        """Test custom generator with error"""
-        mock_generator.run.side_effect = Exception("Generation failed")
-
-        with pytest.raises(Exception, match="Generation failed"):
-            transcribe_audio_file_with_custom_timestamped_transcription_generator("test.mp3")
-
-
 
     def test_initial_disinformation_detection_specific_file(self, mock_supabase_client, mock_s3_client):
         """Test initial disinformation detection with specific file"""
@@ -714,21 +693,6 @@ class TestHelperFunctions:
 
             mock_supabase_client.get_audio_file_by_id.assert_called_once_with(1)
             mock_s3_client.download_file.assert_called_once()
-
-    def test_transcribe_audio_file_with_custom_generator_multiple_segments(self, mock_supabase_client):
-        """Test transcription with custom generator handling multiple segments"""
-        with patch("processing_pipeline.stage_1.TimestampedTranscriptionGenerator") as mock_generator:
-            # Mock generator to return transcription with multiple segments
-            mock_generator.run.return_value = (
-                "[00:00] First segment.\n" "[00:10] Second segment.\n" "[00:20] Third segment.\n"
-            )
-
-            result = transcribe_audio_file_with_custom_timestamped_transcription_generator("test.mp3")
-
-            assert isinstance(result, dict)
-            assert "timestamped_transcription" in result
-            assert len(result["timestamped_transcription"].split("\n")) == 4  # 3 segments + empty line
-            mock_generator.run.assert_called_once_with("test.mp3", os.getenv("GOOGLE_GEMINI_KEY"), 10)
 
     def test_disinformation_detection_with_unicode_handling(self, mock_supabase_client, mock_genai):
         """Test disinformation detection with Unicode characters"""

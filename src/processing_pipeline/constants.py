@@ -41,36 +41,25 @@ class PromptStage(StrEnum):
 
 
 def get_user_prompt_for_stage_3():
-    return open("prompts/Stage_3_analysis_prompt.md", "r").read()
+    return open("prompts/stage_3/analysis_prompt.md", "r").read()
 
 
 def get_system_instruction_for_stage_3():
-    return open("prompts/Stage_3_system_instruction.md", "r").read()
-
+    return open("prompts/stage_3/system_instruction.md", "r").read()
 
 def get_output_schema_for_stage_3():
-    return json.load(open("prompts/Stage_3_output_schema.json", "r"))
-
-
-def get_timestamped_transcription_generation_prompt():
-    return open("prompts/Timestamped_transcription_generation_prompt.md", "r").read()
-
-
-def get_timestamped_transcription_generation_output_schema():
-    return json.load(open("prompts/Timestamped_transcription_generation_output_schema.json", "r"))
+    return json.load(open("prompts/stage_3/output_schema.json", "r"))
 
 
 def get_system_instruction_for_stage_4():
-    return open("prompts/Stage_4_system_instruction.md", "r").read()
-
+    return open("prompts/stage_4/system_instruction.md", "r").read()
 
 def get_user_prompt_for_stage_4():
-    return open("prompts/Stage_4_review_prompt.md", "r").read()
+    return open("prompts/stage_4/review_prompt.md", "r").read()
 
 
 def get_output_schema_for_stage_4():
-    return json.load(open("prompts/Stage_4_output_schema.json", "r"))
-
+    return json.load(open("prompts/stage_4/output_schema.json", "r"))
 
 def get_gemini_timestamped_transcription_generation_prompt():
     return open("prompts/Gemini_timestamped_transcription_generation_prompt.md", "r").read()

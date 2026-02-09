@@ -9,7 +9,7 @@ from prefect.flows import Flow
 from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 
-from processing_pipeline.constants import ProcessingStatus, PromptStage
+from processing_pipeline.constants import GeminiModel, ProcessingStatus, PromptStage
 
 from processing_pipeline.stage_1.tasks import (
     delete_stage_1_llm_responses,
@@ -18,12 +18,12 @@ from processing_pipeline.stage_1.tasks import (
     fetch_a_new_audio_file_from_supabase,
     fetch_audio_file_by_id,
     fetch_stage_1_llm_response_by_id,
+    get_audio_file_metadata,
     process_audio_file,
     reset_status_of_audio_files,
     reset_status_of_stage_1_llm_response,
     set_audio_file_status,
     set_status_of_stage_1_llm_response,
-    transcribe_audio_file_with_custom_timestamped_transcription_generator,
     transcribe_audio_file_with_timestamp_with_gemini,
     update_stage_1_llm_response_detection_result,
     update_stage_1_llm_response_timestamped_transcription,
@@ -219,18 +219,9 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
         if stage_1_llm_response:
             print(f"Found stage 1 llm response {id}")
 
-            # Get metadata of the transcription
             audio_file = stage_1_llm_response["audio_file"]
             local_file = download_audio_file_from_s3(s3_client, audio_file["file_path"])
-            recorded_at = datetime.strptime(audio_file["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
-            metadata = {
-                "radio_station_name": audio_file["radio_station_name"],
-                "radio_station_code": audio_file["radio_station_code"],
-                "location": {"state": audio_file["location_state"], "city": audio_file["location_city"]},
-                "recorded_at": recorded_at.strftime("%B %-d, %Y %-I:%M %p"),
-                "recording_day_of_week": recorded_at.strftime("%A"),
-                "time_zone": "UTC",
-            }
+            metadata = get_audio_file_metadata(audio_file)
 
             initial_detection_result = stage_1_llm_response["initial_detection_result"] or {}
             flagged_snippets = initial_detection_result.get("flagged_snippets", [])
@@ -238,32 +229,25 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
             if len(flagged_snippets) == 0:
                 print("No flagged snippets found during the initial detection phase.")
             else:
-                try:
-                    transcriptor = "gemini-1206"
-                    timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(
-                        gemini_client=gemini_client,
-                        audio_file=local_file,
-                        prompt_version=transcription_prompt_version,
-                    )
-                except ValueError as e:
-                    print(
-                        f"Failed to transcribe the audio file with Gemini 2.5 Pro: {e}\n"
-                        "Falling back to the custom timestamped-transcript generator"
-                    )
-                    transcriptor = "custom"
-                    timestamped_transcription = transcribe_audio_file_with_custom_timestamped_transcription_generator(
-                        local_file
-                    )
+                # Timestamped transcription
+                transcriptor = GeminiModel.GEMINI_FLASH_LATEST
+                timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(
+                    gemini_client=gemini_client,
+                    audio_file=local_file,
+                    prompt_version=transcription_prompt_version,
+                    model_name=transcriptor,
+                )
                 update_stage_1_llm_response_timestamped_transcription(
                     supabase_client, id, timestamped_transcription, transcriptor
                 )
 
-                print("Processing the timestamped transcription with Gemini 2.5 Pro")
+                # Main detection
                 detection_result = disinformation_detection_with_gemini(
                     gemini_client=gemini_client,
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                     prompt_version=detection_prompt_version,
+                    model_name=GeminiModel.GEMINI_FLASH_LATEST,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
                 update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
