@@ -230,7 +230,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                 print("No flagged snippets found during the initial detection phase.")
             else:
                 # Timestamped transcription
-                transcriptor = GeminiModel.GEMINI_FLASH_LATEST
+                transcriptor = GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025
                 timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(
                     gemini_client=gemini_client,
                     audio_file=local_file,
@@ -247,7 +247,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                     prompt_version=detection_prompt_version,
-                    model_name=GeminiModel.GEMINI_FLASH_LATEST,
+                    model_name=GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
                 update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)

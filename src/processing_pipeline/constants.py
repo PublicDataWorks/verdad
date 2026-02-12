@@ -5,8 +5,11 @@ from enum import StrEnum
 class GeminiModel(StrEnum):
     GEMINI_1_5_PRO = "gemini-1.5-pro-002"
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
+
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
     GEMINI_2_5_PRO = "gemini-2.5-pro"
+    GEMINI_2_5_FLASH_PREVIEW_09_2025 = "gemini-2.5-flash-preview-09-2025"
+
     GEMINI_FLASH_LATEST = "gemini-flash-latest"
     GEMINI_FLASH_LITE_LATEST = "gemini-flash-lite-latest"
 
