@@ -296,7 +296,7 @@ class Stage3Executor:
         user_prompt = f"Please structure the following analysis text into the required JSON format:\n\n{analysis_text}"
 
         response = client.models.generate_content(
-            model=GeminiModel.GEMINI_FLASH_LATEST,
+            model=GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025,
             contents=[user_prompt],
             config=GenerateContentConfig(
                 response_mime_type="application/json",

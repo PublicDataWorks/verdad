@@ -136,7 +136,7 @@ def initial_transcription_with_gemini(
     response = Stage1PreprocessTranscriptionExecutor.run(
         gemini_client=gemini_client,
         audio_file=audio_file,
-        model_name=GeminiModel.GEMINI_FLASH_LATEST,
+        model_name=GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025,
         prompt_version=prompt_version,
     )
     return response["transcription"]
@@ -155,7 +155,7 @@ def initial_disinformation_detection_with_gemini(
 
     response = Stage1PreprocessDetectionExecutor.run(
         gemini_client=gemini_client,
-        model_name=GeminiModel.GEMINI_FLASH_LATEST,
+        model_name=GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025,
         transcription=initial_transcription,
         metadata=metadata,
         prompt_version=prompt_version,
@@ -168,7 +168,7 @@ def transcribe_audio_file_with_timestamp_with_gemini(
     gemini_client: genai.Client | None,
     audio_file: str,
     prompt_version: dict,
-    model_name=GeminiModel.GEMINI_FLASH_LATEST,
+    model_name=GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025,
 ):
     print(f"Transcribing the audio file {audio_file} using {model_name}")
     if not gemini_client:
@@ -191,7 +191,7 @@ def disinformation_detection_with_gemini(
     timestamped_transcription: str,
     metadata: dict,
     prompt_version: dict,
-    model_name=GeminiModel.GEMINI_FLASH_LATEST,
+    model_name=GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025,
 ):
     print(f"Processing the timestamped transcription with {model_name}")
     if not gemini_client:
@@ -293,7 +293,7 @@ def process_audio_file(
             )
         else:
             # Timestamped transcription
-            transcriptor = GeminiModel.GEMINI_FLASH_LATEST
+            transcriptor = GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025
             timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(
                 gemini_client=gemini_client,
                 audio_file=local_file,
@@ -307,7 +307,7 @@ def process_audio_file(
                 timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                 metadata=metadata,
                 prompt_version=detection_prompt_version,
-                model_name=GeminiModel.GEMINI_FLASH_LATEST,
+                model_name=GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025,
             )
             print(f"Main detection result:\n{json.dumps(detection_result, indent=2, ensure_ascii=False)}\n")
 
