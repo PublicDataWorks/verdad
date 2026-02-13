@@ -40,6 +40,10 @@ class PromptStage(StrEnum):
     STAGE_1_INITIAL_DETECTION = "stage_1_initial_detection"
     STAGE_3 = "stage_3"
     STAGE_4 = "stage_4"
+    STAGE_4_KB_RESEARCHER = "stage_4_kb_researcher"
+    STAGE_4_WEB_RESEARCHER = "stage_4_web_researcher"
+    STAGE_4_REVIEWER = "stage_4_reviewer"
+    STAGE_4_KB_UPDATER = "stage_4_kb_updater"
     GEMINI_TIMESTAMPED_TRANSCRIPTION = "gemini_timestamped_transcription"
 
 
@@ -53,16 +57,6 @@ def get_system_instruction_for_stage_3():
 def get_output_schema_for_stage_3():
     return json.load(open("prompts/stage_3/output_schema.json", "r"))
 
-
-def get_system_instruction_for_stage_4():
-    return open("prompts/stage_4/system_instruction.md", "r").read()
-
-def get_user_prompt_for_stage_4():
-    return open("prompts/stage_4/review_prompt.md", "r").read()
-
-
-def get_output_schema_for_stage_4():
-    return json.load(open("prompts/stage_4/output_schema.json", "r"))
 
 def get_gemini_timestamped_transcription_generation_prompt():
     return open("prompts/Gemini_timestamped_transcription_generation_prompt.md", "r").read()
@@ -100,18 +94,6 @@ if __name__ == "__main__":
     # Print timestamped transcription generation output schema
     # timestamped_transcription_generation_output_schema = get_timestamped_transcription_generation_output_schema()
     # print(json.dumps(timestamped_transcription_generation_output_schema, indent=2))
-
-    # Print system instruction for stage 4
-    # system_instruction_for_stage_4 = get_system_instruction_for_stage_4()
-    # print(system_instruction_for_stage_4)
-
-    # # Print user prompt for stage 4
-    # user_prompt_for_stage_4 = get_user_prompt_for_stage_4()
-    # print(user_prompt_for_stage_4)
-
-    # Print output schema for stage 4
-    # output_schema_for_stage_4 = get_output_schema_for_stage_4()
-    # print(json.dumps(output_schema_for_stage_4, indent=2))
 
     # Print gemini timestamped transcription generation prompt
     gemini_timestamped_transcription_generation_prompt = get_gemini_timestamped_transcription_generation_prompt()
