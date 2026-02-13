@@ -44,10 +44,18 @@ PROMPT_MAPPING = {
         "user_prompt": "prompts/stage_3/analysis_prompt.md",
         "output_schema": "prompts/stage_3/output_schema.json",
     },
-    PromptStage.STAGE_4: {
-        "system_instruction": "prompts/Stage_4_system_instruction.md",
-        "user_prompt": "prompts/Stage_4_review_prompt.md",
-        "output_schema": "prompts/Stage_4_output_schema.json",
+    PromptStage.STAGE_4_KB_RESEARCHER: {
+        "system_instruction": "prompts/stage_4/kb_researcher_instruction.md",
+    },
+    PromptStage.STAGE_4_WEB_RESEARCHER: {
+        "system_instruction": "prompts/stage_4/web_researcher_instruction.md",
+    },
+    PromptStage.STAGE_4_REVIEWER: {
+        "system_instruction": "prompts/stage_4/reviewer_instruction.md",
+        "output_schema": "prompts/stage_4/output_schema.json",
+    },
+    PromptStage.STAGE_4_KB_UPDATER: {
+        "system_instruction": "prompts/stage_4/kb_updater_instruction.md",
     },
     PromptStage.GEMINI_TIMESTAMPED_TRANSCRIPTION: {
         "system_instruction": "prompts/stage_1/main/timestamped_transcription_system_instruction.md",

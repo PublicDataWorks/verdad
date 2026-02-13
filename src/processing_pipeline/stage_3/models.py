@@ -25,7 +25,7 @@ class DisinformationCategory(BaseModel):
 class Language(BaseModel):
     primary_language: str = Field(description="Primary language of the audio (e.g., Spanish, Arabic)")
     dialect: str = Field(description="Specific dialect or regional variation")
-    register_: str = Field(alias="register", description="Language register (formal, informal, colloquial, slang)")
+    register: str = Field(description="Language register (formal, informal, colloquial, slang)")
 
 
 class Context(BaseModel):
