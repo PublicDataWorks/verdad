@@ -196,7 +196,9 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
             prompt_version=prompt_version,
         )
 
-        status = ProcessingStatus.PROCESSED if skip_review else ProcessingStatus.READY_FOR_REVIEW
+        needs_review = not skip_review and analyzing_response["response"]["confidence_scores"]["overall"] >= 95
+        status = ProcessingStatus.READY_FOR_REVIEW if needs_review else ProcessingStatus.PROCESSED
+
         update_snippet_in_supabase(
             supabase_client=supabase_client,
             snippet_id=snippet["id"],
@@ -209,7 +211,7 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
             stage_3_prompt_version_id=prompt_version["id"],
         )
 
-        if skip_review:
+        if status == ProcessingStatus.PROCESSED:
             postprocess_snippet(
                 supabase_client, snippet["id"], analyzing_response["response"]["disinformation_categories"]
             )
