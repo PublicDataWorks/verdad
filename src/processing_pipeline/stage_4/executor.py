@@ -73,7 +73,7 @@ class Stage4Executor:
         session_service = InMemorySessionService()
         app_name = "stage4_review"
         user_id = "pipeline"
-        session_id = "stage4_review_session"
+        session_id = f"stage4_review_session_{snippet_id}"
 
         try:
             session = await session_service.create_session(
