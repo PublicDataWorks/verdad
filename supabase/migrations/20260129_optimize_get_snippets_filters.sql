@@ -1,16 +1,12 @@
-DROP FUNCTION IF EXISTS get_snippets;
-
--- Optimized get_snippets function
--- Key optimizations:
--- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
--- 2. Uses JOINs with pre-filtered CTEs for state/source filters (avoids IN subquery on audio_files)
+-- Optimize get_snippets function to fix timeout issues with starred/labeled/upvotedBy filters
+-- The main issue is EXISTS subqueries being evaluated for every row (119k+ snippets)
+-- Solution: Use JOINs with pre-filtered CTEs instead of EXISTS subqueries
 --
 -- Performance improvements:
 -- - starredBy filter: timeout (>30s) -> <1s
 -- - labeledBy filter: timeout (>30s) -> <1s
 -- - upvotedBy filter: 6.7s -> <1s
--- - state filter: ~134ms -> <50ms
--- - source filter: similar improvement
+-- - politicalSpectrum filter: uses existing index, no change needed
 
 CREATE OR REPLACE FUNCTION get_snippets (
     p_language text,
@@ -38,9 +34,6 @@ DECLARE
     has_upvoted_filter BOOLEAN;
     filter_upvoted_by_me BOOLEAN;
     filter_upvoted_by_others BOOLEAN;
-    -- State/source filter flags
-    has_state_filter BOOLEAN;
-    has_source_filter BOOLEAN;
 BEGIN
     current_user_id := auth.uid();
     IF current_user_id IS NULL THEN
@@ -73,15 +66,7 @@ BEGIN
     filter_upvoted_by_me := has_upvoted_filter AND p_filter->'upvotedBy' ? 'by_me';
     filter_upvoted_by_others := has_upvoted_filter AND p_filter->'upvotedBy' ? 'by_others';
 
-    -- State/source filter flags
-    has_state_filter := p_filter IS NOT NULL
-        AND p_filter ? 'states'
-        AND jsonb_array_length(p_filter->'states') > 0;
-    has_source_filter := p_filter IS NOT NULL
-        AND p_filter ? 'sources'
-        AND jsonb_array_length(p_filter->'sources') > 0;
-
-    -- Get count using optimized query with JOINs instead of EXISTS/IN
+    -- Get count using optimized query with JOINs instead of EXISTS
     WITH
     starred_snippet_ids AS (
         SELECT DISTINCT uss.snippet
@@ -102,6 +87,7 @@ BEGIN
             (labeled_by_others AND NOT labeled_by_me AND lu.upvoted_by != current_user_id)
         )
     ),
+    -- Pre-filter upvoted snippet IDs (optimizes upvotedBy filter from 6.7s to <1s)
     upvoted_snippet_ids AS (
         SELECT DISTINCT sl.snippet
         FROM snippet_labels sl
@@ -111,18 +97,6 @@ BEGIN
             (filter_upvoted_by_me AND NOT filter_upvoted_by_others AND lu.upvoted_by = current_user_id) OR
             (filter_upvoted_by_others AND NOT filter_upvoted_by_me AND lu.upvoted_by != current_user_id)
         )
-    ),
-    -- Pre-filter audio file IDs by state (uses idx_audio_files_location_state)
-    state_filtered_audio_ids AS (
-        SELECT id FROM audio_files
-        WHERE has_state_filter
-        AND location_state IN (SELECT jsonb_array_elements_text(p_filter->'states'))
-    ),
-    -- Pre-filter audio file IDs by source/radio station
-    source_filtered_audio_ids AS (
-        SELECT id FROM audio_files
-        WHERE has_source_filter
-        AND radio_station_code IN (SELECT jsonb_array_elements_text(p_filter->'sources'))
     )
     SELECT COUNT(*) INTO total_count
     FROM snippets s
@@ -134,10 +108,6 @@ BEGIN
     LEFT JOIN labeled_snippet_ids lsi ON lsi.snippet = s.id
     -- Use JOIN for upvoted filter
     LEFT JOIN upvoted_snippet_ids usi ON usi.snippet = s.id
-    -- Use JOIN for state filter
-    LEFT JOIN state_filtered_audio_ids sfa ON sfa.id = s.audio_file
-    -- Use JOIN for source filter
-    LEFT JOIN source_filtered_audio_ids srfa ON srfa.id = s.audio_file
     WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
     AND (user_is_admin OR uhs.snippet IS NULL)
     -- Starred filter: use JOIN result instead of EXISTS (key optimization)
@@ -146,15 +116,23 @@ BEGIN
     AND (NOT has_labeled_filter OR lsi.snippet IS NOT NULL)
     -- Upvoted filter: use JOIN result instead of EXISTS
     AND (NOT has_upvoted_filter OR usi.snippet IS NOT NULL)
-    -- State filter: use JOIN result instead of IN subquery
-    AND (NOT has_state_filter OR sfa.id IS NOT NULL)
-    -- Source filter: use JOIN result instead of IN subquery
-    AND (NOT has_source_filter OR srfa.id IS NOT NULL)
     AND (
         p_filter IS NULL OR
         NOT p_filter ? 'languages' OR
         jsonb_array_length(p_filter->'languages') = 0 OR
         s.language ->> 'primary_language' IN (SELECT jsonb_array_elements_text(p_filter->'languages'))
+    )
+    AND (
+        p_filter IS NULL OR
+        NOT p_filter ? 'states' OR
+        jsonb_array_length(p_filter->'states') = 0 OR
+        a.location_state IN (SELECT jsonb_array_elements_text(p_filter->'states'))
+    )
+    AND (
+        p_filter IS NULL OR
+        NOT p_filter ? 'sources' OR
+        jsonb_array_length(p_filter->'sources') = 0 OR
+        a.radio_station_code IN (SELECT jsonb_array_elements_text(p_filter->'sources'))
     )
     AND (
         p_filter IS NULL OR
@@ -210,6 +188,7 @@ BEGIN
             (labeled_by_others AND NOT labeled_by_me AND lu.upvoted_by != current_user_id)
         )
     ),
+    -- Pre-filter upvoted snippet IDs
     upvoted_snippet_ids AS (
         SELECT DISTINCT sl.snippet
         FROM snippet_labels sl
@@ -219,18 +198,6 @@ BEGIN
             (filter_upvoted_by_me AND NOT filter_upvoted_by_others AND lu.upvoted_by = current_user_id) OR
             (filter_upvoted_by_others AND NOT filter_upvoted_by_me AND lu.upvoted_by != current_user_id)
         )
-    ),
-    -- Pre-filter audio file IDs by state
-    state_filtered_audio_ids AS (
-        SELECT id FROM audio_files
-        WHERE has_state_filter
-        AND location_state IN (SELECT jsonb_array_elements_text(p_filter->'states'))
-    ),
-    -- Pre-filter audio file IDs by source
-    source_filtered_audio_ids AS (
-        SELECT id FROM audio_files
-        WHERE has_source_filter
-        AND radio_station_code IN (SELECT jsonb_array_elements_text(p_filter->'sources'))
     ),
     filtered_snippets AS (
         SELECT
@@ -273,10 +240,6 @@ BEGIN
         LEFT JOIN labeled_snippet_ids lsi ON lsi.snippet = s.id
         -- Use JOIN for upvoted filter
         LEFT JOIN upvoted_snippet_ids usi ON usi.snippet = s.id
-        -- Use JOIN for state filter
-        LEFT JOIN state_filtered_audio_ids sfa ON sfa.id = s.audio_file
-        -- Use JOIN for source filter
-        LEFT JOIN source_filtered_audio_ids srfa ON srfa.id = s.audio_file
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (user_is_admin OR uhs.snippet IS NULL)
         -- Starred filter: use JOIN result instead of EXISTS
@@ -285,13 +248,17 @@ BEGIN
         AND (NOT has_labeled_filter OR lsi.snippet IS NOT NULL)
         -- Upvoted filter: use JOIN result instead of EXISTS
         AND (NOT has_upvoted_filter OR usi.snippet IS NOT NULL)
-        -- State filter: use JOIN result
-        AND (NOT has_state_filter OR sfa.id IS NOT NULL)
-        -- Source filter: use JOIN result
-        AND (NOT has_source_filter OR srfa.id IS NOT NULL)
         AND (
             p_filter IS NULL OR NOT p_filter ? 'languages' OR jsonb_array_length(p_filter->'languages') = 0 OR
             s.language ->> 'primary_language' IN (SELECT jsonb_array_elements_text(p_filter->'languages'))
+        )
+        AND (
+            p_filter IS NULL OR NOT p_filter ? 'states' OR jsonb_array_length(p_filter->'states') = 0 OR
+            a.location_state IN (SELECT jsonb_array_elements_text(p_filter->'states'))
+        )
+        AND (
+            p_filter IS NULL OR NOT p_filter ? 'sources' OR jsonb_array_length(p_filter->'sources') = 0 OR
+            a.radio_station_code IN (SELECT jsonb_array_elements_text(p_filter->'sources'))
         )
         AND (
             p_filter IS NULL OR NOT p_filter ? 'politicalSpectrum' OR
@@ -338,7 +305,7 @@ BEGIN
             l.id,
             CASE WHEN p_language = 'spanish' THEN l.text_spanish ELSE l.text END AS text,
             sl.upvote_count,
-            lu.id IS NOT NULL AS upvoted_by_me,
+            lu.id IS NOT NULL AS filter_upvoted_by_me,
             sl.snippet AS snippet_id
         FROM snippet_labels sl
         JOIN labels l ON l.id = sl.label
@@ -351,7 +318,7 @@ BEGIN
             COALESCE(ld.labels, '[]'::jsonb) AS labels
         FROM filtered_snippets fs
         LEFT JOIN (
-            SELECT snippet_id, jsonb_agg(jsonb_build_object('id', id, 'text', text, 'upvote_count', upvote_count, 'upvoted_by_me', upvoted_by_me)) as labels
+            SELECT snippet_id, jsonb_agg(jsonb_build_object('id', id, 'text', text, 'upvote_count', upvote_count, 'filter_upvoted_by_me', filter_upvoted_by_me)) as labels
             FROM label_summary
             GROUP BY snippet_id
         ) ld ON fs.id = ld.snippet_id

@@ -1,16 +1,9 @@
-DROP FUNCTION IF EXISTS get_snippets;
+-- Optimize state and source filters in get_snippets
+-- Problem: State filter scans all 19k+ snippets first, then filters by audio_files.location_state
+-- Solution: Use same CTE+JOIN pattern as starred/labeled/upvoted filters
+-- Expected improvement: ~134ms -> <50ms for state filter queries
 
--- Optimized get_snippets function
--- Key optimizations:
--- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
--- 2. Uses JOINs with pre-filtered CTEs for state/source filters (avoids IN subquery on audio_files)
---
--- Performance improvements:
--- - starredBy filter: timeout (>30s) -> <1s
--- - labeledBy filter: timeout (>30s) -> <1s
--- - upvotedBy filter: 6.7s -> <1s
--- - state filter: ~134ms -> <50ms
--- - source filter: similar improvement
+DROP FUNCTION IF EXISTS get_snippets;
 
 CREATE OR REPLACE FUNCTION get_snippets (
     p_language text,
@@ -38,7 +31,7 @@ DECLARE
     has_upvoted_filter BOOLEAN;
     filter_upvoted_by_me BOOLEAN;
     filter_upvoted_by_others BOOLEAN;
-    -- State/source filter flags
+    -- State/source filter flags (new)
     has_state_filter BOOLEAN;
     has_source_filter BOOLEAN;
 BEGIN
@@ -73,7 +66,7 @@ BEGIN
     filter_upvoted_by_me := has_upvoted_filter AND p_filter->'upvotedBy' ? 'by_me';
     filter_upvoted_by_others := has_upvoted_filter AND p_filter->'upvotedBy' ? 'by_others';
 
-    -- State/source filter flags
+    -- State/source filter flags (new optimization)
     has_state_filter := p_filter IS NOT NULL
         AND p_filter ? 'states'
         AND jsonb_array_length(p_filter->'states') > 0;
@@ -134,9 +127,9 @@ BEGIN
     LEFT JOIN labeled_snippet_ids lsi ON lsi.snippet = s.id
     -- Use JOIN for upvoted filter
     LEFT JOIN upvoted_snippet_ids usi ON usi.snippet = s.id
-    -- Use JOIN for state filter
+    -- Use JOIN for state filter (new optimization)
     LEFT JOIN state_filtered_audio_ids sfa ON sfa.id = s.audio_file
-    -- Use JOIN for source filter
+    -- Use JOIN for source filter (new optimization)
     LEFT JOIN source_filtered_audio_ids srfa ON srfa.id = s.audio_file
     WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
     AND (user_is_admin OR uhs.snippet IS NULL)
@@ -146,9 +139,9 @@ BEGIN
     AND (NOT has_labeled_filter OR lsi.snippet IS NOT NULL)
     -- Upvoted filter: use JOIN result instead of EXISTS
     AND (NOT has_upvoted_filter OR usi.snippet IS NOT NULL)
-    -- State filter: use JOIN result instead of IN subquery
+    -- State filter: use JOIN result instead of IN subquery (new optimization)
     AND (NOT has_state_filter OR sfa.id IS NOT NULL)
-    -- Source filter: use JOIN result instead of IN subquery
+    -- Source filter: use JOIN result instead of IN subquery (new optimization)
     AND (NOT has_source_filter OR srfa.id IS NOT NULL)
     AND (
         p_filter IS NULL OR
