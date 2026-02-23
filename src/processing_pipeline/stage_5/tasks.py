@@ -52,7 +52,7 @@ def generate_snippet_document(snippet):
 
 
 @optional_task(log_prints=True)
-def generate_snippet_embedding(supabase_client, snippet_id, snippet_document):
+def generate_snippet_embedding(openai_client, supabase_client, snippet_id, snippet_document):
     model_name = "text-embedding-3-large"
     # Get the tokenizer for the embedding model
     try:
@@ -66,7 +66,7 @@ def generate_snippet_embedding(supabase_client, snippet_id, snippet_document):
 
     try:
         print(f"Generating vector embedding for snippet f{snippet_id}...")
-        embedding = Stage5Executor.run(snippet_document, model_name)
+        embedding = Stage5Executor.run(openai_client, snippet_document, model_name)
         upsert_snippet_embedding_to_supabase(
             supabase_client=supabase_client,
             snippet_id=snippet_id,
