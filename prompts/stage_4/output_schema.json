@@ -1,7 +1,6 @@
 {
     "type": "object",
     "required": [
-        "is_convertible",
         "translation",
         "title",
         "summary",
@@ -10,13 +9,10 @@
         "keywords_detected",
         "language",
         "confidence_scores",
-        "political_leaning"
+        "political_leaning",
+        "thought_summaries"
     ],
     "properties": {
-        "is_convertible": {
-            "type": "boolean",
-            "description": "Indicates whether the provided text can be converted into a valid JSON object according to the given schema."
-        },
         "translation": {
             "type": "string",
             "description": "Translation of the transcription into English."
@@ -111,11 +107,16 @@
         },
         "confidence_scores": {
             "type": "object",
-            "required": ["overall", "analysis", "categories"],
+            "required": ["overall", "verification_status", "analysis", "categories"],
             "properties": {
                 "overall": {
                     "type": "integer",
                     "description": "Overall confidence score of the analysis, ranging from 0 to 100."
+                },
+                "verification_status": {
+                    "type": "string",
+                    "enum": ["verified_false", "verified_true", "uncertain", "insufficient_evidence"],
+                    "description": "Overall verification status based on evidence quality."
                 },
                 "analysis": {
                     "type": "object",
@@ -149,14 +150,16 @@
                                 "evidence_provided",
                                 "scoring_falsity",
                                 "defensible_to_factcheckers",
-                                "consistent_explanations"
+                                "consistent_explanations",
+                                "uncertain_claims_scored_low"
                             ],
                             "properties": {
                                 "specific_claims_quoted": { "type": "boolean" },
                                 "evidence_provided": { "type": "boolean" },
                                 "scoring_falsity": { "type": "boolean" },
                                 "defensible_to_factcheckers": { "type": "boolean" },
-                                "consistent_explanations": { "type": "boolean" }
+                                "consistent_explanations": { "type": "boolean" },
+                                "uncertain_claims_scored_low": { "type": "boolean" }
                             }
                         },
                         "score_adjustments": {
@@ -246,6 +249,10 @@
                     }
                 }
             }
+        },
+        "thought_summaries": {
+            "type": "string",
+            "description": "A summary of your reasoning process, key observations, and analytical steps taken during the review."
         }
     }
 }

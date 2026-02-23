@@ -9,12 +9,12 @@ STAGE_3_IN_DEPTH="Stage 3: In-depth Analysis/Stage 3: In-Depth Analysis"
 STAGE_4_REVIEW="Stage 4: Analysis Review/Stage 4: Analysis Review"
 STAGE_5_EMBEDDING="Stage 5: Embedding/Stage 5: Embedding"
 
-# Number of flow runs to trigger per stage
-STAGE_1_FLOW_RUNS=3
-STAGE_2_FLOW_RUNS=1
-STAGE_3_FLOW_RUNS=2
-STAGE_4_FLOW_RUNS=2
-STAGE_5_FLOW_RUNS=1
+# Number of flow runs to trigger per stage (configurable via env vars, 0 to skip)
+STAGE_1_FLOW_RUNS="${STAGE_1_FLOW_RUNS:-2}"
+STAGE_2_FLOW_RUNS="${STAGE_2_FLOW_RUNS:-1}"
+STAGE_3_FLOW_RUNS="${STAGE_3_FLOW_RUNS:-2}"
+STAGE_4_FLOW_RUNS="${STAGE_4_FLOW_RUNS:-1}"
+STAGE_5_FLOW_RUNS="${STAGE_5_FLOW_RUNS:-1}"
 
 # Log function
 log() {
@@ -40,6 +40,11 @@ start_deployment_instances() {
     local num_flow_runs="$2"
     local stage_name="$3"
     local params="${4:-}"
+
+    if [[ "$num_flow_runs" -le 0 ]]; then
+        log "Skipping $stage_name (flow runs = $num_flow_runs)"
+        return 0
+    fi
 
     log "Starting $num_flow_runs run(s) of $stage_name..."
 
@@ -103,9 +108,7 @@ start_deployment_instances "$STAGE_2_CLIPPING" "$STAGE_2_FLOW_RUNS" "Stage 2"
 start_deployment_instances "$STAGE_3_IN_DEPTH" "$STAGE_3_FLOW_RUNS" "Stage 3"
 
 # Stage 4: Analysis Review
-if [[ "${RUN_STAGE_4:-false}" == "true" ]]; then
-    start_deployment_instances "$STAGE_4_REVIEW" "$STAGE_4_FLOW_RUNS" "Stage 4"
-fi
+start_deployment_instances "$STAGE_4_REVIEW" "$STAGE_4_FLOW_RUNS" "Stage 4"
 
 # Stage 5: Embedding
 start_deployment_instances "$STAGE_5_EMBEDDING" "$STAGE_5_FLOW_RUNS" "Stage 5"

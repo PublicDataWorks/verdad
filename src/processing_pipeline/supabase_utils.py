@@ -1,6 +1,6 @@
 from supabase import create_client
 from datetime import datetime, timezone
-from processing_pipeline.constants import GeminiModel, PromptStage
+from processing_pipeline.constants import PromptStage
 
 
 class SupabaseClient:
@@ -271,7 +271,22 @@ class SupabaseClient:
         )
         return response.data
 
-    def submit_snippet_review(self, id, translation, title, summary, explanation, disinformation_categories, keywords_detected, language, confidence_scores, political_leaning, grounding_metadata):
+    def submit_snippet_review(
+        self,
+        id,
+        translation,
+        title,
+        summary,
+        explanation,
+        disinformation_categories,
+        keywords_detected,
+        language,
+        confidence_scores,
+        political_leaning,
+        grounding_metadata,
+        reviewed_by,
+        thought_summaries=None
+    ):
         response = (
             self.client.table("snippets")
             .update({
@@ -285,10 +300,11 @@ class SupabaseClient:
                 "confidence_scores": confidence_scores,
                 "political_leaning": political_leaning,
                 "grounding_metadata": grounding_metadata,
+                "thought_summaries": thought_summaries,
                 "status": "Processed",
                 "error_message": None,
                 "reviewed_at": datetime.now(timezone.utc).isoformat(),
-                "reviewed_by": GeminiModel.GEMINI_2_5_PRO.value  # Hardcoded for now
+                "reviewed_by": reviewed_by,
             })
             .eq("id", id)
             .execute()
@@ -434,3 +450,169 @@ class SupabaseClient:
     def delete_vector_embedding_of_snippet(self, snippet_id):
         response = self.client.table("snippet_embeddings").delete().eq("snippet", snippet_id).execute()
         return response.data
+
+    # Knowledge Base methods
+
+    def search_kb_entries(self, query_embedding, match_threshold=0.75, match_count=10, candidate_multiplier=8, filter_categories=None, reference_date=None):
+        params = {
+            "query_embedding": query_embedding,
+            "match_threshold": match_threshold,
+            "match_count": match_count,
+            "candidate_multiplier": candidate_multiplier,
+        }
+        if filter_categories is not None:
+            params["filter_categories"] = filter_categories
+        if reference_date is not None:
+            params["reference_date"] = reference_date
+        response = self.client.rpc("search_kb_entries", params).execute()
+        return response.data if response.data else []
+
+    def find_duplicate_kb_entries(self, query_embedding, similarity_threshold=0.92, max_results=5):
+        response = self.client.rpc("find_duplicate_kb_entries", {
+            "query_embedding": query_embedding,
+            "similarity_threshold": similarity_threshold,
+            "max_results": max_results,
+        }).execute()
+        return response.data if response.data else []
+
+    def insert_kb_entry(self, fact, confidence_score, disinformation_categories=None, keywords=None, related_claim=None, valid_from=None, valid_until=None, is_time_sensitive=False, created_by_snippet=None, created_by_model=None, notes=None):
+        data = {
+            "fact": fact,
+            "confidence_score": confidence_score,
+            "disinformation_categories": disinformation_categories or [],
+            "keywords": keywords or [],
+            "is_time_sensitive": is_time_sensitive,
+        }
+        if related_claim is not None:
+            data["related_claim"] = related_claim
+        if valid_from is not None:
+            data["valid_from"] = valid_from
+        if valid_until is not None:
+            data["valid_until"] = valid_until
+        if created_by_snippet is not None:
+            data["created_by_snippet"] = created_by_snippet
+        if created_by_model is not None:
+            data["created_by_model"] = created_by_model
+        if notes is not None:
+            data["notes"] = notes
+        response = self.client.table("kb_entries").insert(data).execute()
+        return response.data[0]
+
+    def supersede_kb_entry(self, old_entry_id, new_entry_data):
+        """Create a new version of a KB entry. Deactivates old, inserts new."""
+        # Get old entry to determine new version number
+        old_entry = self.get_kb_entry_by_id(old_entry_id)
+        if not old_entry:
+            raise ValueError(f"KB entry not found: {old_entry_id}")
+
+        new_entry_data["version"] = old_entry["version"] + 1
+        new_entry_data["previous_version"] = old_entry_id
+
+        # Insert new entry
+        new_response = self.client.table("kb_entries").insert(new_entry_data).execute()
+        new_entry = new_response.data[0]
+
+        # Copy sources from old entry to new entry
+        old_sources = self.get_kb_entry_sources(old_entry_id)
+        for source in old_sources:
+            self.insert_kb_entry_source(
+                kb_entry_id=new_entry["id"],
+                url=source["url"],
+                source_name=source["source_name"],
+                source_type=source["source_type"],
+                title=source.get("title"),
+                relevant_excerpt=source.get("relevant_excerpt"),
+                publication_date=source.get("publication_date"),
+                relevance_to_claim=source.get("relevance_to_claim", "provides_context"),
+            )
+
+        # Update old entry: superseded
+        self.client.table("kb_entries").update({
+            "status": "superseded",
+            "superseded_by": new_entry["id"],
+        }).eq("id", old_entry_id).execute()
+
+        # Delete old embedding
+        self.delete_kb_entry_embedding(old_entry_id)
+
+        return new_entry
+
+    def deactivate_kb_entry(self, entry_id, reason):
+        response = self.client.table("kb_entries").update({
+            "status": "deactivated",
+            "deactivation_reason": reason,
+        }).eq("id", entry_id).execute()
+        # Delete embedding so it no longer appears in RAG queries
+        self.delete_kb_entry_embedding(entry_id)
+        return response.data[0] if response.data else None
+
+    def get_kb_entry_by_id(self, entry_id):
+        response = self.client.table("kb_entries").select("*").eq("id", entry_id).execute()
+        return response.data[0] if response.data else None
+
+    def get_kb_entry_sources(self, kb_entry_id):
+        response = self.client.table("kb_entry_sources").select("*").eq("kb_entry", kb_entry_id).execute()
+        return response.data if response.data else []
+
+    def insert_kb_entry_source(self, kb_entry_id, url, source_name, source_type, title=None, relevant_excerpt=None, publication_date=None, relevance_to_claim="provides_context"):
+        data = {
+            "kb_entry": kb_entry_id,
+            "url": url,
+            "source_name": source_name,
+            "source_type": source_type,
+            "relevance_to_claim": relevance_to_claim,
+        }
+        if title is not None:
+            data["title"] = title
+        if relevant_excerpt is not None:
+            data["relevant_excerpt"] = relevant_excerpt
+        if publication_date is not None:
+            data["publication_date"] = publication_date
+        response = self.client.table("kb_entry_sources").insert(data).execute()
+        return response.data[0]
+
+    def upsert_kb_entry_embedding(self, kb_entry_id, embedded_document, document_token_count, embedding, model_name):
+        existing = self.client.table("kb_entry_embeddings").select("id").eq("kb_entry", kb_entry_id).execute()
+        data = {
+            "embedded_document": embedded_document,
+            "document_token_count": document_token_count,
+            "embedding": embedding,
+            "model_name": model_name,
+            "status": "Processed",
+            "error_message": None,
+        }
+        if existing.data:
+            response = self.client.table("kb_entry_embeddings").update(data).eq("kb_entry", kb_entry_id).execute()
+        else:
+            data["kb_entry"] = kb_entry_id
+            response = self.client.table("kb_entry_embeddings").insert(data).execute()
+        return response.data[0]
+
+    def delete_kb_entry_embedding(self, kb_entry_id):
+        response = self.client.table("kb_entry_embeddings").delete().eq("kb_entry", kb_entry_id).execute()
+        return response.data
+
+    def record_kb_usage(self, kb_entry_id, snippet_id, usage_type, similarity_score=None, notes=None):
+        data = {
+            "kb_entry": kb_entry_id,
+            "snippet": snippet_id,
+            "usage_type": usage_type,
+        }
+        if similarity_score is not None:
+            data["similarity_score"] = similarity_score
+        if notes is not None:
+            data["notes"] = notes
+        # Upsert to handle unique constraint
+        existing = (
+            self.client.table("kb_entry_snippet_usage")
+            .select("id")
+            .eq("kb_entry", kb_entry_id)
+            .eq("snippet", snippet_id)
+            .eq("usage_type", usage_type)
+            .execute()
+        )
+        if existing.data:
+            response = self.client.table("kb_entry_snippet_usage").update(data).eq("id", existing.data[0]["id"]).execute()
+        else:
+            response = self.client.table("kb_entry_snippet_usage").insert(data).execute()
+        return response.data[0]
