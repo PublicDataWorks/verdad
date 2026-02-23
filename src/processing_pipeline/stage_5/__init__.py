@@ -8,10 +8,10 @@ from .tasks import (
 )
 
 __all__ = [
+    "Stage5Executor",
+    "embedding",
     "fetch_a_snippet_that_has_no_embedding",
-    "upsert_snippet_embedding_to_supabase",
     "generate_snippet_document",
     "generate_snippet_embedding",
-    "embedding",
-    "Stage5Executor",
+    "upsert_snippet_embedding_to_supabase",
 ]
