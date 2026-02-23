@@ -1,11 +1,8 @@
-import os
-import time
-
-from openai import OpenAI
 from tiktoken import encoding_for_model
-from processing_pipeline.supabase_utils import SupabaseClient
-from utils import optional_flow, optional_task
-from prefect.task_runners import ConcurrentTaskRunner
+from utils import optional_task
+
+from processing_pipeline.stage_5.executors import Stage5Executor
+
 
 @optional_task(log_prints=True, retries=3)
 def fetch_a_snippet_that_has_no_embedding(supabase_client):
@@ -94,47 +91,3 @@ def generate_snippet_embedding(supabase_client, snippet_id, snippet_document):
             status="Error",
             error_message=str(e)
         )
-
-
-@optional_flow(name="Stage 5: Embedding", log_prints=True, task_runner=ConcurrentTaskRunner)
-def embedding(repeat):
-    # Setup Supabase client
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
-
-    while True:
-        snippet = fetch_a_snippet_that_has_no_embedding(supabase_client)  # TODO: Retry failed snippets (status: Error)
-
-        if snippet:
-            document = generate_snippet_document(snippet)
-            generate_snippet_embedding(supabase_client, snippet["id"], document)
-
-        # Stop the flow if we're not meant to repeat the process
-        if not repeat:
-            break
-
-        if snippet:
-            sleep_time = 2
-        else:
-            sleep_time = 60
-
-        print(f"Sleep for {sleep_time} seconds before the next iteration")
-        time.sleep(sleep_time)
-
-
-class Stage5Executor:
-
-    @classmethod
-    def run(cls, text, model_name):
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if not openai_key:
-            raise ValueError("OpenAI API key was not set!")
-
-        # Setup Open AI Client
-        client = OpenAI(api_key=openai_key)
-
-        response = client.embeddings.create(
-            model=model_name,
-            input=text
-        )
-
-        return response.data[0].embedding
