@@ -2,6 +2,11 @@ import json
 from enum import StrEnum
 
 
+CONFIDENCE_THRESHOLD = 95
+KB_SEARCH_MATCH_THRESHOLD = 0.3
+KB_DEDUP_SIMILARITY_THRESHOLD = 0.92
+
+
 class GeminiModel(StrEnum):
     GEMINI_1_5_PRO = "gemini-1.5-pro-002"
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
@@ -53,6 +58,7 @@ def get_user_prompt_for_stage_3():
 
 def get_system_instruction_for_stage_3():
     return open("prompts/stage_3/system_instruction.md", "r").read()
+
 
 def get_output_schema_for_stage_3():
     return json.load(open("prompts/stage_3/output_schema.json", "r"))

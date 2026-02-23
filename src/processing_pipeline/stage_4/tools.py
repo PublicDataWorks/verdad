@@ -7,7 +7,11 @@ import os
 from openai import OpenAI
 from tiktoken import encoding_for_model
 
-from processing_pipeline.constants import GeminiModel
+from processing_pipeline.constants import (
+    KB_DEDUP_SIMILARITY_THRESHOLD,
+    KB_SEARCH_MATCH_THRESHOLD,
+    GeminiModel,
+)
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -59,7 +63,7 @@ def search_knowledge_base(query: str, categories: list[str] | None = None, refer
 
     results = supabase_client.search_kb_entries(
         query_embedding=embedding,
-        match_threshold=0.3,
+        match_threshold=KB_SEARCH_MATCH_THRESHOLD,
         match_count=10,
         filter_categories=filter_categories,
         reference_date=reference_date,
@@ -140,7 +144,7 @@ def upsert_knowledge_entry(
     # Check for duplicates
     duplicates = supabase_client.find_duplicate_kb_entries(
         query_embedding=embedding,
-        similarity_threshold=0.92,
+        similarity_threshold=KB_DEDUP_SIMILARITY_THRESHOLD,
     )
 
     if duplicates:

@@ -6,6 +6,7 @@ import os
 from google.genai import errors
 
 from processing_pipeline.constants import (
+    CONFIDENCE_THRESHOLD,
     GeminiModel,
     ProcessingStatus,
 )
@@ -196,7 +197,9 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
             prompt_version=prompt_version,
         )
 
-        needs_review = not skip_review and analyzing_response["response"]["confidence_scores"]["overall"] >= 95
+        needs_review = (
+            not skip_review and analyzing_response["response"]["confidence_scores"]["overall"] >= CONFIDENCE_THRESHOLD
+        )
         status = ProcessingStatus.READY_FOR_REVIEW if needs_review else ProcessingStatus.PROCESSED
 
         update_snippet_in_supabase(
