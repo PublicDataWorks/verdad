@@ -157,7 +157,7 @@ def upsert_knowledge_entry(
             "disinformation_categories": category_list,
             "keywords": keyword_list,
             "is_time_sensitive": is_time_sensitive,
-            "created_by_model": GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025.value,
+            "created_by_model": GeminiModel.GEMINI_2_5_FLASH.value,
         }
         if related_claim:
             new_entry_data["related_claim"] = related_claim
@@ -182,7 +182,7 @@ def upsert_knowledge_entry(
             valid_from=valid_from,
             valid_until=valid_until,
             created_by_snippet=snippet_id,
-            created_by_model=GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025.value,
+            created_by_model=GeminiModel.GEMINI_2_5_FLASH.value,
         )
         action = "created"
 

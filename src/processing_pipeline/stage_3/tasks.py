@@ -133,7 +133,7 @@ def __get_metadata(snippet):
 @optional_task(log_prints=True)
 def analyze_snippet(gemini_key, audio_file, metadata, prompt_version: dict):
     main_model = GeminiModel.GEMINI_2_5_PRO
-    fallback_model = GeminiModel.GEMINI_2_5_FLASH_PREVIEW_09_2025
+    fallback_model = GeminiModel.GEMINI_2_5_FLASH
 
     try:
         print(f"Attempting analysis with {main_model}")
