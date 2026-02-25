@@ -38,8 +38,7 @@ def _coerce_int_enums_to_str(
             int_enum_paths[path] = schema["enum"]
             schema["enum"] = [str(v) for v in schema["enum"]]
             # Gemini only allows enum on STRING type properties
-            if schema.get("type") in ("integer", "number"):
-                schema["type"] = "string"
+            schema["type"] = "string"
 
     if "properties" in schema and isinstance(schema["properties"], dict):
         for prop_name, prop_schema in schema["properties"].items():
