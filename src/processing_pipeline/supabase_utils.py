@@ -453,16 +453,24 @@ class SupabaseClient:
 
     # Knowledge Base methods
 
-    def search_kb_entries(self, query_embedding, match_threshold=0.75, match_count=10, candidate_multiplier=8, filter_categories=None, reference_date=None):
+    def search_kb_entries(
+        self,
+        query_embedding: list[float],
+        match_threshold=0.75,
+        match_count=10,
+        candidate_multiplier=8,
+        filter_categories: list[str] | None = None,
+        reference_date: str | None = None,
+    ):
         params = {
             "query_embedding": query_embedding,
             "match_threshold": match_threshold,
             "match_count": match_count,
             "candidate_multiplier": candidate_multiplier,
         }
-        if filter_categories is not None:
+        if filter_categories:
             params["filter_categories"] = filter_categories
-        if reference_date is not None:
+        if reference_date:
             params["reference_date"] = reference_date
         response = self.client.rpc("search_kb_entries", params).execute()
         return response.data if response.data else []
