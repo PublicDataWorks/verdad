@@ -41,7 +41,7 @@ def _generate_kb_document(fact: str, related_claim: str | None = None, categorie
     return "\n\n".join(parts)
 
 
-def search_knowledge_base(query: str, categories: list[str] | None = None, reference_date: str | None = None) -> str:
+def search_knowledge_base(query: str, categories: list[str] | None = None, reference_date: str | None = None) -> dict:
     """Search the knowledge base for verified facts relevant to a query.
 
     Args:
@@ -50,7 +50,7 @@ def search_knowledge_base(query: str, categories: list[str] | None = None, refer
         reference_date: Optional ISO date string for temporal relevance filtering.
 
     Returns:
-        JSON string of matching knowledge base entries with sources.
+        Dictionary of matching knowledge base entries with sources.
     """
     supabase_client = _get_supabase_client()
 
@@ -59,23 +59,20 @@ def search_knowledge_base(query: str, categories: list[str] | None = None, refer
     search_document = _generate_kb_document(query)
     embedding = _generate_embedding(search_document)
 
-    filter_categories = categories if categories else None
-
     results = supabase_client.search_kb_entries(
         query_embedding=embedding,
         match_threshold=KB_SEARCH_MATCH_THRESHOLD,
         match_count=10,
-        filter_categories=filter_categories,
+        filter_categories=categories,
         reference_date=reference_date,
     )
 
     if not results:
         print(f"  [KB Search] Query: '{query}' — 0 results")
-        return json.dumps({"results": [], "message": "No relevant knowledge base entries found."})
+        return {"results": [], "message": "No relevant knowledge base entries found."}
 
     print(f"  [KB Search] Query: '{query}' — {len(results)} results (top similarity: {results[0].get('similarity', 'N/A')})")
-    return json.dumps({"results": results, "count": len(results)})
-
+    return {"results": results, "count": len(results)}
 
 def upsert_knowledge_entry(
     fact: str,
@@ -92,7 +89,7 @@ def upsert_knowledge_entry(
     source_title: str | None = None,
     source_excerpt: str | None = None,
     snippet_id: str | None = None,
-) -> str:
+) -> dict:
     """Create or update a knowledge base entry with a verified fact.
 
     If a similar entry already exists (similarity > 0.92), creates a new version.
@@ -115,30 +112,28 @@ def upsert_knowledge_entry(
         snippet_id: UUID of the snippet that triggered this KB entry.
 
     Returns:
-        JSON string with the created/updated entry details.
+        Dictionary with status and details of the created or updated KB entry.
     """
     if confidence_score < 70:
-        return json.dumps({"error": "Confidence score must be >= 70 to store in the knowledge base."})
+        return {"status": "error", "error_message": "Confidence score must be >= 70 to store in the knowledge base."}
 
     if not source_url or not source_url.strip():
-        return json.dumps({"error": "source_url is required. Every KB entry must have at least one external source."})
+        return {"status": "error", "error_message": "source_url is required. Every KB entry must have at least one external source."}
 
     if not source_name or not source_name.strip():
-        return json.dumps({"error": "source_name is required. Every KB entry must have at least one external source."})
+        return {"status": "error", "error_message": "source_name is required. Every KB entry must have at least one external source."}
 
     if not source_type or not source_type.strip():
-        return json.dumps({"error": "source_type is required. Every KB entry must have at least one external source."})
+        return {"status": "error", "error_message": "source_type is required. Every KB entry must have at least one external source."}
 
     valid_source_types = {"tier1_wire_service", "tier1_factchecker", "tier2_major_news", "tier3_regional_news", "official_source", "other"}
     if source_type not in valid_source_types:
-        return json.dumps({"error": f"Invalid source_type '{source_type}'. Must be one of: {', '.join(sorted(valid_source_types))}"})
+        return {"status": "error", "error_message": f"Invalid source_type '{source_type}'. Must be one of: {', '.join(valid_source_types)}"}
 
     supabase_client = _get_supabase_client()
-    category_list = categories or []
-    keyword_list = keywords or []
 
     # Generate embedding for deduplication check
-    document = _generate_kb_document(fact, related_claim, category_list)
+    document = _generate_kb_document(fact, related_claim, categories)
     embedding = _generate_embedding(document)
 
     # Check for duplicates
@@ -154,8 +149,8 @@ def upsert_knowledge_entry(
         new_entry_data = {
             "fact": fact,
             "confidence_score": confidence_score,
-            "disinformation_categories": category_list,
-            "keywords": keyword_list,
+            "disinformation_categories": categories,
+            "keywords": keywords,
             "is_time_sensitive": is_time_sensitive,
             "created_by_model": GeminiModel.GEMINI_2_5_FLASH.value,
         }
@@ -175,8 +170,8 @@ def upsert_knowledge_entry(
         entry = supabase_client.insert_kb_entry(
             fact=fact,
             confidence_score=confidence_score,
-            disinformation_categories=category_list,
-            keywords=keyword_list,
+            disinformation_categories=categories,
+            keywords=keywords,
             related_claim=related_claim,
             is_time_sensitive=is_time_sensitive,
             valid_from=valid_from,
@@ -216,17 +211,16 @@ def upsert_knowledge_entry(
         usage_type = "triggered_update" if duplicates else "triggered_creation"
         supabase_client.record_kb_usage(entry["id"], snippet_id, usage_type)
 
-    return json.dumps(
-        {
-            "action": action,
-            "entry_id": entry["id"],
-            "version": entry.get("version", 1),
-            "fact": fact,
-        }
-    )
+    return {
+        "status": "success",
+        "action": action,
+        "entry_id": entry["id"],
+        "version": entry.get("version", 1),
+        "fact": fact,
+    }
 
 
-def deactivate_knowledge_entry(entry_id: str, reason: str) -> str:
+def deactivate_knowledge_entry(entry_id: str, reason: str) -> dict:
     """Deactivate a knowledge base entry that is outdated or incorrect.
 
     Args:
@@ -234,12 +228,12 @@ def deactivate_knowledge_entry(entry_id: str, reason: str) -> str:
         reason: Clear explanation of why this entry is being deactivated.
 
     Returns:
-        JSON string confirming the deactivation.
+        Dictionary with status and details of the deactivation.
     """
     supabase_client = _get_supabase_client()
     result = supabase_client.deactivate_kb_entry(entry_id, reason)
 
     if result:
-        return json.dumps({"status": "deactivated", "entry_id": entry_id, "reason": reason})
+        return {"status": "deactivated", "entry_id": entry_id, "reason": reason}
     else:
-        return json.dumps({"error": f"Failed to deactivate entry {entry_id}"})
+        return {"error": f"Failed to deactivate entry {entry_id}"}

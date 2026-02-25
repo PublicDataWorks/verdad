@@ -2,7 +2,9 @@ import os
 
 from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
 from google.adk.tools.function_tool import FunctionTool
-from google.adk.tools.mcp_tool.mcp_toolset import McpToolset, StdioConnectionParams
+from google.adk.tools.mcp_tool.mcp_toolset import StdioConnectionParams
+
+from processing_pipeline.stage_4.gemini_mcp_toolset import GeminiSafeMcpToolset
 from mcp import StdioServerParameters
 
 from processing_pipeline.constants import GeminiModel
@@ -28,7 +30,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
             - review_pipeline: SequentialAgent for the full review
             - searxng_toolset: McpToolset that must be closed after use
     """
-    searxng_toolset = McpToolset(
+    searxng_toolset = GeminiSafeMcpToolset(
         connection_params=StdioConnectionParams(
             server_params=StdioServerParameters(
                 command="npx",
