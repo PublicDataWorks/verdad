@@ -401,7 +401,8 @@
                                             "description": "Classification of source reliability tier."
                                         },
                                         "publication_date": {
-                                            "type": ["string", "null"],
+                                            "type": "string",
+                                            "nullable": true,
                                             "description": "Publication date in ISO 8601 format (YYYY-MM-DD), or null if not available."
                                         },
                                         "title": {
