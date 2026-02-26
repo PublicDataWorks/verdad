@@ -3,6 +3,7 @@ import os
 from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.mcp_tool.mcp_toolset import StdioConnectionParams
+from google.genai import types
 
 from processing_pipeline.stage_4.gemini_mcp_toolset import GeminiSafeMcpToolset
 from mcp import StdioServerParameters
@@ -70,6 +71,9 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
         instruction=prompt_versions["reviewer"]["system_instruction"],
         output_key="revised_analysis",
         output_schema=ReviewAnalysisOutput,
+        generate_content_config=types.GenerateContentConfig(
+            max_output_tokens=16384,
+        ),
     )
 
     # Agent 4: KB Updater — updates knowledge base with new verified facts
