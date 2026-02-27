@@ -1,49 +1,7 @@
--- Additional optimizations identified via pg_stat_statements and Supabase Database Advisor:
--- 1. get_recording_filter_options: 1.2s avg (18 calls) - Same DISTINCT problem on audio_files
--- 2. Unindexed foreign keys causing slower joins
-
--- Optimize get_recording_filter_options to use the materialized view cache
-CREATE OR REPLACE FUNCTION get_recording_filter_options()
-RETURNS JSONB AS $$
-DECLARE
-    result JSONB;
-BEGIN
-    SELECT jsonb_build_object(
-        'states', (
-            SELECT COALESCE(jsonb_agg(value ORDER BY value), '[]'::jsonb)
-            FROM filter_options_cache
-            WHERE option_type = 'states'
-        ),
-        'radio_stations', (
-            SELECT COALESCE(jsonb_agg(
-                jsonb_build_object('name', secondary_value, 'code', value)
-            ), '[]'::jsonb)
-            FROM filter_options_cache
-            WHERE option_type = 'sources'
-        ),
-        'languages', (
-            SELECT COALESCE(jsonb_agg(value ORDER BY value), '[]'::jsonb)
-            FROM filter_options_cache
-            WHERE option_type = 'languages'
-        ),
-        'labels', (
-            SELECT COALESCE(jsonb_agg(
-                jsonb_build_object('id', l.id, 'text', l.text, 'text_spanish', l.text_spanish)
-            ), '[]'::jsonb)
-            FROM (
-                SELECT DISTINCT l.id, l.text, l.text_spanish
-                FROM labels l
-                JOIN snippet_labels sl ON sl.label = l.id
-                JOIN snippets s ON sl.snippet = s.id
-                WHERE s.status = 'Processed'
-                ORDER BY l.text
-                LIMIT 100
-            ) l
-        )
-    ) INTO result;
-    RETURN result;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Drop unused get_recording_filter_options function
+-- It was a legacy version of get_filtering_options, with 0 callers in the codebase
+-- and no calls in Supabase logs for 7+ days. The frontend uses get_filtering_options instead.
+DROP FUNCTION IF EXISTS get_recording_filter_options();
 
 -- Add indexes for unindexed foreign keys (identified by Supabase Database Advisor)
 -- These improve JOIN performance when querying related tables
