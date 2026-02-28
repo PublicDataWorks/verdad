@@ -4,6 +4,7 @@ DROP FUNCTION IF EXISTS get_snippets;
 -- Key optimizations:
 -- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
 -- 2. Uses JOINs with pre-filtered CTEs for state/source filters (avoids IN subquery on audio_files)
+-- 3. Single query with CTE chain — filter CTEs defined once, count + data in one pass
 --
 -- Performance improvements:
 -- - starredBy filter: timeout (>30s) -> <1s
@@ -81,8 +82,8 @@ BEGIN
         AND p_filter ? 'sources'
         AND jsonb_array_length(p_filter->'sources') > 0;
 
-    -- Get count using optimized query with JOINs instead of EXISTS/IN
     WITH
+    -- Pre-filter CTEs (defined once, reused by filtered_snippets)
     starred_snippet_ids AS (
         SELECT DISTINCT uss.snippet
         FROM user_star_snippets uss
@@ -112,189 +113,48 @@ BEGIN
             (filter_upvoted_by_others AND NOT filter_upvoted_by_me AND lu.upvoted_by != current_user_id)
         )
     ),
-    -- Pre-filter audio file IDs by state (uses idx_audio_files_location_state)
     state_filtered_audio_ids AS (
         SELECT id FROM audio_files
         WHERE has_state_filter
         AND location_state IN (SELECT jsonb_array_elements_text(p_filter->'states'))
     ),
-    -- Pre-filter audio file IDs by source/radio station
-    source_filtered_audio_ids AS (
-        SELECT id FROM audio_files
-        WHERE has_source_filter
-        AND radio_station_code IN (SELECT jsonb_array_elements_text(p_filter->'sources'))
-    )
-    SELECT COUNT(*) INTO total_count
-    FROM snippets s
-    LEFT JOIN audio_files a ON s.audio_file = a.id
-    LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
-    -- Use JOIN for starred filter (starts from smaller set of ~200 rows instead of 119k)
-    LEFT JOIN starred_snippet_ids ssi ON ssi.snippet = s.id
-    -- Use JOIN for labeled filter
-    LEFT JOIN labeled_snippet_ids lsi ON lsi.snippet = s.id
-    -- Use JOIN for upvoted filter
-    LEFT JOIN upvoted_snippet_ids usi ON usi.snippet = s.id
-    -- Use JOIN for state filter
-    LEFT JOIN state_filtered_audio_ids sfa ON sfa.id = s.audio_file
-    -- Use JOIN for source filter
-    LEFT JOIN source_filtered_audio_ids srfa ON srfa.id = s.audio_file
-    WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
-    AND (user_is_admin OR uhs.snippet IS NULL)
-    -- Starred filter: use JOIN result instead of EXISTS (key optimization)
-    AND (NOT has_starred_filter OR ssi.snippet IS NOT NULL)
-    -- Labeled filter: use JOIN result instead of EXISTS
-    AND (NOT has_labeled_filter OR lsi.snippet IS NOT NULL)
-    -- Upvoted filter: use JOIN result instead of EXISTS
-    AND (NOT has_upvoted_filter OR usi.snippet IS NOT NULL)
-    -- State filter: use JOIN result instead of IN subquery
-    AND (NOT has_state_filter OR sfa.id IS NOT NULL)
-    -- Source filter: use JOIN result instead of IN subquery
-    AND (NOT has_source_filter OR srfa.id IS NOT NULL)
-    AND (
-        p_filter IS NULL OR
-        NOT p_filter ? 'languages' OR
-        jsonb_array_length(p_filter->'languages') = 0 OR
-        s.language ->> 'primary_language' IN (SELECT jsonb_array_elements_text(p_filter->'languages'))
-    )
-    AND (
-        p_filter IS NULL OR
-        NOT p_filter ? 'politicalSpectrum' OR
-        (
-            CASE
-                WHEN p_filter->>'politicalSpectrum' = 'left' THEN (s.political_leaning->>'score')::FLOAT BETWEEN -1.0 AND -0.7
-                WHEN p_filter->>'politicalSpectrum' = 'center-left' THEN (s.political_leaning->>'score')::FLOAT BETWEEN -0.7 AND -0.3
-                WHEN p_filter->>'politicalSpectrum' = 'center' THEN (s.political_leaning->>'score')::FLOAT BETWEEN -0.3 AND 0.3
-                WHEN p_filter->>'politicalSpectrum' = 'center-right' THEN (s.political_leaning->>'score')::FLOAT BETWEEN 0.3 AND 0.7
-                WHEN p_filter->>'politicalSpectrum' = 'right' THEN (s.political_leaning->>'score')::FLOAT BETWEEN 0.7 AND 1.0
-                ELSE TRUE
-            END
-        )
-    )
-    AND (
-        p_filter IS NULL OR
-        NOT p_filter ? 'labels' OR
-        jsonb_array_length(p_filter->'labels') = 0 OR
-        EXISTS (SELECT 1 FROM snippet_labels sl WHERE sl.snippet = s.id AND sl.label IN (SELECT (jsonb_array_elements_text(p_filter->'labels'))::UUID))
-    )
-    AND (
-        trimmed_search_term = '' OR (
-            (s.title ->> 'english') &@ trimmed_search_term
-            OR (s.title ->> 'spanish') &@ trimmed_search_term
-            OR (s.explanation ->> 'english') &@ trimmed_search_term
-            OR (s.explanation ->> 'spanish') &@ trimmed_search_term
-            OR (s.summary ->> 'english') &@ trimmed_search_term
-            OR (s.summary ->> 'spanish') &@ trimmed_search_term
-            OR s.transcription &@ trimmed_search_term
-            OR s.translation &@ trimmed_search_term
-        )
-    );
-
-    -- Now get the actual data with pagination using the same optimization
-    WITH
-    starred_snippet_ids AS (
-        SELECT DISTINCT uss.snippet
-        FROM user_star_snippets uss
-        WHERE has_starred_filter AND (
-            (starred_by_me AND starred_by_others) OR
-            (starred_by_me AND NOT starred_by_others AND uss."user" = current_user_id) OR
-            (starred_by_others AND NOT starred_by_me AND uss."user" != current_user_id)
-        )
-    ),
-    labeled_snippet_ids AS (
-        SELECT DISTINCT sl.snippet
-        FROM snippet_labels sl
-        JOIN label_upvotes lu ON lu.snippet_label = sl.id
-        WHERE has_labeled_filter AND (
-            (labeled_by_me AND labeled_by_others) OR
-            (labeled_by_me AND NOT labeled_by_others AND lu.upvoted_by = current_user_id) OR
-            (labeled_by_others AND NOT labeled_by_me AND lu.upvoted_by != current_user_id)
-        )
-    ),
-    upvoted_snippet_ids AS (
-        SELECT DISTINCT sl.snippet
-        FROM snippet_labels sl
-        JOIN label_upvotes lu ON lu.snippet_label = sl.id
-        WHERE has_upvoted_filter AND (
-            (filter_upvoted_by_me AND filter_upvoted_by_others) OR
-            (filter_upvoted_by_me AND NOT filter_upvoted_by_others AND lu.upvoted_by = current_user_id) OR
-            (filter_upvoted_by_others AND NOT filter_upvoted_by_me AND lu.upvoted_by != current_user_id)
-        )
-    ),
-    -- Pre-filter audio file IDs by state
-    state_filtered_audio_ids AS (
-        SELECT id FROM audio_files
-        WHERE has_state_filter
-        AND location_state IN (SELECT jsonb_array_elements_text(p_filter->'states'))
-    ),
-    -- Pre-filter audio file IDs by source
     source_filtered_audio_ids AS (
         SELECT id FROM audio_files
         WHERE has_source_filter
         AND radio_station_code IN (SELECT jsonb_array_elements_text(p_filter->'sources'))
     ),
+    -- Lightweight filtered IDs (for count + pagination, no heavy columns)
     filtered_snippets AS (
         SELECT
             s.id,
             s.recorded_at,
             s.user_last_activity,
-            s.duration,
-            s.start_time,
-            s.end_time,
-            s.file_path,
-            s.file_size,
-            s.political_leaning,
-            CASE WHEN p_language = 'spanish' THEN s.title ->> 'spanish' ELSE s.title ->> 'english' END AS title,
-            CASE WHEN p_language = 'spanish' THEN s.summary ->> 'spanish' ELSE s.summary ->> 'english' END AS summary,
-            CASE WHEN p_language = 'spanish' THEN s.explanation ->> 'spanish' ELSE s.explanation ->> 'english' END AS explanation,
-            s.confidence_scores,
-            s.language,
-            s.context,
             s.upvote_count,
             s.comment_count,
-            s.like_count,
-            jsonb_build_object(
-                'id', a.id,
-                'radio_station_name', a.radio_station_name,
-                'radio_station_code', a.radio_station_code,
-                'location_state', a.location_state,
-                'location_city', a.location_city
-            ) AS audio_file,
-            us.id IS NOT NULL AS starred_by_user,
-            ul.value AS user_like_status,
-            uhs.snippet IS NOT NULL AS hidden
+            COALESCE(s.like_count, 0) AS like_count
         FROM snippets s
-        LEFT JOIN audio_files a ON s.audio_file = a.id
-        LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
-        LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
         LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
-        -- Use JOIN for starred filter (starts from smaller set)
         LEFT JOIN starred_snippet_ids ssi ON ssi.snippet = s.id
-        -- Use JOIN for labeled filter
         LEFT JOIN labeled_snippet_ids lsi ON lsi.snippet = s.id
-        -- Use JOIN for upvoted filter
         LEFT JOIN upvoted_snippet_ids usi ON usi.snippet = s.id
-        -- Use JOIN for state filter
         LEFT JOIN state_filtered_audio_ids sfa ON sfa.id = s.audio_file
-        -- Use JOIN for source filter
         LEFT JOIN source_filtered_audio_ids srfa ON srfa.id = s.audio_file
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (user_is_admin OR uhs.snippet IS NULL)
-        -- Starred filter: use JOIN result instead of EXISTS
         AND (NOT has_starred_filter OR ssi.snippet IS NOT NULL)
-        -- Labeled filter: use JOIN result instead of EXISTS
         AND (NOT has_labeled_filter OR lsi.snippet IS NOT NULL)
-        -- Upvoted filter: use JOIN result instead of EXISTS
         AND (NOT has_upvoted_filter OR usi.snippet IS NOT NULL)
-        -- State filter: use JOIN result
         AND (NOT has_state_filter OR sfa.id IS NOT NULL)
-        -- Source filter: use JOIN result
         AND (NOT has_source_filter OR srfa.id IS NOT NULL)
         AND (
-            p_filter IS NULL OR NOT p_filter ? 'languages' OR jsonb_array_length(p_filter->'languages') = 0 OR
+            p_filter IS NULL OR
+            NOT p_filter ? 'languages' OR
+            jsonb_array_length(p_filter->'languages') = 0 OR
             s.language ->> 'primary_language' IN (SELECT jsonb_array_elements_text(p_filter->'languages'))
         )
         AND (
-            p_filter IS NULL OR NOT p_filter ? 'politicalSpectrum' OR
+            p_filter IS NULL OR
+            NOT p_filter ? 'politicalSpectrum' OR
             (
                 CASE
                     WHEN p_filter->>'politicalSpectrum' = 'left' THEN (s.political_leaning->>'score')::FLOAT BETWEEN -1.0 AND -0.7
@@ -307,8 +167,17 @@ BEGIN
             )
         )
         AND (
-            p_filter IS NULL OR NOT p_filter ? 'labels' OR jsonb_array_length(p_filter->'labels') = 0 OR
-            EXISTS (SELECT 1 FROM snippet_labels sl WHERE sl.snippet = s.id AND sl.label IN (SELECT (jsonb_array_elements_text(p_filter->'labels'))::UUID))
+            p_filter IS NULL OR
+            NOT p_filter ? 'labels' OR
+            jsonb_array_length(p_filter->'labels') = 0 OR
+            EXISTS (
+                SELECT 1
+                FROM snippet_labels sl
+                WHERE sl.snippet = s.id
+                AND sl.label IN (
+                    SELECT (jsonb_array_elements_text(p_filter->'labels'))::UUID
+                )
+            )
         )
         AND (
             trimmed_search_term = '' OR (
@@ -322,14 +191,21 @@ BEGIN
                 OR s.translation &@ trimmed_search_term
             )
         )
+    ),
+    total_count_cte AS (
+        SELECT COUNT(*) AS cnt FROM filtered_snippets
+    ),
+    paginated_ids AS (
+        SELECT id
+        FROM filtered_snippets fs
         ORDER BY
             CASE
-                WHEN p_order_by = 'upvotes' THEN s.upvote_count + COALESCE(s.like_count, 0)
-                WHEN p_order_by = 'comments' THEN s.comment_count
+                WHEN p_order_by = 'upvotes' THEN fs.upvote_count + fs.like_count
+                WHEN p_order_by = 'comments' THEN fs.comment_count
                 WHEN p_order_by = 'activities' THEN
-                    CASE WHEN s.user_last_activity IS NULL THEN 0 ELSE EXTRACT(EPOCH FROM s.user_last_activity) END
+                    CASE WHEN fs.user_last_activity IS NULL THEN 0 ELSE EXTRACT(EPOCH FROM fs.user_last_activity) END
             END DESC,
-            s.recorded_at DESC
+            fs.recorded_at DESC
         LIMIT page_size
         OFFSET page * page_size
     ),
@@ -343,46 +219,111 @@ BEGIN
         FROM snippet_labels sl
         JOIN labels l ON l.id = sl.label
         LEFT JOIN label_upvotes lu ON lu.snippet_label = sl.id AND lu.upvoted_by = current_user_id
-        WHERE sl.snippet IN (SELECT id FROM filtered_snippets)
+        WHERE sl.snippet IN (SELECT id FROM paginated_ids)
     ),
-    snippets_with_labels AS (
+    paginated_snippets AS (
         SELECT
-            fs.*,
+            s.id,
+            s.recorded_at,
+            s.user_last_activity,
+            s.duration,
+            s.start_time,
+            s.end_time,
+            s.file_path,
+            s.file_size,
+            s.political_leaning,
+            CASE
+                WHEN p_language = 'spanish' THEN s.title ->> 'spanish'
+                ELSE s.title ->> 'english'
+            END AS title,
+            CASE
+                WHEN p_language = 'spanish' THEN s.summary ->> 'spanish'
+                ELSE s.summary ->> 'english'
+            END AS summary,
+            CASE
+                WHEN p_language = 'spanish' THEN s.explanation ->> 'spanish'
+                ELSE s.explanation ->> 'english'
+            END AS explanation,
+            s.confidence_scores,
+            s.language,
+            s.context,
+            s.upvote_count,
+            s.comment_count,
+            jsonb_build_object(
+                'id', a.id,
+                'radio_station_name', a.radio_station_name,
+                'radio_station_code', a.radio_station_code,
+                'location_state', a.location_state,
+                'location_city', a.location_city
+            ) AS audio_file,
+            us.id IS NOT NULL AS starred_by_user,
+            ul.value AS user_like_status,
+            uhs.snippet IS NOT NULL AS hidden,
+            COALESCE(s.like_count, 0) AS like_count,
+            COALESCE(s.dislike_count, 0) AS dislike_count,
             COALESCE(ld.labels, '[]'::jsonb) AS labels
-        FROM filtered_snippets fs
+        FROM paginated_ids p
+        JOIN snippets s ON s.id = p.id
+        LEFT JOIN audio_files a ON s.audio_file = a.id
+        LEFT JOIN user_star_snippets us ON us.snippet = s.id AND us."user" = current_user_id
+        LEFT JOIN user_like_snippets ul ON ul.snippet = s.id AND ul."user" = current_user_id
+        LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
         LEFT JOIN (
-            SELECT snippet_id, jsonb_agg(jsonb_build_object('id', id, 'text', text, 'upvote_count', upvote_count, 'upvoted_by_me', upvoted_by_me)) as labels
+            SELECT
+                snippet_id,
+                jsonb_agg(
+                    jsonb_build_object(
+                        'id', id,
+                        'text', text,
+                        'upvote_count', upvote_count,
+                        'upvoted_by_me', upvoted_by_me
+                    )
+                ) as labels
             FROM label_summary
             GROUP BY snippet_id
-        ) ld ON fs.id = ld.snippet_id
+        ) ld ON p.id = ld.snippet_id
+        ORDER BY
+            CASE
+                WHEN p_order_by = 'upvotes' THEN s.upvote_count + COALESCE(s.like_count, 0)
+                WHEN p_order_by = 'comments' THEN s.comment_count
+                WHEN p_order_by = 'activities' THEN
+                    CASE
+                        WHEN s.user_last_activity IS NULL THEN 0
+                        ELSE EXTRACT(EPOCH FROM s.user_last_activity)
+                    END
+            END DESC,
+            s.recorded_at DESC
     )
-    SELECT jsonb_agg(
-        jsonb_build_object(
-            'id', s.id,
-            'recorded_at', s.recorded_at,
-            'user_last_activity', s.user_last_activity,
-            'duration', s.duration,
-            'start_time', s.start_time,
-            'end_time', s.end_time,
-            'file_path', s.file_path,
-            'file_size', s.file_size,
-            'political_leaning', s.political_leaning,
-            'title', s.title,
-            'summary', s.summary,
-            'explanation', s.explanation,
-            'confidence_scores', s.confidence_scores,
-            'language', s.language,
-            'context', s.context,
-            'labels', s.labels,
-            'audio_file', s.audio_file,
-            'starred_by_user', s.starred_by_user,
-            'user_like_status', s.user_like_status,
-            'hidden', s.hidden,
-            'like_count', COALESCE(s.like_count, 0),
-            'dislike_count', 0
-        )
-    ) INTO result
-    FROM snippets_with_labels s;
+    SELECT
+        jsonb_agg(
+            jsonb_build_object(
+                'id', ps.id,
+                'recorded_at', ps.recorded_at,
+                'user_last_activity', ps.user_last_activity,
+                'duration', ps.duration,
+                'start_time', ps.start_time,
+                'end_time', ps.end_time,
+                'file_path', ps.file_path,
+                'file_size', ps.file_size,
+                'political_leaning', ps.political_leaning,
+                'title', ps.title,
+                'summary', ps.summary,
+                'explanation', ps.explanation,
+                'confidence_scores', ps.confidence_scores,
+                'language', ps.language,
+                'context', ps.context,
+                'labels', ps.labels,
+                'audio_file', ps.audio_file,
+                'starred_by_user', ps.starred_by_user,
+                'user_like_status', ps.user_like_status,
+                'hidden', ps.hidden,
+                'like_count', ps.like_count,
+                'dislike_count', ps.dislike_count
+            )
+        ),
+        (SELECT cnt FROM total_count_cte)
+    INTO result, total_count
+    FROM paginated_snippets ps;
 
     total_pages := CEIL(total_count::FLOAT / page_size);
 
