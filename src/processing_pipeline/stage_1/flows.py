@@ -10,7 +10,7 @@ from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus, PromptStage
-
+from processing_pipeline.stage_1.constants import Stage1SubStage
 from processing_pipeline.stage_1.tasks import (
     delete_stage_1_llm_responses,
     disinformation_detection_with_gemini,
@@ -67,10 +67,10 @@ def initial_disinformation_detection(audio_file_id, limit):
     gemini_client = _create_gemini_client()
 
     # Load prompt versions
-    initial_transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1_INITIAL_TRANSCRIPTION)
-    initial_detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1_INITIAL_DETECTION)
-    transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.GEMINI_TIMESTAMPED_TRANSCRIPTION)
-    detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1)
+    initial_transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.INITIAL_TRANSCRIPTION)
+    initial_detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.INITIAL_DETECTION)
+    transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.TIMESTAMPED_TRANSCRIPTION)
+    detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.DISINFORMATION_DETECTION)
 
     # Track the number of audio files processed
     processed_audio_files = 0
@@ -145,7 +145,7 @@ def redo_main_detection(stage_1_llm_response_ids):
     gemini_client = _create_gemini_client()
 
     # Load prompt version
-    detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1)
+    detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.DISINFORMATION_DETECTION)
 
     for id in stage_1_llm_response_ids:
         stage_1_llm_response = fetch_stage_1_llm_response_by_id(supabase_client, id)
@@ -211,8 +211,8 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
     gemini_client = _create_gemini_client()
 
     # Load prompt versions
-    transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.GEMINI_TIMESTAMPED_TRANSCRIPTION)
-    detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1)
+    transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.TIMESTAMPED_TRANSCRIPTION)
+    detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.DISINFORMATION_DETECTION)
 
     for id in stage_1_llm_response_ids:
         stage_1_llm_response = fetch_stage_1_llm_response_by_id(supabase_client, id)

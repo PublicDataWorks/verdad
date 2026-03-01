@@ -1,3 +1,5 @@
+from enum import StrEnum
+
 from supabase import create_client
 from datetime import datetime, timezone
 from processing_pipeline.constants import PromptStage
@@ -105,17 +107,20 @@ class SupabaseClient:
         )
         return response.data[0]
 
-    def get_active_prompt(self, stage: PromptStage):
-        response = (
+    def get_active_prompt(self, stage: PromptStage, sub_stage: StrEnum | None = None):
+        query = (
             self.client.table("prompt_versions")
             .select("*")
             .eq("stage", stage.value)
             .eq("is_active", True)
-            .limit(1)
-            .execute()
         )
+        if sub_stage is not None:
+            query = query.eq("sub_stage", sub_stage.value)
+        else:
+            query = query.is_("sub_stage", "null")
+        response = query.limit(1).execute()
         if not response.data:
-            raise ValueError(f"No active prompt version found for stage: {stage}")
+            raise ValueError(f"No active prompt version found for stage: {stage}, sub_stage: {sub_stage}")
         return response.data[0]
 
     def get_prompt_by_id(self, prompt_version_id: str):
