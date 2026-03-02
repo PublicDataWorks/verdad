@@ -1,5 +1,3 @@
-DROP FUNCTION IF EXISTS get_snippets;
-
 -- Optimized get_snippets function
 -- Key optimizations:
 -- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
@@ -12,6 +10,7 @@ DROP FUNCTION IF EXISTS get_snippets;
 -- - upvotedBy filter: 6.7s -> <1s
 -- - state filter: ~134ms -> <50ms
 -- - source filter: similar improvement
+-- - politicalSpectrum filter: uses existing index, no change needed
 
 CREATE OR REPLACE FUNCTION get_snippets (
     p_language text,
