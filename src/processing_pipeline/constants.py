@@ -41,15 +41,8 @@ class ProcessingStatus(StrEnum):
 
 class PromptStage(StrEnum):
     STAGE_1 = "stage_1"
-    STAGE_1_INITIAL_TRANSCRIPTION = "stage_1_initial_transcription"
-    STAGE_1_INITIAL_DETECTION = "stage_1_initial_detection"
     STAGE_3 = "stage_3"
     STAGE_4 = "stage_4"
-    STAGE_4_KB_RESEARCHER = "stage_4_kb_researcher"
-    STAGE_4_WEB_RESEARCHER = "stage_4_web_researcher"
-    STAGE_4_REVIEWER = "stage_4_reviewer"
-    STAGE_4_KB_UPDATER = "stage_4_kb_updater"
-    GEMINI_TIMESTAMPED_TRANSCRIPTION = "gemini_timestamped_transcription"
 
 
 def get_user_prompt_for_stage_3():

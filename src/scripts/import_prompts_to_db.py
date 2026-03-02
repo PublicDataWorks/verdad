@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 from src.processing_pipeline.constants import PromptStage
+from src.processing_pipeline.stage_1.constants import Stage1SubStage
+from src.processing_pipeline.stage_4.constants import Stage4SubStage
 
 load_dotenv()
 
@@ -25,39 +27,39 @@ ALLOWED_PROMPT_DIR = "prompts"
 MAX_DESCRIPTION_LENGTH = 500
 
 PROMPT_MAPPING = {
-    PromptStage.STAGE_1: {
+    (PromptStage.STAGE_1, Stage1SubStage.DISINFORMATION_DETECTION): {
         "system_instruction": "prompts/stage_1/main/detection_system_instruction.md",
         "user_prompt": "prompts/stage_1/main/detection_user_prompt.md",
         "output_schema": "prompts/stage_1/main/detection_output_schema.json",
     },
-    PromptStage.STAGE_1_INITIAL_TRANSCRIPTION: {
+    (PromptStage.STAGE_1, Stage1SubStage.INITIAL_TRANSCRIPTION): {
         "user_prompt": "prompts/stage_1/preprocess/initial_transcription_user_prompt.md",
         "output_schema": "prompts/stage_1/preprocess/initial_transcription_output_schema.json",
     },
-    PromptStage.STAGE_1_INITIAL_DETECTION: {
+    (PromptStage.STAGE_1, Stage1SubStage.INITIAL_DETECTION): {
         "system_instruction": "prompts/stage_1/preprocess/initial_detection_system_instruction.md",
         "user_prompt": "prompts/stage_1/preprocess/initial_detection_user_prompt.md",
         "output_schema": "prompts/stage_1/preprocess/initial_detection_output_schema.json",
     },
-    PromptStage.STAGE_3: {
+    (PromptStage.STAGE_3, None): {
         "system_instruction": "prompts/stage_3/system_instruction.md",
         "user_prompt": "prompts/stage_3/analysis_prompt.md",
         "output_schema": "prompts/stage_3/output_schema.json",
     },
-    PromptStage.STAGE_4_KB_RESEARCHER: {
+    (PromptStage.STAGE_4, Stage4SubStage.KB_RESEARCHER): {
         "system_instruction": "prompts/stage_4/kb_researcher_instruction.md",
     },
-    PromptStage.STAGE_4_WEB_RESEARCHER: {
+    (PromptStage.STAGE_4, Stage4SubStage.WEB_RESEARCHER): {
         "system_instruction": "prompts/stage_4/web_researcher_instruction.md",
     },
-    PromptStage.STAGE_4_REVIEWER: {
+    (PromptStage.STAGE_4, Stage4SubStage.REVIEWER): {
         "system_instruction": "prompts/stage_4/reviewer_instruction.md",
         "output_schema": "prompts/stage_4/output_schema.json",
     },
-    PromptStage.STAGE_4_KB_UPDATER: {
+    (PromptStage.STAGE_4, Stage4SubStage.KB_UPDATER): {
         "system_instruction": "prompts/stage_4/kb_updater_instruction.md",
     },
-    PromptStage.GEMINI_TIMESTAMPED_TRANSCRIPTION: {
+    (PromptStage.STAGE_1, Stage1SubStage.TIMESTAMPED_TRANSCRIPTION): {
         "system_instruction": "prompts/stage_1/main/timestamped_transcription_system_instruction.md",
         "user_prompt": "prompts/stage_1/main/timestamped_transcription_user_prompt.md",
         "output_schema": "prompts/stage_1/main/timestamped_transcription_output_schema.json",
@@ -84,18 +86,35 @@ def validate_description(description: str) -> str:
     return description
 
 
-def check_files_exist(stages: list) -> tuple[bool, list[str], list[str]]:
+def _stage_label(key):
+    """Format a (stage, sub_stage) tuple as a display string."""
+    stage, sub_stage = key
+    if sub_stage is None:
+        return stage.value
+    return f"{stage.value}/{sub_stage.value}"
+
+
+def _parse_stage_label(label: str):
+    """Parse a display string back to a (stage, sub_stage) tuple."""
+    for key in PROMPT_MAPPING:
+        if _stage_label(key) == label:
+            return key
+    return None
+
+
+def check_files_exist(keys: list) -> tuple[bool, list[str], list[str]]:
     missing_files = []
     unsafe_paths = []
-    for stage in stages:
-        if stage not in PROMPT_MAPPING:
+    for key in keys:
+        if key not in PROMPT_MAPPING:
             continue
-        files = PROMPT_MAPPING[stage]
+        files = PROMPT_MAPPING[key]
+        label = _stage_label(key)
         for file_type, path in files.items():
             if not validate_path_safety(path):
-                unsafe_paths.append(f"{stage}/{file_type}: {path}")
+                unsafe_paths.append(f"{label}/{file_type}: {path}")
             elif not os.path.exists(path):
-                missing_files.append(f"{stage}/{file_type}: {path}")
+                missing_files.append(f"{label}/{file_type}: {path}")
     return len(missing_files) == 0 and len(unsafe_paths) == 0, missing_files, unsafe_paths
 
 
@@ -130,8 +149,8 @@ def import_prompts(
         raise ValueError(f"Invalid version format: '{version}'. Must be semver format (e.g., 1.0.0)")
 
     description = validate_description(description)
-    stages_to_import = stages if stages else list(PROMPT_MAPPING.keys())
-    all_valid, missing_files, unsafe_paths = check_files_exist(stages_to_import)
+    keys_to_import = stages if stages else list(PROMPT_MAPPING.keys())
+    all_valid, missing_files, unsafe_paths = check_files_exist(keys_to_import)
 
     if unsafe_paths:
         print("Error: The following paths are outside the allowed directory:")
@@ -162,13 +181,15 @@ def import_prompts(
     success_count = 0
     error_count = 0
 
-    for stage in stages_to_import:
-        if stage not in PROMPT_MAPPING:
-            print(f"Warning: Unknown stage '{stage}', skipping...")
+    for key in keys_to_import:
+        if key not in PROMPT_MAPPING:
+            print(f"Warning: Unknown key '{key}', skipping...")
             continue
 
-        files = PROMPT_MAPPING[stage]
-        print(f"Importing {stage} v{version}...")
+        stage, sub_stage = key
+        label = _stage_label(key)
+        files = PROMPT_MAPPING[key]
+        print(f"Importing {label} v{version}...")
 
         data = {}
 
@@ -192,7 +213,7 @@ def import_prompts(
                 print(f"  Warning: {files['output_schema']} not found")
 
         if dry_run:
-            print(f"  Would create version {version} for {stage}")
+            print(f"  Would create version {version} for {label}")
             print(f"    - System instruction: {len(data.get('system_instruction', '')) or 'N/A'} chars")
             print(f"    - User prompt: {len(data.get('user_prompt', '')) or 'N/A'} chars")
             print(f"    - Output schema: {'Yes' if data.get('output_schema') else 'No'}")
@@ -205,7 +226,7 @@ def import_prompts(
             response = client.rpc(
                 "upsert_prompt_version",
                 {
-                    "p_stage": stage,
+                    "p_stage": stage.value,
                     "p_version": version,
                     "p_description": description,
                     "p_created_by": "import_script",
@@ -213,6 +234,7 @@ def import_prompts(
                     "p_user_prompt": data.get("user_prompt"),
                     "p_output_schema": data.get("output_schema"),
                     "p_set_active": set_active,
+                    "p_sub_stage": sub_stage.value if sub_stage else None,
                 },
             ).execute()
 
@@ -220,18 +242,18 @@ def import_prompts(
                 result = response.data
                 print(f"  Created prompt version: {result['id']}")
                 if set_active:
-                    print(f"  Set as active version for {stage}")
+                    print(f"  Set as active version for {label}")
                 success_count += 1
             else:
-                print(f"  Error: No data returned for {stage}")
+                print(f"  Error: No data returned for {label}")
                 error_count += 1
 
         except Exception as e:
-            print(f"  Error creating prompt version for {stage}: {e}")
+            print(f"  Error creating prompt version for {label}: {e}")
             error_count += 1
 
     if dry_run:
-        print(f"\n=== DRY RUN COMPLETE - No changes were made ({len(stages_to_import)} stages previewed) ===")
+        print(f"\n=== DRY RUN COMPLETE - No changes were made ({len(keys_to_import)} entries previewed) ===")
     else:
         print(f"\nImport complete! Success: {success_count}, Errors: {error_count}")
 
@@ -248,8 +270,9 @@ def list_versions():
 
     response = (
         client.table("prompt_versions")
-        .select("id, stage, version, is_active, description, created_at")
+        .select("id, stage, sub_stage, version, is_active, description, created_at")
         .order("stage")
+        .order("sub_stage")
         .order("created_at", desc=True)
         .execute()
     )
@@ -259,16 +282,17 @@ def list_versions():
         return
 
     print("\nPrompt Versions:")
-    print("-" * 100)
-    print(f"{'Stage':<40} {'Version':<10} {'Active':<8} {'Description':<30}")
-    print("-" * 100)
+    print("-" * 120)
+    print(f"{'Stage':<15} {'Sub Stage':<30} {'Version':<10} {'Active':<8} {'Description':<30}")
+    print("-" * 120)
 
     for row in response.data:
         active = "Yes" if row["is_active"] else "No"
         desc = (row["description"] or "")[:30]
-        print(f"{row['stage']:<40} {row['version']:<10} {active:<8} {desc:<30}")
+        sub_stage = row.get("sub_stage") or "-"
+        print(f"{row['stage']:<15} {sub_stage:<30} {row['version']:<10} {active:<8} {desc:<30}")
 
-    print("-" * 100)
+    print("-" * 120)
 
 
 def main():
@@ -287,8 +311,8 @@ def main():
     import_parser.add_argument(
         "--stages",
         nargs="+",
-        help="Specific stages to import (default: all)",
-        choices=list(PROMPT_MAPPING.keys()),
+        help="Specific stages to import (default: all). Use format: stage/sub_stage (e.g., stage_1/initial_detection)",
+        choices=[_stage_label(k) for k in PROMPT_MAPPING],
     )
     import_parser.add_argument(
         "--dry-run",
@@ -302,11 +326,12 @@ def main():
     args = parser.parse_args()
 
     if args.command == "import":
+        stages = [_parse_stage_label(s) for s in args.stages] if args.stages else None
         import_prompts(
             version=args.version,
             description=args.description,
             set_active=not args.no_active,
-            stages=args.stages,
+            stages=stages,
             dry_run=args.dry_run,
         )
     elif args.command == "list":

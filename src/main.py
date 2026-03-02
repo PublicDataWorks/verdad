@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 from processing_pipeline.constants import GeminiModel, PromptStage
+from processing_pipeline.stage_4.constants import Stage4SubStage
 from processing_pipeline.stage_4 import Stage4Executor
 from processing_pipeline.stage_4.tasks import prepare_snippet_for_review
 from processing_pipeline.supabase_utils import SupabaseClient
@@ -28,10 +29,10 @@ async def test_stage_4():
     )
 
     prompt_versions = {
-        "kb_researcher": supabase_client.get_active_prompt(PromptStage.STAGE_4_KB_RESEARCHER),
-        "web_researcher": supabase_client.get_active_prompt(PromptStage.STAGE_4_WEB_RESEARCHER),
-        "reviewer": supabase_client.get_active_prompt(PromptStage.STAGE_4_REVIEWER),
-        "kb_updater": supabase_client.get_active_prompt(PromptStage.STAGE_4_KB_UPDATER),
+        "kb_researcher": supabase_client.get_active_prompt(PromptStage.STAGE_4, Stage4SubStage.KB_RESEARCHER),
+        "web_researcher": supabase_client.get_active_prompt(PromptStage.STAGE_4, Stage4SubStage.WEB_RESEARCHER),
+        "reviewer": supabase_client.get_active_prompt(PromptStage.STAGE_4, Stage4SubStage.REVIEWER),
+        "kb_updater": supabase_client.get_active_prompt(PromptStage.STAGE_4, Stage4SubStage.KB_UPDATER),
     }
 
     response, grounding_metadata = await Stage4Executor.run_async(

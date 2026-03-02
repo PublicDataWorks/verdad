@@ -4,6 +4,7 @@ import os
 from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import PromptStage
+from processing_pipeline.stage_4.constants import Stage4SubStage
 from processing_pipeline.stage_4.tasks import (
     fetch_a_ready_for_review_snippet_from_supabase,
     fetch_a_specific_snippet_from_supabase,
@@ -28,10 +29,10 @@ async def analysis_review(snippet_ids, repeat):
 
     # Load prompt versions from DB
     prompt_versions = {
-        "kb_researcher": supabase_client.get_active_prompt(PromptStage.STAGE_4_KB_RESEARCHER),
-        "web_researcher": supabase_client.get_active_prompt(PromptStage.STAGE_4_WEB_RESEARCHER),
-        "reviewer": supabase_client.get_active_prompt(PromptStage.STAGE_4_REVIEWER),
-        "kb_updater": supabase_client.get_active_prompt(PromptStage.STAGE_4_KB_UPDATER),
+        "kb_researcher": supabase_client.get_active_prompt(PromptStage.STAGE_4, Stage4SubStage.KB_RESEARCHER),
+        "web_researcher": supabase_client.get_active_prompt(PromptStage.STAGE_4, Stage4SubStage.WEB_RESEARCHER),
+        "reviewer": supabase_client.get_active_prompt(PromptStage.STAGE_4, Stage4SubStage.REVIEWER),
+        "kb_updater": supabase_client.get_active_prompt(PromptStage.STAGE_4, Stage4SubStage.KB_UPDATER),
     }
 
     if snippet_ids:
