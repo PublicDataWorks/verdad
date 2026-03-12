@@ -53,8 +53,7 @@ CREATE TABLE IF NOT EXISTS public.kb_entries (
 
     -- Provenance
     created_by_snippet UUID REFERENCES public.snippets(id) ON DELETE SET NULL,
-    created_by_model TEXT,
-    notes TEXT
+    created_by_model TEXT
 );
 
 -- Table 2: kb_entry_sources — Evidence for each entry
@@ -105,7 +104,6 @@ CREATE TABLE IF NOT EXISTS public.kb_entry_snippet_usage (
     usage_type TEXT NOT NULL
         CHECK (usage_type IN ('used_for_review', 'triggered_creation', 'triggered_update')),
     similarity_score FLOAT,
-    notes TEXT,
     UNIQUE (kb_entry, snippet, usage_type)
 );
 

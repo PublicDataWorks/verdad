@@ -488,7 +488,7 @@ class SupabaseClient:
         }).execute()
         return response.data if response.data else []
 
-    def insert_kb_entry(self, fact, confidence_score, disinformation_categories=None, keywords=None, related_claim=None, valid_from=None, valid_until=None, is_time_sensitive=False, created_by_snippet=None, created_by_model=None, notes=None):
+    def insert_kb_entry(self, fact, confidence_score, disinformation_categories=None, keywords=None, related_claim=None, valid_from=None, valid_until=None, is_time_sensitive=False, created_by_snippet=None, created_by_model=None):
         data = {
             "fact": fact,
             "confidence_score": confidence_score,
@@ -506,8 +506,6 @@ class SupabaseClient:
             data["created_by_snippet"] = created_by_snippet
         if created_by_model is not None:
             data["created_by_model"] = created_by_model
-        if notes is not None:
-            data["notes"] = notes
         response = self.client.table("kb_entries").insert(data).execute()
         return response.data[0]
 
@@ -605,7 +603,7 @@ class SupabaseClient:
         response = self.client.table("kb_entry_embeddings").delete().eq("kb_entry", kb_entry_id).execute()
         return response.data
 
-    def record_kb_usage(self, kb_entry_id, snippet_id, usage_type, similarity_score=None, notes=None):
+    def record_kb_usage(self, kb_entry_id, snippet_id, usage_type, similarity_score=None):
         data = {
             "kb_entry": kb_entry_id,
             "snippet": snippet_id,
@@ -613,8 +611,6 @@ class SupabaseClient:
         }
         if similarity_score is not None:
             data["similarity_score"] = similarity_score
-        if notes is not None:
-            data["notes"] = notes
         # Upsert to handle unique constraint
         existing = (
             self.client.table("kb_entry_snippet_usage")
