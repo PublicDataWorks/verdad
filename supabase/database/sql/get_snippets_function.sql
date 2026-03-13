@@ -123,6 +123,20 @@ BEGIN
         WHERE has_source_filter
         AND radio_station_code IN (SELECT jsonb_array_elements_text(p_filter->'sources'))
     ),
+    search_matched_ids AS (
+        SELECT s.id
+        FROM snippets s
+        WHERE trimmed_search_term != '' AND (
+            (s.title ->> 'english') &@ trimmed_search_term
+            OR (s.title ->> 'spanish') &@ trimmed_search_term
+            OR (s.explanation ->> 'english') &@ trimmed_search_term
+            OR (s.explanation ->> 'spanish') &@ trimmed_search_term
+            OR (s.summary ->> 'english') &@ trimmed_search_term
+            OR (s.summary ->> 'spanish') &@ trimmed_search_term
+            OR s.transcription &@ trimmed_search_term
+            OR s.translation &@ trimmed_search_term
+        )
+    ),
     -- Lightweight filtered IDs (for count + pagination, no heavy columns)
     filtered_snippets AS (
         SELECT
@@ -139,6 +153,7 @@ BEGIN
         LEFT JOIN upvoted_snippet_ids usi ON usi.snippet = s.id
         LEFT JOIN state_filtered_audio_ids sfa ON sfa.id = s.audio_file
         LEFT JOIN source_filtered_audio_ids srfa ON srfa.id = s.audio_file
+        LEFT JOIN search_matched_ids smi ON smi.id = s.id
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         AND (user_is_admin OR uhs.snippet IS NULL)
         AND (NOT has_starred_filter OR ssi.snippet IS NOT NULL)
@@ -179,18 +194,7 @@ BEGIN
                 )
             )
         )
-        AND (
-            trimmed_search_term = '' OR (
-                (s.title ->> 'english') &@ trimmed_search_term
-                OR (s.title ->> 'spanish') &@ trimmed_search_term
-                OR (s.explanation ->> 'english') &@ trimmed_search_term
-                OR (s.explanation ->> 'spanish') &@ trimmed_search_term
-                OR (s.summary ->> 'english') &@ trimmed_search_term
-                OR (s.summary ->> 'spanish') &@ trimmed_search_term
-                OR s.transcription &@ trimmed_search_term
-                OR s.translation &@ trimmed_search_term
-            )
-        )
+        AND (trimmed_search_term = '' OR smi.id IS NOT NULL)
     ),
     total_count_cte AS (
         SELECT COUNT(*) AS cnt FROM filtered_snippets
