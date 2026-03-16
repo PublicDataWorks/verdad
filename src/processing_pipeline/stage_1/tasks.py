@@ -13,6 +13,7 @@ from processing_pipeline.stage_1.executors import (
     Stage1PreprocessDetectionExecutor,
     Stage1PreprocessTranscriptionExecutor,
 )
+from processing_pipeline.stage_1.kb_context import retrieve_kb_context
 from processing_pipeline.supabase_utils import SupabaseClient
 from utils import optional_task
 
@@ -142,12 +143,23 @@ def initial_transcription_with_gemini(
     return response["transcription"]
 
 
+@optional_task(log_prints=True, retries=2)
+def fetch_kb_context(supabase_client, openai_client, transcription):
+    kb_context = retrieve_kb_context(supabase_client, openai_client, transcription)
+    if kb_context:
+        print(f"Retrieved KB context ({len(kb_context)} chars)")
+    else:
+        print("No KB context available")
+    return kb_context
+
+
 @optional_task(log_prints=True, retries=3)
 def initial_disinformation_detection_with_gemini(
     gemini_client: genai.Client | None,
     initial_transcription: str,
     metadata: dict,
     prompt_version: dict,
+    kb_context: str | None,
 ):
     print(f"Processing initial transcription with Gemini for disinformation detection")
     if not gemini_client:
@@ -159,6 +171,7 @@ def initial_disinformation_detection_with_gemini(
         transcription=initial_transcription,
         metadata=metadata,
         prompt_version=prompt_version,
+        kb_context=kb_context,
     )
     return response
 
@@ -192,6 +205,7 @@ def disinformation_detection_with_gemini(
     metadata: dict,
     prompt_version: dict,
     model_name: GeminiModel,
+    kb_context: str | None = None,
 ):
     print(f"Processing the timestamped transcription with {model_name}")
     if not gemini_client:
@@ -203,6 +217,7 @@ def disinformation_detection_with_gemini(
         timestamped_transcription=timestamped_transcription,
         metadata=metadata,
         prompt_version=prompt_version,
+        kb_context=kb_context,
     )
     flagged_snippets = response["flagged_snippets"]
 
@@ -248,6 +263,7 @@ def set_audio_file_status(supabase_client, audio_file_id, status: ProcessingStat
 def process_audio_file(
     supabase_client: SupabaseClient,
     gemini_client: genai.Client | None,
+    openai_client: OpenAI,
     audio_file: dict,
     local_file: str,
     initial_transcription_prompt_version: dict,
@@ -266,12 +282,16 @@ def process_audio_file(
             prompt_version=initial_transcription_prompt_version,
         )
 
+        # Fetch KB context based on the transcription
+        kb_context = fetch_kb_context(supabase_client, openai_client, initial_transcription)
+
         # Initial detection
         initial_detection_result = initial_disinformation_detection_with_gemini(
             gemini_client=gemini_client,
             initial_transcription=initial_transcription,
             metadata=metadata,
             prompt_version=initial_detection_prompt_version,
+            kb_context=kb_context,
         )
         print(f"Initial detection result:\n{json.dumps(initial_detection_result, indent=2, ensure_ascii=False)}\n")
 
@@ -308,6 +328,7 @@ def process_audio_file(
                 metadata=metadata,
                 prompt_version=detection_prompt_version,
                 model_name=GeminiModel.GEMINI_2_5_FLASH,
+                kb_context=kb_context,
             )
             print(f"Main detection result:\n{json.dumps(detection_result, indent=2, ensure_ascii=False)}\n")
 

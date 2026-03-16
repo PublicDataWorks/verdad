@@ -544,7 +544,19 @@ By meticulously following these instructions and applying the heuristics across 
 
 ---
 
-## Self-Review Process
+# Knowledge Base: Verified Facts
+
+The following are verified facts from our knowledge base. Use them to:
+1. Better detect content that contradicts these verified facts (likely disinformation)
+2. Avoid flagging content that aligns with these verified facts as disinformation
+3. If a claim in the transcription matches a verified fact below, do NOT flag it
+
+Found related knowledge entries:
+{kb_context}
+
+---
+
+# Self-Review Process
 
 Before finalizing your output, complete this validation checklist:
 
@@ -574,20 +586,32 @@ If any verification fails, revise your analysis accordingly.
 # Example of Output (Hypothetical)
 
 ```json
-{
+{{
   "flagged_snippets": [
-    {
+    {{
       "transcription": "La 'plandemia' es una excusa para controlarnos con 'microchips en vacunas'.",
       "explanation": "The speaker claims that the pandemic is a planned event used to control the population by implanting microchips through vaccines. This promotes unfounded conspiracy theories about COVID-19 and vaccination.",
       "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"]
-    },
-    {
+    }},
+    {{
       "transcription": "Los 'extranjeros ilegales' están causando problemas económicos en nuestro país.",
       "explanation": "The speaker asserts that illegal immigrants are causing economic problems in the country, depicting immigrants as a burden without providing evidence. This aligns with disinformation regarding immigration policies.",
       "disinformation_categories": ["Immigration Policies"]
-    }
+    }}
   ]
-}
+}}
 ```
 
 This example illustrates how to structure the output for the flagged snippets. Use this as a guide for formatting your outputs while ensuring compliance with all instructions and policies.
+
+---
+
+# Transcription Input
+
+Here is the metadata of the transcription:
+
+{metadata}
+
+Here is the transcription:
+
+{transcription}

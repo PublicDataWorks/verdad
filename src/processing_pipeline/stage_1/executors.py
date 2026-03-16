@@ -71,12 +71,12 @@ class Stage1PreprocessDetectionExecutor:
         transcription: str,
         metadata: dict,
         prompt_version: dict,
+        kb_context: str | None,
     ):
-        # Prepare the user prompt
-        user_prompt = (
-            f"{prompt_version['user_prompt']}\n\n"
-            f"Here is the metadata of the transcription:\n\n{json.dumps(metadata, indent=2)}\n\n"
-            f"Here is the transcription:\n\n{transcription}"
+        user_prompt = prompt_version["user_prompt"].format(
+            kb_context=kb_context,
+            metadata=json.dumps(metadata, indent=2),
+            transcription=transcription,
         )
 
         result = gemini_client.models.generate_content(
@@ -112,12 +112,13 @@ class Stage1Executor:
         timestamped_transcription: str,
         metadata: dict,
         prompt_version: dict,
+        kb_context: str | None = None,
     ):
-        # Prepare the user prompt
-        user_prompt = (
-            f"{prompt_version['user_prompt']}\n\n"
-            f"Here is the metadata of the transcription:\n\n{json.dumps(metadata, indent=2)}\n\n"
-            f"Here is the timestamped transcription:\n\n{timestamped_transcription}"
+        # Prepare the user prompt from template
+        user_prompt = prompt_version["user_prompt"].format(
+            kb_context=kb_context,
+            metadata=json.dumps(metadata, indent=2),
+            timestamped_transcription=timestamped_transcription,
         )
 
         result = gemini_client.models.generate_content(

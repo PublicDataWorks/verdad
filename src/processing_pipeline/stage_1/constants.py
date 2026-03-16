@@ -1,5 +1,8 @@
 from enum import StrEnum
 
+KB_STAGE1_CHUNK_SIZE = 2000
+KB_STAGE1_MATCH_COUNT_PER_CHUNK = 5
+
 
 class Stage1SubStage(StrEnum):
     INITIAL_TRANSCRIPTION = "initial_transcription"
