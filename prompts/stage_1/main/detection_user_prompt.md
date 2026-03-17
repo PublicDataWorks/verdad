@@ -33,13 +33,13 @@ Please analyze the provided timestamped transcription for potential disinformati
 # JSON Schema
 
 ```json
-{
+{{
     "type": "object",
     "required": ["flagged_snippets"],
-    "properties": {
-        "flagged_snippets": {
+    "properties": {{
+        "flagged_snippets": {{
             "type": "array",
-            "items": {
+            "items": {{
                 "type": "object",
                 "required": [
                     "start_time",
@@ -49,40 +49,40 @@ Please analyze the provided timestamped transcription for potential disinformati
                     "disinformation_categories",
                     "keywords_detected"
                 ],
-                "properties": {
-                    "start_time": {
+                "properties": {{
+                    "start_time": {{
                         "type": "string",
                         "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
-                    },
-                    "end_time": {
+                    }},
+                    "end_time": {{
                         "type": "string",
                         "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
-                    },
-                    "transcription": {
+                    }},
+                    "transcription": {{
                         "type": "string",
                         "description": "Transcription of the snippet (without timestamps)."
-                    },
-                    "explanation": {
+                    }},
+                    "explanation": {{
                         "type": "string",
                         "description": "Explain why this snippet was flagged (in English)."
-                    },
-                    "disinformation_categories": {
+                    }},
+                    "disinformation_categories": {{
                         "type": "array",
-                        "items": {
+                        "items": {{
                             "type": "string"
-                        }
-                    },
-                    "keywords_detected": {
+                        }}
+                    }},
+                    "keywords_detected": {{
                         "type": "array",
-                        "items": {
+                        "items": {{
                             "type": "string"
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }}
+}}
 ```
 
 # Disinformation Detection Heuristics
@@ -690,29 +690,41 @@ By meticulously following these instructions and applying the heuristics across 
 
 ---
 
+# Knowledge Base: Verified Facts
+
+The following are verified facts from our knowledge base. Use them to:
+1. Better detect content that contradicts these verified facts (likely disinformation)
+2. Avoid flagging content that aligns with these verified facts as disinformation
+3. If a claim in the transcription matches a verified fact below, do NOT flag it
+
+Found related knowledge entries:
+{kb_context}
+
+---
+
 # Example of Output (Hypothetical)
 
 ```json
-{
+{{
   "flagged_snippets": [
-    {
+    {{
       "start_time": "05:30",
       "end_time": "07:15",
       "transcription": "La 'plandemia' es una excusa para controlarnos con 'microchips en vacunas'.",
       "explanation": "The speaker claims that the pandemic is a planned event used to control the population by implanting microchips through vaccines. This promotes unfounded conspiracy theories about COVID-19 and vaccination.",
       "disinformation_categories": ["COVID-19 and Vaccination", "Conspiracy Theories"],
       "keywords_detected": ["plandemia", "microchips en vacunas"]
-    },
-    {
+    }},
+    {{
       "start_time": "07:15",
       "end_time": "08:00",
       "transcription": "Los 'extranjeros ilegales' están causando problemas económicos en nuestro país.",
       "explanation": "The speaker asserts that illegal immigrants are causing economic problems in the country, depicting immigrants as a burden without providing evidence. This aligns with disinformation regarding immigration policies.",
       "disinformation_categories": ["Immigration Policies"],
       "keywords_detected": ["extranjeros ilegales", "problemas económicos"]
-    }
+    }}
   ]
-}
+}}
 ```
 
 This example illustrates how to structure the output for the flagged snippets. Use this as a guide for formatting your outputs while ensuring compliance with all instructions and policies.
@@ -753,3 +765,15 @@ Before finalizing your output, complete this validation checklist:
    - [ ] My analysis would be defensible to fact-checkers
 
 If any verification fails, revise your analysis accordingly.
+
+---
+
+# Transcription Input
+
+Here is the metadata of the transcription:
+
+{metadata}
+
+Here is the timestamped transcription:
+
+{timestamped_transcription}

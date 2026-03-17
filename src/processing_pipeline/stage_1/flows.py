@@ -5,6 +5,7 @@ import time
 
 import boto3
 from google import genai
+from openai import OpenAI
 from prefect.flows import Flow
 from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
@@ -17,6 +18,7 @@ from processing_pipeline.stage_1.tasks import (
     download_audio_file_from_s3,
     fetch_a_new_audio_file_from_supabase,
     fetch_audio_file_by_id,
+    fetch_kb_context,
     fetch_stage_1_llm_response_by_id,
     get_audio_file_metadata,
     process_audio_file,
@@ -66,6 +68,9 @@ def initial_disinformation_detection(audio_file_id, limit):
     # Setup Gemini client
     gemini_client = _create_gemini_client()
 
+    # Setup OpenAI client
+    openai_client = _create_openai_client()
+
     # Load prompt versions
     initial_transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.INITIAL_TRANSCRIPTION)
     initial_detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.INITIAL_DETECTION)
@@ -88,6 +93,7 @@ def initial_disinformation_detection(audio_file_id, limit):
             process_audio_file(
                 supabase_client=supabase_client,
                 gemini_client=gemini_client,
+                openai_client=openai_client,
                 audio_file=audio_file,
                 local_file=local_file,
                 initial_transcription_prompt_version=initial_transcription_prompt_version,
@@ -144,6 +150,9 @@ def redo_main_detection(stage_1_llm_response_ids):
     # Setup Gemini client
     gemini_client = _create_gemini_client()
 
+    # Setup OpenAI client
+    openai_client = _create_openai_client()
+
     # Load prompt version
     detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.DISINFORMATION_DETECTION)
 
@@ -173,6 +182,10 @@ def redo_main_detection(stage_1_llm_response_ids):
             else:
                 timestamped_transcription = stage_1_llm_response["timestamped_transcription"]
 
+                # Fetch KB context using the initial transcription
+                initial_transcription = stage_1_llm_response.get("initial_transcription", "")
+                kb_context = fetch_kb_context(supabase_client, openai_client, initial_transcription)
+
                 print("Processing the timestamped transcription with Gemini Flash Latest")
                 detection_result = disinformation_detection_with_gemini(
                     gemini_client=gemini_client,
@@ -180,6 +193,7 @@ def redo_main_detection(stage_1_llm_response_ids):
                     metadata=metadata,
                     prompt_version=detection_prompt_version,
                     model_name=GeminiModel.GEMINI_2_5_FLASH,
+                    kb_context=kb_context,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
                 update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
@@ -209,6 +223,9 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
 
     # Setup Gemini client
     gemini_client = _create_gemini_client()
+
+    # Setup OpenAI client
+    openai_client = _create_openai_client()
 
     # Load prompt versions
     transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.TIMESTAMPED_TRANSCRIPTION)
@@ -242,6 +259,10 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                     supabase_client, id, timestamped_transcription, transcriptor
                 )
 
+                # Fetch KB context using the initial transcription
+                initial_transcription = stage_1_llm_response.get("initial_transcription", "")
+                kb_context = fetch_kb_context(supabase_client, openai_client, initial_transcription)
+
                 # Main detection
                 detection_result = disinformation_detection_with_gemini(
                     gemini_client=gemini_client,
@@ -249,6 +270,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                     metadata=metadata,
                     prompt_version=detection_prompt_version,
                     model_name=GeminiModel.GEMINI_2_5_FLASH,
+                    kb_context=kb_context,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
                 update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
@@ -276,3 +298,10 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
 def _create_gemini_client() -> genai.Client | None:
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
     return genai.Client(api_key=gemini_key) if gemini_key else None
+
+
+def _create_openai_client() -> OpenAI:
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        raise ValueError("OPENAI_API_KEY environment variable is not set")
+    return OpenAI(api_key=openai_key)
