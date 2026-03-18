@@ -5,6 +5,13 @@ description: Transform raw disinformation research into production-ready detecti
 
 # VERDAD Heuristics Updater
 
+## Critical Configuration
+
+- **Supabase Project ID**: `dzujjhzgzguciwryzwlx` — use this for ALL Supabase MCP calls (`execute_sql`, `list_tables`, etc.)
+- **Supabase Project Name**: VERDAD
+- **Supabase URL**: `https://dzujjhzgzguciwryzwlx.supabase.co`
+- **Repo path**: Look for the `prompts/` directory in the current working directory, or check `/Users/j/GitHub/verdad/`
+
 ## On Invocation
 
 When this skill triggers, immediately:
