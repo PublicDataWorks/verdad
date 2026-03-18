@@ -2,11 +2,17 @@ import os
 from dotenv import load_dotenv
 from prefect import serve
 import sentry_sdk
-from processing_pipeline.stage_1 import initial_disinformation_detection, redo_main_detection, regenerate_timestamped_transcript, undo_disinformation_detection
+from processing_pipeline.stage_1 import (
+    initial_disinformation_detection,
+    redo_main_detection,
+    regenerate_timestamped_transcript,
+    undo_disinformation_detection,
+)
 from processing_pipeline.stage_2 import audio_clipping, undo_audio_clipping
 from processing_pipeline.stage_3 import in_depth_analysis
 from processing_pipeline.stage_5 import embedding
-from processing_pipeline.stage_4 import analysis_review
+from processing_pipeline.stage_4 import analysis_review, downvote_review  # noqa: F401
+
 load_dotenv()
 
 # Setup Sentry
@@ -51,7 +57,9 @@ if __name__ == "__main__":
             deployment = audio_clipping.to_deployment(
                 name="Stage 2: Audio Clipping",
                 concurrency_limit=100,
-                parameters=dict(context_before_seconds=90, context_after_seconds=60, repeat=True),
+                parameters=dict(
+                    context_before_seconds=90, context_after_seconds=60, repeat=True
+                ),
             )
             serve(deployment, limit=100)
         case "undo_audio_clipping":
@@ -81,6 +89,13 @@ if __name__ == "__main__":
                 parameters=dict(snippet_ids=[], repeat=True),
             )
             serve(deployment, limit=100)
+        case "downvote_review":
+            deployment = downvote_review.to_deployment(
+                name="Stage 4: Downvote Review",
+                concurrency_limit=1,
+                parameters=dict(repeat=True),
+            )
+            serve(deployment, limit=1)
         case "embedding":
             deployment = embedding.to_deployment(
                 name="Stage 5: Embedding",
