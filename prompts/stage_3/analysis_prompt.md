@@ -1758,6 +1758,648 @@ Disinformation about strikes, picketing, and other forms of collective action.
 
 ---
 
+### **20. Women's Health and Reproductive Care**
+
+**Description**:
+
+Disinformation targeting women's health issues including reproductive care, hormonal health, cancer prevention/treatment, fertility, pregnancy, and menopause. This category encompasses false claims about contraception, menstruation, gynecological conditions, and women-specific medical treatments. A significant portion of this disinformation promotes unproven "natural cures," demonizes evidence-based medicine, and exploits fears about pharmaceutical companies and medical institutions.
+
+**Important Context**: This category is distinct from Category 6 (Abortion and Reproductive Rights) which focuses on political/ethical framing. Category 20 focuses on medical disinformation — false health claims about treatments, procedures, and conditions regardless of political orientation.
+
+**Common Narratives**:
+
+- **"Miracle Cures"**: Claims that natural substances (cúrcuma, jengibre, guanábana, sábila) can cure cancer or serious conditions without medical treatment
+- **"Industry Conspiracy"**: Assertions that doctors, "Big Pharma," or the "cancer industry" hide cures for profit
+- **"Natural = Safe"**: False equivalence that natural products are always safe and effective, while pharmaceuticals are inherently dangerous
+- **"Hormonal Damage"**: Claims that contraceptives cause permanent brain damage, infertility, or irreversible hormonal disruption
+- **"Detox/Cleanse Culture"**: Promotion of vaginal detoxes, uterine cleanses, or parasite protocols as cure-alls
+- **"Censorship Narrative"**: Claims of being "silenced" or "censored" to build credibility before promoting products
+- **"Doctor Influencer Authority"**: Use of lab coats and medical terminology by unqualified individuals to appear credible
+
+**Disinformation Tactics (Detection Signals)**:
+- "Cura milagrosa / sin efectos secundarios" - Promises of miracle cures without side effects
+- "La industria te oculta la verdad" - Conspiracy framing about hidden truths
+- "Nadie te lo contó / Se acaba de descubrir" - False urgency and novelty claims
+- "Doctor dice / Científico confirma" - Performative authority without verifiable sources
+- "Voy a abrir un Telegram/grupo privado" - Migration to closed platforms to avoid moderation
+- "Link en bio / Código de descuento" - Commercial incentives embedded in health claims
+
+**Cultural/Regional Variations**:
+
+- **Spanish-Speaking Communities**:
+  - Strong influence of traditional remedios caseros (home remedies)
+  - Cultural expectations around motherhood and fertility
+  - Distrust from historical medical mistreatment (e.g., forced sterilization)
+  - WhatsApp and family networks as primary information channels
+  - Influence of curanderas/sobadoras in some communities
+  - Religious frameworks affecting reproductive health decisions
+- **Arabic-Speaking Communities**:
+  - Religious interpretations of women's health issues
+  - Modesty concerns affecting healthcare access and discussion
+  - Traditional medicine practices (Prophetic medicine / الطب النبوي)
+  - Gender segregation preferences in healthcare
+  - Family and community involvement in health decisions
+
+**Potential Legitimate Discussions**:
+
+- Genuine concerns about healthcare access and affordability
+- Cultural preferences in healthcare delivery
+- Discussion of evidence-based complementary approaches
+- Personal experiences with medical care (positive or negative)
+- Debates about healthcare policy and coverage
+- Questions about specific treatments and their risks/benefits
+- Breastfeeding support and guidance
+- Fertility journey sharing and support
+
+**Keywords/Phrases for Detection**:
+
+**Spanish**:
+- "cura milagrosa", "cura natural", "sin efectos secundarios", "sin quimio", "sin radioterapia"
+- "tu médico no quiere que sepas", "Big Pharma oculta", "la industria del cáncer"
+- "detox uterino", "limpieza vaginal", "desintoxicar el útero", "memoria uterina"
+- "equilibrar hormonas", "fase lunar", "ciclo hormonal natural"
+- "anticonceptivos dañan", "píldora causa", "DIU peligroso"
+- "vacuna VPH infertilidad", "vacuna experimental"
+- "vitaminas milagro", "suplemento garantiza", "enlace en bio"
+- "me censuran", "grupo de Telegram", "video censurado"
+- "doctor dice", "estudio confirma", "científicamente probado" (when unverifiable)
+
+**Arabic**:
+- "علاج طبيعي" (natural treatment), "بدون آثار جانبية" (without side effects)
+- "شفاء بالأعشاب" (herbal cure), "الطب البديل يشفي" (alternative medicine cures)
+- "شركات الأدوية تخفي" (pharmaceutical companies hide)
+- "تنظيف الرحم" (uterine cleansing), "إزالة السموم" (detoxification)
+- "موانع الحمل خطيرة" (contraceptives are dangerous)
+- "لقاح فيروس الورم الحليمي يسبب العقم" (HPV vaccine causes infertility)
+- "الهرمونات تسبب السرطان" (hormones cause cancer)
+- "العلاج الكيماوي سم" (chemotherapy is poison)
+
+**Examples**:
+
+- *Spanish*: "Con cúrcuma y jengibre mi prima curó el cáncer de mama sin quimioterapia. Los doctores no quieren que sepas esto porque pierden dinero."
+- *Arabic*: "استخدمت أختي الحلبة والعسل وشُفيت من تكيس المبايض. الأطباء يخفون هذه العلاجات الطبيعية."
+- *Spanish*: "Las anticonceptivas te están dañando el cerebro. Se acaba de descubrir en un estudio que nadie te va a mostrar. Link en mi bio para más información."
+- *Arabic*: "حبوب منع الحمل تدمر دماغك. اكتشفوا هذا في دراسة جديدة. لا تثقي بطبيبك."
+
+**Red Flags for High-Confidence Disinformation**:
+
+Immediate high-confidence signals:
+- "Cure" claims for cancer without medical treatment
+- Claims that all contraceptives cause permanent damage
+- Promotion of vaginal detox or uterine cleansing products
+
+Requires careful analysis:
+- Natural remedy discussions (may be legitimate cultural practice or dangerous replacement for medicine)
+- Breastfeeding advocacy (may be supportive or shaming/promoting dangerous alternatives)
+- Questions about vaccine timing/spacing (may be legitimate concern or anti-vax framing)
+
+#### **20.1 Contraception and Family Planning**
+
+**Description**:
+
+Disinformation about contraceptive methods including pills, IUDs, implants, and other family planning tools, often claiming permanent or catastrophic harm.
+
+**Narratives**:
+- "La píldora infertiliza / causa cáncer" (The pill causes infertility/cancer)
+- "El DIU se pierde en el cuerpo / provoca abortos" (IUDs get lost in the body/cause abortions)
+- "Los anticonceptivos arruinan las hormonas para siempre" (Contraceptives permanently ruin hormones)
+- "Los anticonceptivos producen daños cerebrales" (Contraceptives cause brain damage)
+
+**Evidence**: Modern contraceptives have well-documented safety profiles; "permanent infertility" from typical use is a myth; risks and benefits depend on method and individual health history.
+
+**Examples**:
+
+- *Spanish*: "Me hice poner la barrita esa y mi criatura nació deforme. Ojo con los anticonceptivos."
+- *Arabic*: "حبوب منع الحمل تسبب العقم الدائم. لا تستخدميها أبداً."
+
+#### **20.2 HPV Vaccine**
+
+**Description**:
+
+Disinformation about the human papillomavirus vaccine, often falsely linking it to infertility or paralysis and framing it as experimental.
+
+**Narratives**:
+- "La vacuna del VPH causa infertilidad / parálisis" (HPV vaccine causes infertility/paralysis)
+- "Es experimental y peligrosa" (It's experimental and dangerous)
+- "Las farmacéuticas ocultan los efectos secundarios" (Pharma hides the side effects)
+
+**Evidence**: HPV vaccine is recommended to prevent associated cancers; serious adverse effects are rare; does not affect fertility.
+
+**Examples**:
+
+- *Spanish*: "La vacuna del VPH causa infertilidad. Las farmacéuticas ocultan los efectos secundarios."
+- *Arabic*: "لقاح فيروس الورم الحليمي يسبب العقم والشلل. إنه تجريبي وخطير."
+
+#### **20.3 Menstruation and "Detox"**
+
+**Description**:
+
+Disinformation promoting pseudoscientific practices related to menstruation, including vaginal douching, uterine detoxes, and false claims about menstrual products.
+
+**Narratives**:
+- "Las duchas vaginales limpian el útero de toxinas" (Vaginal douches clean uterine toxins)
+- "Detox uterino / Limpieza vaginal" (Uterine detox / Vaginal cleanse)
+- "Los tampones liberan químicos peligrosos" (Tampons release dangerous chemicals)
+- "Memoria uterina" (Uterine memory — pseudoscientific concept)
+
+**Evidence**: The vagina is self-cleaning; douching increases infection risk; regulated menstrual products are safe when used as directed.
+
+**Examples**:
+
+- *Spanish*: "Necesitas un detox uterino para limpiar las toxinas. Las duchas vaginales son esenciales."
+- *Arabic*: "تنظيف الرحم ضروري لإزالة السموم. استخدمي الغسول المهبلي بانتظام."
+
+#### **20.4 PCOS/SOP and Hormonal Conditions**
+
+**Description**:
+
+Disinformation about polycystic ovary syndrome and hormonal conditions, promoting miracle cures and dismissing the condition's complexity.
+
+**Narratives**:
+- "Con dieta milagro o suplementos X el SOP se cura" (Miracle diet or supplement X cures PCOS)
+- "El SOP es solo flojedad hormonal" (PCOS is just hormonal laziness)
+- "Equilibrar hormonas con fase lunar" (Balance hormones with lunar phases)
+
+**Evidence**: PCOS is an endocrine disorder requiring integrated management; no universal "quick cure" exists.
+
+**Examples**:
+
+- *Spanish*: "Con este suplemento regulé mis hormonas en 7 días. El SOP se cura con dieta."
+- *Arabic*: "تكيس المبايض يُشفى بالأعشاب والحمية. لا تحتاجين طبيباً."
+
+#### **20.5 Endometriosis**
+
+**Description**:
+
+Disinformation that normalizes severe pain, dismisses the condition, or promotes pregnancy as a cure for endometriosis.
+
+**Narratives**:
+- "El dolor severo es normal en las mujeres" (Severe pain is normal for women)
+- "Quedarse embarazada cura la endometriosis" (Getting pregnant cures endometriosis)
+- "Es solo dolor menstrual exagerado" (It's just exaggerated menstrual pain)
+
+**Evidence**: Incapacitating pain is not normal; pregnancy does not cure endometriosis; diagnosis often requires specialized evaluation.
+
+**Examples**:
+
+- *Spanish*: "El dolor es normal. Si te embarazas se te quita la endometriosis."
+- *Arabic*: "الألم الشديد طبيعي للنساء. الحمل يعالج بطانة الرحم المهاجرة."
+
+#### **20.6 Pregnancy and Breastfeeding**
+
+**Description**:
+
+Disinformation about pregnancy and breastfeeding safety, promoting unverified natural products and homemade formulas as superior alternatives.
+
+**Narratives**:
+- "Cualquier hierba es segura porque es natural" (Any herb is safe because it's natural)
+- "Fórmulas caseras de leche son mejores" (Homemade milk formulas are better)
+- "La leche materna se puede mejorar con suplementos X" (Breast milk can be improved with supplement X)
+
+**Evidence**: Many "natural" products are not evaluated for pregnancy/lactation safety; homemade formulas are neither safe nor nutritionally balanced.
+
+**Examples**:
+
+- *Spanish*: "Las hierbas son naturales y seguras durante el embarazo. Las fórmulas caseras son más limpias."
+- *Arabic*: "الأعشاب آمنة لأنها طبيعية. الحليب المنزلي أفضل من الصناعي."
+
+#### **20.7 Medication Abortion (Mifepristone/Misoprostol)**
+
+**Description**:
+
+Disinformation about medication abortion that exaggerates risks, claims permanent infertility, or promotes fraudulent sources for pills without medical guidance.
+
+**Narratives**:
+- "Las pastillas abortivas son peligrosísimas en todos los casos" (Abortion pills are extremely dangerous in all cases)
+- "Causan infertilidad permanente" (They cause permanent infertility)
+- "Páginas que venden pastillas sin guía médica" (Sites selling pills without medical guidance — fraud risk)
+
+**Evidence**: When used according to medical guidelines, medication abortion is a safe procedure; disinformation centers on exaggerated risks and fraudulent sites.
+
+**Examples**:
+
+- *Spanish*: "Las pastillas abortivas causan infertilidad permanente. Son peligrosísimas."
+- *Arabic*: "حبوب الإجهاض خطيرة جداً وتسبب العقم الدائم في جميع الحالات."
+
+#### **20.8 Menopause and Hormone Therapy**
+
+**Description**:
+
+Disinformation about menopause management, falsely claiming hormone therapy always causes cancer or promoting unregulated bioidentical hormones as risk-free.
+
+**Narratives**:
+- "La terapia hormonal siempre causa cáncer" (Hormone therapy always causes cancer)
+- "Las hormonas bioidénticas en pellets son libres de riesgo" (Bioidentical hormone pellets are risk-free)
+- "Menopausia se cura con tés y ayuno" (Menopause is cured with teas and fasting)
+
+**Evidence**: Hormone therapy indication is individualized; risks/benefits depend on age, time since menopause, dose, and delivery method; pellets are not standardized for everyone.
+
+**Examples**:
+
+- *Spanish*: "La terapia hormonal siempre causa cáncer. Mejor usar tés y ayuno."
+- *Arabic*: "العلاج الهرموني يسبب السرطان دائماً. استخدمي الأعشاب والصيام بدلاً منه."
+
+#### **20.9 Breast and Cervical Cancer Screening**
+
+**Description**:
+
+Disinformation discouraging cancer screening by claiming mammography causes cancer or that plant-based cures can replace chemotherapy.
+
+**Narratives**:
+- "La mamografía siembra cáncer / daña las mamas" (Mammography plants cancer/damages breasts)
+- "Si no tengo síntomas, no necesito Papanicolau" (If I have no symptoms, I don't need a Pap smear)
+- "El cáncer se cura con plantas sin quimio" (Cancer is cured with plants without chemo)
+
+**Evidence**: Screening reduces mortality; decisions are personalized by age/risk; absence of symptoms does not exclude need for screening.
+
+**Examples**:
+
+- *Spanish*: "La mamografía siembra cáncer. El cáncer se cura con plantas sin quimio."
+- *Arabic*: "تصوير الثدي يسبب السرطان. السرطان يُشفى بالأعشاب بدون علاج كيماوي."
+
+#### **20.10 Fertility and IVF**
+
+**Description**:
+
+Disinformation about fertility treatments, including false promises from supplements and conspiracy theories about IVF causing cancer or birth defects.
+
+**Narratives**:
+- "Suplementos garantizan embarazo" (Supplements guarantee pregnancy)
+- "Clínicas prometen tasas aseguradas" (Clinics promise guaranteed success rates)
+- "La FIV causa cáncer / defectos en los bebés" (IVF causes cancer/birth defects)
+
+**Evidence**: No guarantees in fertility treatment; success rates depend on age and clinical factors; beware of absolute promises.
+
+**Examples**:
+
+- *Spanish*: "Este suplemento garantiza el embarazo. La FIV causa cáncer y defectos."
+- *Arabic*: "هذا المكمل يضمن الحمل. التلقيح الصناعي يسبب السرطان وتشوهات."
+
+#### **20.11 Weight, Thyroid, and Metabolic Claims**
+
+**Description**:
+
+Disinformation about thyroid conditions and weight management, promoting dangerous self-medication and unregulated use of prescription drugs.
+
+**Narratives**:
+- "Hipotiroidismo se cura con té o ayuno extremo" (Hypothyroidism is cured with tea or extreme fasting)
+- "Ozempic sin receta es seguro" (Ozempic without prescription is safe)
+- "Stacking casero de suplementos para metabolismo" (DIY supplement stacking for metabolism)
+
+**Evidence**: Thyroid conditions require medical diagnosis and treatment; weight loss medications require prescription and monitoring.
+
+**Examples**:
+
+- *Spanish*: "El hipotiroidismo se cura con té. Ozempic sin receta es seguro y más barato."
+- *Arabic*: "قصور الغدة الدرقية يُعالج بالشاي والصيام. أوزمبيك بدون وصفة آمن."
+
+#### **20.12 Urinary and Vaginal Infections**
+
+**Description**:
+
+Disinformation promoting unproven remedies for urinary and vaginal infections while discouraging appropriate antibiotic treatment.
+
+**Narratives**:
+- "El propóleo/aceites/boro curan toda infección" (Propolis/oils/boron cure all infections)
+- "Los antibióticos dañan más y siempre se deben evitar" (Antibiotics cause more harm and should always be avoided)
+- "Lavados vaginales con vinagre curan las infecciones" (Vaginal washes with vinegar cure infections)
+
+**Evidence**: Treatment depends on proper diagnosis; boric acid vaginal capsules have very specific limited uses and are not for everyone; self-medication can worsen conditions and lead to antibiotic resistance.
+
+**Examples**:
+
+- *Spanish*: "No necesitas antibióticos. Con propóleo y aceites esenciales curas cualquier infección vaginal."
+- *Arabic*: "لا تحتاجين مضادات حيوية. بالعكبر والزيوت العطرية تعالجين أي عدوى مهبلية."
+
+---
+
+### **21. Children's Health and Pediatric Care**
+
+**Description**:
+
+Disinformation targeting children's health including vaccines, fever management, antibiotic use, developmental conditions (autism, ADHD), nutrition, and general pediatric care. This category is particularly dangerous because it can lead parents to make decisions that directly harm their children's health and development. A significant portion exploits parental anxiety and the desire to protect children.
+
+**Important Context**: This category overlaps with but is distinct from Category 3 (COVID-19 and Vaccination) which focuses specifically on COVID-19. Category 21 encompasses all childhood vaccines, as well as broader pediatric health disinformation.
+
+**Common Narratives**:
+
+- **"Vaccines Harm Children"**: Claims that childhood vaccines cause autism, infertility, contain microchips, or alter DNA
+- **"Natural Immunity Superior"**: Assertions that natural infection is always preferable to vaccination
+- **"Pediatricians Are Paid Off"**: Conspiracy that doctors are financially motivated to vaccinate/prescribe
+- **"Miracle Cures for Developmental Conditions"**: Dangerous "treatments" for autism including bleach (CDS/MMS), chelation, restrictive diets
+- **"Big Pharma Poisons Children"**: Claims that common medications (acetaminophen, ibuprofen) are harmful
+- **"Natural Remedies Replace Medicine"**: Promotion of essential oils, homeopathy, or herbs as replacements for medical treatment
+- **"Hidden Epidemic"**: Claims that vaccines cause a hidden wave of harm being covered up
+
+**Disinformation Tactics (Detection Signals)**:
+- "Vacuna experimental / cambia el ADN" - False claims about vaccine mechanisms
+- "Mi pediatra me oculta alternativas" - Conspiracy framing about pediatric care
+- "Con CDS/aceites mi hijo sanó" - Promotion of dangerous unproven treatments
+- "Video censurado sobre vacunas" - Censorship narrative to build credibility
+- "Inmunidad natural es mejor" - Oversimplification dismissing vaccination benefits
+- "Las cifras están fabricadas" - Denial of health statistics
+
+**Cultural/Regional Variations**:
+
+- **Spanish-Speaking Communities**:
+  - Strong cultural value placed on protecting children from perceived harm
+  - Influence of traditional remedies passed through generations (abuelita medicine)
+  - WhatsApp parenting groups as major information vectors
+  - Economic barriers to healthcare access affecting trust
+  - Fear of medical system based on immigration status concerns
+  - Influence of Latin American alternative medicine traditions
+  - Religious framing of parental duty to protect children
+- **Arabic-Speaking Communities**:
+  - High value placed on children's welfare and parental protection
+  - Traditional medicine (Prophetic medicine) recommendations for children
+  - Family and community networks strongly influence health decisions
+  - Concerns about preserving religious and cultural identity through health choices
+  - Gender-specific considerations in children's healthcare
+
+**Potential Legitimate Discussions**:
+
+- Genuine questions about vaccine schedules and timing
+- Concerns about specific ingredients and allergies
+- Discussion of evidence-based complementary nutrition
+- Questions about fever management approaches
+- Seeking second opinions on diagnoses
+- Discussing developmental concerns and appropriate evaluation
+- Sharing parenting experiences and support
+- Questioning healthcare access and affordability
+- Cultural adaptation of health recommendations
+
+**Keywords/Phrases for Detection**:
+
+**Spanish**:
+- "vacuna experimental", "vacuna causa autismo", "chips en vacunas", "metales pesados"
+- "inmunidad natural mejor", "calendario vacunas agresivo"
+- "CDS", "MMS", "dióxido de cloro", "protocolo de desparasitación"
+- "quelación natural", "sacar metales pesados", "desintoxicar niños"
+- "fórmula tóxica", "leche casera mejor", "receta de fórmula"
+- "pediatra pagado", "médicos comprados", "farmacéuticas controlan"
+- "aceite esencial para autismo", "Frankincense autismo"
+- "TDAH no existe", "TDAH invento", "medicamentos TDAH drogas"
+- "jarabes naturales curan", "antibióticos destruyen"
+- "video censurado vacunas", "lo que no te dicen de las vacunas"
+
+**Arabic**:
+- "لقاح تجريبي" (experimental vaccine), "اللقاحات تسبب التوحد" (vaccines cause autism)
+- "شرائح في اللقاحات" (chips in vaccines), "معادن ثقيلة" (heavy metals)
+- "المناعة الطبيعية أفضل" (natural immunity is better)
+- "ثاني أكسيد الكلور" (chlorine dioxide), "بروتوكول إزالة الطفيليات" (deworming protocol)
+- "إزالة المعادن الثقيلة" (removing heavy metals), "تنقية طبيعية" (natural purification)
+- "الحليب الصناعي سام" (formula is toxic), "وصفة حليب منزلية" (homemade milk recipe)
+- "الطبيب مدفوع من شركات الأدوية" (doctor paid by pharmaceutical companies)
+- "الأدوية كيماويات ضارة" (medications are harmful chemicals)
+- "علاج التوحد الطبيعي" (natural autism treatment)
+- "فرط الحركة لا يوجد" (ADHD doesn't exist)
+
+**Examples**:
+
+- *Spanish*: "No le pongas esa vacuna nueva a tu bebé. Nirsevimab es experimental y nadie sabe los efectos a largo plazo. Big Pharma solo quiere ganar dinero con nuestros hijos."
+- *Arabic*: "لا تعطي طفلك هذا اللقاح الجديد. إنه تجريبي ولا أحد يعرف آثاره على المدى الطويل."
+- *Spanish*: "Con tres gotas de CDS en agua mi hijo dejó de tener problemas de comportamiento. Los parásitos causan todo, desde autismo hasta alergias. El pediatra no te va a decir esto."
+- *Arabic*: "بثلاث قطرات من ثاني أكسيد الكلور في الماء، توقف ابني عن مشاكل السلوك. الطفيليات تسبب كل شيء."
+- *Spanish*: "La fórmula comercial está llena de químicos. Yo hago leche con leche de almendras, miel y vitaminas. Es más natural y mi bebé está hermoso."
+- *Arabic*: "الحليب الصناعي مليء بالكيماويات. أنا أصنع الحليب في المنزل بحليب اللوز والعسل."
+
+**Red Flags for High-Confidence Disinformation**:
+
+Immediate high-confidence signals:
+- Promotion of CDS/MMS/chlorine dioxide for any purpose
+- Claims that vaccines cause autism
+- Homemade infant formula recipes
+- Chelation or detox protocols for autism
+
+Requires careful analysis:
+- Natural remedy discussions (may be legitimate cultural practice or dangerous replacement for medicine)
+- Questions about vaccine timing/spacing (may be legitimate concern or anti-vax framing)
+- Breastfeeding advocacy (may be supportive or shaming/promoting dangerous alternatives)
+
+#### **21.1 Childhood Vaccines (MMR, DTaP, Polio, etc.)**
+
+**Description**:
+
+Disinformation about routine childhood vaccines, falsely linking them to autism, claiming they contain dangerous substances, or arguing natural immunity is always superior.
+
+**Narratives**:
+- "Las vacunas causan autismo" (Vaccines cause autism)
+- "Contienen chips, metales pesados, células fetales" (They contain chips, heavy metals, fetal cells)
+- "Mejor la inmunidad natural" (Natural immunity is better)
+- "El calendario de vacunación es demasiado agresivo" (The vaccine schedule is too aggressive)
+- "Vacunas experimentales en nuestros hijos" (Experimental vaccines on our children)
+
+**Evidence**: Extensive research has disproven vaccine-autism link; vaccine ingredients are safe at administered doses; natural infection carries significant risks; vaccine schedules are evidence-based.
+
+**Examples**:
+
+- *Spanish*: "Las vacunas causan autismo. Contienen metales pesados y chips. Mejor la inmunidad natural."
+- *Arabic*: "اللقاحات تسبب التوحد. تحتوي على معادن ثقيلة وشرائح. المناعة الطبيعية أفضل."
+
+#### **21.2 RSV Prevention (Nirsevimab and Maternal Vaccine)**
+
+**Description**:
+
+Disinformation about RSV prevention measures, framing newer preventive treatments as experimental and dangerous while minimizing RSV severity.
+
+**Narratives**:
+- "Nirsevimab es nuevo y peligroso" (Nirsevimab is new and dangerous)
+- "No arriesgues a tu bebé con esto" (Don't risk your baby with this)
+- "Es solo negocio de las farmacéuticas" (It's just pharmaceutical business)
+- "RSV no es tan grave" (RSV isn't that serious)
+
+**Evidence**: RSV is a leading cause of infant hospitalization; prevention measures have been extensively tested; risk-benefit strongly favors prevention.
+
+**Examples**:
+
+- *Spanish*: "Nirsevimab es nuevo y peligroso. No arriesgues a tu bebé. Es solo negocio de las farmacéuticas."
+- *Arabic*: "نيرسيفيماب جديد وخطير. لا تخاطري بطفلك. إنه مجرد تجارة شركات الأدوية."
+
+#### **21.3 Dangerous "Miracle Treatments" (CDS/MMS, Chlorine Dioxide)**
+
+**Description**:
+
+Extremely dangerous disinformation promoting industrial bleach (chlorine dioxide) and other toxic substances as cures for autism, infections, and parasites in children.
+
+**Narratives**:
+- "CDS cura infecciones, autismo, parásitos" (CDS cures infections, autism, parasites)
+- "Es mejor que antibióticos y vacunas" (It's better than antibiotics and vaccines)
+- "Protocolo de desparasitación milagroso" (Miraculous deworming protocol)
+- "Quelación natural para sacar metales pesados" (Natural chelation to remove heavy metals)
+
+**Evidence**: CDS/MMS is industrial bleach and is toxic; has caused serious injuries and deaths; no legitimate medical use for the conditions claimed. This is extremely dangerous disinformation.
+
+**Examples**:
+
+- *Spanish*: "Con CDS mi hijo se curó del autismo. Los parásitos causan todo. El pediatra no te va a decir esto."
+- *Arabic*: "بثاني أكسيد الكلور شُفي ابني من التوحد. الطفيليات تسبب كل شيء."
+
+#### **21.4 Fever and Pain Management**
+
+**Description**:
+
+Disinformation about pediatric fever and pain management, demonizing standard medications and promoting unregulated homemade alternatives.
+
+**Narratives**:
+- "La fiebre siempre hay que bajarla inmediatamente" (Fever must always be lowered immediately)
+- "El paracetamol/ibuprofeno es veneno" (Acetaminophen/ibuprofen is poison)
+- "Jarabes caseros son más naturales y seguros" (Homemade syrups are more natural and safe)
+- "Nunca des medicamentos a un niño" (Never give medications to a child)
+
+**Evidence**: Fever is often a beneficial immune response; appropriate use of fever reducers is safe; dosing should follow guidelines; homemade preparations can be dangerous.
+
+**Examples**:
+
+- *Spanish*: "El paracetamol es veneno para tu hijo. Usa jarabes caseros, son más naturales."
+- *Arabic*: "الباراسيتامول سم لطفلك. استخدمي الأعشاب الطبيعية فهي أكثر أماناً."
+
+#### **21.5 Antibiotics and Infection Treatment**
+
+**Description**:
+
+Disinformation about antibiotic use in children, including both misuse promotion (antibiotics for viruses) and blanket avoidance of necessary antibiotic treatment.
+
+**Narratives**:
+- "Los antibióticos curan virus" (Antibiotics cure viruses — misuse promotion)
+- "Nunca uses antibióticos, destruyen el sistema inmune" (Never use antibiotics, they destroy the immune system)
+- "Jarabes naturales curan infecciones" (Natural syrups cure infections)
+- "El pediatra solo quiere recetar químicos" (The pediatrician only wants to prescribe chemicals)
+
+**Evidence**: Antibiotics work only on bacterial infections; appropriate use is essential for serious infections; resistance is a real concern but avoiding necessary treatment is dangerous.
+
+**Examples**:
+
+- *Spanish*: "Los antibióticos destruyen el sistema inmune de tu hijo. Los jarabes naturales curan infecciones."
+- *Arabic*: "المضادات الحيوية تدمر مناعة طفلك. الأعشاب الطبيعية تعالج العدوى."
+
+#### **21.6 Infant Feeding (Breastfeeding and Formula)**
+
+**Description**:
+
+Disinformation about infant feeding that demonizes commercial formula, promotes dangerous homemade alternatives, or uses shaming tactics around breastfeeding.
+
+**Narratives**:
+- "La fórmula es tóxica" (Formula is toxic)
+- "Recetas caseras de fórmula son mejores" (Homemade formula recipes are better)
+- "Si no das pecho, dañas a tu hijo" (If you don't breastfeed, you damage your child)
+- "Fórmula con ingredientes secretos dañinos" (Formula with secret harmful ingredients)
+
+**Evidence**: Breastfeeding has benefits but formula is safe and nutritionally complete; homemade formulas are dangerous and can cause malnutrition, contamination, and electrolyte imbalances.
+
+**Examples**:
+
+- *Spanish*: "La fórmula es tóxica. Yo hago leche con leche de almendras y miel. Es más natural."
+- *Arabic*: "الحليب الصناعي سام. أنا أصنع الحليب في المنزل بحليب اللوز والعسل."
+
+#### **21.7 Autism: False Cures and Causes**
+
+**Description**:
+
+Disinformation about autism that promotes false causes (vaccines, parasites) and dangerous "cures" including bleach, chelation, and extreme diets.
+
+**Narratives**:
+- "Las vacunas causan autismo" (Vaccines cause autism)
+- "Quelación cura el autismo" (Chelation cures autism)
+- "Dietas extremas curan el autismo" (Extreme diets cure autism)
+- "CDS elimina los parásitos que causan autismo" (CDS eliminates parasites that cause autism)
+- "Aceites esenciales para el autismo" (Essential oils for autism — e.g., Frankincense)
+- "Jugo de repollo verde para niños en el espectro" (Green cabbage juice for children on the spectrum)
+- "Desintoxicar de metales pesados" (Detox from heavy metals)
+
+**Evidence**: Autism is a neurodevelopmental condition, not caused by vaccines or parasites; there is no "cure"; these "treatments" can cause serious harm and delay appropriate support.
+
+**Examples**:
+
+- *Spanish*: "Las vacunas causan autismo. Con quelación y dieta especial se cura."
+- *Arabic*: "اللقاحات تسبب التوحد. يمكن علاجه بإزالة المعادن الثقيلة والحمية الخاصة."
+
+#### **21.8 ADHD/ADD**
+
+**Description**:
+
+Disinformation denying ADHD as a legitimate condition, demonizing evidence-based medications, and attributing the condition to parenting failures.
+
+**Narratives**:
+- "El TDAH no existe, es invento para vender medicamentos" (ADHD doesn't exist, it's an invention to sell medications)
+- "Los medicamentos para TDAH son drogas que dañan el cerebro" (ADHD medications are drugs that damage the brain)
+- "Dieta especial cura el TDAH" (Special diet cures ADHD)
+- "Es solo falta de disciplina" (It's just lack of discipline)
+
+**Evidence**: ADHD is a well-documented neurodevelopmental condition; medications when appropriate are evidence-based; it's not caused by parenting or discipline.
+
+**Examples**:
+
+- *Spanish*: "El TDAH no existe. Es un invento para vender medicamentos. Es solo falta de disciplina."
+- *Arabic*: "فرط الحركة لا يوجد. إنه اختراع لبيع الأدوية. إنه مجرد نقص في الانضباط."
+
+#### **21.9 Nutrition and Supplements**
+
+**Description**:
+
+Disinformation about children's nutrition promoting unregulated supplements, unnecessary deworming protocols, and miracle appetite products.
+
+**Narratives**:
+- "Suplementos X abren el apetito de los niños" (Supplement X opens children's appetite)
+- "Vitaminas milagro para el crecimiento" (Miracle vitamins for growth)
+- "Tu hijo necesita desparasitarse regularmente" (Your child needs regular deworming)
+- "Productos naturales para que coma mejor" (Natural products so they eat better)
+
+**Evidence**: Most children in developed countries don't need routine deworming; appetite supplements are often unregulated and unnecessary; nutrition should come primarily from food.
+
+**Examples**:
+
+- *Spanish*: "Este suplemento abre el apetito. Tu hijo necesita desparasitarse regularmente."
+- *Arabic*: "هذا المكمل يفتح الشهية. طفلك يحتاج إلى إزالة الديدان بانتظام."
+
+#### **21.10 "Pediatricians Are Compromised"**
+
+**Description**:
+
+Conspiracy-based disinformation alleging that pediatricians are financially controlled by pharmaceutical companies and cannot be trusted.
+
+**Narratives**:
+- "El pediatra está pagado por farmacéuticas" (The pediatrician is paid by pharmaceutical companies)
+- "No confíes en médicos, solo quieren tu dinero" (Don't trust doctors, they only want your money)
+- "Los pediatras siguen órdenes, no la ciencia" (Pediatricians follow orders, not science)
+
+**Evidence**: Pediatric recommendations are based on extensive research and professional guidelines; financial conflicts of interest are regulated and disclosed.
+
+**Examples**:
+
+- *Spanish*: "El pediatra está pagado por las farmacéuticas. No confíes en él."
+- *Arabic*: "طبيب الأطفال مدفوع من شركات الأدوية. لا تثقي به."
+
+#### **21.11 Health Conspiracies Targeting Children**
+
+**Description**:
+
+Conspiracy theories specifically targeting children's health, including population control narratives and microchip claims about vaccines.
+
+**Narratives**:
+- "Las vacunas son control poblacional" (Vaccines are population control)
+- "Microchips 5G en vacunas infantiles" (5G microchips in childhood vaccines)
+- "Las estadísticas de enfermedades están fabricadas" (Disease statistics are fabricated)
+- "Agenda para debilitar a la próxima generación" (Agenda to weaken the next generation)
+
+**Evidence**: These conspiracy theories have no factual basis and are designed to create fear and distrust in public health systems.
+
+**Examples**:
+
+- *Spanish*: "Las vacunas son control poblacional. Tienen microchips 5G."
+- *Arabic*: "اللقاحات للسيطرة على السكان. تحتوي على شرائح 5G."
+
+**Cross-Category Considerations**:
+
+These categories may overlap with:
+- Category 3 (COVID-19): COVID vaccines specifically vs. general childhood vaccines
+- Category 6 (Abortion): Political framing vs. medical disinformation
+- Category 11 (Healthcare Reform): Policy debates vs. medical misinformation
+- Category 14 (Conspiracy Theories): General conspiracies vs. health-specific ones
+
+---
+
+---
+
 ### **Additional Instructions**
 
 - **Cultural Sensitivity:** Always consider the cultural context and avoid imposing external biases. Be respectful of cultural nuances in language and expression.
