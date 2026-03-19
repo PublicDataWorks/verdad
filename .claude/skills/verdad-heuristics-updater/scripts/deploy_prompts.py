@@ -23,9 +23,9 @@ import os
 import sys
 import requests
 
-# VERDAD project configuration
-SUPABASE_URL = "https://dzujjhzgzguciwryzwlx.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6dWpqaHpnemd1Y2l3cnl6d2x4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjU1NzU4OTgsImV4cCI6MjA0MTE1MTg5OH0.siE0Uya6nIp0EpTfnIjIB4-YC9YAhGhER3XH7Bws_Bo"
+# VERDAD project configuration — loaded from environment or .env file
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
 # Prompt file mappings (relative to verdad repo root)
 STAGE_1_DETECTION = {
@@ -68,9 +68,13 @@ def deploy_via_rpc(supabase_url, supabase_key, config, version, description):
             "p_version": version,
             "p_description": description,
             "p_created_by": "heuristics_updater",
-            "p_system_instruction": read_file(config["system_instruction"]) if config.get("system_instruction") else None,
+            "p_system_instruction": read_file(config["system_instruction"])
+            if config.get("system_instruction")
+            else None,
             "p_user_prompt": read_file(config["user_prompt"]),
-            "p_output_schema": read_json(config["output_schema"]) if config.get("output_schema") else None,
+            "p_output_schema": read_json(config["output_schema"])
+            if config.get("output_schema")
+            else None,
             "p_set_active": True,
             "p_sub_stage": config.get("sub_stage"),
         },
@@ -119,7 +123,9 @@ def main():
     os.chdir(repo_root)
 
     # Try service_role key first
-    supabase_key = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    supabase_key = os.environ.get("SUPABASE_KEY") or os.environ.get(
+        "SUPABASE_SERVICE_ROLE_KEY"
+    )
 
     if supabase_key and supabase_key != SUPABASE_ANON_KEY:
         print("Using service_role key for deployment...")
@@ -129,7 +135,9 @@ def main():
         for config in [STAGE_1_DETECTION, STAGE_3]:
             label = f"{config['stage']}/{config.get('sub_stage', 'main')}"
             print(f"Deploying {label} v{version}...")
-            result = deploy_via_rpc(SUPABASE_URL, supabase_key, config, version, description)
+            result = deploy_via_rpc(
+                SUPABASE_URL, supabase_key, config, version, description
+            )
             print(f"  Success: {result}")
     else:
         print("No service_role key found.")
@@ -137,7 +145,9 @@ def main():
         print("")
         print("Quick reference:")
         print("1. INSERT new version by copying current active:")
-        print("   INSERT INTO prompt_versions (...) SELECT ... FROM prompt_versions WHERE id = '<active_id>' RETURNING id;")
+        print(
+            "   INSERT INTO prompt_versions (...) SELECT ... FROM prompt_versions WHERE id = '<active_id>' RETURNING id;"
+        )
         print("2. CREATE temp_import_prompt function (SECURITY DEFINER)")
         print("3. Use Python requests to POST content via REST API")
         print("4. Activate new version, deactivate old")
