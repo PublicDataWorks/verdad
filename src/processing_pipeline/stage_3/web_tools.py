@@ -6,7 +6,7 @@ import certifi
 import html2text
 
 SEARXNG_URL = os.environ.get("SEARXNG_URL", "")
-URL_READ_TIMEOUT = aiohttp.ClientTimeout(total=10)
+HTTP_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 # SSL context using certifi's CA bundle for environments where the system
 # certificate store may be incomplete (e.g., macOS Python without Homebrew certs)
@@ -33,6 +33,9 @@ async def searxng_web_search(
         A dictionary with a list of search results, each containing
         title, url, content snippet, and relevance score.
     """
+    if not SEARXNG_URL:
+        raise ValueError("SEARXNG_URL environment variable is not set")
+
     params = {
         "q": query,
         "format": "json",
@@ -45,7 +48,7 @@ async def searxng_web_search(
     if safesearch in (0, 1, 2):
         params["safesearch"] = safesearch
 
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=_ssl_context)) as session:
+    async with aiohttp.ClientSession(timeout=HTTP_TIMEOUT, connector=aiohttp.TCPConnector(ssl=_ssl_context)) as session:
         async with session.get(f"{SEARXNG_URL}/search", params=params) as response:
             response.raise_for_status()
             data = await response.json()
@@ -83,7 +86,7 @@ async def web_url_read(
         A dictionary with the URL and its content converted to markdown.
     """
     async with aiohttp.ClientSession(
-        timeout=URL_READ_TIMEOUT, connector=aiohttp.TCPConnector(ssl=_ssl_context)
+        timeout=HTTP_TIMEOUT, connector=aiohttp.TCPConnector(ssl=_ssl_context)
     ) as session:
         async with session.get(url) as response:
             response.raise_for_status()

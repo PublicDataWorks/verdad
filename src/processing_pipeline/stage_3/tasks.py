@@ -216,7 +216,7 @@ async def process_snippet(
 
         print(f"Processing completed for audio file {local_file} - snippet ID: {snippet['id']}")
 
-    except BaseException as e:
+    except Exception as e:
         if isinstance(e, ExceptionGroup):
             error_message = "\n".join(f"- {type(exc).__name__}: {exc}" for exc in e.exceptions)
         else:
