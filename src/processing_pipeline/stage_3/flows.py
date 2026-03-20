@@ -1,7 +1,8 @@
+import asyncio
 import os
-import time
 
 import boto3
+from google import genai
 from prefect.flows import Flow
 from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
@@ -37,7 +38,7 @@ def reset_snippet_status_hook(flow: Flow, flow_run: FlowRun, state: State):
     on_crashed=[reset_snippet_status_hook],
     on_cancellation=[reset_snippet_status_hook],
 )
-def in_depth_analysis(snippet_ids, skip_review, repeat):
+async def in_depth_analysis(snippet_ids, skip_review, repeat):
     # Setup S3 Client
     R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
     s3_client = boto3.client(
@@ -47,8 +48,11 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
         aws_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
     )
 
-    # Setup Gemini Key
+    # Setup Gemini client
     GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
+    if not GEMINI_KEY:
+        raise ValueError("No Gemini API key set (GOOGLE_GEMINI_KEY)")
+    gemini_client = genai.Client(api_key=GEMINI_KEY)
 
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
@@ -65,11 +69,11 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet
-                process_snippet(
-                    supabase_client,
-                    snippet,
-                    local_file,
-                    GEMINI_KEY,
+                await process_snippet(
+                    supabase_client=supabase_client,
+                    gemini_client=gemini_client,
+                    snippet=snippet,
+                    local_file=local_file,
                     skip_review=skip_review,
                     prompt_version=prompt_version,
                 )
@@ -84,11 +88,11 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet
-                process_snippet(
-                    supabase_client,
-                    snippet,
-                    local_file,
-                    GEMINI_KEY,
+                await process_snippet(
+                    supabase_client=supabase_client,
+                    gemini_client=gemini_client,
+                    snippet=snippet,
+                    local_file=local_file,
                     skip_review=skip_review,
                     prompt_version=prompt_version,
                 )
@@ -106,4 +110,4 @@ def in_depth_analysis(snippet_ids, skip_review, repeat):
                 sleep_time = 60
 
             print(f"Sleep for {sleep_time} seconds before the next iteration")
-            time.sleep(sleep_time)
+            await asyncio.sleep(sleep_time)
