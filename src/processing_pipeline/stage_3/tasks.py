@@ -3,15 +3,17 @@ from http import HTTPStatus
 import json
 import os
 
+from google import genai
 from google.genai import errors
 
 from processing_pipeline.constants import (
     CONFIDENCE_THRESHOLD,
-    GeminiModel,
     ProcessingStatus,
 )
 from processing_pipeline.processing_utils import postprocess_snippet
+from processing_pipeline.stage_3.constants import FALLBACK_MODEL, MAIN_MODEL
 from processing_pipeline.stage_3.executors import Stage3Executor
+from processing_pipeline.supabase_utils import SupabaseClient
 from utils import optional_task
 
 
@@ -131,67 +133,60 @@ def __get_metadata(snippet):
 
 
 @optional_task(log_prints=True)
-def analyze_snippet(gemini_key, audio_file, metadata, prompt_version: dict):
-    main_model = GeminiModel.GEMINI_2_5_PRO
-    fallback_model = GeminiModel.GEMINI_2_5_FLASH
+async def analyze_snippet(gemini_client, audio_file, metadata, prompt_version: dict):
+    model = MAIN_MODEL
 
     try:
-        print(f"Attempting analysis with {main_model}")
-        analyzing_response = Stage3Executor.run(
-            gemini_key=gemini_key,
-            model_name=main_model,
+        print(f"Attempting analysis with {model}")
+        analyzing_response = await Stage3Executor.run_async(
+            gemini_client=gemini_client,
+            model_name=model,
             audio_file=audio_file,
             metadata=metadata,
             prompt_version=prompt_version,
         )
-        return {
-            **analyzing_response,
-            "analyzed_by": main_model,
-        }
-    except errors.ServerError as e:
-        print(f"Server error with {main_model} (code {e.code}): {e.message}")
-        print(f"Falling back to {fallback_model}")
-        analyzing_response = Stage3Executor.run(
-            gemini_key=gemini_key,
-            model_name=fallback_model,
-            audio_file=audio_file,
-            metadata=metadata,
-            prompt_version=prompt_version,
-        )
-        return {
-            **analyzing_response,
-            "analyzed_by": fallback_model,
-        }
-    except errors.ClientError as e:
+    except (errors.ServerError, errors.ClientError) as e:
         if e.code in [HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN]:
-            print(f"Auth error with {main_model} (code {e.code}): {e.message}")
+            print(f"Auth error with {model} (code {e.code}): {e.message}")
             raise
-        else:
-            print(f"Client error with {main_model} (code {e.code}): {e.message}")
-            print(f"Falling back to {fallback_model}")
-            analyzing_response = Stage3Executor.run(
-                gemini_key=gemini_key,
-                model_name=fallback_model,
-                audio_file=audio_file,
-                metadata=metadata,
-                prompt_version=prompt_version,
-            )
-            return {
-                **analyzing_response,
-                "analyzed_by": fallback_model,
-            }
+
+        print(
+            f"{e.__class__.__name__} with {model} (code {e.code}): {e.message} "
+            f"Falling back to {FALLBACK_MODEL}"
+        )
+
+        model = FALLBACK_MODEL
+        analyzing_response = await Stage3Executor.run_async(
+            gemini_client=gemini_client,
+            model_name=model,
+            audio_file=audio_file,
+            metadata=metadata,
+            prompt_version=prompt_version,
+        )
+
+    return {
+        **analyzing_response,
+        "analyzed_by": model,
+    }
 
 
 @optional_task(log_prints=True)
-def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_review: bool, prompt_version: dict):
+async def process_snippet(
+    supabase_client: SupabaseClient,
+    gemini_client: genai.Client,
+    snippet: dict,
+    local_file: str,
+    skip_review: bool,
+    prompt_version: dict,
+):
     print(f"Processing snippet: {local_file}")
 
     try:
         metadata = get_metadata(snippet)
         print(f"Metadata:\n{json.dumps(metadata, indent=2, ensure_ascii=False)}")
 
-        analyzing_response = analyze_snippet(
-            gemini_key=gemini_key,
+        analyzing_response = await analyze_snippet(
+            gemini_client=gemini_client,
             audio_file=local_file,
             metadata=metadata,
             prompt_version=prompt_version,
@@ -222,5 +217,9 @@ def process_snippet(supabase_client, snippet, local_file, gemini_key, skip_revie
         print(f"Processing completed for audio file {local_file} - snippet ID: {snippet['id']}")
 
     except Exception as e:
-        print(f"Failed to process {local_file}: {e}")
-        supabase_client.set_snippet_status(snippet["id"], ProcessingStatus.ERROR, str(e))
+        if isinstance(e, ExceptionGroup):
+            error_message = "\n".join(f"- {type(exc).__name__}: {exc}" for exc in e.exceptions)
+        else:
+            error_message = f"{type(e).__name__}: {e}"
+        print(f"Failed to process {local_file}:\n{error_message}")
+        supabase_client.set_snippet_status(snippet["id"], ProcessingStatus.ERROR, error_message)
