@@ -19,7 +19,7 @@ The audio clip contains 3 parts:
 - `disinformation_categories`: the disinformation categories assigned to the snippet by Stage 1 of the pipeline
 - `additional_info`: other relevant metadata, such as recording date, time, and location
 
-3. The current date and time, which may be relevant for verifying time-sensitive claims made in the audio clip.
+3. The current date and time, the hours since recording, and any applicable breaking news protocol notice — provided in the Snippet Data section at the end of this prompt. These are critical for verifying time-sensitive claims.
 
 Your tasks are:
 
@@ -27,6 +27,14 @@ Your tasks are:
 2. **Translate** the transcription of the entire audio clip into English, preserving meaning, context, and cultural nuances.
 3. **Analyze** the content for disinformation, using detailed heuristics covering all disinformation categories.
 4. **Provide** detailed annotations and assemble structured output conforming to the provided JSON schema.
+
+## CRITICAL TEMPORAL CONSTRAINT
+
+The current date, time, and hours since recording are provided in the Snippet Data section at the end of this prompt. These values are AUTHORITATIVE and correct.
+
+- **NEVER** conclude that the current date is "in the future." Your training data has a knowledge cutoff that may predate today's date.
+- **NEVER** treat claims as false solely because they reference events after your training cutoff. Use web search to verify.
+- If you find yourself thinking "this date is in the future," STOP. Consult the Snippet Data section and the Breaking News Protocol (Section H.1).
 
 ## **Instructions**
 
@@ -296,13 +304,11 @@ No search results does NOT mean the claim is false. Unusual or surprising claims
 
 Before assigning any confidence score above 30 (out of 100), you MUST evaluate whether the claim qualifies as potentially unverifiable breaking news.
 
-**Step 1: Calculate Event Recency**
+**Step 1: Check Event Recency**
 
-Compare the following two timestamps:
-1. **Recording Timestamp**: The `recorded_at` field from the audio metadata
-2. **Current Timestamp**: The current date and time provided in the prompt
+The `hours_since_recording` value is provided in the Snippet Data section at the end of this prompt. Use this pre-computed value directly — do not attempt your own date calculations.
 
-Calculate the time difference. If the recording was made within the past **72 hours**, the content may reference breaking news that has not yet been indexed.
+If the recording was made within the past **72 hours** (i.e., `hours_since_recording` ≤ 72), the content may reference breaking news that has not yet been indexed.
 
 **Step 2: Identify Time-Sensitive Claims**
 
@@ -368,8 +374,8 @@ After completing your initial analysis, perform this structured review:
 
 5. **Breaking News Verification Checklist**
    Before finalizing any score above 30 (out of 100), answer these questions:
-   - [ ] Have I calculated the time delta between recording and current time?
-   - [ ] Is this claim within the 72-hour breaking news window?
+   - [ ] Have I checked the `hours_since_recording` value from the Snippet Data section?
+   - [ ] Is this claim within the 72-hour breaking news window (hours_since_recording ≤ 72)?
    - [ ] If within the breaking news window, did I find CONTRADICTORY evidence (not just absence of evidence)?
    - [ ] If no contradictory evidence found for a recent claim, is my score capped at 30 or lower?
    - [ ] Have I included the required Breaking News Protocol note if applicable?

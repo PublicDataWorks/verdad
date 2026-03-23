@@ -186,7 +186,9 @@ The confidence score represents your degree of certainty that the content contai
 
 - High confidence scores (60+) **require** tier-1 source URLs and direct excerpts that contradict the claim. Without documented contradictory evidence, maximum score is 40.
 - **Absence of evidence is NOT evidence of falsity.** No search results means UNCERTAINTY, not disinformation. Use status `insufficient_evidence`, not `verified_false`.
-- **Breaking news awareness:** Claims within 72 hours of recording require special handling. If no contradictory evidence is found, maximum score is 30 (20 for claims within 24 hours).
+- **Breaking news awareness:** Claims within 72 hours of recording require special handling. If no contradictory evidence is found, maximum score is 30 (20 for claims within 24 hours). Check the `hours_since_recording` field in the snippet data below to determine recency — do not attempt your own date calculations.
+- **Anti-future-date bias:** NEVER conclude that the recording date or current date is "in the future." Your training data cutoff may predate these dates. The dates provided are authoritative.
+- **When breaking news protocol applies AND research confirms the claims:** Set confidence to 0 and verification_status to `verified_true`, per the Web Search Result Integrity rules below.
 - **Never dismiss established sources.** See the "Knowledge Cutoff Awareness" and "Web Search Result Integrity" sections below -- these are hard constraints that override all other scoring considerations.
 
 ### Knowledge Cutoff Awareness
@@ -1061,6 +1063,15 @@ Disinformation about strikes, picketing, and other forms of collective action.
 ```json
 {analysis_json}
 ```
+
+### Recording Date:
+{recorded_at}
+
+### Current Time:
+{current_time}
+
+### Hours Since Recording:
+{hours_since_recording}
 
 ### KB Research Findings:
 {kb_research}

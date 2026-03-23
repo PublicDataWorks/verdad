@@ -47,11 +47,44 @@ class Stage3Executor:
             dict: Structured and validated analysis output
         """
 
+        # Pre-compute temporal context for breaking news protocol
+        now = datetime.now(timezone.utc)
+        current_date_time = now.strftime("%B %-d, %Y %-I:%M %p UTC")
+
+        recorded_at_str = metadata.get("additional_info", {}).get("recorded_at", "")
+        hours_since_recording = ""
+        breaking_news_notice = ""
+        if recorded_at_str:
+            try:
+                recorded_at_dt = datetime.strptime(recorded_at_str, "%B %-d, %Y %-I:%M %p")
+                recorded_at_dt = recorded_at_dt.replace(tzinfo=timezone.utc)
+                delta_hours = round((now - recorded_at_dt).total_seconds() / 3600, 1)
+                hours_since_recording = str(delta_hours)
+                if delta_hours <= 24:
+                    breaking_news_notice = (
+                        f"**BREAKING NEWS PROTOCOL APPLIES**: This recording is {delta_hours} hours old (< 24 hours). "
+                        f"Maximum confidence score is 20 unless contradictory evidence from tier-1/tier-2 sources is found. "
+                        f"Use verification_status: insufficient_evidence."
+                    )
+                elif delta_hours <= 72:
+                    breaking_news_notice = (
+                        f"**BREAKING NEWS PROTOCOL APPLIES**: This recording is {delta_hours} hours old (< 72 hours). "
+                        f"Maximum confidence score is 30 unless contradictory evidence from tier-1/tier-2 sources is found. "
+                        f"Use verification_status: insufficient_evidence."
+                    )
+            except ValueError:
+                pass
+
         # Prepare the user prompt
         user_prompt = (
             f"{prompt_version['user_prompt']}\n\n"
-            f"Here is the metadata of the attached audio clip:\n{json.dumps(metadata, indent=2)}\n\n"
-            f"Here is the current date and time: {datetime.now(timezone.utc).strftime('%B %-d, %Y %-I:%M %p UTC')}\n\n"
+            f"## Snippet Data\n\n"
+            f"- **Current date and time**: {current_date_time}\n"
+            f"- **Hours since recording**: {hours_since_recording}\n"
+            f"- {breaking_news_notice}\n"
+            f"- **Metadata of the attached audio clip**: \n{json.dumps(metadata, indent=2)}\n\n"
+            f"**WARNING:** Do NOT treat today's date as a 'future date'. "
+            f"Your training data may predate this date — that does NOT make the date wrong.\n\n"
         )
 
         # Upload audio file

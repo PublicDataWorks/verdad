@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import Optional
 
 from google.adk.apps.app import App
@@ -68,6 +69,15 @@ class Stage4Executor:
         if not disinformation_snippet:
             print("Warning: Disinformation Snippet was not provided for Review")
 
+        # Pre-compute hours since recording for breaking news protocol
+        hours_since_recording = ""
+        try:
+            rec_dt = datetime.fromisoformat(recorded_at)
+            cur_dt = datetime.fromisoformat(current_time)
+            hours_since_recording = str(round((cur_dt - rec_dt).total_seconds() / 3600, 1))
+        except (ValueError, TypeError):
+            pass
+
         # Build the agent pipeline
         review_pipeline, searxng_toolset = build_review_pipeline(prompt_versions, reviewer_model)
         session_service = InMemorySessionService()
@@ -88,6 +98,7 @@ class Stage4Executor:
                     "analysis_json": json.dumps(analysis_json, indent=2),
                     "recorded_at": recorded_at,
                     "current_time": current_time,
+                    "hours_since_recording": hours_since_recording,
                     "kb_research": "",
                     "web_research": "",
                     "revised_analysis": "",
