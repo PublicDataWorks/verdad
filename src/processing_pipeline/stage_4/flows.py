@@ -20,7 +20,7 @@ from utils import optional_flow
     task_runner=ConcurrentTaskRunner,
 )
 async def analysis_review(snippet_ids, repeat):
-    os.environ["GOOGLE_API_KEY"] = os.environ.get("GOOGLE_GEMINI_PAID_KEY")
+    os.environ["GOOGLE_API_KEY"] = os.environ.get("GOOGLE_GEMINI_KEY")
 
     supabase_client = SupabaseClient(
         supabase_url=os.getenv("SUPABASE_URL"),
