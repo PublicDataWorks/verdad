@@ -17,7 +17,9 @@ class SupabaseClient:
         return response.data if response else None
 
     def get_a_new_stage_1_llm_response_and_reserve_it(self):
-        response = self.client.rpc("fetch_a_new_stage_1_llm_response_and_reserve_it").execute()
+        response = self.client.rpc(
+            "fetch_a_new_stage_1_llm_response_and_reserve_it"
+        ).execute()
         return response.data if response else None
 
     def get_a_new_snippet_and_reserve_it(self):
@@ -25,7 +27,9 @@ class SupabaseClient:
         return response.data if response else None
 
     def get_a_ready_for_review_snippet_and_reserve_it(self):
-        response = self.client.rpc("fetch_a_ready_for_review_snippet_and_reserve_it").execute()
+        response = self.client.rpc(
+            "fetch_a_ready_for_review_snippet_and_reserve_it"
+        ).execute()
         return response.data if response.data else None
 
     def get_snippet_by_id(self, id, select="*"):
@@ -37,11 +41,18 @@ class SupabaseClient:
         return response.data
 
     def get_audio_file_by_id(self, id, select="*"):
-        response = self.client.table("audio_files").select(select).eq("id", id).execute()
+        response = (
+            self.client.table("audio_files").select(select).eq("id", id).execute()
+        )
         return response.data[0] if response.data else None
 
     def get_stage_1_llm_response_by_id(self, id, select="*"):
-        response = self.client.table("stage_1_llm_responses").select(select).eq("id", id).execute()
+        response = (
+            self.client.table("stage_1_llm_responses")
+            .select(select)
+            .eq("id", id)
+            .execute()
+        )
         return response.data[0] if response.data else None
 
     def set_audio_file_status(self, id, status, error_message=None):
@@ -53,7 +64,12 @@ class SupabaseClient:
                 .execute()
             )
         else:
-            response = self.client.table("audio_files").update({"status": status}).eq("id", id).execute()
+            response = (
+                self.client.table("audio_files")
+                .update({"status": status})
+                .eq("id", id)
+                .execute()
+            )
         return response.data
 
     def set_stage_1_llm_response_status(self, id, status, error_message=None):
@@ -65,7 +81,12 @@ class SupabaseClient:
                 .execute()
             )
         else:
-            response = self.client.table("stage_1_llm_responses").update({"status": status}).eq("id", id).execute()
+            response = (
+                self.client.table("stage_1_llm_responses")
+                .update({"status": status})
+                .eq("id", id)
+                .execute()
+            )
         return response.data
 
     def set_snippet_status(self, id, status, error_message=None):
@@ -77,7 +98,12 @@ class SupabaseClient:
                 .execute()
             )
         else:
-            response = self.client.table("snippets").update({"status": status}).eq("id", id).execute()
+            response = (
+                self.client.table("snippets")
+                .update({"status": status})
+                .eq("id", id)
+                .execute()
+            )
         return response.data
 
     def insert_audio_file(
@@ -120,7 +146,9 @@ class SupabaseClient:
             query = query.is_("sub_stage", "null")
         response = query.limit(1).execute()
         if not response.data:
-            raise ValueError(f"No active prompt version found for stage: {stage}, sub_stage: {sub_stage}")
+            raise ValueError(
+                f"No active prompt version found for stage: {stage}, sub_stage: {sub_stage}"
+            )
         return response.data[0]
 
     def get_prompt_by_id(self, prompt_version_id: str):
@@ -290,27 +318,29 @@ class SupabaseClient:
         political_leaning,
         grounding_metadata,
         reviewed_by,
-        thought_summaries=None
+        thought_summaries=None,
     ):
         response = (
             self.client.table("snippets")
-            .update({
-                "translation": translation,
-                "title": title,
-                "summary": summary,
-                "explanation": explanation,
-                "disinformation_categories": disinformation_categories,
-                "keywords_detected": keywords_detected,
-                "language": language,
-                "confidence_scores": confidence_scores,
-                "political_leaning": political_leaning,
-                "grounding_metadata": grounding_metadata,
-                "thought_summaries": thought_summaries,
-                "status": "Processed",
-                "error_message": None,
-                "reviewed_at": datetime.now(timezone.utc).isoformat(),
-                "reviewed_by": reviewed_by,
-            })
+            .update(
+                {
+                    "translation": translation,
+                    "title": title,
+                    "summary": summary,
+                    "explanation": explanation,
+                    "disinformation_categories": disinformation_categories,
+                    "keywords_detected": keywords_detected,
+                    "language": language,
+                    "confidence_scores": confidence_scores,
+                    "political_leaning": political_leaning,
+                    "grounding_metadata": grounding_metadata,
+                    "thought_summaries": thought_summaries,
+                    "status": "Processed",
+                    "error_message": None,
+                    "reviewed_at": datetime.now(timezone.utc).isoformat(),
+                    "reviewed_by": reviewed_by,
+                }
+            )
             .eq("id", id)
             .execute()
         )
@@ -355,13 +385,17 @@ class SupabaseClient:
         )
         return response.data
 
-    def update_stage_1_llm_response_timestamped_transcription(self, id, timestamped_transcription, transcriptor):
+    def update_stage_1_llm_response_timestamped_transcription(
+        self, id, timestamped_transcription, transcriptor
+    ):
         response = (
             self.client.table("stage_1_llm_responses")
-            .update({
-                "timestamped_transcription": timestamped_transcription,
-                "transcriptor": transcriptor
-            })
+            .update(
+                {
+                    "timestamped_transcription": timestamped_transcription,
+                    "transcriptor": transcriptor,
+                }
+            )
             .eq("id", id)
             .execute()
         )
@@ -379,81 +413,134 @@ class SupabaseClient:
     def create_new_label(self, text, text_spanish):
         # Check if the label with the same text already exists
         existing_label = (
-            self.client.table("labels")
-            .select("*")
-            .eq("text", text)
-            .execute()
+            self.client.table("labels").select("*").eq("text", text).execute()
         )
 
         if existing_label.data:
             print(f"Label '{text}' already exists")
             return existing_label.data[0]
         else:
-            response = self.client.table("labels").insert({
-                "text": text,
-                "text_spanish": text_spanish,
-                "is_ai_suggested": True,
-            }).execute()
+            response = (
+                self.client.table("labels")
+                .insert(
+                    {
+                        "text": text,
+                        "text_spanish": text_spanish,
+                        "is_ai_suggested": True,
+                    }
+                )
+                .execute()
+            )
             return response.data[0]
 
     def assign_label_to_snippet(self, label_id, snippet_id):
         # Check if the label is already assigned to the snippet
-        existing_snippet_label = self.client.table("snippet_labels").select("*").eq("label", label_id).eq("snippet", snippet_id).execute()
+        existing_snippet_label = (
+            self.client.table("snippet_labels")
+            .select("*")
+            .eq("label", label_id)
+            .eq("snippet", snippet_id)
+            .execute()
+        )
         if existing_snippet_label.data:
             print(f"Label {label_id} already assigned to snippet {snippet_id}")
             return existing_snippet_label.data[0]
         else:
             response = (
                 self.client.table("snippet_labels")
-                .insert({
-                    "label": label_id,
-                    "snippet": snippet_id,
-                })
+                .insert(
+                    {
+                        "label": label_id,
+                        "snippet": snippet_id,
+                    }
+                )
                 .execute()
             )
             return response.data[0]
 
     def reset_audio_file_status(self, ids):
-        response = self.client.table("audio_files").update({"status": "New", "error_message": None}).in_("id", ids).execute()
+        response = (
+            self.client.table("audio_files")
+            .update({"status": "New", "error_message": None})
+            .in_("id", ids)
+            .execute()
+        )
         return response.data
 
     def delete_stage_1_llm_responses(self, audio_file_ids):
-        response = self.client.table("stage_1_llm_responses").delete().in_("audio_file", audio_file_ids).execute()
+        response = (
+            self.client.table("stage_1_llm_responses")
+            .delete()
+            .in_("audio_file", audio_file_ids)
+            .execute()
+        )
         return response.data
 
     def get_a_snippet_that_has_no_embedding(self):
         response = self.client.rpc("fetch_a_snippet_that_has_no_embedding").execute()
         return response.data if response.data else None
 
-    def upsert_snippet_embedding(self, snippet_id, snippet_document, document_token_count, embedding, model_name, status, error_message):
+    def upsert_snippet_embedding(
+        self,
+        snippet_id,
+        snippet_document,
+        document_token_count,
+        embedding,
+        model_name,
+        status,
+        error_message,
+    ):
         # Check if the embedding of the snippet already exists
-        existing_embedding = self.client.table("snippet_embeddings").select("id").eq("snippet", snippet_id).execute()
+        existing_embedding = (
+            self.client.table("snippet_embeddings")
+            .select("id")
+            .eq("snippet", snippet_id)
+            .execute()
+        )
         if existing_embedding.data:
             # If it exists, update the embedding
-            response = self.client.table("snippet_embeddings").update({
-                "snippet_document": snippet_document,
-                "document_token_count": document_token_count,
-                "embedding": embedding,
-                "model_name": model_name,
-                "status": status,
-                "error_message": error_message,
-            }).eq("snippet", snippet_id).execute()
+            response = (
+                self.client.table("snippet_embeddings")
+                .update(
+                    {
+                        "snippet_document": snippet_document,
+                        "document_token_count": document_token_count,
+                        "embedding": embedding,
+                        "model_name": model_name,
+                        "status": status,
+                        "error_message": error_message,
+                    }
+                )
+                .eq("snippet", snippet_id)
+                .execute()
+            )
             return response.data[0]
         else:
             # If not, insert the new embedding
-            response = self.client.table("snippet_embeddings").insert({
-                "snippet": snippet_id,
-                "snippet_document": snippet_document,
-                "document_token_count": document_token_count,
-                "embedding": embedding,
-                "model_name": model_name,
-                "status": status,
-                "error_message": error_message,
-            }).execute()
+            response = (
+                self.client.table("snippet_embeddings")
+                .insert(
+                    {
+                        "snippet": snippet_id,
+                        "snippet_document": snippet_document,
+                        "document_token_count": document_token_count,
+                        "embedding": embedding,
+                        "model_name": model_name,
+                        "status": status,
+                        "error_message": error_message,
+                    }
+                )
+                .execute()
+            )
             return response.data[0]
 
     def delete_vector_embedding_of_snippet(self, snippet_id):
-        response = self.client.table("snippet_embeddings").delete().eq("snippet", snippet_id).execute()
+        response = (
+            self.client.table("snippet_embeddings")
+            .delete()
+            .eq("snippet", snippet_id)
+            .execute()
+        )
         return response.data
 
     # Knowledge Base methods
@@ -480,15 +567,32 @@ class SupabaseClient:
         response = self.client.rpc("search_kb_entries", params).execute()
         return response.data if response.data else []
 
-    def find_duplicate_kb_entries(self, query_embedding, similarity_threshold=0.92, max_results=5):
-        response = self.client.rpc("find_duplicate_kb_entries", {
-            "query_embedding": query_embedding,
-            "similarity_threshold": similarity_threshold,
-            "max_results": max_results,
-        }).execute()
+    def find_duplicate_kb_entries(
+        self, query_embedding, similarity_threshold=0.92, max_results=5
+    ):
+        response = self.client.rpc(
+            "find_duplicate_kb_entries",
+            {
+                "query_embedding": query_embedding,
+                "similarity_threshold": similarity_threshold,
+                "max_results": max_results,
+            },
+        ).execute()
         return response.data if response.data else []
 
-    def insert_kb_entry(self, fact, confidence_score, disinformation_categories=None, keywords=None, related_claim=None, valid_from=None, valid_until=None, is_time_sensitive=False, created_by_snippet=None, created_by_model=None):
+    def insert_kb_entry(
+        self,
+        fact,
+        confidence_score,
+        disinformation_categories=None,
+        keywords=None,
+        related_claim=None,
+        valid_from=None,
+        valid_until=None,
+        is_time_sensitive=False,
+        created_by_snippet=None,
+        created_by_model=None,
+    ):
         data = {
             "fact": fact,
             "confidence_score": confidence_score,
@@ -538,10 +642,12 @@ class SupabaseClient:
             )
 
         # Update old entry: superseded
-        self.client.table("kb_entries").update({
-            "status": "superseded",
-            "superseded_by": new_entry["id"],
-        }).eq("id", old_entry_id).execute()
+        self.client.table("kb_entries").update(
+            {
+                "status": "superseded",
+                "superseded_by": new_entry["id"],
+            }
+        ).eq("id", old_entry_id).execute()
 
         # Delete old embedding
         self.delete_kb_entry_embedding(old_entry_id)
@@ -549,23 +655,47 @@ class SupabaseClient:
         return new_entry
 
     def deactivate_kb_entry(self, entry_id, reason):
-        response = self.client.table("kb_entries").update({
-            "status": "deactivated",
-            "deactivation_reason": reason,
-        }).eq("id", entry_id).execute()
+        response = (
+            self.client.table("kb_entries")
+            .update(
+                {
+                    "status": "deactivated",
+                    "deactivation_reason": reason,
+                }
+            )
+            .eq("id", entry_id)
+            .execute()
+        )
         # Delete embedding so it no longer appears in RAG queries
         self.delete_kb_entry_embedding(entry_id)
         return response.data[0] if response.data else None
 
     def get_kb_entry_by_id(self, entry_id):
-        response = self.client.table("kb_entries").select("*").eq("id", entry_id).execute()
+        response = (
+            self.client.table("kb_entries").select("*").eq("id", entry_id).execute()
+        )
         return response.data[0] if response.data else None
 
     def get_kb_entry_sources(self, kb_entry_id):
-        response = self.client.table("kb_entry_sources").select("*").eq("kb_entry", kb_entry_id).execute()
+        response = (
+            self.client.table("kb_entry_sources")
+            .select("*")
+            .eq("kb_entry", kb_entry_id)
+            .execute()
+        )
         return response.data if response.data else []
 
-    def insert_kb_entry_source(self, kb_entry_id, url, source_name, source_type, title=None, relevant_excerpt=None, publication_date=None, relevance_to_claim="provides_context"):
+    def insert_kb_entry_source(
+        self,
+        kb_entry_id,
+        url,
+        source_name,
+        source_type,
+        title=None,
+        relevant_excerpt=None,
+        publication_date=None,
+        relevance_to_claim="provides_context",
+    ):
         data = {
             "kb_entry": kb_entry_id,
             "url": url,
@@ -582,8 +712,20 @@ class SupabaseClient:
         response = self.client.table("kb_entry_sources").insert(data).execute()
         return response.data[0]
 
-    def upsert_kb_entry_embedding(self, kb_entry_id, embedded_document, document_token_count, embedding, model_name):
-        existing = self.client.table("kb_entry_embeddings").select("id").eq("kb_entry", kb_entry_id).execute()
+    def upsert_kb_entry_embedding(
+        self,
+        kb_entry_id,
+        embedded_document,
+        document_token_count,
+        embedding,
+        model_name,
+    ):
+        existing = (
+            self.client.table("kb_entry_embeddings")
+            .select("id")
+            .eq("kb_entry", kb_entry_id)
+            .execute()
+        )
         data = {
             "embedded_document": embedded_document,
             "document_token_count": document_token_count,
@@ -593,17 +735,29 @@ class SupabaseClient:
             "error_message": None,
         }
         if existing.data:
-            response = self.client.table("kb_entry_embeddings").update(data).eq("kb_entry", kb_entry_id).execute()
+            response = (
+                self.client.table("kb_entry_embeddings")
+                .update(data)
+                .eq("kb_entry", kb_entry_id)
+                .execute()
+            )
         else:
             data["kb_entry"] = kb_entry_id
             response = self.client.table("kb_entry_embeddings").insert(data).execute()
         return response.data[0]
 
     def delete_kb_entry_embedding(self, kb_entry_id):
-        response = self.client.table("kb_entry_embeddings").delete().eq("kb_entry", kb_entry_id).execute()
+        response = (
+            self.client.table("kb_entry_embeddings")
+            .delete()
+            .eq("kb_entry", kb_entry_id)
+            .execute()
+        )
         return response.data
 
-    def record_kb_usage(self, kb_entry_id, snippet_id, usage_type, similarity_score=None):
+    def record_kb_usage(
+        self, kb_entry_id, snippet_id, usage_type, similarity_score=None
+    ):
         data = {
             "kb_entry": kb_entry_id,
             "snippet": snippet_id,
@@ -621,7 +775,81 @@ class SupabaseClient:
             .execute()
         )
         if existing.data:
-            response = self.client.table("kb_entry_snippet_usage").update(data).eq("id", existing.data[0]["id"]).execute()
+            response = (
+                self.client.table("kb_entry_snippet_usage")
+                .update(data)
+                .eq("id", existing.data[0]["id"])
+                .execute()
+            )
         else:
-            response = self.client.table("kb_entry_snippet_usage").insert(data).execute()
+            response = (
+                self.client.table("kb_entry_snippet_usage").insert(data).execute()
+            )
         return response.data[0]
+
+    # ── Downvote Review Queue ─────────────────────────────────────────
+
+    def get_pending_downvote_reviews(self, limit=10):
+        """Fetch pending downvote review queue entries."""
+        response = (
+            self.client.table("downvote_review_queue")
+            .select("*")
+            .eq("status", "pending")
+            .order("created_at")
+            .limit(limit)
+            .execute()
+        )
+        return response.data if response.data else []
+
+    def claim_downvote_review(self, queue_id):
+        """Atomically claim a downvote review entry for processing."""
+        response = (
+            self.client.table("downvote_review_queue")
+            .update({"status": "processing"})
+            .eq("id", queue_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def complete_downvote_review(self, queue_id, kb_entries_created=0):
+        """Mark a downvote review as completed."""
+        from datetime import datetime, timezone
+
+        response = (
+            self.client.table("downvote_review_queue")
+            .update(
+                {
+                    "status": "completed",
+                    "processed_at": datetime.now(timezone.utc).isoformat(),
+                    "kb_entries_created": kb_entries_created,
+                }
+            )
+            .eq("id", queue_id)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def fail_downvote_review(self, queue_id, error_message):
+        """Mark a downvote review as failed."""
+        response = (
+            self.client.table("downvote_review_queue")
+            .update(
+                {
+                    "status": "error",
+                    "error_message": error_message,
+                }
+            )
+            .eq("id", queue_id)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def hide_snippet_by_system(self, snippet_id):
+        """Hide a snippet programmatically (no auth/admin check)."""
+        response = (
+            self.client.table("user_hide_snippets")
+            .upsert({"snippet": snippet_id}, on_conflict="snippet")
+            .execute()
+        )
+        return response.data[0] if response.data else None
