@@ -70,14 +70,12 @@ if __name__ == "__main__":
         case "analysis_review":
             deployment = analysis_review.to_deployment(
                 name="Stage 4: Analysis Review",
-                concurrency_limit=100,
                 parameters=dict(snippet_ids=[], repeat=True),
             )
             serve(deployment, limit=100)
         case "analysis_review_2":
             deployment = analysis_review.to_deployment(
                 name="Stage 4: Analysis Review 2",
-                concurrency_limit=100,
                 parameters=dict(snippet_ids=[], repeat=True),
             )
             serve(deployment, limit=100)
