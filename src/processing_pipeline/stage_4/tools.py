@@ -1,7 +1,6 @@
 # WARNING: Do not delete the docstrings of exported functions (search_knowledge_base, upsert_knowledge_entry, deactivate_knowledge_entry).
 # They are used by Gemini ADK as tool descriptions.
 
-import json
 import os
 
 from openai import OpenAI
@@ -12,6 +11,7 @@ from processing_pipeline.constants import (
     KB_SEARCH_MATCH_THRESHOLD,
     GeminiModel,
 )
+from processing_pipeline.processing_utils import normalize_embedding
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -29,7 +29,7 @@ def _generate_embedding(text: str) -> list[float]:
 
     client = OpenAI(api_key=openai_api_key)
     response = client.embeddings.create(model="text-embedding-3-large", input=text)
-    return response.data[0].embedding
+    return normalize_embedding(response.data[0].embedding)
 
 
 def _generate_kb_document(fact: str, related_claim: str | None = None, categories: list[str] | None = None) -> str:

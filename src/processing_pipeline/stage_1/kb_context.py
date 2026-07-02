@@ -7,6 +7,7 @@ from processing_pipeline.stage_1.constants import (
     KB_STAGE1_CHUNK_SIZE,
     KB_STAGE1_MATCH_COUNT_PER_CHUNK,
 )
+from processing_pipeline.processing_utils import normalize_embedding
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -24,7 +25,7 @@ def retrieve_kb_context(
 
     # Batch-embed all chunks in a single API call
     response = openai_client.embeddings.create(model="text-embedding-3-large", input=chunks)
-    embeddings = [item.embedding for item in response.data]
+    embeddings = [normalize_embedding(item.embedding) for item in response.data]
 
     # Search KB for each chunk and deduplicate by entry ID
     seen = {}

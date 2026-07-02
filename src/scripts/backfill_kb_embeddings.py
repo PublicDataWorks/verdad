@@ -16,6 +16,7 @@ from tiktoken import encoding_for_model
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from processing_pipeline.processing_utils import normalize_embedding
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -78,7 +79,7 @@ def main():
             model="text-embedding-3-large",
             input=document,
         )
-        embedding = response.data[0].embedding
+        embedding = normalize_embedding(response.data[0].embedding)
         token_count = len(encoding.encode(document))
 
         client.upsert_kb_entry_embedding(

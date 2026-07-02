@@ -1,3 +1,5 @@
+import math
+
 from google.genai.types import (
     HarmBlockThreshold,
     HarmCategory,
@@ -5,6 +7,20 @@ from google.genai.types import (
 )
 
 from utils import optional_task
+
+
+def normalize_embedding(embedding: list[float]):
+    """L2-normalize an embedding to exact unit length.
+
+    OpenAI's text-embedding-3 vectors are only approximately normalized (norm
+    ~1.0 +/- 0.0001), which occasionally violates the `snippet_embeddings`
+    `embedding_normalized` check and skews inner-product (`<#>`) similarity.
+    Returns the input unchanged if its norm is zero.
+    """
+    norm = math.sqrt(sum(value * value for value in embedding))
+    if norm == 0.0:
+        return embedding
+    return [value / norm for value in embedding]
 
 
 def get_safety_settings():
