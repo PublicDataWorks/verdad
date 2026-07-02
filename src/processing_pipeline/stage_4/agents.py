@@ -47,7 +47,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     kb_researcher = LlmAgent(
         name="kb_researcher",
         description="Searches the internal knowledge base for verified facts relevant to the flagged claims.",
-        model=GeminiModel.GEMINI_2_5_FLASH,
+        model=GeminiModel.GEMINI_2_5_PRO,
         instruction=prompt_versions["kb_researcher"]["system_instruction"],
         tools=[FunctionTool(search_knowledge_base)],
         output_key="kb_research",
@@ -57,7 +57,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     web_researcher = LlmAgent(
         name="web_researcher",
         description="Performs web-based fact-checking using search engines and source reading.",
-        model=GeminiModel.GEMINI_2_5_FLASH,
+        model=GeminiModel.GEMINI_2_5_PRO,
         instruction=prompt_versions["web_researcher"]["system_instruction"],
         tools=[searxng_toolset],
         output_key="web_research",
@@ -80,7 +80,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     kb_updater = LlmAgent(
         name="kb_updater",
         description="Updates the knowledge base with newly verified facts from the review.",
-        model=GeminiModel.GEMINI_2_5_FLASH,
+        model=GeminiModel.GEMINI_2_5_PRO,
         instruction=prompt_versions["kb_updater"]["system_instruction"],
         tools=[
             FunctionTool(upsert_knowledge_entry),
