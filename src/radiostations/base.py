@@ -228,5 +228,5 @@ class RadioStation:
             subprocess.run(["pulseaudio", "--check"], check=True)
             print("PulseAudio is now running.")
             return
-        except subprocess.CalledProcessError:
-            raise Exception("Failed to start PulseAudio.")
+        except subprocess.CalledProcessError as e:
+            raise Exception("Failed to start PulseAudio.") from e

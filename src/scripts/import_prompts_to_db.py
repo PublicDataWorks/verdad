@@ -218,7 +218,7 @@ def import_prompts(
             print(f"    - User prompt: {len(data.get('user_prompt', '')) or 'N/A'} chars")
             print(f"    - Output schema: {'Yes' if data.get('output_schema') else 'No'}")
             if set_active:
-                print(f"    - Would deactivate existing active version and set this as active")
+                print("    - Would deactivate existing active version and set this as active")
             continue
 
         # Use PostgreSQL function for atomic insert + activation

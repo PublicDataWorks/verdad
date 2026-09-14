@@ -33,3 +33,18 @@ directory = "htmlcov"
 
 [tool.coverage.xml]
 output = "coverage.xml"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["docs", "htmlcov", "searxng", "server", "supabase"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+ignore = ["E501"]
+# "I" (import sorting) is deliberately off for now: enabling it re-sorts imports in ~40 files.
+# Turn it on in a dedicated formatting-only commit once in-flight branches have landed.
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "lf"

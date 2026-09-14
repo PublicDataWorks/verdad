@@ -1,0 +1,9 @@
+# Install once with: pip install pre-commit && pre-commit install
+# Runs only on the files staged in the commit.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.7
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format

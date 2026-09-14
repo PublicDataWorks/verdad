@@ -161,7 +161,7 @@ def initial_disinformation_detection_with_gemini(
     prompt_version: dict,
     kb_context: str | None,
 ):
-    print(f"Processing initial transcription with Gemini for disinformation detection")
+    print("Processing initial transcription with Gemini for disinformation detection")
     if not gemini_client:
         raise ValueError("Gemini client is not provided")
 
