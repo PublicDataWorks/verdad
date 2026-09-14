@@ -1,6 +1,6 @@
 # VERDAD
 
-VERDAD is an open-source platform designed to detect and analyze potential disinformation in radio broadcasts (across any language, but with a primary focus on Spanish and Arabic). Our multi-stage AI pipeline powered primarily by Google's multimodal Gemini LLM APIs and OpenAI Whisper speech-to-text (ASR) API. The audio recording pipeline is orchestrated by Prefect running on Fly.io. This system includes continuous audio recording, preliminary detection by a multimodal model, detailed transcription with timestamps, audio clip generation, and nuanced content analysis to generate structured output that is finally stored in a Postgres database and displayed in an interactive [front-end](https://github.com/publicdataworks/verdad-frontend) where support journalists and researchers can review suspected snippets of mis/disinformation upvote the existing labels or add their own custom labels and discuss with each other in comments. Their feedback will also be used to improve the heuristics for flagging suspected mis/disinfo more accurately going forward.
+VERDAD is an open-source platform designed to detect and analyze potential disinformation in radio broadcasts (across any language, but with a primary focus on Spanish and Arabic). Our five-stage AI pipeline is powered by Google's multimodal Gemini 2.5 models (`gemini-2.5-flash`, `gemini-2.5-pro`) with OpenAI `text-embedding-3-large` embeddings for knowledge-base retrieval and semantic search. The audio recording pipeline is orchestrated by Prefect running on Fly.io. This system includes continuous audio recording, preliminary detection by a multimodal model, detailed transcription with timestamps, audio clip generation, nuanced content analysis, an agentic fact-checking review, and vector embedding to generate structured output that is finally stored in a Postgres database and displayed in an interactive [front-end](https://github.com/publicdataworks/verdad-frontend) where support journalists and researchers can review suspected snippets of mis/disinformation upvote the existing labels or add their own custom labels and discuss with each other in comments. Their feedback will also be used to improve the heuristics for flagging suspected mis/disinfo more accurately going forward.
 
 The project's big goals are:
 
@@ -21,7 +21,7 @@ The VERDAD project addresses the critical challenge of monitoring and analyzing 
 
 ## Technical Architecture
 
-VERDAD employs a multi-stage pipeline architecture designed for scalability and accuracy:
+VERDAD employs a five-stage pipeline (`src/processing_pipeline/stage_1` ... `stage_5`), each stage a Prefect flow that polls Supabase for work:
 
 ### Stage 1: Initial Disinformation Detection
 
@@ -32,9 +32,8 @@ VERDAD employs a multi-stage pipeline architecture designed for scalability and 
 
 **Process:**
 
--   Uses Gemini 1.5 Flash LLM for rapid initial screening
--   Applies simplified heuristics for high-recall detection
--   Generates timestamped transcriptions using OpenAI Whisper
+-   Uses Gemini 2.5 Flash (`gemini-2.5-flash`) for an initial transcription and a high-recall screening pass, augmented with knowledge-base context retrieved via OpenAI embeddings
+-   Only if something is flagged: generates a timestamped transcription with Gemini 2.5 Flash over 20-second audio segments, then runs the main detection prompt
 
 **Output:**
 
@@ -71,9 +70,9 @@ VERDAD employs a multi-stage pipeline architecture designed for scalability and 
 
 **Process:**
 
--   Utilizes Gemini 1.5 Pro LLM for detailed analysis
+-   Uses Gemini 2.5 Pro (`gemini-2.5-pro`, falling back to `gemini-2.5-flash` on server errors) with SearXNG web-search tools for fact checking
 -   Performs multi-dimensional content evaluation
--   Generates comprehensive annotations
+-   Snippets with overall confidence >= 95 are routed to Stage 4 review; the rest are marked `Processed`
 
 **Output:**
 Structured JSON including:
@@ -84,6 +83,21 @@ Structured JSON including:
 -   Emotional tone analysis
 -   Political leaning assessment
 -   Cultural context notes
+
+### Stage 4: Analysis Review
+
+**Input:** high-confidence Stage 3 snippets (`Ready for review`)
+
+**Process:**
+
+-   A Google ADK agent pipeline on Gemini 2.5 Pro: knowledge-base researcher and web researcher (SearXNG via MCP) run in parallel, a reviewer revises the analysis, a knowledge-base updater records new findings
+-   The original Stage 3 analysis is kept in `snippets.previous_analysis`
+
+**Output:** revised analysis, grounding metadata and `reviewed_by` on the snippet; labels assigned from the final categories
+
+### Stage 5: Embedding
+
+-   Builds a text document from each processed snippet and embeds it with OpenAI `text-embedding-3-large` (L2-normalized) into `snippet_embeddings` for semantic search
 
 ## Data Schema
 
@@ -178,7 +192,7 @@ snippets {
 
 -   Python 3.11+
 -   Node.js 20+ (for Gemini CLI)
--   PostgreSQL 13+
+-   A Supabase project (Postgres + pgvector); see `supabase/`
 -   FFmpeg
 -   PulseAudio
 -   Chrome/Chromium (for web radio capture)
@@ -226,68 +240,61 @@ cp .env.sample .env
 
 ### Development Setup
 
-1. Install Git hooks to ensure code quality:
+1. Run the checks (this is exactly what CI runs on every pull request):
 
 ```bash
-./hooks/install-hooks.sh
+make check      # ruff check + pytest
+make lint       # ruff only
+make test       # pytest with the coverage gate
 ```
 
-This installs a pre-push hook that:
+The coverage gate is `fail_under` in `pyproject.toml`; it is set to the current real coverage and only moves up.
+`ffmpeg` must be on your PATH (stage 2 tests decode real mp3s). `ruff` rule `I` (import sorting) is intentionally off until a formatting-only commit lands.
 
--   Runs all tests
--   Verifies code coverage meets minimum requirements (80%)
--   Prevents pushing if tests fail or coverage is insufficient
-
-To bypass the hook in exceptional cases (not recommended):
+2. Optional local hooks:
 
 ```bash
-git push --no-verify
+pip install pre-commit && pre-commit install   # ruff on staged files
+./hooks/install-hooks.sh                      # pre-push: ruff + pytest without the coverage gate
 ```
 
-2. Run tests manually:
-
-```bash
-# Run tests with coverage report
-./scripts/coverage.sh
-```
+3. HTML coverage report: `./scripts/coverage.sh` (writes `htmlcov/`).
 
 ### Configuration
 
-Key environment variables:
+All environment variables, with a one-line explanation each, are listed in [`.env.sample`](.env.sample). The main ones:
 
--   `GOOGLE_GEMINI_KEY`: API key for Google's Gemini LLM
--   `OPENAI_API_KEY`: API key for OpenAI's Whisper API
+-   `GOOGLE_GEMINI_KEY`: Gemini API key (stages 1, 3, 4)
+-   `OPENAI_API_KEY`: OpenAI key for `text-embedding-3-large` (stage 5, knowledge-base retrieval)
 -   `R2_*`: Cloudflare R2 storage configuration
--   `SUPABASE_*`: Supabase database configuration
+-   `SUPABASE_URL`, `SUPABASE_KEY`: Supabase database configuration
+-   `SEARXNG_URL`: SearXNG instance for web search (stages 3 and 4)
 
 ### Running the Pipeline
 
-1. Start the recording service:
+In production every worker is a Fly machine whose `FLY_PROCESS_GROUP` selects one Prefect deployment; without that variable `src/processing_pipeline/main.py` and `src/recording.py` raise `ValueError`. See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for the apps, process groups and how to trigger a run.
+
+To run a single stage locally as plain Python (no Prefect server; uses whatever `.env` points at):
 
 ```bash
-python src/recording.py
+python scripts/run_stage.py --stage 1 --audio-file-id <uuid>
+python scripts/run_stage.py --stage 3 --snippet-id <uuid> --skip-review
+python scripts/run_stage.py --stage 4 --snippet-id <uuid>
 ```
 
-2. Launch the processing pipeline:
+Prompts are read from the `prompt_versions` table, not from `prompts/`. After editing a prompt file, import it:
 
 ```bash
-python src/processing_pipeline/main.py
+PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py import --version 1.2.0 --description "..." --dry-run
 ```
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on submitting pull requests, reporting issues, and contributing to documentation.
+We welcome contributions! Read [`AGENTS.md`](AGENTS.md) for the repo layout, commands, gotchas and rules (it applies to humans and coding agents alike), run `make check` before pushing, and open a pull request against `main`.
 
 ## Deployment
 
-VERDAD is designed to run on Fly.io, with separate services for:
-
--   Audio recording
--   Processing pipeline stages
--   Database operations
--   Web interface
-
-Deployment configurations are provided in the repository.
+VERDAD runs on Fly.io as separate apps for the Prefect server (plus a cron machine), audio recording, the processing stages, a SearXNG instance and the Express server; the database is Supabase. Each app has a `fly.*.toml` in the repository and is deployed manually with `fly deploy -c <file>`. See [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 ## License
 
