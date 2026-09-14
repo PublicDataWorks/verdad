@@ -24,6 +24,10 @@ supabase projects list
 psql "$SUPABASE_DB_URL" -c 'select 1'
 ```
 
+If `fly` is unavailable (GitHub release downloads are blocked in the web sandbox), the Machines API works with curl:
+`curl -sS "https://api.machines.dev/v1/apps?org_slug=verdad" -H "Authorization: Bearer $FLY_API_TOKEN"` and
+`curl -sS "https://api.machines.dev/v1/apps/<app>/machines" -H "Authorization: Bearer $FLY_API_TOKEN"`.
+
 Safety: this environment talks to production. Be read-mostly by default (`fly status`, `fly logs`, `SELECT`s).
 Confirm with a human before `fly deploy`, `fly machine destroy/restart`, `fly secrets set`, schema migrations
 (`supabase db push`, files under `supabase/migrations/`), or any `DELETE`/`UPDATE` on production data.

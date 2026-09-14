@@ -9,7 +9,7 @@ fi
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 BIN="$HOME/.local/bin"
-SUPABASE_CLI_VERSION="2.117.0"   # https://github.com/supabase/cli/releases
+SUPABASE_CLI_VERSION="2.117.0"   # npm package "supabase"
 mkdir -p "$BIN"
 export PATH="$BIN:$PATH"
 
@@ -55,12 +55,18 @@ if ! command -v flyctl >/dev/null 2>&1; then
   log "installing flyctl to $BIN"
   curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL="$HOME/.local" sh >/dev/null 2>&1 \
     || warn "flyctl install failed (needs fly.io + github.com egress)"
+  command -v fly >/dev/null 2>&1 \
+    || warn "fly still missing; use the Machines API curl fallback in CLAUDE.md > Cloud environment"
 fi
 if ! command -v supabase >/dev/null 2>&1; then
-  log "installing supabase CLI v$SUPABASE_CLI_VERSION to $BIN"
-  curl -fsSL "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" 2>/dev/null \
-    | tar -xz -C "$BIN" supabase 2>/dev/null \
-    || warn "supabase CLI install failed (needs github.com egress)"
+  # npm, not the GitHub tarball: the web sandbox's GitHub proxy only serves attached repos.
+  if command -v npm >/dev/null 2>&1; then
+    log "installing supabase CLI v$SUPABASE_CLI_VERSION via npm"
+    npm install -g --silent "supabase@$SUPABASE_CLI_VERSION" >/dev/null 2>&1 \
+      || warn "supabase CLI install failed (npm postinstall downloads the binary)"
+  else
+    warn "supabase CLI missing and npm not available"
+  fi
 fi
 command -v psql >/dev/null 2>&1 || warn "psql not found; SUPABASE_DB_URL checks will not work"
 
