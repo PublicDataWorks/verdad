@@ -183,7 +183,7 @@ def fetch_active_prompts(client) -> dict:
     """Return the active prompt_versions rows keyed by (stage, sub_stage)."""
     response = (
         client.table("prompt_versions")
-        .select("id, stage, sub_stage, version, description, created_at, system_instruction, user_prompt, output_schema")
+        .select("id, stage, sub_stage, version, description, created_at, " + ", ".join(PROMPT_FIELDS))
         .eq("is_active", True)
         .execute()
     )
