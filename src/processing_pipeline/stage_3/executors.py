@@ -18,6 +18,20 @@ from processing_pipeline.stage_3.models import Stage3Output
 from processing_pipeline.stage_3.web_tools import searxng_web_search, web_url_read
 
 
+USAGE_FIELDS = (
+    "prompt_token_count",
+    "candidates_token_count",
+    "thoughts_token_count",
+    "tool_use_prompt_token_count",
+    "total_token_count",
+)
+
+
+def usage_metadata_to_dict(usage_metadata) -> dict:
+    """Flatten the SDK's ``usage_metadata`` into ``{field: int}`` (missing counts become 0)."""
+    return {field: getattr(usage_metadata, field, None) or 0 for field in USAGE_FIELDS}
+
+
 class Stage3Executor:
     """Executor for Stage 3 in-depth analysis."""
 
@@ -97,7 +111,7 @@ class Stage3Executor:
                 uploaded_audio_file = gemini_client.files.get(name=uploaded_audio_file.name)
 
             # Analyze with web search tools
-            analysis_text, thought_summaries = await cls.__analyze_with_web_search(
+            analysis_text, thought_summaries, usage = await cls.__analyze_with_web_search(
                 gemini_client=gemini_client,
                 model_name=model_name,
                 uploaded_audio_file=uploaded_audio_file,
@@ -117,6 +131,7 @@ class Stage3Executor:
                 "response": output,
                 "grounding_metadata": json.dumps(output.get("verification_evidence"), indent=2),
                 "thought_summaries": thought_summaries or output.get("thought_summaries"),
+                "usage": usage,
             }
         finally:
             if uploaded_audio_file:
@@ -138,7 +153,8 @@ class Stage3Executor:
         with the SDK's automatic function calling.
 
         Returns:
-            tuple: (analysis_text, thought_summaries)
+            tuple: (analysis_text, thought_summaries, usage) where usage is the token
+            accounting of the final model turn as a plain dict (see ``usage_metadata_to_dict``)
         """
         print("Analyzing with SDK + web search tools...")
 
@@ -172,7 +188,7 @@ class Stage3Executor:
             print(f"Response finish reason: {finish_reason}")
             raise ValueError("No response from Gemini.")
 
-        return response.text, thoughts
+        return response.text, thoughts, usage_metadata_to_dict(response.usage_metadata)
 
     @classmethod
     def __validate_with_pydantic(cls, response_text: str):
