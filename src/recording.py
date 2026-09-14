@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 import sentry_sdk
 
 from processing_pipeline.supabase_utils import SupabaseClient
+from stations import station_dicts
 from utils import fetch_radio_stations, optional_flow, optional_task
 
 load_dotenv()
@@ -159,19 +160,13 @@ def serve_deployments(radio_stations, flow_function):
 
 
 if __name__ == "__main__":
-    radio_stations = fetch_radio_stations()
-
-    # Divide the stations into two groups:
-    # Max recorder stations: the first 39 stations
-    # Lite recorder stations: the rest of the stations (which is currently 14 stations)
-    max_recorder_stations = radio_stations[:39]
-    lite_recorder_stations = radio_stations[39:]
-
+    # Which stations this machine records comes from the "recorder" field in config/stations.yaml,
+    # not from a position in the list.
     process_group = os.environ.get("FLY_PROCESS_GROUP")
     match process_group:
         case "max_recorder":
-            serve_deployments(max_recorder_stations, audio_processing_pipeline_max_recorder)
+            serve_deployments(station_dicts(["max"]), audio_processing_pipeline_max_recorder)
         case "lite_recorder":
-            serve_deployments(lite_recorder_stations, audio_processing_pipeline_lite_recorder)
+            serve_deployments(station_dicts(["lite"]), audio_processing_pipeline_lite_recorder)
         case _:
             raise ValueError(f"Invalid process group: {process_group}")
