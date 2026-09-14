@@ -14,6 +14,8 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
   Prefect deployment (`fly.processing_worker.toml` `[processes]` lists the 11 valid values). With no value it raises.
 - `src/recording.py` (ffmpeg stream recorders) and `src/generic_recording.py` + `src/radiostations/` (Selenium/Chrome
   recorders for six web-only stations). Same `FLY_PROCESS_GROUP` dispatch.
+- `config/stations.yaml` + `src/stations.py`: the station list and its loader/validator (`load_stations`,
+  `stations_for`, `station_dicts`, and `python -m stations prefect-runs` for `scripts/start_recording.sh`).
 - `src/utils.py`: `optional_flow`/`optional_task` decorators and `fetch_radio_stations()` (see gotchas).
 - `src/processing_pipeline/supabase_utils.py`: the only DB access layer (`SupabaseClient`).
 - `prompts/`: source of truth for LLM prompts, but the pipeline reads prompts from the `prompt_versions` table.
@@ -60,9 +62,11 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
 
 ## Gotchas
 
-- Stations are hard-coded: 53 dicts in `src/utils.py::fetch_radio_stations()`, split by position in
-  `src/recording.py` (`radio_stations[:39]` -> max recorder, `[39:]` -> lite recorder), and duplicated by name in
-  `scripts/start_recording.sh`. Adding or reordering a station touches all three and shifts the split.
+- Stations live in `config/stations.yaml`, loaded and validated by `src/stations.py`; adding or disabling one is
+  a single YAML entry plus a deploy (docs/OPERATIONS.md, "Adding or disabling a station").
+- Each station's `recorder` field (`max` | `lite` | `generic`) is what assigns it to a recorder -- there is no
+  positional split any more. It is a topology fact tied to the `fly.*.toml` process groups, so it only takes
+  effect on deploy.
 - `src/main.py` is an ad-hoc stage 4 smoke script with a hard-coded production snippet UUID. Do not run it.
 - `ENABLE_PREFECT_DECORATOR=false` (set by tests and `scripts/run_stage.py`) makes flows/tasks plain functions.
   It is read at import time, so set it before importing anything from `src/`.
