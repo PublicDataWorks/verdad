@@ -75,10 +75,32 @@ class TestFalsityDetection:
             "It is not true that this happened: the story was invented.",
             "No existe evidencia de que el evento haya ocurrido.",
             "Fabricated. No source reports it.",
+            "Is it real? No. The story was fabricated.",
+            "Not confirmed by any outlet. The event is fabricated.",
+            "Ninguna fuente lo confirma. El evento es ficticio.",
+            "Fabricated claim: no source confirms it.",
+            "Invented story: not covered by any outlet.",
         ],
     )
     def test_negation_far_from_the_term_still_counts(self, text):
         assert mentions_falsity(text)
+
+    @pytest.mark.parametrize("text", ["Fabricated content: not detected.", "Fabricated Content: none", "Fabricated: no"])
+    def test_bare_negated_value_after_colon_does_not_count(self, text):
+        assert not mentions_falsity(text)
+
+    def test_negation_at_the_end_of_one_field_does_not_neutralise_the_next(self):
+        analysis = _analysis(
+            explanation_en="The claim is unverified.",
+            categories=[{"english": "Fabricated Event", "spanish": "Evento inexistente"}],
+        )
+        analysis["explanation"]["spanish"] = "Ninguna fuente lo confirma."
+        assert asserts_falsity(analysis)
+
+        analysis["verification_evidence"] = {"searches_performed": [], "verification_summary": {}}
+        result = apply_evidence_caps(analysis)
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert "contradicts_claim" in result["evidence_gate"]["reasons"][0]
 
 
 class TestContradictingEvidence:

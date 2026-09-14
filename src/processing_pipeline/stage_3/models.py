@@ -240,11 +240,17 @@ def _fold(text: str) -> str:
 # Terms match at a word start only ("prefabricated" is not "fabricated") and do not count when negated:
 # "not fabricated", "no fabricated content detected", "no evidence of fabrication", "isn't fictional",
 # "no fue inventado" and "Fabricated content: none" all describe absent fabrication, not an assertion of it.
+# A negation only reaches a term within the same sentence ("Is it real? No. The story was fabricated." asserts
+# fabrication), and a "label: value" only negates when the value is a bare negation ("Fabricated claim: no
+# source confirms it" asserts fabrication).
 _FALSITY_TERM_RE = re.compile(r"\b(?:" + "|".join(re.escape(_fold(term)) for term in FALSITY_TERMS) + ")")
 _NEGATED_BEFORE_RE = re.compile(
-    r"\b(?:not|no|non|never|nothing|neither|nor|without|\w+n't|nunca|ningun\w*|nada|tampoco|ni)(?:\W+\w+){0,3}?\W*$"
+    r"\b(?:not|no|non|never|nothing|neither|nor|without|\w+n't|nunca|ningun\w*|nada|tampoco|ni)"
+    r"(?:[^\w.;!?\n]+\w+){0,3}?[^\w.;!?\n]*$"
 )
-_NEGATED_AFTER_RE = re.compile(r"^\w*(?:\s+\w+){0,2}\s*:\s*(?:none|no|not|n/a|ninguno|ninguna)\b")
+_NEGATED_AFTER_RE = re.compile(
+    r"^\w*(?:\s+\w+){0,2}\s*:\s*(?:none|no|n/a|ninguno|ninguna|not(?:\s+\w+)?)\b\s*(?:[.;,!?)\]]|$)"
+)
 _NEGATION_WINDOW = 60
 _GATE_NOTE_RE = re.compile(r"\s*" + re.escape(EVIDENCE_GATE_NOTE_PREFIX) + r"[^\n]*")
 
@@ -280,7 +286,9 @@ def asserts_falsity(analysis: dict) -> bool:
     texts = list(_bilingual_texts(analysis.get("explanation")))
     for category in analysis.get("disinformation_categories") or []:
         texts.extend(_bilingual_texts(category))
-    return mentions_falsity(" | ".join(texts))
+    # Each field is judged on its own: a negation at the end of one explanation must not neutralise a
+    # "Fabricated Event" category that follows it.
+    return any(mentions_falsity(text) for text in texts)
 
 
 def has_contradicting_evidence(verification_evidence: dict | None) -> bool:
