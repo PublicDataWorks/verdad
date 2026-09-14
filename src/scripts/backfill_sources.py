@@ -24,6 +24,10 @@ YOUTUBE_CHANNELS = [
 ]
 
 
+# bulk upsert sends missing keys as NULL, so every row must carry every column
+ROW_DEFAULTS = {"location_state": None, "stream_url": None, "feed_urls": [], "enabled": True, "metadata": {}}
+
+
 def youtube_feed_urls(channel_id):
     # UULF: uploads without Shorts/live. UULV: livestream recordings
     suffix = channel_id.removeprefix("UC")
@@ -87,7 +91,7 @@ def main():
     parser.add_argument("--with-youtube", action="store_true")
     args = parser.parse_args()
 
-    rows = radio_rows() + (youtube_rows() if args.with_youtube else [])
+    rows = [{**ROW_DEFAULTS, **r} for r in radio_rows() + (youtube_rows() if args.with_youtube else [])]
     keys = [(r["type"], r["external_id"]) for r in rows]
     if len(set(keys)) != len(keys):
         sys.exit("duplicate (type, external_id) in input")
