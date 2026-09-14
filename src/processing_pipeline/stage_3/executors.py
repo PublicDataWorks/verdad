@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import get_safety_settings
-from processing_pipeline.stage_3.models import Stage3Output
+from processing_pipeline.stage_3.models import Stage3Output, apply_evidence_caps
 from processing_pipeline.stage_3.web_tools import searxng_web_search, web_url_read
 
 
@@ -113,9 +113,17 @@ class Stage3Executor:
                     gemini_client, analysis_text, prompt_version["output_schema"]
                 )
 
+            # Deterministic evidence gate: never let an unevidenced analysis reach the analyst feed
+            output = apply_evidence_caps(output)
+            evidence_gate = output.pop("evidence_gate")
+            grounding_metadata = dict(output.get("verification_evidence") or {})
+            if evidence_gate.get("applied"):
+                print(f"Evidence gate applied: {evidence_gate['note']}")
+                grounding_metadata["evidence_gate"] = evidence_gate
+
             return {
                 "response": output,
-                "grounding_metadata": json.dumps(output.get("verification_evidence"), indent=2),
+                "grounding_metadata": json.dumps(grounding_metadata, indent=2),
                 "thought_summaries": thought_summaries or output.get("thought_summaries"),
             }
         finally:

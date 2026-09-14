@@ -1,4 +1,7 @@
+import copy
+import unicodedata
 from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -196,3 +199,133 @@ class Stage3Output(BaseModel):
     verification_evidence: VerificationEvidence = Field(
         description="Complete documentation of all web searches performed during fact-checking"
     )
+
+
+# --- Deterministic evidence gate -------------------------------------------------------------------
+#
+# The analyst feed only shows snippets with confidence_scores.overall >= 95, and the model's `overall`
+# is otherwise unconstrained. These caps make sure that an analysis which admits it has no evidence
+# (or asserts that something is fabricated without a single contradicting source) can never reach it.
+
+EVIDENCE_CAP_MAX_SCORE = 40
+UNVERIFIED_STATUSES = frozenset({"insufficient_evidence", "uncertain"})
+FALSITY_TERMS = (
+    "fabricat",
+    "fabricado",
+    "ficticio",
+    "fictional",
+    "did not happen",
+    "no ocurrió",
+    "no existe",
+    "does not exist",
+    "invented",
+    "inventado",
+)
+EVIDENCE_GATE_NOTE_PREFIX = "[Evidence gate]"
+
+
+def _fold(text: str) -> str:
+    """Lowercase and strip accents so 'ocurrió' and 'ocurrio' compare equal."""
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+_FOLDED_FALSITY_TERMS = tuple(_fold(term) for term in FALSITY_TERMS)
+
+
+def _bilingual_texts(value) -> list[str]:
+    if isinstance(value, dict):
+        return [v for v in value.values() if isinstance(v, str)]
+    if isinstance(value, str):
+        return [value]
+    return []
+
+
+def asserts_falsity(analysis: dict) -> bool:
+    """True when any disinformation category or explanation text asserts that something is fabricated."""
+    texts = list(_bilingual_texts(analysis.get("explanation")))
+    for category in analysis.get("disinformation_categories") or []:
+        texts.extend(_bilingual_texts(category))
+    folded = _fold(" | ".join(texts))
+    return any(term in folded for term in _FOLDED_FALSITY_TERMS)
+
+
+def has_contradicting_evidence(verification_evidence: dict | None) -> bool:
+    """True when at least one recorded search result contradicts the claim and carries a URL."""
+    if not isinstance(verification_evidence, dict):
+        return False
+    for search in verification_evidence.get("searches_performed") or []:
+        for result in (search or {}).get("results") or []:
+            if result.get("relevance_to_claim") == "contradicts_claim" and (result.get("url") or "").strip():
+                return True
+    return False
+
+
+def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = None) -> dict:
+    """Clamp confidence scores that are not backed by evidence.
+
+    Returns a deep copy of ``analysis``. When a cap applies, ``confidence_scores.overall`` and every
+    ``confidence_scores.categories[].score`` are clamped to ``EVIDENCE_CAP_MAX_SCORE``, a machine note is
+    appended to both explanation languages, and the copy carries an ``evidence_gate`` dict (reasons, cap,
+    pre-cap scores) that callers store in ``grounding_metadata``. When nothing applies, the copy carries
+    ``evidence_gate = {"applied": False}``.
+
+    ``verification_evidence`` defaults to ``analysis["verification_evidence"]`` (Stage 3 output shape).
+    Stage 4 passes the Stage 3 record explicitly because the reviewer output has no structured evidence.
+    """
+    result = copy.deepcopy(analysis)
+    confidence_scores = result.get("confidence_scores")
+    if not isinstance(confidence_scores, dict):
+        result["evidence_gate"] = {"applied": False}
+        return result
+
+    if verification_evidence is None:
+        verification_evidence = result.get("verification_evidence")
+
+    reasons = []
+    status = confidence_scores.get("verification_status")
+    if status in UNVERIFIED_STATUSES:
+        reasons.append(f"verification_status is '{status}'")
+    if asserts_falsity(result) and not has_contradicting_evidence(verification_evidence):
+        reasons.append(
+            "the analysis asserts the content is fabricated/fictional but no search result with a URL is "
+            "marked contradicts_claim"
+        )
+
+    if not reasons:
+        result["evidence_gate"] = {"applied": False}
+        return result
+
+    original_overall = confidence_scores.get("overall")
+    original_categories = [
+        {"category": c.get("category"), "score": c.get("score")} for c in confidence_scores.get("categories") or []
+    ]
+    if isinstance(original_overall, (int, float)):
+        confidence_scores["overall"] = min(original_overall, EVIDENCE_CAP_MAX_SCORE)
+    for category in confidence_scores.get("categories") or []:
+        if isinstance(category.get("score"), (int, float)):
+            category["score"] = min(category["score"], EVIDENCE_CAP_MAX_SCORE)
+
+    note_en = (
+        f"{EVIDENCE_GATE_NOTE_PREFIX} Confidence capped at {EVIDENCE_CAP_MAX_SCORE} by the pipeline because "
+        + "; ".join(reasons)
+        + "."
+    )
+    note_es = (
+        f"{EVIDENCE_GATE_NOTE_PREFIX} La confianza fue limitada a {EVIDENCE_CAP_MAX_SCORE} por el sistema "
+        f"(sin evidencia suficiente: {'; '.join(reasons)})."
+    )
+    explanation = result.get("explanation")
+    if isinstance(explanation, dict):
+        explanation["english"] = f"{explanation.get('english', '')}\n\n{note_en}".strip()
+        explanation["spanish"] = f"{explanation.get('spanish', '')}\n\n{note_es}".strip()
+
+    result["evidence_gate"] = {
+        "applied": True,
+        "cap": EVIDENCE_CAP_MAX_SCORE,
+        "reasons": reasons,
+        "original_overall": original_overall,
+        "original_categories": original_categories,
+        "note": note_en,
+    }
+    return result

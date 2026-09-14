@@ -1,0 +1,161 @@
+import json
+
+import pytest
+
+from processing_pipeline.stage_3.models import (
+    EVIDENCE_CAP_MAX_SCORE,
+    apply_evidence_caps,
+    asserts_falsity,
+    has_contradicting_evidence,
+)
+from processing_pipeline.stage_4.tasks import extract_stage_3_verification_evidence, merge_grounding_metadata
+
+
+def _analysis(status="verified_false", overall=98, explanation_en="The claim is false.", categories=None):
+    return {
+        "explanation": {"english": explanation_en, "spanish": "La afirmación es falsa."},
+        "disinformation_categories": categories or [{"english": "Election Fraud", "spanish": "Fraude electoral"}],
+        "confidence_scores": {
+            "overall": overall,
+            "verification_status": status,
+            "categories": [{"category": "Election Fraud", "score": 96}, {"category": "Other", "score": 20}],
+        },
+    }
+
+
+def _evidence(relevance="contradicts_claim", url="https://apnews.com/article/x"):
+    return {
+        "searches_performed": [
+            {
+                "query": "q",
+                "results": [{"url": url, "relevance_to_claim": relevance}],
+            }
+        ],
+        "verification_summary": {},
+    }
+
+
+class TestFalsityDetection:
+    @pytest.mark.parametrize(
+        "text",
+        ["This event is fabricated", "El evento no ocurrió", "El evento no ocurrio", "It did not happen", "inventado"],
+    )
+    def test_detects_terms_in_explanation(self, text):
+        assert asserts_falsity(_analysis(explanation_en=text))
+
+    def test_detects_terms_in_category(self):
+        categories = [{"english": "Fictional Event", "spanish": "Evento ficticio"}]
+        assert asserts_falsity(_analysis(explanation_en="neutral", categories=categories))
+
+    def test_no_terms(self):
+        assert not asserts_falsity(_analysis(explanation_en="The statistic is misleading."))
+
+
+class TestContradictingEvidence:
+    def test_present(self):
+        assert has_contradicting_evidence(_evidence())
+
+    def test_missing_url(self):
+        assert not has_contradicting_evidence(_evidence(url=""))
+
+    def test_other_relevance(self):
+        assert not has_contradicting_evidence(_evidence(relevance="provides_context"))
+
+    def test_none(self):
+        assert not has_contradicting_evidence(None)
+
+
+class TestApplyEvidenceCaps:
+    def test_insufficient_evidence_is_capped(self):
+        analysis = _analysis(status="insufficient_evidence", overall=98)
+        analysis["verification_evidence"] = _evidence()
+
+        result = apply_evidence_caps(analysis)
+
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert [c["score"] for c in result["confidence_scores"]["categories"]] == [EVIDENCE_CAP_MAX_SCORE, 20]
+        assert result["evidence_gate"]["applied"] is True
+        assert result["evidence_gate"]["original_overall"] == 98
+        assert result["evidence_gate"]["original_categories"][0]["score"] == 96
+        assert "insufficient_evidence" in result["evidence_gate"]["reasons"][0]
+        assert "[Evidence gate]" in result["explanation"]["english"]
+        assert "[Evidence gate]" in result["explanation"]["spanish"]
+        # input is not mutated
+        assert analysis["confidence_scores"]["overall"] == 98
+
+    def test_uncertain_is_capped(self):
+        result = apply_evidence_caps(_analysis(status="uncertain", overall=97))
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+
+    def test_verified_false_with_contradicting_source_is_not_capped(self):
+        analysis = _analysis(explanation_en="The rally was fabricated; AP shows it never took place.")
+        analysis["verification_evidence"] = _evidence()
+
+        result = apply_evidence_caps(analysis)
+
+        assert result["confidence_scores"]["overall"] == 98
+        assert result["evidence_gate"] == {"applied": False}
+        assert "[Evidence gate]" not in result["explanation"]["english"]
+
+    def test_falsity_without_contradicting_source_is_capped(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(relevance="provides_context")
+
+        result = apply_evidence_caps(analysis)
+
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert "contradicts_claim" in result["evidence_gate"]["reasons"][0]
+
+    def test_breaking_news_recording_with_no_evidence_is_capped(self):
+        # 10-hour-old recording: model followed the protocol status but not the score
+        analysis = _analysis(
+            status="insufficient_evidence",
+            overall=95,
+            explanation_en="No coverage found yet; the claim about the shooting appears fabricated.",
+        )
+        analysis["verification_evidence"] = {"searches_performed": [], "verification_summary": {}}
+
+        result = apply_evidence_caps(analysis)
+
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert len(result["evidence_gate"]["reasons"]) == 2
+
+    def test_low_score_stays_low(self):
+        result = apply_evidence_caps(_analysis(status="insufficient_evidence", overall=15))
+        assert result["confidence_scores"]["overall"] == 15
+        assert result["evidence_gate"]["applied"] is True
+
+    def test_stage_4_uses_explicit_stage_3_evidence(self):
+        analysis = _analysis(explanation_en="This is fictional.")
+        result = apply_evidence_caps(analysis, verification_evidence=_evidence())
+        assert result["evidence_gate"] == {"applied": False}
+
+    def test_missing_confidence_scores(self):
+        assert apply_evidence_caps({"explanation": {}})["evidence_gate"] == {"applied": False}
+
+
+class TestGroundingMetadataHelpers:
+    def test_extract_from_stage_3_shape(self):
+        evidence = _evidence()
+        assert extract_stage_3_verification_evidence(json.dumps(evidence)) == evidence
+
+    def test_extract_from_stage_4_shape(self):
+        evidence = _evidence()
+        payload = {"web_research": "x", "stage_3_verification_evidence": evidence}
+        assert extract_stage_3_verification_evidence(payload) == evidence
+
+    @pytest.mark.parametrize("value", [None, "", "not json", {"web_research": "x"}])
+    def test_extract_returns_none_otherwise(self, value):
+        assert extract_stage_3_verification_evidence(value) is None
+
+    def test_merge_preserves_stage_3_record_and_gate(self):
+        evidence = _evidence()
+        gate = {"applied": True, "cap": 40, "reasons": ["r"]}
+        merged = json.loads(merge_grounding_metadata(json.dumps({"web_research": "found"}), evidence, gate))
+        assert merged["web_research"] == "found"
+        assert merged["stage_3_verification_evidence"] == evidence
+        assert merged["evidence_gate"] == gate
+
+    def test_merge_with_no_stage_4_metadata(self):
+        merged = json.loads(merge_grounding_metadata(None, None, {"applied": False}))
+        assert merged == {}
