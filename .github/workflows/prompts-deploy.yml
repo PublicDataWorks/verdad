@@ -1,0 +1,57 @@
+name: Prompts deploy
+
+# Merging a manifest bump to main deploys it: every prompts/manifest.json entry whose version
+# differs from the active database version is imported and activated.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "prompts/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prompts-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      PYTHONPATH: .:src
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::SUPABASE_URL and SUPABASE_KEY secrets are required to deploy prompts (see docs/PROMPT_EVALUATION.md)"
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Import manifest versions that differ from the database
+        run: python src/scripts/import_prompts_to_db.py import --from-manifest
+
+      - name: Verify active versions
+        run: |
+          python src/scripts/import_prompts_to_db.py list --active
+          # A second planning pass must report nothing left to import.
+          python src/scripts/import_prompts_to_db.py import --from-manifest --dry-run | tee plan.txt
+          if grep -Eq "\((import|conflict)\b" plan.txt; then
+            echo "::error::Database does not match the manifest after deploy"
+            exit 1
+          fi

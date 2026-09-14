@@ -1,0 +1,161 @@
+name: Prompt evaluation
+
+# Runs the Stage 3 evaluation harness on every PR that touches prompts and posts the
+# evidence report as a single, updated PR comment. Read-only against Supabase.
+
+on:
+  pull_request:
+    paths:
+      - "prompts/**"
+  workflow_dispatch:
+    inputs:
+      eval_set:
+        description: "Eval set name(s) under prompts/eval/ without .json, space-separated (empty = all)"
+        required: false
+        default: ""
+      runs:
+        description: "Runs per prompt per snippet"
+        required: false
+        default: "2"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: prompt-evaluation-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  COMMENT_MARKER: "<!-- prompt-evaluation-report -->"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        id: secrets
+        env:
+          GOOGLE_GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          missing=""
+          for name in GOOGLE_GEMINI_KEY SUPABASE_URL SUPABASE_KEY R2_ENDPOINT_URL R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET_NAME; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::notice::Prompt evaluation skipped; missing secrets:$missing (forks never receive secrets)"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve eval sets
+        id: sets
+        if: steps.secrets.outputs.available == 'true'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          INPUT_SETS: ${{ github.event.inputs.eval_set }}
+        run: |
+          # Sets come from the workflow_dispatch input, then from `Eval-set: <name>` lines in the PR body,
+          # and default to every file in prompts/eval/.
+          sets="$INPUT_SETS"
+          if [ -z "$sets" ]; then
+            sets=$(printf '%s\n' "$PR_BODY" | sed -n 's/^[Ee]val-[Ss]et:[[:space:]]*//p' | tr '\n' ' ')
+          fi
+          if [ -z "$(echo "$sets" | tr -d '[:space:]')" ]; then
+            sets=$(ls prompts/eval/*.json 2>/dev/null | xargs -n1 basename | sed 's/\.json$//' | tr '\n' ' ')
+          fi
+          if [ -z "$(echo "$sets" | tr -d '[:space:]')" ]; then
+            echo "::notice::No eval sets found under prompts/eval/; nothing to evaluate"
+          fi
+          echo "sets=$sets" >> "$GITHUB_OUTPUT"
+          echo "Eval sets: $sets"
+
+      - uses: actions/setup-python@v5
+        if: steps.secrets.outputs.available == 'true' && steps.sets.outputs.sets != ''
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        if: steps.secrets.outputs.available == 'true' && steps.sets.outputs.sets != ''
+        run: pip install -r requirements.txt
+
+      - name: Run evaluation harness
+        id: harness
+        if: steps.secrets.outputs.available == 'true' && steps.sets.outputs.sets != ''
+        env:
+          GOOGLE_GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          SEARXNG_URL: ${{ secrets.SEARXNG_URL || vars.SEARXNG_URL }}
+          PYTHONPATH: .:src
+          RUNS: ${{ github.event.inputs.runs || '2' }}
+          SETS: ${{ steps.sets.outputs.sets }}
+        run: |
+          set -o pipefail
+          status=0
+          {
+            echo "$COMMENT_MARKER"
+            echo "## Prompt evaluation for \`${GITHUB_SHA::7}\`"
+            echo
+          } > eval-report.md
+          for set in $SETS; do
+            file="prompts/eval/${set}.json"
+            if [ ! -f "$file" ]; then
+              echo "::warning::Eval set $file not found; skipping"
+              echo "- Eval set \`$set\`: file not found" >> eval-report.md
+              continue
+            fi
+            echo "=== Evaluating $set ==="
+            if ! python src/scripts/evaluate_prompt.py --candidate-dir prompts --snippet-file "$file" \
+                 --runs "$RUNS" --out "eval-report-${set}.md" --json "eval-results-${set}.json"; then
+              status=1
+              echo "- Eval set \`$set\`: harness failed (see workflow logs)" >> eval-report.md
+            fi
+            if [ -f "eval-report-${set}.md" ]; then
+              { echo; echo "<details><summary>Eval set: ${set}</summary>"; echo; cat "eval-report-${set}.md"; echo; echo "</details>"; } >> eval-report.md
+            fi
+          done
+          exit $status
+
+      - name: Upload report
+        if: always() && steps.secrets.outputs.available == 'true' && steps.sets.outputs.sets != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: prompt-evaluation-report
+          path: |
+            eval-report*.md
+            eval-results-*.json
+          if-no-files-found: ignore
+
+      - name: Find existing report comment
+        if: always() && github.event_name == 'pull_request' && steps.secrets.outputs.available == 'true' && steps.sets.outputs.sets != ''
+        id: find
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: ${{ env.COMMENT_MARKER }}
+
+      - name: Post or update report comment
+        if: always() && github.event_name == 'pull_request' && steps.secrets.outputs.available == 'true' && steps.sets.outputs.sets != ''
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find.outputs.comment-id }}
+          body-path: eval-report.md
+          edit-mode: replace
