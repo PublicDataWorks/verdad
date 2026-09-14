@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+from postgrest.exceptions import APIError
 from supabase import create_client
 from datetime import datetime, timezone
 from processing_pipeline.constants import PromptStage
@@ -487,13 +488,23 @@ class SupabaseClient:
             "match_threshold": match_threshold,
             "match_count": match_count,
             "candidate_multiplier": candidate_multiplier,
-            "min_confidence": min_confidence,
         }
+        if min_confidence:
+            params["min_confidence"] = min_confidence
         if filter_categories:
             params["filter_categories"] = filter_categories
         if reference_date:
             params["reference_date"] = reference_date
-        response = self.client.rpc("search_kb_entries", params).execute()
+        try:
+            response = self.client.rpc("search_kb_entries", params).execute()
+        except APIError as e:
+            # min_confidence only exists once the updated search_kb_entries.sql is deployed; until then PostgREST
+            # cannot resolve the function (PGRST202). Retry without it: callers re-check confidence client-side.
+            if getattr(e, "code", None) != "PGRST202" or "min_confidence" not in params:
+                raise
+            print("[KB Search] search_kb_entries has no min_confidence parameter yet; retrying without it")
+            legacy_params = {key: value for key, value in params.items() if key != "min_confidence"}
+            response = self.client.rpc("search_kb_entries", legacy_params).execute()
         return response.data if response.data else []
 
     def find_duplicate_kb_entries(self, query_embedding, similarity_threshold=0.92, max_results=5):

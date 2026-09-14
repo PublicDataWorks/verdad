@@ -56,6 +56,18 @@ class TestUrlInText:
         assert not url_appears_in_text("https://apnews.com/article/other", self.RESEARCH)
         assert not url_appears_in_text("https://apnews.com/article/abc", "")
 
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Confirmed by https://apnews.com/article/abc.",
+            "- **URL:** https://apnews.com/article/abc, published 2026-03-01",
+            "See **https://apnews.com/article/abc** for details",
+            "[AP](https://apnews.com/article/abc)",
+        ],
+    )
+    def test_found_despite_trailing_prose_punctuation(self, text):
+        assert url_appears_in_text("https://apnews.com/article/abc", text)
+
     def test_contains_http_url(self):
         assert contains_http_url("Superseded per https://apnews.com/article/abc")
         assert not contains_http_url("Outdated, trust me")

@@ -4,9 +4,11 @@ import pytest
 
 from processing_pipeline.stage_3.models import (
     EVIDENCE_CAP_MAX_SCORE,
+    EVIDENCE_GATE_NOTE_PREFIX,
     apply_evidence_caps,
     asserts_falsity,
     has_contradicting_evidence,
+    mentions_falsity,
 )
 from processing_pipeline.stage_4.tasks import extract_stage_3_verification_evidence, merge_grounding_metadata
 
@@ -49,6 +51,34 @@ class TestFalsityDetection:
 
     def test_no_terms(self):
         assert not asserts_falsity(_analysis(explanation_en="The statistic is misleading."))
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "The event is not fabricated; AP confirms it.",
+            "No fabricated content detected.",
+            "Fabricated Content: none",
+            "There is no evidence of fabrication here.",
+            "It isn't fictional, it is a non-fictional account.",
+            "El evento no fue inventado ni es ficticio.",
+            "Nothing invented in this segment.",
+            "Sales of prefabricated homes rose 10%.",
+        ],
+    )
+    def test_negated_or_unrelated_terms_do_not_count(self, text):
+        assert not mentions_falsity(text)
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "There is no doubt that the event was fabricated.",
+            "It is not true that this happened: the story was invented.",
+            "No existe evidencia de que el evento haya ocurrido.",
+            "Fabricated. No source reports it.",
+        ],
+    )
+    def test_negation_far_from_the_term_still_counts(self, text):
+        assert mentions_falsity(text)
 
 
 class TestContradictingEvidence:
@@ -132,6 +162,40 @@ class TestApplyEvidenceCaps:
 
     def test_missing_confidence_scores(self):
         assert apply_evidence_caps({"explanation": {}})["evidence_gate"] == {"applied": False}
+
+    def test_never_raises_on_malformed_model_output(self):
+        analysis = {
+            "explanation": {"english": None, "spanish": "Contenido fabricado."},
+            "disinformation_categories": [None, "plain string", {"english": "Fabricated Event"}],
+            "confidence_scores": {"overall": 99, "verification_status": None, "categories": [None, {"score": None}]},
+            "verification_evidence": {"searches_performed": [None, "junk", {"results": [None, {"url": None}]}]},
+        }
+
+        result = apply_evidence_caps(analysis)
+
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["applied"] is True
+        assert result["explanation"]["english"].startswith(EVIDENCE_GATE_NOTE_PREFIX)
+
+    def test_note_from_a_previous_run_is_replaced_not_duplicated(self):
+        analysis = _analysis(status="insufficient_evidence", explanation_en="Unclear.")
+        once = apply_evidence_caps(analysis)
+        twice = apply_evidence_caps(once)
+        assert twice["explanation"]["english"] == once["explanation"]["english"]
+        assert twice["explanation"]["english"].count(EVIDENCE_GATE_NOTE_PREFIX) == 1
+
+    def test_stale_note_is_dropped_when_gate_no_longer_applies(self):
+        capped = apply_evidence_caps(_analysis(status="insufficient_evidence", explanation_en="Unclear."))
+        reviewed = {
+            **capped,
+            "confidence_scores": {**capped["confidence_scores"], "verification_status": "verified_false"},
+        }
+        reviewed["verification_evidence"] = _evidence()
+
+        result = apply_evidence_caps(reviewed)
+
+        assert result["evidence_gate"] == {"applied": False}
+        assert result["explanation"]["english"] == "Unclear."
 
 
 class TestGroundingMetadataHelpers:

@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from unittest.mock import Mock
 
 import pytest
 
@@ -65,6 +66,31 @@ class TestPureHelpers:
 
     def test_stage_to_status(self):
         assert rs.STAGE_TARGET_STATUS == {3: "New", 4: "Ready for review"}
+
+
+class TestFetchAll:
+    def test_builds_a_fresh_query_per_page_and_stops_on_a_short_page(self):
+        pages = [[{"id": i} for i in range(rs.PAGE_SIZE)], [{"id": "last"}]]
+        builders = []
+
+        def build_query():
+            builder = Mock()
+            builder.range.return_value.execute.return_value = Mock(data=pages[len(builders)])
+            builders.append(builder)
+            return builder
+
+        rows = rs.fetch_all(build_query)
+
+        assert len(rows) == rs.PAGE_SIZE + 1 and rows[-1] == {"id": "last"}
+        assert [b.range.call_args.args for b in builders] == [
+            (0, rs.PAGE_SIZE - 1),
+            (rs.PAGE_SIZE, 2 * rs.PAGE_SIZE - 1),
+        ]
+
+    def test_empty_table(self):
+        builder = Mock()
+        builder.range.return_value.execute.return_value = Mock(data=None)
+        assert rs.fetch_all(lambda: builder) == []
 
 
 class TestSelectSnippets:

@@ -27,7 +27,7 @@ from src.processing_pipeline.stage_3.models import FALSITY_TERMS, mentions_falsi
 
 load_dotenv()
 
-BATCH_SIZE = 500
+BATCH_SIZE = 100  # ids go into the request URL as an `in.(...)` filter; 100 UUIDs stay well under URL limits
 PAGE_SIZE = 1000
 STAGE_TARGET_STATUS = {3: "New", 4: "Ready for review"}
 REASON_FLAGS = ("fabricated_label", "disliked", "commented", "ids_file")
@@ -160,11 +160,16 @@ def get_supabase_client():
     return create_client(url, key)
 
 
-def fetch_all(query):
+def fetch_all(build_query):
+    """Read every row of a query, PAGE_SIZE rows at a time.
+
+    ``build_query`` must return a fresh query builder on each call: postgrest builders accumulate params, so
+    calling ``.range()`` twice on one builder sends two ``offset`` values and the same page comes back forever.
+    """
     rows = []
     start = 0
     while True:
-        page = query.range(start, start + PAGE_SIZE - 1).execute().data or []
+        page = build_query().range(start, start + PAGE_SIZE - 1).execute().data or []
         rows.extend(page)
         if len(page) < PAGE_SIZE:
             return rows
@@ -172,34 +177,35 @@ def fetch_all(query):
 
 
 def fetch_fabricated_label_snippet_ids(client) -> set:
-    labels = fetch_all(client.table("labels").select("id, text, text_spanish"))
+    labels = fetch_all(lambda: client.table("labels").select("id, text, text_spanish"))
     label_ids = [label["id"] for label in labels if label_matches_falsity(label)]
     ids = set()
     for batch in chunked(label_ids, BATCH_SIZE):
-        rows = fetch_all(client.table("snippet_labels").select("snippet").in_("label", batch))
+        rows = fetch_all(lambda: client.table("snippet_labels").select("snippet").in_("label", batch))
         ids.update(row["snippet"] for row in rows)
     return ids
 
 
 def fetch_disliked_snippet_ids(client) -> set:
-    rows = fetch_all(client.table("user_like_snippets").select("snippet").eq("value", -1))
+    rows = fetch_all(lambda: client.table("user_like_snippets").select("snippet").eq("value", -1))
     return {row["snippet"] for row in rows}
 
 
 def fetch_commented_snippet_ids(client) -> set:
-    rows = fetch_all(client.table("snippets").select("id").gt("comment_count", 0))
+    rows = fetch_all(lambda: client.table("snippets").select("id").gt("comment_count", 0))
     return {row["id"] for row in rows}
 
 
 def fetch_hidden_snippet_ids(client) -> set:
-    rows = fetch_all(client.table("user_hide_snippets").select("snippet"))
+    rows = fetch_all(lambda: client.table("user_hide_snippets").select("snippet"))
     return {row["snippet"] for row in rows}
 
 
 def fetch_snippets(client, ids: list) -> dict[str, dict]:
     snippets = {}
+    columns = "id, status, recorded_at, confidence_scores"
     for batch in chunked(ids, BATCH_SIZE):
-        rows = fetch_all(client.table("snippets").select("id, status, recorded_at, confidence_scores").in_("id", batch))
+        rows = fetch_all(lambda: client.table("snippets").select(columns).in_("id", batch))
         snippets.update({row["id"]: row for row in rows})
     return snippets
 

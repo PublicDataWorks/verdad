@@ -162,6 +162,7 @@ For EVERY factual claim that could be verified or disproven, you MUST:
    - `results_found`: Search returned relevant, actionable results
    - `no_results`: Search returned no relevant results (document this - absence of evidence is important)
    - `results_inconclusive`: Results exist but don't clearly address the claim
+   - `search_failed`: The search tool returned `failed: true` (error, timeout, misconfiguration). A failed search is NOT `no_results` and is NOT evidence of anything — retry or move on, but never treat it as absence of coverage
 
 **Source Priority Guidelines:**
 
@@ -592,7 +593,7 @@ Document ALL web searches performed during fact-checking:
       {
         "query": "exact search query used",
         "search_intent": "what claim this search verifies",
-        "result_status": "results_found | no_results | results_inconclusive",
+        "result_status": "results_found | no_results | results_inconclusive | search_failed",
         "results": [
           {
             "url": "https://example.com/article",
@@ -993,7 +994,7 @@ Ensure your output strictly adheres to this schema.
                         "properties": {
                             "query": { "type": "string" },
                             "search_intent": { "type": "string" },
-                            "result_status": { "type": "string", "enum": ["results_found", "no_results", "results_inconclusive"] },
+                            "result_status": { "type": "string", "enum": ["results_found", "no_results", "results_inconclusive", "search_failed"] },
                             "results": {
                                 "type": "array",
                                 "items": {

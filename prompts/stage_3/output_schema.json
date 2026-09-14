@@ -377,8 +377,8 @@
                             },
                             "result_status": {
                                 "type": "string",
-                                "enum": ["results_found", "no_results", "results_inconclusive"],
-                                "description": "Whether the search returned actionable results."
+                                "enum": ["results_found", "no_results", "results_inconclusive", "search_failed"],
+                                "description": "Whether the search returned actionable results. Use search_failed when the tool reported failed=true (error/timeout): a failed search is not evidence of anything."
                             },
                             "results": {
                                 "type": "array",

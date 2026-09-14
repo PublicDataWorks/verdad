@@ -37,12 +37,17 @@ def parse_iso_date(value) -> date | None:
         return None
 
 
+# Prose and markdown glue a URL to what follows it ("...article/abc.", "**https://x.com/a**"); none of these
+# characters end a real article URL, so they are dropped before comparing.
+_URL_TRAILING_CHARS = ".,;:!?*_'\"`"
+
+
 def normalize_url(url: str) -> str:
-    return url.strip().lower().rstrip("/")
+    return url.strip().rstrip(_URL_TRAILING_CHARS).lower().rstrip("/")
 
 
 def url_appears_in_text(url: str, text: str) -> bool:
-    """True when ``url`` (ignoring scheme case and a trailing slash) is one of the URLs mentioned in ``text``."""
+    """True when ``url`` (ignoring case, a trailing slash and trailing punctuation) is one of the URLs in ``text``."""
     target = normalize_url(url)
     return any(normalize_url(found) == target for found in _URL_IN_TEXT.findall(text or ""))
 

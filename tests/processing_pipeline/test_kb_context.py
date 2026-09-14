@@ -1,5 +1,8 @@
 from unittest.mock import Mock
 
+import pytest
+from postgrest.exceptions import APIError
+
 from processing_pipeline.stage_1.constants import KB_STAGE1_MIN_CONFIDENCE, STAGE_1_KB_MATCH_THRESHOLD
 from processing_pipeline.stage_1.kb_context import (
     _format_kb_entries,
@@ -7,6 +10,7 @@ from processing_pipeline.stage_1.kb_context import (
     retrieve_kb_context,
     select_trustworthy_entries,
 )
+from processing_pipeline.supabase_utils import SupabaseClient
 
 GOOD_SOURCE = {
     "url": "https://apnews.com/article/abc",
@@ -95,3 +99,43 @@ class TestRetrieveKbContext:
         openai = Mock()
         openai.embeddings.create.return_value = Mock(data=[Mock(embedding=[1.0])])
         assert retrieve_kb_context(supabase, openai, "text") is None
+
+
+def _function_not_found():
+    return APIError({"message": "Could not find the function public.search_kb_entries(...)", "code": "PGRST202"})
+
+
+class TestSearchKbEntriesRpc:
+    def _client(self):
+        supabase = SupabaseClient.__new__(SupabaseClient)
+        supabase.client = Mock()
+        return supabase
+
+    def test_sends_min_confidence_only_when_set(self):
+        supabase = self._client()
+        supabase.client.rpc.return_value.execute.return_value = Mock(data=[{"id": "e1"}])
+
+        supabase.search_kb_entries([0.1], min_confidence=85)
+        assert supabase.client.rpc.call_args.args[1]["min_confidence"] == 85
+
+        supabase.search_kb_entries([0.1])
+        assert "min_confidence" not in supabase.client.rpc.call_args.args[1]
+
+    def test_retries_without_min_confidence_when_sql_is_not_deployed_yet(self):
+        supabase = self._client()
+        old_signature = Mock()
+        old_signature.execute.side_effect = _function_not_found()
+        new_signature = Mock()
+        new_signature.execute.return_value = Mock(data=[{"id": "e1"}])
+        supabase.client.rpc.side_effect = [old_signature, new_signature]
+
+        assert supabase.search_kb_entries([0.1], min_confidence=85) == [{"id": "e1"}]
+        first, second = (call.args[1] for call in supabase.client.rpc.call_args_list)
+        assert first["min_confidence"] == 85 and "min_confidence" not in second
+
+    def test_other_errors_propagate(self):
+        supabase = self._client()
+        supabase.client.rpc.return_value.execute.side_effect = APIError({"message": "boom", "code": "42501"})
+        with pytest.raises(APIError):
+            supabase.search_kb_entries([0.1], min_confidence=85)
+        assert supabase.client.rpc.call_count == 1

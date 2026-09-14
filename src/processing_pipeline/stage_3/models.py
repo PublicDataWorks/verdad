@@ -1,4 +1,5 @@
 import copy
+import re
 import unicodedata
 from typing import Literal
 
@@ -141,10 +142,11 @@ class SearchResult(BaseModel):
     url: str = Field(description="Full URL of the source")
     source_name: str = Field(description="Name of the publication or website (e.g., Reuters, AP News, BBC)")
     source_type: Literal[
-        "tier1_wire_service", "tier1_factchecker", "tier2_major_news",
-        "tier3_regional_news", "official_source", "other"
+        "tier1_wire_service", "tier1_factchecker", "tier2_major_news", "tier3_regional_news", "official_source", "other"
     ] = Field(description="Classification of source reliability tier")
-    publication_date: str | None = Field(description="Publication date in ISO 8601 format (YYYY-MM-DD), or null if not available")
+    publication_date: str | None = Field(
+        description="Publication date in ISO 8601 format (YYYY-MM-DD), or null if not available"
+    )
     title: str = Field(description="Title or headline of the article/page")
     relevant_excerpt: str = Field(description="Direct quote from the source relevant to the claim (50-200 words)")
     relevance_to_claim: Literal["supports_claim", "contradicts_claim", "provides_context", "inconclusive"] = Field(
@@ -184,7 +186,9 @@ class Stage3Output(BaseModel):
     translation: str = Field(description="Translation of the transcription into English")
     title: Title = Field(description="Descriptive title of the snippet")
     summary: Summary = Field(description="Objective summary of the snippet")
-    explanation: Explanation = Field(description="Detailed explanation of the analysis findings, including why content is scored as disinformation or verified as accurate")
+    explanation: Explanation = Field(
+        description="Detailed explanation of the analysis findings, including why content is scored as disinformation or verified as accurate"
+    )
     disinformation_categories: list[DisinformationCategory] = Field(
         description="Disinformation categories that the snippet belongs to"
     )
@@ -233,7 +237,16 @@ def _fold(text: str) -> str:
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
-_FOLDED_FALSITY_TERMS = tuple(_fold(term) for term in FALSITY_TERMS)
+# Terms match at a word start only ("prefabricated" is not "fabricated") and do not count when negated:
+# "not fabricated", "no fabricated content detected", "no evidence of fabrication", "isn't fictional",
+# "no fue inventado" and "Fabricated content: none" all describe absent fabrication, not an assertion of it.
+_FALSITY_TERM_RE = re.compile(r"\b(?:" + "|".join(re.escape(_fold(term)) for term in FALSITY_TERMS) + ")")
+_NEGATED_BEFORE_RE = re.compile(
+    r"\b(?:not|no|non|never|nothing|neither|nor|without|\w+n't|nunca|ningun\w*|nada|tampoco|ni)(?:\W+\w+){0,3}?\W*$"
+)
+_NEGATED_AFTER_RE = re.compile(r"^\w*(?:\s+\w+){0,2}\s*:\s*(?:none|no|not|n/a|ninguno|ninguna)\b")
+_NEGATION_WINDOW = 60
+_GATE_NOTE_RE = re.compile(r"\s*" + re.escape(EVIDENCE_GATE_NOTE_PREFIX) + r"[^\n]*")
 
 
 def _bilingual_texts(value) -> list[str]:
@@ -245,9 +258,21 @@ def _bilingual_texts(value) -> list[str]:
 
 
 def mentions_falsity(text: str) -> bool:
-    """True when ``text`` contains one of the FALSITY_TERMS (case- and accent-insensitive)."""
+    """True when ``text`` contains a non-negated FALSITY_TERM (case- and accent-insensitive)."""
     folded = _fold(text or "")
-    return any(term in folded for term in _FOLDED_FALSITY_TERMS)
+    for match in _FALSITY_TERM_RE.finditer(folded):
+        start, end = match.span()
+        before = folded[:start][-_NEGATION_WINDOW:]
+        after = folded[end:][:_NEGATION_WINDOW]
+        if _NEGATED_BEFORE_RE.search(before) or _NEGATED_AFTER_RE.match(after):
+            continue
+        return True
+    return False
+
+
+def _without_gate_note(text) -> str:
+    """Drop a note appended by an earlier run so a re-review neither keeps a stale note nor gets two."""
+    return _GATE_NOTE_RE.sub("", text if isinstance(text, str) else "").strip()
 
 
 def asserts_falsity(analysis: dict) -> bool:
@@ -263,8 +288,13 @@ def has_contradicting_evidence(verification_evidence: dict | None) -> bool:
     if not isinstance(verification_evidence, dict):
         return False
     for search in verification_evidence.get("searches_performed") or []:
-        for result in (search or {}).get("results") or []:
-            if result.get("relevance_to_claim") == "contradicts_claim" and (result.get("url") or "").strip():
+        if not isinstance(search, dict):
+            continue
+        for result in search.get("results") or []:
+            if not isinstance(result, dict):
+                continue
+            url = result.get("url")
+            if result.get("relevance_to_claim") == "contradicts_claim" and isinstance(url, str) and url.strip():
                 return True
     return False
 
@@ -290,6 +320,13 @@ def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = Non
     if verification_evidence is None:
         verification_evidence = result.get("verification_evidence")
 
+    # A previous run's note (e.g. Stage 3's, echoed by the Stage 4 reviewer) must not be judged or kept
+    explanation = result.get("explanation")
+    if isinstance(explanation, dict):
+        for language in ("english", "spanish"):
+            if language in explanation:
+                explanation[language] = _without_gate_note(explanation[language])
+
     reasons = []
     status = confidence_scores.get("verification_status")
     if status in UNVERIFIED_STATUSES:
@@ -305,12 +342,11 @@ def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = Non
         return result
 
     original_overall = confidence_scores.get("overall")
-    original_categories = [
-        {"category": c.get("category"), "score": c.get("score")} for c in confidence_scores.get("categories") or []
-    ]
+    categories = [c for c in confidence_scores.get("categories") or [] if isinstance(c, dict)]
+    original_categories = [{"category": c.get("category"), "score": c.get("score")} for c in categories]
     if isinstance(original_overall, (int, float)):
         confidence_scores["overall"] = min(original_overall, EVIDENCE_CAP_MAX_SCORE)
-    for category in confidence_scores.get("categories") or []:
+    for category in categories:
         if isinstance(category.get("score"), (int, float)):
             category["score"] = min(category["score"], EVIDENCE_CAP_MAX_SCORE)
 
@@ -323,10 +359,9 @@ def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = Non
         f"{EVIDENCE_GATE_NOTE_PREFIX} La confianza fue limitada a {EVIDENCE_CAP_MAX_SCORE} por el sistema "
         f"(sin evidencia suficiente: {'; '.join(reasons)})."
     )
-    explanation = result.get("explanation")
     if isinstance(explanation, dict):
-        explanation["english"] = f"{explanation.get('english', '')}\n\n{note_en}".strip()
-        explanation["spanish"] = f"{explanation.get('spanish', '')}\n\n{note_es}".strip()
+        explanation["english"] = f"{explanation.get('english') or ''}\n\n{note_en}".strip()
+        explanation["spanish"] = f"{explanation.get('spanish') or ''}\n\n{note_es}".strip()
 
     result["evidence_gate"] = {
         "applied": True,
