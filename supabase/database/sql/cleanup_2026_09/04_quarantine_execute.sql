@@ -19,6 +19,12 @@
 -- Choose the batch by editing `params.batch`:
 --   'cleanup-2026-09-narrow'  NARROW_A UNION NARROW_B  (reasons
 --                             'unsupported_fabrication_claim' / 'insufficient_evidence_high_score')
+--                             NARROW_A additionally requires NOT HAS_CONTRADICTING_EVIDENCE:
+--                             no result in grounding_metadata.searches_performed[].results[]
+--                             with an http(s) url and relevance_to_claim = 'contradicts_claim'
+--                             (or result_status = 'results_found' when relevance is missing).
+--                             Stage 4 currently overwrites that log with prose for ~99 % of
+--                             processed snippets, so the guard excludes ~0 rows today; see 03.
 --   'cleanup-2026-09-broad'   BROAD                    (reason 'fabrication_label')
 -- Run the narrow batch first if both are approved. Because the selection
 -- requires status = 'Processed', snippets already quarantined by an earlier
@@ -64,16 +70,52 @@ visible AS (
       AND NOT EXISTS (SELECT 1 FROM public.snippet_quarantine_log l
                       WHERE l.snippet = s.id AND l.batch = p.batch)
 ),
-flagged AS (
+flagged AS MATERIALIZED (
     SELECT
         v.*,
         (v.overall >= 95 AND v.fab
             AND v.txt ~*  pt.no_evidence
-            AND v.txt !~* pt.dated_src)                                            AS narrow_a,
+            AND v.txt !~* pt.dated_src)                                            AS narrow_a_text,
         (v.overall >= 70 AND v.verification_status IN ('insufficient_evidence', 'uncertain')) AS narrow_b,
         (v.overall >= 95 AND v.fab)                                                AS broad
     FROM visible v
     CROSS JOIN patterns pt
+),
+-- Structured evidence check, evaluated only for rows that need it (f.narrow_a_text).
+-- pg_input_is_valid (PG16+) keeps a non-JSON value from raising; CASE keeps the
+-- cast from running on it. Stage 4's prose strings never have searches_performed,
+-- so they yield false.
+evidence AS (
+    SELECT
+        f.*,
+        coalesce(ev.has_contradicting_evidence, false) AS has_contradicting_evidence
+    FROM flagged f
+    LEFT JOIN LATERAL (
+        SELECT EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(doc.j->'searches_performed') = 'array'
+                          THEN doc.j->'searches_performed' ELSE '[]'::jsonb END) sp
+            CROSS JOIN LATERAL jsonb_array_elements(
+                     CASE WHEN jsonb_typeof(sp->'results') = 'array'
+                          THEN sp->'results' ELSE '[]'::jsonb END) r
+            WHERE coalesce(r->>'url', '') ~* '^https?://'
+              AND (r->>'relevance_to_claim' = 'contradicts_claim'
+                   OR (r->>'relevance_to_claim' IS NULL AND sp->>'result_status' = 'results_found'))
+        ) AS has_contradicting_evidence
+        FROM public.snippets s2
+        CROSS JOIN LATERAL (
+            SELECT CASE WHEN s2.grounding_metadata IS NOT NULL
+                          AND pg_input_is_valid(s2.grounding_metadata, 'jsonb')
+                        THEN s2.grounding_metadata::jsonb END AS j
+        ) doc
+        WHERE s2.id = f.id
+          AND f.narrow_a_text
+    ) ev ON true
+),
+narrowed AS (
+    SELECT f.*, (f.narrow_a_text AND NOT f.has_contradicting_evidence) AS narrow_a
+    FROM evidence f
 ),
 picked AS (
     SELECT
@@ -87,7 +129,7 @@ picked AS (
             WHEN 'cleanup-2026-09-broad' THEN 'fabrication_label'
         END AS reason,
         p.batch
-    FROM flagged f
+    FROM narrowed f
     CROSS JOIN params p
     WHERE (p.batch = 'cleanup-2026-09-narrow' AND (f.narrow_a OR f.narrow_b))
        OR (p.batch = 'cleanup-2026-09-broad'  AND f.broad)

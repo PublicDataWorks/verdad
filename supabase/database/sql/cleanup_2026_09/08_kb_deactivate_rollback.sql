@@ -1,8 +1,10 @@
--- cleanup_2026_09 / step 08: roll back the knowledge-base deactivation (WRITES).
+-- cleanup_2026_09 / step 08: roll back ONE BATCH of the knowledge-base deactivation (WRITES).
 --
 -- Restores kb_entries.status to kb_deactivation_log.previous_status ('active')
 -- and clears the 'cleanup-2026-09: ...' deactivation_reason for every log row
--- of the batch that has not been restored yet, then stamps restored_at.
+-- of the chosen batch ('cleanup-2026-09-kb-negation' or '-kb-unsourced') that
+-- has not been restored yet, then stamps restored_at. Run once per batch to
+-- undo both.
 -- Only entries still 'deactivated' with our reason prefix are touched, so an
 -- entry someone deactivated or superseded for another reason since is left alone.
 -- Embeddings were never deleted (07 set kb_entry_embeddings.status = 'Deactivated');
@@ -11,7 +13,7 @@
 BEGIN;
 
 WITH params AS (
-    SELECT 'cleanup-2026-09-kb'::text AS batch
+    SELECT 'cleanup-2026-09-kb-negation'::text AS batch   -- <- edit: -kb-negation or -kb-unsourced
 ),
 todo AS (
     SELECT l.kb_entry, l.previous_status
@@ -52,7 +54,7 @@ COMMIT;
 
 -- Verify (read-only):
 -- SELECT status, count(*) FROM public.kb_entries GROUP BY status;
--- SELECT count(*) FILTER (WHERE restored_at IS NULL) AS still_deactivated,
+-- SELECT batch, count(*) FILTER (WHERE restored_at IS NULL) AS still_deactivated,
 --        count(*) FILTER (WHERE restored_at IS NOT NULL) AS restored
--- FROM public.kb_deactivation_log WHERE batch = 'cleanup-2026-09-kb';
+-- FROM public.kb_deactivation_log GROUP BY batch;
 -- SELECT status, count(*) FROM public.kb_entry_embeddings GROUP BY status;

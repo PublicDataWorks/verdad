@@ -5,6 +5,12 @@
 -- exactly. restored_at is set by the rollback; a row with restored_at IS NULL
 -- is a currently quarantined snippet for that batch.
 --
+-- snippet is deliberately NOT a foreign key: the pipeline deletes snippets
+-- (SupabaseClient.delete_snippet, used by the Stage 2 redo flow), and a
+-- REFERENCES ... ON DELETE CASCADE would erase the audit row with the snippet.
+-- An audit log must outlive what it describes, so the column is a plain
+-- NOT NULL uuid; 05/09 join it to snippets and simply skip ids that no longer exist.
+--
 -- Access pattern follows public.user_hide_snippets / user_like_snippets in this
 -- project: RLS enabled with NO policies, so only service_role (which bypasses
 -- RLS) and the postgres owner can read or write it. The anon/authenticated
@@ -12,7 +18,7 @@
 -- web app reads it; nothing in the app reads this log.)
 CREATE TABLE IF NOT EXISTS public.snippet_quarantine_log (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    snippet         UUID NOT NULL REFERENCES public.snippets(id) ON DELETE CASCADE,
+    snippet         UUID NOT NULL,   -- no FK on purpose, see header
     previous_status public.processing_status NOT NULL,
     reason          TEXT NOT NULL,
     batch           TEXT NOT NULL,

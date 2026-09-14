@@ -25,8 +25,8 @@ This folder parks the affected snippets in a new `Quarantined` status (out of th
 | 04 | `04_quarantine_execute.sql` | yes | repeat per 2,000-row batch until 0 rows |
 | 05 | `05_quarantine_rollback.sql` | yes | only to undo 04 |
 | 06 | `06_kb_deactivate_select.sql` | no | as needed; produces the KB counts |
-| 07 | `07_kb_deactivate_execute.sql` | DDL (log table) + yes | once (idempotent) |
-| 08 | `08_kb_deactivate_rollback.sql` | yes | only to undo 07 |
+| 07 | `07_kb_deactivate_execute.sql` | DDL (log table) + yes | once per approved KB batch (`-kb-negation`, `-kb-unsourced`); idempotent |
+| 08 | `08_kb_deactivate_rollback.sql` | yes | only to undo 07, per batch |
 | 09 | `09_reprocess_requeue.sql` | yes | **after the hotfix deploy**; repeat per 500 until 0 rows |
 
 Recommended sequence:
@@ -35,8 +35,8 @@ Recommended sequence:
 2. `01` alone. `ALTER TYPE ... ADD VALUE` cannot be used in the same transaction that references the new label, so paste and run only that statement, then confirm with `select unnest(enum_range(null::processing_status))`.
 3. `02`.
 4. `03` per 10-day slice; confirm the totals still match the approved set.
-5. `04` with `params.batch = 'cleanup-2026-09-narrow'`, repeated until the `UPDATE` reports 0 rows (about 4 runs). If the broad set is approved as well, run it again with `'cleanup-2026-09-broad'` (about 3 more runs for the ~3,980 additional rows, since narrow-A is a subset of broad and is already gone).
-6. `06`, then `07`.
+5. `04` with `params.batch = 'cleanup-2026-09-narrow'`, repeated until the `UPDATE` reports 0 rows (about 4 runs). If the broad set is approved as well, run it again with `'cleanup-2026-09-broad'` (about 4 more runs for the ~6,920 additional rows, since narrow-A is a subset of broad and is already gone).
+6. `06`, then `07` once with `params.batch = 'cleanup-2026-09-kb-negation'` and once with `'cleanup-2026-09-kb-unsourced'` (each is a separate approval; either can be run alone).
 7. Record the **after** numbers.
 8. Later, after the fixed pipeline is deployed: `09` in chunks of 500 (or `src/scripts/reprocess_snippets.py` from the hotfix PR, not both).
 
@@ -68,14 +68,15 @@ Verbatim from the review thread; the SQL in `03`/`04` implements them and nothin
 | TXT | `coalesce(explanation->>'english','') \|\| ' ' \|\| coalesce(confidence_scores::text,'')` |
 | NO_EVIDENCE | `TXT ~* '(no\|zero\|absence of any) (credible \|verifiable \|public \|official \|online \|such )?(evidence\|records?\|results?\|reports?\|information\|mention\|trace)\|does not exist\|do not exist\|non-?existent\|never (happened\|occurred\|existed\|took place)\|did not (happen\|occur\|take place)\|yield(ed\|s)? no\|no search results'` |
 | DATED_SRC | `TXT ~* 'https?://\|(January\|…\|December) [0-9]{1,2},? 20[0-9]{2}\|[0-9]{1,2} de (enero\|…\|diciembre) de 20[0-9]{2}\|20[0-9]{2}-[0-9]{2}-[0-9]{2}'` |
-| **NARROW-A** | VISIBLE and OVERALL >= 95 and FAB and NO_EVIDENCE and not DATED_SRC — reason `unsupported_fabrication_claim` |
+| HAS_CONTRADICTING_EVIDENCE | `grounding_metadata` parses as a jsonb object and some `searches_performed[].results[]` entry has a non-empty `http(s)` `url` and `relevance_to_claim = 'contradicts_claim'` (or, when `relevance_to_claim` is missing, its search has `result_status = 'results_found'`). Stage 3 writes `verification_evidence` there; Stage 4 overwrites it with `kb_research` / `web_research` prose strings, which count as *no* structured evidence. Non-JSON values are guarded with `pg_input_is_valid`. |
+| **NARROW-A** | VISIBLE and OVERALL >= 95 and FAB and NO_EVIDENCE and not DATED_SRC **and not HAS_CONTRADICTING_EVIDENCE** — reason `unsupported_fabrication_claim`. The text heuristics say the model found nothing; the evidence check makes sure its structured search log agrees, so a correctly verified-false snippet with tier-1 sources is not quarantined. |
 | **NARROW-B** | VISIBLE and OVERALL >= 70 and `confidence_scores->>'verification_status' in ('insufficient_evidence','uncertain')` — reason `insufficient_evidence_high_score` |
 | **NARROW** | NARROW-A union NARROW-B, batch `cleanup-2026-09-narrow` |
 | **BROAD** | VISIBLE and OVERALL >= 95 and FAB — reason `fabrication_label`, batch `cleanup-2026-09-broad` |
-| **K1** | active `kb_entries` whose `fact \|\| ' ' \|\| coalesce(related_claim,'')` matches NO_EVIDENCE or `fabricat\|fictional\|ficticio\|never existed\|does not exist\|no existe` — reason `unsupported_or_negative_fact` |
+| **K1** | active `kb_entries` whose `fact \|\| ' ' \|\| coalesce(related_claim,'')` matches NO_EVIDENCE or `fabricat\|fictional\|ficticio\|never existed\|does not exist\|no existe` — reason `unsupported_or_negative_fact`. **Exception (kept active):** entries whose `fact` contains an explicit date (the DATED_SRC date patterns) *and* have a source whose host is on the fact-checker/wire allowlist: reuters.com, apnews.com, bbc.com, bbc.co.uk, politifact.com, factcheck.org, snopes.com, afp.com, factuel.afp.com, verificat.cat, maldita.es, newtral.es, efe.com, chequeado.com, animalpolitico.com, elsurti.com (any subdomain). |
 | **K2** | active entries with no `kb_entry_sources` row whose `url ~* '^https?://'` and is not `%example.com%` / `%web_research.com%` / `%google.com/search%` — reason `no_real_source` |
 | **K3** | active entries whose `created_by_snippet` has `user_like_snippets.value < 0` or a `user_hide_snippets` row — reason `created_by_rejected_snippet` |
-| **KB set** | K1 union K2 union K3, batch `cleanup-2026-09-kb`; `deactivation_reason = 'cleanup-2026-09: ' \|\| tags` |
+| **KB batches** | `cleanup-2026-09-kb-negation` = K1 minus the exception; `cleanup-2026-09-kb-unsourced` = K2 union K3. Each log row carries every matching tag; `deactivation_reason = 'cleanup-2026-09: ' \|\| tags`. An entry in both sets is logged under whichever batch runs first (07 only touches `active` rows). |
 
 Schema facts checked on 2026-09-14: `processing_status` = New, Processing, Processed, Error, Ready for review, Reviewing (no Quarantined yet); `verification_status` is a key inside `confidence_scores` (not a column); `disinformation_categories` is `jsonb[]`; `kb_entry_embeddings.status` is free `TEXT`.
 
@@ -83,37 +84,48 @@ Schema facts checked on 2026-09-14: `processing_status` = New, Processing, Proce
 
 ## Counts
 
-Re-confirmed read-only on 2026-09-14 (afternoon UTC) through the Management API, anchor `2026-09-14`. Snippet counts were taken in nine 10-day slices and summed; KB counts in one query.
+Re-confirmed read-only on 2026-09-14 (afternoon UTC) through the Management API, anchor `2026-09-14`. Snippet counts were taken in nine 10-day slices and summed (two lanes of sequential slices; nine in parallel overload the 2-minute gateway); KB counts in one query. The second pass re-ran everything after the review changes (evidence check on NARROW-A, K1 exception, KB batch split).
 
-| Set | Expected (morning) | Re-confirmed | Note |
-|-----|-------------------:|-------------:|------|
-| Feed visible (Processed, overall >= 95, not hidden, 90 d) | — | **15,596** | what `get_snippets` can show today |
-| NARROW-A `unsupported_fabrication_claim` | 4,979 | **4,980** | +1 newly processed snippet |
-| NARROW-B `insufficient_evidence_high_score` | 2,939 | **2,939** | |
+| Set | Expected (morning) | Re-confirmed (2nd pass) | Note |
+|-----|-------------------:|------------------------:|------|
+| Feed visible (Processed, overall >= 95, not hidden, 90 d) | — | **15,599** | what `get_snippets` can show today |
+| NARROW-A before the evidence check | 4,979 | 4,981 | text heuristics only |
+| NARROW-A rows excluded by HAS_CONTRADICTING_EVIDENCE | — | **0** | see note below |
+| **NARROW-A** `unsupported_fabrication_claim` | 4,979 | **4,981** | |
+| **NARROW-B** `insufficient_evidence_high_score` | 2,939 | **2,941** | |
 | NARROW-A and NARROW-B overlap | — | **0** | disjoint in every slice |
-| **NARROW total** (batch `-narrow`) | 7,918 | **7,919** | |
-| **BROAD** `fabrication_label` (batch `-broad`) | 11,898 | **11,899** | superset of NARROW-A; 76 % of the visible feed |
-| K1 `unsupported_or_negative_fact` | 4,030 | **4,030** | |
+| **NARROW total** (batch `-narrow`) | 7,918 | **7,922** | |
+| **BROAD** `fabrication_label` (batch `-broad`) | 11,898 | **11,901** | superset of NARROW-A; 76 % of the visible feed |
+| BROAD rows with structured contradicting evidence | — | **0** | see note below |
+| K1 raw (text match) | 4,030 | 4,032 | |
+| K1 exception kept (allowlisted fact-checker source + explicit date) | — | **164** | stays active |
+| **K1** `unsupported_or_negative_fact` → batch `-kb-negation` | 4,030 | **3,868** | |
 | K2 `no_real_source` | 1,758 | **1,758** | |
 | K3 `created_by_rejected_snippet` | 44 | **44** | |
-| **KB union** (batch `-kb`) | 4,247 | **4,247** | of 11,160 active entries |
+| **K2 union K3** → batch `-kb-unsourced` | — | **1,789** | |
+| K1 also in K2/K3 | — | 1,571 | logged under whichever batch runs first |
+| **KB union** (both batches) | 4,247 | **4,086** | of 11,164 active entries |
 
-Per-slice detail (snippets):
+Drift versus the morning numbers (+2 to +4 on the snippet sets, +2 K1 raw, +4 active KB entries) is new Stage 3/4 output during the day.
 
-| recorded_at slice | feed visible | broad | narrow-A | narrow-B | narrow union |
-|---|---:|---:|---:|---:|---:|
-| 2026-06-16 – 06-26 | 1,082 | 852 | 282 | 160 | 442 |
-| 2026-06-26 – 07-06 | 1,358 | 1,029 | 363 | 257 | 620 |
-| 2026-07-06 – 07-16 | 2,189 | 1,644 | 653 | 377 | 1,030 |
-| 2026-07-16 – 07-26 | 1,747 | 1,306 | 565 | 402 | 967 |
-| 2026-07-26 – 08-05 | 1,159 | 896 | 421 | 282 | 703 |
-| 2026-08-05 – 08-15 | 1,890 | 1,450 | 604 | 336 | 940 |
-| 2026-08-15 – 08-25 | 2,135 | 1,658 | 700 | 381 | 1,081 |
-| 2026-08-25 – 09-04 | 1,801 | 1,396 | 605 | 350 | 955 |
-| 2026-09-04 – 09-15 | 2,235 | 1,668 | 787 | 394 | 1,181 |
-| **sum** | **15,596** | **11,899** | **4,980** | **2,939** | **7,919** |
+**Why the evidence check excludes 0 rows.** `grounding_metadata` is written by Stage 3 as the structured `verification_evidence` object, but Stage 4 runs on every snippet before it reaches `Processed` and overwrites the column with its own `kb_research` / `web_research` prose (`stage_4/executor.py::_build_grounding_metadata`). Of 1,530 broad rows recorded in the last 10 days, 1,527 carry the Stage 4 prose shape, 14 the Stage 3 structured shape, 0 are null; none of the 14 has a `contradicts_claim` result with a URL, and only 2 of 1,530 even mention `contradicts_claim` in prose. The check is kept because it is the right guard whenever the structured log survives and becomes effective the moment Stage 4 stops overwriting the column (follow-up for the pipeline, not this PR). Until then the NARROW-A criterion is the text heuristic plus the 95+ score and fabrication label.
 
-NARROW-B includes snippets scored 70–94, which are not in the public feed today; quarantining them only parks them for reprocessing. Expected feed impact: narrow removes about 4,980 of 15,596 visible snippets; broad removes about 11,899. Counts drift upward by a few per hour as Stage 3 keeps processing.
+Per-slice detail (snippets, second pass):
+
+| recorded_at slice | feed visible | broad | narrow-A text | excluded by evidence | narrow-A | narrow-B | narrow union |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2026-06-16 – 06-26 | 1,082 | 852 | 282 | 0 | 282 | 160 | 442 |
+| 2026-06-26 – 07-06 | 1,358 | 1,029 | 363 | 0 | 363 | 257 | 620 |
+| 2026-07-06 – 07-16 | 2,189 | 1,644 | 653 | 0 | 653 | 377 | 1,030 |
+| 2026-07-16 – 07-26 | 1,747 | 1,306 | 565 | 0 | 565 | 402 | 967 |
+| 2026-07-26 – 08-05 | 1,159 | 896 | 421 | 0 | 421 | 282 | 703 |
+| 2026-08-05 – 08-15 | 1,890 | 1,450 | 604 | 0 | 604 | 336 | 940 |
+| 2026-08-15 – 08-25 | 2,135 | 1,658 | 700 | 0 | 700 | 381 | 1,081 |
+| 2026-08-25 – 09-04 | 1,801 | 1,396 | 605 | 0 | 605 | 350 | 955 |
+| 2026-09-04 – 09-15 | 2,238 | 1,670 | 788 | 0 | 788 | 396 | 1,184 |
+| **sum** | **15,599** | **11,901** | **4,981** | **0** | **4,981** | **2,941** | **7,922** |
+
+NARROW-B includes snippets scored 70–94, which are not in the public feed today; quarantining them only parks them for reprocessing. Expected feed impact: narrow removes about 4,981 of 15,599 visible snippets; broad removes about 11,901. Counts drift upward by a few per hour as Stage 3 keeps processing.
 
 ---
 
@@ -152,7 +164,7 @@ SELECT status, count(*) FROM kb_entry_embeddings GROUP BY status;
 SELECT count(*) FROM snippets WHERE status IN ('New', 'Ready for review');
 ```
 
-Expected after `04` (narrow only): `feed_visible_90d` drops by ~4,980; `snippets.status = 'Quarantined'` = ~7,919; `New`/`Ready for review` counts unchanged by this step. After `07`: `kb_entries.status = 'deactivated'` rises by 4,247 and `kb_entry_embeddings.status = 'Deactivated'` = number of those entries that had an embedding.
+Expected after `04` (narrow only): `feed_visible_90d` drops by ~4,981; `snippets.status = 'Quarantined'` = ~7,922; `New`/`Ready for review` counts unchanged by this step. After `07` (both KB batches): `kb_entries.status = 'deactivated'` rises by 4,086 (3,868 negation + 218 unsourced-only, or 1,789 + 2,297 if the unsourced batch runs first) and `kb_entry_embeddings.status = 'Deactivated'` = number of those entries that had an embedding.
 
 ---
 
@@ -161,7 +173,7 @@ Expected after `04` (narrow only): `feed_visible_90d` drops by ~4,980; `snippets
 Every write is logged with the previous state, and every rollback is a single file run per batch:
 
 * Snippets: `05_quarantine_rollback.sql` with `params.batch` set to `'cleanup-2026-09-narrow'` or `'cleanup-2026-09-broad'`; repeat until 0 rows. Restores `previous_status` (normally `Processed`, so the snippets are back in the feed immediately) and stamps `restored_at`. Snippets already re-queued by `09` are not touched.
-* Knowledge base: `08_kb_deactivate_rollback.sql`. Restores `status = 'active'`, clears the `cleanup-2026-09:` reason, and sets `kb_entry_embeddings.status` back to `'Processed'`. Entries deactivated or superseded since for another reason are left alone.
+* Knowledge base: `08_kb_deactivate_rollback.sql` with `params.batch` set to `'cleanup-2026-09-kb-negation'` or `'cleanup-2026-09-kb-unsourced'`. Restores `status = 'active'`, clears the `cleanup-2026-09:` reason, and sets `kb_entry_embeddings.status` back to `'Processed'`. Entries deactivated or superseded since for another reason are left alone.
 * The `Quarantined` enum label and the two log tables are intentionally left in place (removing an enum value is not supported by PostgreSQL; the tables are the audit trail).
 
 ---
@@ -179,5 +191,7 @@ Every write is logged with the previous state, and every rollback is a single fi
 * **RLS pattern.** `snippet_quarantine_log` and `kb_deactivation_log` have RLS enabled with no policies and a `service_role` grant only, the same as `user_hide_snippets` / `user_like_snippets` in production (RLS on, zero policies). `kb_entries` uses explicit policies because the web app reads it; nothing in the app reads these logs.
 * **Enum ALTER.** `ALTER TYPE ... ADD VALUE` is fine outside a transaction block but the new label cannot be *used* in the same transaction. Run `01` by itself. PostgreSQL 17.6 in production.
 * **Embeddings.** `search_kb_entries` filters `kb_entries.status = 'active'`, but `find_duplicate_kb_entries` does not; it assumes deactivated entries lose their `Processed` embedding. `07` therefore marks the embeddings `Deactivated` rather than deleting them so `08` can restore without a re-embedding backfill. This differs from the pipeline's own `deactivate_kb_entry`, which deletes the embedding row; `backfill_kb_embeddings.py` only looks at active entries with no row, so it is not affected either way.
-* **Batch interaction.** `04` selects `status = 'Processed'`, so running `-broad` after `-narrow` logs only the additional rows under the broad batch; each log row belongs to the batch that moved the snippet, and `05` is per batch. To undo everything run `05` once per batch.
+* **Batch interaction.** `04` selects `status = 'Processed'`, so running `-broad` after `-narrow` logs only the additional rows under the broad batch; each log row belongs to the batch that moved the snippet, and `05` is per batch. To undo everything run `05` once per batch. The same holds for the two KB batches and `08`.
+* **Why K1 is a class-level deactivation.** Negation "facts" ("no credible evidence exists that X happened") encode a moment's absence of search results as a permanent truth with no expiry; RAG then feeds them back and the model concludes that a real event never happened (a Wikipedia-sourced "there has never been a Pope Leo XIV" existed). They are the self-poisoning loop itself, so K1 is deactivated as a class rather than only when unsourced, but as its own batch so it is approved as a distinct decision. Properly sourced, dated fact-checks (allowlisted fact-checker/wire host *and* an explicit date in the fact) are kept; everything is reversible through `kb_deactivation_log`.
+* **No foreign keys on the log tables.** `snippet_quarantine_log.snippet` and `kb_deactivation_log.kb_entry` are plain `NOT NULL uuid` columns. The pipeline deletes snippets (`SupabaseClient.delete_snippet`, Stage 2 redo flow), and a `REFERENCES ... ON DELETE CASCADE` would have erased the audit row with the snippet. `05`/`08`/`09` join to the live table and skip ids that no longer exist.
 * **Two-minute statement timeout** applies to the Management API and SQL editor alike; the batch sizes above were chosen for it and have not yet been timed against a real write.
