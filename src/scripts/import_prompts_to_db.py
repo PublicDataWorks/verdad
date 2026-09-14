@@ -2,17 +2,25 @@
 """
 Script to import prompt files into the database as versioned entries.
 
+The list of prompt files per stage/sub_stage and the version each one is at live in
+``prompts/manifest.json`` (see ``src/scripts/prompt_manifest.py``).
+
 Usage:
+    # Deploy whatever the manifest says differs from the active DB versions (used by CI on merge)
+    python src/scripts/import_prompts_to_db.py import --from-manifest
+    python src/scripts/import_prompts_to_db.py import --from-manifest --dry-run
+
+    # Import every mapped entry (or --stages ...) at one explicit version
     python src/scripts/import_prompts_to_db.py import --version 1.0.0 --description "Initial import from files"
     python src/scripts/import_prompts_to_db.py import --version 1.1.0 --description "Updated Stage 3 prompt" --no-active
     python src/scripts/import_prompts_to_db.py import --version 1.0.0 --dry-run  # Preview changes without committing
-    python src/scripts/import_prompts_to_db.py list
+
+    python src/scripts/import_prompts_to_db.py list [--active]
 """
 
 import argparse
-import json
 import os
-import re
+import sys
 
 from dotenv import load_dotenv
 from supabase import create_client
@@ -20,55 +28,47 @@ from supabase import create_client
 from src.processing_pipeline.constants import PromptStage
 from src.processing_pipeline.stage_1.constants import Stage1SubStage
 from src.processing_pipeline.stage_4.constants import Stage4SubStage
+from src.scripts.prompt_manifest import (
+    format_plan,
+    load_manifest,
+    manifest_files,
+    plan_manifest_import,
+    read_prompt_files,
+    split_stage_label,
+    stage_label,
+    validate_version,
+)
 
 load_dotenv()
 
 ALLOWED_PROMPT_DIR = "prompts"
 MAX_DESCRIPTION_LENGTH = 500
+MISSING_ENV_EXIT_CODE = 2
 
-PROMPT_MAPPING = {
-    (PromptStage.STAGE_1, Stage1SubStage.DISINFORMATION_DETECTION): {
-        "system_instruction": "prompts/stage_1/main/detection_system_instruction.md",
-        "user_prompt": "prompts/stage_1/main/detection_user_prompt.md",
-        "output_schema": "prompts/stage_1/main/detection_output_schema.json",
-    },
-    (PromptStage.STAGE_1, Stage1SubStage.INITIAL_TRANSCRIPTION): {
-        "user_prompt": "prompts/stage_1/preprocess/initial_transcription_user_prompt.md",
-        "output_schema": "prompts/stage_1/preprocess/initial_transcription_output_schema.json",
-    },
-    (PromptStage.STAGE_1, Stage1SubStage.INITIAL_DETECTION): {
-        "system_instruction": "prompts/stage_1/preprocess/initial_detection_system_instruction.md",
-        "user_prompt": "prompts/stage_1/preprocess/initial_detection_user_prompt.md",
-        "output_schema": "prompts/stage_1/preprocess/initial_detection_output_schema.json",
-    },
-    (PromptStage.STAGE_3, None): {
-        "system_instruction": "prompts/stage_3/system_instruction.md",
-        "user_prompt": "prompts/stage_3/analysis_prompt.md",
-        "output_schema": "prompts/stage_3/output_schema.json",
-    },
-    (PromptStage.STAGE_4, Stage4SubStage.KB_RESEARCHER): {
-        "system_instruction": "prompts/stage_4/kb_researcher_instruction.md",
-    },
-    (PromptStage.STAGE_4, Stage4SubStage.WEB_RESEARCHER): {
-        "system_instruction": "prompts/stage_4/web_researcher_instruction.md",
-    },
-    (PromptStage.STAGE_4, Stage4SubStage.REVIEWER): {
-        "system_instruction": "prompts/stage_4/reviewer_instruction.md",
-        "output_schema": "prompts/stage_4/output_schema.json",
-    },
-    (PromptStage.STAGE_4, Stage4SubStage.KB_UPDATER): {
-        "system_instruction": "prompts/stage_4/kb_updater_instruction.md",
-    },
-    (PromptStage.STAGE_1, Stage1SubStage.TIMESTAMPED_TRANSCRIPTION): {
-        "system_instruction": "prompts/stage_1/main/timestamped_transcription_system_instruction.md",
-        "user_prompt": "prompts/stage_1/main/timestamped_transcription_user_prompt.md",
-        "output_schema": "prompts/stage_1/main/timestamped_transcription_output_schema.json",
-    },
+
+class MissingEnvError(RuntimeError):
+    """SUPABASE_URL / SUPABASE_KEY are not set."""
+
+
+SUB_STAGE_ENUMS = {
+    PromptStage.STAGE_1: Stage1SubStage,
+    PromptStage.STAGE_4: Stage4SubStage,
 }
 
 
-def validate_version(version: str) -> bool:
-    return bool(re.match(r"^\d+\.\d+\.\d+$", version))
+def _manifest_key(label: str):
+    """Map a manifest label to the (PromptStage, sub-stage enum | None) tuple used by the pipeline."""
+    stage_value, sub_stage_value = split_stage_label(label)
+    stage = PromptStage(stage_value)
+    if sub_stage_value is None:
+        return (stage, None)
+    return (stage, SUB_STAGE_ENUMS[stage](sub_stage_value))
+
+
+MANIFEST = load_manifest()
+
+# (stage, sub_stage) -> {file_type: path}. Derived from the manifest so there is one source of truth.
+PROMPT_MAPPING = {_manifest_key(label): manifest_files(entry) for label, entry in MANIFEST.items()}
 
 
 def validate_path_safety(path: str) -> bool:
@@ -89,17 +89,12 @@ def validate_description(description: str) -> str:
 def _stage_label(key):
     """Format a (stage, sub_stage) tuple as a display string."""
     stage, sub_stage = key
-    if sub_stage is None:
-        return stage.value
-    return f"{stage.value}/{sub_stage.value}"
+    return stage_label(stage.value, sub_stage.value if sub_stage else None)
 
 
 def _parse_stage_label(label: str):
     """Parse a display string back to a (stage, sub_stage) tuple."""
-    for key in PROMPT_MAPPING:
-        if _stage_label(key) == label:
-            return key
-    return None
+    return _manifest_key(label) if label in MANIFEST else None
 
 
 def check_files_exist(keys: list) -> tuple[bool, list[str], list[str]]:
@@ -118,39 +113,8 @@ def check_files_exist(keys: list) -> tuple[bool, list[str], list[str]]:
     return len(missing_files) == 0 and len(unsafe_paths) == 0, missing_files, unsafe_paths
 
 
-def read_file(path: str) -> str:
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
-
-
-def read_json(path: str) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def import_prompts(
-    version: str,
-    description: str,
-    set_active: bool = True,
-    stages: list = None,
-    dry_run: bool = False,
-):
-    """
-    Import prompt files into the database.
-
-    Args:
-        version: Version string (e.g., "1.0.0")
-        description: Human-readable description of this version
-        set_active: Whether to set these versions as active (default True)
-        stages: Optional list of specific stages to import. If None, imports all.
-        dry_run: If True, preview changes without committing to database.
-    """
-    if not validate_version(version):
-        raise ValueError(f"Invalid version format: '{version}'. Must be semver format (e.g., 1.0.0)")
-
-    description = validate_description(description)
-    keys_to_import = stages if stages else list(PROMPT_MAPPING.keys())
-    all_valid, missing_files, unsafe_paths = check_files_exist(keys_to_import)
+def _validate_files(keys: list):
+    _, missing_files, unsafe_paths = check_files_exist(keys)
 
     if unsafe_paths:
         print("Error: The following paths are outside the allowed directory:")
@@ -164,19 +128,95 @@ def import_prompts(
             print(f"  - {missing}")
         raise FileNotFoundError("Cannot proceed with missing files")
 
-    if not all_valid:
-        raise ValueError("File validation failed")
+
+def _require_supabase_env():
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    if not supabase_url or not supabase_key:
+        raise MissingEnvError("SUPABASE_URL and SUPABASE_KEY must be set in environment")
+    return supabase_url, supabase_key
+
+
+def _create_client():
+    return create_client(*_require_supabase_env())
+
+
+def _import_one(client, key, version: str, description: str, set_active: bool, dry_run: bool) -> bool:
+    """Import a single (stage, sub_stage) entry. Returns True on success (or dry run)."""
+    stage, sub_stage = key
+    label = _stage_label(key)
+    print(f"Importing {label} v{version}...")
+
+    data = read_prompt_files(MANIFEST[label])
+
+    if dry_run:
+        print(f"  Would create version {version} for {label}")
+        print(f"    - System instruction: {len(data.get('system_instruction', '')) or 'N/A'} chars")
+        print(f"    - User prompt: {len(data.get('user_prompt', '')) or 'N/A'} chars")
+        print(f"    - Output schema: {'Yes' if data.get('output_schema') else 'No'}")
+        if set_active:
+            print("    - Would deactivate existing active version and set this as active")
+        return True
+
+    # Use PostgreSQL function for atomic insert + activation
+    try:
+        response = client.rpc(
+            "upsert_prompt_version",
+            {
+                "p_stage": stage.value,
+                "p_version": version,
+                "p_description": description,
+                "p_created_by": "import_script",
+                "p_system_instruction": data.get("system_instruction"),
+                "p_user_prompt": data.get("user_prompt"),
+                "p_output_schema": data.get("output_schema"),
+                "p_set_active": set_active,
+                "p_sub_stage": sub_stage.value if sub_stage else None,
+            },
+        ).execute()
+    except Exception as e:
+        print(f"  Error creating prompt version for {label}: {e}")
+        return False
+
+    if not response.data:
+        print(f"  Error: No data returned for {label}")
+        return False
+
+    print(f"  Created prompt version: {response.data['id']}")
+    if set_active:
+        print(f"  Set as active version for {label}")
+    return True
+
+
+def import_prompts(
+    version: str,
+    description: str,
+    set_active: bool = True,
+    stages: list = None,
+    dry_run: bool = False,
+):
+    """
+    Import prompt files into the database at one explicit version.
+
+    Args:
+        version: Version string (e.g., "1.0.0")
+        description: Human-readable description of this version
+        set_active: Whether to set these versions as active (default True)
+        stages: Optional list of specific stages to import. If None, imports all.
+        dry_run: If True, preview changes without committing to database.
+    """
+    if not validate_version(version):
+        raise ValueError(f"Invalid version format: '{version}'. Must be semver format (e.g., 1.0.0)")
+
+    description = validate_description(description)
+    keys_to_import = stages if stages else list(PROMPT_MAPPING.keys())
+    _validate_files(keys_to_import)
 
     if dry_run:
         print("\n=== DRY RUN MODE - No changes will be made ===\n")
 
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY")
-
-    if not supabase_url or not supabase_key:
-        raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment")
-
-    client = None if dry_run else create_client(supabase_url, supabase_key)
+    _require_supabase_env()
+    client = None if dry_run else _create_client()
 
     success_count = 0
     error_count = 0
@@ -185,71 +225,9 @@ def import_prompts(
         if key not in PROMPT_MAPPING:
             print(f"Warning: Unknown key '{key}', skipping...")
             continue
-
-        stage, sub_stage = key
-        label = _stage_label(key)
-        files = PROMPT_MAPPING[key]
-        print(f"Importing {label} v{version}...")
-
-        data = {}
-
-        # Load each component if file exists
-        if files.get("system_instruction"):
-            try:
-                data["system_instruction"] = read_file(files["system_instruction"])
-            except FileNotFoundError:
-                print(f"  Warning: {files['system_instruction']} not found")
-
-        if files.get("user_prompt"):
-            try:
-                data["user_prompt"] = read_file(files["user_prompt"])
-            except FileNotFoundError:
-                print(f"  Warning: {files['user_prompt']} not found")
-
-        if files.get("output_schema"):
-            try:
-                data["output_schema"] = read_json(files["output_schema"])
-            except FileNotFoundError:
-                print(f"  Warning: {files['output_schema']} not found")
-
-        if dry_run:
-            print(f"  Would create version {version} for {label}")
-            print(f"    - System instruction: {len(data.get('system_instruction', '')) or 'N/A'} chars")
-            print(f"    - User prompt: {len(data.get('user_prompt', '')) or 'N/A'} chars")
-            print(f"    - Output schema: {'Yes' if data.get('output_schema') else 'No'}")
-            if set_active:
-                print(f"    - Would deactivate existing active version and set this as active")
-            continue
-
-        # Use PostgreSQL function for atomic insert + activation
-        try:
-            response = client.rpc(
-                "upsert_prompt_version",
-                {
-                    "p_stage": stage.value,
-                    "p_version": version,
-                    "p_description": description,
-                    "p_created_by": "import_script",
-                    "p_system_instruction": data.get("system_instruction"),
-                    "p_user_prompt": data.get("user_prompt"),
-                    "p_output_schema": data.get("output_schema"),
-                    "p_set_active": set_active,
-                    "p_sub_stage": sub_stage.value if sub_stage else None,
-                },
-            ).execute()
-
-            if response.data:
-                result = response.data
-                print(f"  Created prompt version: {result['id']}")
-                if set_active:
-                    print(f"  Set as active version for {label}")
-                success_count += 1
-            else:
-                print(f"  Error: No data returned for {label}")
-                error_count += 1
-
-        except Exception as e:
-            print(f"  Error creating prompt version for {label}: {e}")
+        if _import_one(client, key, version, description, set_active, dry_run):
+            success_count += 1
+        else:
             error_count += 1
 
     if dry_run:
@@ -258,24 +236,55 @@ def import_prompts(
         print(f"\nImport complete! Success: {success_count}, Errors: {error_count}")
 
 
-def list_versions():
-    """List all prompt versions in the database."""
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY")
+def fetch_db_versions(client) -> list[dict]:
+    response = client.table("prompt_versions").select("stage, sub_stage, version, is_active").execute()
+    return response.data or []
 
-    if not supabase_url or not supabase_key:
-        raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment")
 
-    client = create_client(supabase_url, supabase_key)
+def import_from_manifest(dry_run: bool = False) -> int:
+    """
+    Import (and activate) every manifest entry whose version differs from the active DB version.
 
-    response = (
-        client.table("prompt_versions")
-        .select("id, stage, sub_stage, version, is_active, description, created_at")
-        .order("stage")
-        .order("sub_stage")
-        .order("created_at", desc=True)
-        .execute()
-    )
+    Returns the number of entries that failed (or that conflict with an existing inactive version).
+    """
+    _validate_files(list(PROMPT_MAPPING.keys()))
+    client = _create_client()  # reads only until an import is needed
+
+    actions = plan_manifest_import(MANIFEST, fetch_db_versions(client))
+    if dry_run:
+        print("\n=== DRY RUN MODE - No changes will be made ===\n")
+    print(format_plan(actions))
+    print()
+
+    to_import = [a for a in actions if a.action == "import"]
+    conflicts = [a for a in actions if a.action == "conflict"]
+    for a in conflicts:
+        print(f"Conflict: {a.label}: {a.reason}")
+
+    error_count = len(conflicts)
+    success_count = 0
+    for a in to_import:
+        description = validate_description(MANIFEST[a.label].get("description") or "Imported from manifest")
+        if _import_one(client, _manifest_key(a.label), a.manifest_version, description, True, dry_run):
+            success_count += 1
+        else:
+            error_count += 1
+
+    up_to_date = len(actions) - len(to_import) - len(conflicts)
+    verb = "Would import" if dry_run else "Imported"
+    noun = "entry" if success_count == 1 else "entries"
+    print(f"\n{verb} {success_count} {noun}; {up_to_date} up to date; {error_count} error(s).")
+    return error_count
+
+
+def list_versions(active_only: bool = False):
+    """List prompt versions in the database."""
+    client = _create_client()
+
+    query = client.table("prompt_versions").select("id, stage, sub_stage, version, is_active, description, created_at")
+    if active_only:
+        query = query.eq("is_active", True)
+    response = query.order("stage").order("sub_stage").order("created_at", desc=True).execute()
 
     if not response.data:
         print("No prompt versions found in database.")
@@ -301,12 +310,18 @@ def main():
 
     # Import command
     import_parser = subparsers.add_parser("import", help="Import prompts to database")
-    import_parser.add_argument("--version", required=True, help="Version number (e.g., 1.0.0)")
+    source = import_parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--version", help="Version number (e.g., 1.0.0) applied to every imported entry")
+    source.add_argument(
+        "--from-manifest",
+        action="store_true",
+        help="Import and activate every prompts/manifest.json entry whose version differs from the active DB version",
+    )
     import_parser.add_argument("--description", default="Imported from files", help="Version description")
     import_parser.add_argument(
         "--no-active",
         action="store_true",
-        help="Don't set as active version",
+        help="Don't set as active version (ignored with --from-manifest)",
     )
     import_parser.add_argument(
         "--stages",
@@ -321,23 +336,31 @@ def main():
     )
 
     # List command
-    subparsers.add_parser("list", help="List all prompt versions")
+    list_parser = subparsers.add_parser("list", help="List prompt versions")
+    list_parser.add_argument("--active", action="store_true", help="Only list active versions")
 
     args = parser.parse_args()
 
-    if args.command == "import":
-        stages = [_parse_stage_label(s) for s in args.stages] if args.stages else None
-        import_prompts(
-            version=args.version,
-            description=args.description,
-            set_active=not args.no_active,
-            stages=stages,
-            dry_run=args.dry_run,
-        )
-    elif args.command == "list":
-        list_versions()
-    else:
-        parser.print_help()
+    try:
+        if args.command == "import" and args.from_manifest:
+            if import_from_manifest(dry_run=args.dry_run):
+                sys.exit(1)
+        elif args.command == "import":
+            stages = [_parse_stage_label(s) for s in args.stages] if args.stages else None
+            import_prompts(
+                version=args.version,
+                description=args.description,
+                set_active=not args.no_active,
+                stages=stages,
+                dry_run=args.dry_run,
+            )
+        elif args.command == "list":
+            list_versions(active_only=args.active)
+        else:
+            parser.print_help()
+    except MissingEnvError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(MISSING_ENV_EXIT_CODE)
 
 
 if __name__ == "__main__":
