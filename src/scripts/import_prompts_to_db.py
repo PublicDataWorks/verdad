@@ -183,7 +183,7 @@ def fetch_active_prompts(client) -> dict:
     """Return the active prompt_versions rows keyed by (stage, sub_stage)."""
     response = (
         client.table("prompt_versions")
-        .select("id, stage, sub_stage, version, system_instruction, user_prompt, output_schema")
+        .select("id, stage, sub_stage, version, description, created_at, system_instruction, user_prompt, output_schema")
         .eq("is_active", True)
         .execute()
     )
@@ -232,7 +232,7 @@ def diff_prompts(stages: list = None, show_diff: bool = False) -> int:
         status, differing = compare_prompt_entry(local, db_row)
 
         detail = f" ({', '.join(differing)})" if differing else ""
-        version = f" [db v{db_row['version']}]" if db_row else ""
+        version = f" [db v{db_row['version']}, {(db_row.get('created_at') or '')[:10]}]" if db_row else ""
         print(f"{label}: {status}{detail}{version}")
         if status != "in sync":
             all_in_sync = False
