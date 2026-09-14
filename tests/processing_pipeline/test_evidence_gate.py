@@ -63,6 +63,8 @@ class TestFalsityDetection:
             "El evento no fue inventado ni es ficticio.",
             "Nothing invented in this segment.",
             "Sales of prefabricated homes rose 10%.",
+            "The crowd was made up of supporters.",
+            "The panel is made up  of three judges.",
         ],
     )
     def test_negated_or_unrelated_terms_do_not_count(self, text):
@@ -95,6 +97,8 @@ class TestFalsityDetection:
             "Esto nunca sucedió.",
             "The story is a hoax.",
             "The quote was made up.",
+            "The story was made up",
+            "The host made up a quote and attributed it to the senator.",
         ],
     )
     def test_never_happened_and_other_falsity_phrases_count(self, text):

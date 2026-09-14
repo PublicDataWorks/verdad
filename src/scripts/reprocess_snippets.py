@@ -24,7 +24,7 @@ from datetime import date, datetime, timezone
 from dotenv import load_dotenv
 from supabase import create_client
 
-from src.processing_pipeline.stage_3.models import FALSITY_TERMS, mentions_falsity
+from src.processing_pipeline.stage_3.models import FALSITY_TERMS, FALSITY_TERM_PATTERNS, mentions_falsity
 
 load_dotenv()
 
@@ -126,7 +126,10 @@ def build_sql(args, target_status: str) -> str:
     """The SQL equivalent of what the script does, for the audit trail / manual runs."""
     reasons = []
     if args.fabricated_label:
-        terms = " OR ".join(f"l.text ILIKE '%{t}%' OR l.text_spanish ILIKE '%{t}%'" for t in FALSITY_TERMS)
+        # ILIKE cannot express the exclusions in FALSITY_TERM_PATTERNS ("made up of" is not fabrication), so the
+        # audit SQL leaves those terms out; the script itself selects with mentions_falsity, which applies them.
+        plain_terms = [t for t in FALSITY_TERMS if t not in FALSITY_TERM_PATTERNS]
+        terms = " OR ".join(f"l.text ILIKE '%{t}%' OR l.text_spanish ILIKE '%{t}%'" for t in plain_terms)
         reasons.append(
             "s.id IN (SELECT sl.snippet FROM snippet_labels sl JOIN labels l ON l.id = sl.label WHERE " + terms + ")"
         )

@@ -250,7 +250,14 @@ def _fold(text: str) -> str:
 # happened and is fabricated" asserts fabrication; "Is it real? No. The story was fabricated." does too), and a
 # "label: value" only negates when the value is a bare negation ("Fabricated claim: no source confirms it" asserts
 # fabrication).
-_FALSITY_TERM_RE = re.compile(r"\b(?:" + "|".join(re.escape(_fold(term)) for term in FALSITY_TERMS) + ")")
+# Terms that need more than a plain prefix match: "the crowd was made up of supporters" describes composition,
+# not fabrication, so "made up" only counts when it is not followed by "of".
+FALSITY_TERM_PATTERNS = {
+    "made up": r"made up(?!\s+of\b)",
+}
+_FALSITY_TERM_RE = re.compile(
+    r"\b(?:" + "|".join(FALSITY_TERM_PATTERNS.get(term) or re.escape(_fold(term)) for term in FALSITY_TERMS) + ")"
+)
 _NEGATED_BEFORE_RE = re.compile(
     r"\b(?:not|no|non|never|nothing|neither|nor|without|\w+n't|nunca|ningun\w*|nada|tampoco|ni)"
     r"(?:[^\w.;!?\n]+\w+){0,2}?[^\w.;!?\n]*$"

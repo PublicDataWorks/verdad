@@ -56,6 +56,8 @@ class TestPureHelpers:
             ({"text": "Election Fraud", "text_spanish": "Fraude electoral"}, False),
             ({"text": None, "text_spanish": "Esto no ocurrió"}, True),
             ({"text": None, "text_spanish": "Esto no ocurrio"}, True),
+            ({"text": "The story was made up", "text_spanish": None}, True),
+            ({"text": "Made up of supporters", "text_spanish": None}, False),
         ],
     )
     def test_label_matches_falsity(self, label, expected):
@@ -160,6 +162,7 @@ class TestBuildSql:
         sql = rs.build_sql(args, rs.STAGE_TARGET_STATUS[args.stage])
         assert sql.startswith("UPDATE snippets s\nSET status = 'Ready for review'")
         assert "l.text ILIKE '%fabricat%'" in sql
+        assert "made up" not in sql
         assert "user_like_snippets WHERE value = -1" in sql
         assert "s.comment_count > 0" in sql
         assert "<ids from ids.txt>" in sql
