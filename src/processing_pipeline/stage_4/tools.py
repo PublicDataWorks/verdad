@@ -3,6 +3,7 @@
 
 import os
 
+from google.adk.tools.tool_context import ToolContext
 from openai import OpenAI
 from tiktoken import encoding_for_model
 
@@ -10,6 +11,13 @@ from processing_pipeline.constants import (
     KB_DEDUP_SIMILARITY_THRESHOLD,
     KB_SEARCH_MATCH_THRESHOLD,
     GeminiModel,
+)
+from processing_pipeline.kb_sources import (
+    VALID_SOURCE_TYPES,
+    contains_http_url,
+    is_http_url,
+    parse_iso_date,
+    url_appears_in_text,
 )
 from processing_pipeline.processing_utils import normalize_embedding
 from processing_pipeline.supabase_utils import SupabaseClient
@@ -74,6 +82,59 @@ def search_knowledge_base(query: str, categories: list[str] | None = None, refer
     print(f"  [KB Search] Query: '{query}' — {len(results)} results (top similarity: {results[0].get('similarity', 'N/A')})")
     return {"results": results, "count": len(results)}
 
+def _error(message: str) -> dict:
+    return {"status": "error", "error_message": message}
+
+
+def validate_kb_source(
+    source_url: str,
+    source_name: str,
+    source_type: str,
+    publication_date: str | None,
+    web_research: str | None,
+) -> str | None:
+    """Return an error message when the source does not qualify as KB evidence, else None.
+
+    ``web_research`` is the web researcher's output for this session; when it is available the URL must
+    appear in it (the model may only cite what it actually found). When it is unavailable the check is
+    skipped and logged.
+    """
+    if not is_http_url(source_url):
+        return "source_url must be an absolute http(s) URL with a host name (e.g. https://apnews.com/article/...)."
+    if not source_name or not source_name.strip():
+        return "source_name is required. Every KB entry must have at least one external source."
+    if not source_type or not source_type.strip():
+        return "source_type is required. Every KB entry must have at least one external source."
+    if source_type not in VALID_SOURCE_TYPES:
+        return f"Invalid source_type '{source_type}'. Must be one of: {', '.join(sorted(VALID_SOURCE_TYPES))}"
+    if source_type == "other":
+        return (
+            "source_type 'other' cannot be the sole source of a KB entry. Cite a wire service, fact-checker, "
+            "major/regional news outlet or official source."
+        )
+    if publication_date is not None and parse_iso_date(publication_date) is None:
+        return f"publication_date '{publication_date}' is not an ISO date (YYYY-MM-DD)."
+    if web_research:
+        if not url_appears_in_text(source_url, web_research):
+            return (
+                f"source_url '{source_url}' does not appear in this session's web research. "
+                "Only cite URLs that were actually returned by the search or read tools."
+            )
+    else:
+        print("  [KB Upsert] web research text unavailable in session state; skipping URL provenance check")
+    return None
+
+
+def _web_research_text(tool_context: ToolContext | None) -> str | None:
+    if tool_context is None:
+        return None
+    try:
+        value = tool_context.state.get("web_research")
+    except Exception:  # state access should never break a KB write
+        return None
+    return value if isinstance(value, str) and value.strip() else None
+
+
 def upsert_knowledge_entry(
     fact: str,
     confidence_score: int,
@@ -88,11 +149,14 @@ def upsert_knowledge_entry(
     valid_until: str | None = None,
     source_title: str | None = None,
     source_excerpt: str | None = None,
+    publication_date: str | None = None,
     snippet_id: str | None = None,
+    tool_context: ToolContext | None = None,
 ) -> dict:
     """Create or update a knowledge base entry with a verified fact.
 
-    If a similar entry already exists (similarity > 0.92), creates a new version.
+    If a similar entry already exists (similarity > 0.92), creates a new version, unless the existing active
+    entry has a higher confidence score (then nothing is written and the response says so).
     Otherwise creates a new entry. Only store facts with confidence >= 70.
 
     Args:
@@ -106,29 +170,23 @@ def upsert_knowledge_entry(
         valid_until: Optional ISO date when the fact stopped being true.
         source_url: REQUIRED. URL of the primary evidence source. Every KB entry must have an external source.
         source_name: REQUIRED. Name of the source (e.g., Reuters, PolitiFact).
-        source_type: REQUIRED. Source tier. Must be one of: tier1_wire_service, tier1_factchecker, tier2_major_news, tier3_regional_news, official_source, other.
+        source_type: REQUIRED. Source tier. Must be one of: tier1_wire_service, tier1_factchecker, tier2_major_news, tier3_regional_news, official_source. 'other' is rejected as a sole source.
         source_title: Title of the source article.
         source_excerpt: Relevant excerpt from the source (50-200 words).
+        publication_date: Publication date of the source in ISO format (YYYY-MM-DD), if known.
         snippet_id: UUID of the snippet that triggered this KB entry.
 
     Returns:
         Dictionary with status and details of the created or updated KB entry.
     """
     if confidence_score < 70:
-        return {"status": "error", "error_message": "Confidence score must be >= 70 to store in the knowledge base."}
+        return _error("Confidence score must be >= 70 to store in the knowledge base.")
 
-    if not source_url or not source_url.strip():
-        return {"status": "error", "error_message": "source_url is required. Every KB entry must have at least one external source."}
-
-    if not source_name or not source_name.strip():
-        return {"status": "error", "error_message": "source_name is required. Every KB entry must have at least one external source."}
-
-    if not source_type or not source_type.strip():
-        return {"status": "error", "error_message": "source_type is required. Every KB entry must have at least one external source."}
-
-    valid_source_types = {"tier1_wire_service", "tier1_factchecker", "tier2_major_news", "tier3_regional_news", "official_source", "other"}
-    if source_type not in valid_source_types:
-        return {"status": "error", "error_message": f"Invalid source_type '{source_type}'. Must be one of: {', '.join(valid_source_types)}"}
+    source_error = validate_kb_source(
+        source_url, source_name, source_type, publication_date, _web_research_text(tool_context)
+    )
+    if source_error:
+        return _error(source_error)
 
     supabase_client = _get_supabase_client()
 
@@ -143,9 +201,24 @@ def upsert_knowledge_entry(
     )
 
     if duplicates:
-        # Update existing entry (create new version)
-        existing_id = duplicates[0]["id"]
+        existing = duplicates[0]
+        existing_id = existing["id"]
+        existing_confidence = existing.get("confidence_score") or 0
+        if existing.get("status", "active") == "active" and existing_confidence > confidence_score:
+            # The kb_entry_status enum has no 'pending' value, so a lower-confidence rewrite is dropped, not stored.
+            print(
+                f"  [KB Upsert] Not superseding entry {existing_id} (confidence {existing_confidence}) with a "
+                f"lower-confidence fact ({confidence_score}); skipping"
+            )
+            return {
+                "status": "skipped",
+                "action": "kept_existing",
+                "entry_id": existing_id,
+                "existing_confidence_score": existing_confidence,
+                "message": "An existing active entry with higher confidence already covers this fact; nothing written.",
+            }
 
+        # Update existing entry (create new version)
         new_entry_data = {
             "fact": fact,
             "confidence_score": confidence_score,
@@ -189,6 +262,7 @@ def upsert_knowledge_entry(
         source_type=source_type,
         title=source_title,
         relevant_excerpt=source_excerpt,
+        publication_date=publication_date,
     )
 
     # Generate and store embedding
@@ -225,11 +299,17 @@ def deactivate_knowledge_entry(entry_id: str, reason: str) -> dict:
 
     Args:
         entry_id: UUID of the KB entry to deactivate.
-        reason: Clear explanation of why this entry is being deactivated.
+        reason: Clear explanation of why this entry is being deactivated. Must include the http(s) URL of the
+            source that shows the entry is outdated or incorrect.
 
     Returns:
         Dictionary with status and details of the deactivation.
     """
+    if not contains_http_url(reason):
+        return _error(
+            "reason must cite the http(s) URL of the evidence showing the entry is outdated or incorrect."
+        )
+
     supabase_client = _get_supabase_client()
     result = supabase_client.deactivate_kb_entry(entry_id, reason)
 

@@ -1,0 +1,131 @@
+from unittest.mock import Mock, patch
+
+import pytest
+
+from processing_pipeline.stage_4 import tools
+
+VALID = dict(
+    fact="The 2024 election results were certified by all 50 states.",
+    confidence_score=90,
+    categories=["Election Fraud"],
+    keywords=["certification"],
+    source_url="https://apnews.com/article/abc",
+    source_name="AP News",
+    source_type="tier1_wire_service",
+)
+
+
+@pytest.fixture
+def supabase():
+    client = Mock()
+    client.find_duplicate_kb_entries.return_value = []
+    client.insert_kb_entry.return_value = {"id": "new-id", "version": 1}
+    client.supersede_kb_entry.return_value = {"id": "v2-id", "version": 2}
+    with (
+        patch.object(tools, "_get_supabase_client", return_value=client),
+        patch.object(tools, "_generate_embedding", return_value=[0.1, 0.2]),
+    ):
+        yield client
+
+
+def _tool_context(web_research):
+    return Mock(state={"web_research": web_research})
+
+
+class TestValidateKbSource:
+    def test_accepts_good_source(self):
+        assert tools.validate_kb_source("https://apnews.com/a", "AP", "tier1_wire_service", "2026-01-02", None) is None
+
+    @pytest.mark.parametrize("url", ["", "apnews.com/a", "ftp://apnews.com/a", "https://nohost"])
+    def test_rejects_bad_url(self, url):
+        assert "http(s) URL" in tools.validate_kb_source(url, "AP", "tier1_wire_service", None, None)
+
+    def test_rejects_other_as_sole_source(self):
+        assert "'other'" in tools.validate_kb_source("https://apnews.com/a", "AP", "other", None, None)
+
+    def test_rejects_unknown_source_type(self):
+        assert "Invalid source_type" in tools.validate_kb_source("https://apnews.com/a", "AP", "blog", None, None)
+
+    def test_rejects_bad_publication_date(self):
+        assert "ISO date" in tools.validate_kb_source("https://apnews.com/a", "AP", "official_source", "Jan 2", None)
+
+    def test_requires_url_in_web_research_when_available(self):
+        research = "Checked https://reuters.com/x only."
+        error = tools.validate_kb_source("https://apnews.com/a", "AP", "tier1_wire_service", None, research)
+        assert "does not appear in this session's web research" in error
+        assert tools.validate_kb_source("https://reuters.com/x", "R", "tier1_wire_service", None, research) is None
+
+
+class TestUpsertKnowledgeEntry:
+    def test_creates_entry_with_publication_date(self, supabase):
+        result = tools.upsert_knowledge_entry(
+            **VALID, publication_date="2026-03-01", snippet_id="snip", tool_context=_tool_context(VALID["source_url"])
+        )
+
+        assert result["status"] == "success" and result["action"] == "created"
+        source_kwargs = supabase.insert_kb_entry_source.call_args.kwargs
+        assert source_kwargs["publication_date"] == "2026-03-01"
+        assert source_kwargs["url"] == VALID["source_url"]
+        supabase.upsert_kb_entry_embedding.assert_called_once()
+        supabase.record_kb_usage.assert_called_once_with("new-id", "snip", "triggered_creation")
+
+    def test_rejects_low_confidence_before_touching_db(self, supabase):
+        result = tools.upsert_knowledge_entry(**{**VALID, "confidence_score": 60})
+        assert result["status"] == "error"
+        supabase.insert_kb_entry.assert_not_called()
+
+    def test_rejects_url_missing_from_web_research(self, supabase):
+        result = tools.upsert_knowledge_entry(**VALID, tool_context=_tool_context("Only https://reuters.com/y"))
+        assert result["status"] == "error"
+        assert "web research" in result["error_message"]
+        supabase.insert_kb_entry.assert_not_called()
+
+    def test_allows_when_web_research_unavailable(self, supabase):
+        result = tools.upsert_knowledge_entry(**VALID, tool_context=_tool_context(""))
+        assert result["status"] == "success"
+
+    def test_rejects_other_source_type(self, supabase):
+        result = tools.upsert_knowledge_entry(**{**VALID, "source_type": "other"})
+        assert result["status"] == "error"
+        supabase.insert_kb_entry.assert_not_called()
+
+    def test_does_not_supersede_higher_confidence_active_entry(self, supabase):
+        supabase.find_duplicate_kb_entries.return_value = [{"id": "old", "confidence_score": 95, "status": "active"}]
+
+        result = tools.upsert_knowledge_entry(**VALID)
+
+        assert result["status"] == "skipped" and result["entry_id"] == "old"
+        supabase.supersede_kb_entry.assert_not_called()
+        supabase.insert_kb_entry.assert_not_called()
+        supabase.insert_kb_entry_source.assert_not_called()
+
+    def test_supersedes_lower_confidence_entry(self, supabase):
+        supabase.find_duplicate_kb_entries.return_value = [{"id": "old", "confidence_score": 80, "status": "active"}]
+
+        result = tools.upsert_knowledge_entry(**VALID, snippet_id="snip")
+
+        assert result["action"] == "updated" and result["entry_id"] == "v2-id"
+        supabase.supersede_kb_entry.assert_called_once()
+        supabase.record_kb_usage.assert_called_once_with("v2-id", "snip", "triggered_update")
+
+
+class TestDeactivateKnowledgeEntry:
+    def test_requires_url_in_reason(self, supabase):
+        result = tools.deactivate_knowledge_entry("e1", "Outdated")
+        assert result["status"] == "error"
+        supabase.deactivate_kb_entry.assert_not_called()
+
+    def test_deactivates_with_url(self, supabase):
+        supabase.deactivate_kb_entry.return_value = {"id": "e1"}
+        result = tools.deactivate_knowledge_entry("e1", "Superseded, see https://apnews.com/article/new")
+        assert result["status"] == "deactivated"
+        supabase.deactivate_kb_entry.assert_called_once()
+
+
+def test_adk_declaration_hides_tool_context_and_exposes_publication_date():
+    from google.adk.tools.function_tool import FunctionTool
+
+    declaration = FunctionTool(tools.upsert_knowledge_entry)._get_declaration()
+    properties = declaration.parameters.properties
+    assert "tool_context" not in properties
+    assert "publication_date" in properties

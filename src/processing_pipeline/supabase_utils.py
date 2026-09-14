@@ -466,12 +466,14 @@ class SupabaseClient:
         candidate_multiplier=8,
         filter_categories: list[str] | None = None,
         reference_date: str | None = None,
+        min_confidence: int = 0,
     ):
         params = {
             "query_embedding": query_embedding,
             "match_threshold": match_threshold,
             "match_count": match_count,
             "candidate_multiplier": candidate_multiplier,
+            "min_confidence": min_confidence,
         }
         if filter_categories:
             params["filter_categories"] = filter_categories
