@@ -122,13 +122,11 @@ def extract_stage_3_verification_evidence(grounding_metadata) -> dict | None:
     return None
 
 
-def merge_grounding_metadata(stage_4_grounding_metadata, stage_3_verification_evidence, evidence_gate) -> str:
-    """Combine the Stage 4 research record with the preserved Stage 3 search record and the evidence gate."""
-    merged = {}
-    if isinstance(stage_4_grounding_metadata, str) and stage_4_grounding_metadata:
-        merged = json.loads(stage_4_grounding_metadata)
-    elif isinstance(stage_4_grounding_metadata, dict):
-        merged = dict(stage_4_grounding_metadata)
+def merge_grounding_metadata(
+    stage_4_grounding_metadata: str | None, stage_3_verification_evidence, evidence_gate
+) -> str:
+    """Combine the Stage 4 research record (JSON string or None) with the Stage 3 search record and the gate."""
+    merged = json.loads(stage_4_grounding_metadata) if stage_4_grounding_metadata else {}
     if stage_3_verification_evidence:
         merged["stage_3_verification_evidence"] = stage_3_verification_evidence
     if evidence_gate and evidence_gate.get("applied"):

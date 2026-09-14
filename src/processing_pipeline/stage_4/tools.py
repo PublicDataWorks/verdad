@@ -103,8 +103,6 @@ def validate_kb_source(
         return "source_url must be an absolute http(s) URL with a host name (e.g. https://apnews.com/article/...)."
     if not source_name or not source_name.strip():
         return "source_name is required. Every KB entry must have at least one external source."
-    if not source_type or not source_type.strip():
-        return "source_type is required. Every KB entry must have at least one external source."
     if source_type not in VALID_SOURCE_TYPES:
         return f"Invalid source_type '{source_type}'. Must be one of: {', '.join(sorted(VALID_SOURCE_TYPES))}"
     if source_type == "other":
@@ -114,24 +112,18 @@ def validate_kb_source(
         )
     if publication_date is not None and parse_iso_date(publication_date) is None:
         return f"publication_date '{publication_date}' is not an ISO date (YYYY-MM-DD)."
-    if web_research:
-        if not url_appears_in_text(source_url, web_research):
-            return (
-                f"source_url '{source_url}' does not appear in this session's web research. "
-                "Only cite URLs that were actually returned by the search or read tools."
-            )
-    else:
+    if not web_research:
         print("  [KB Upsert] web research text unavailable in session state; skipping URL provenance check")
+    elif not url_appears_in_text(source_url, web_research):
+        return (
+            f"source_url '{source_url}' does not appear in this session's web research. "
+            "Only cite URLs that were actually returned by the search or read tools."
+        )
     return None
 
 
 def _web_research_text(tool_context: ToolContext | None) -> str | None:
-    if tool_context is None:
-        return None
-    try:
-        value = tool_context.state.get("web_research")
-    except Exception:  # state access should never break a KB write
-        return None
+    value = tool_context.state.get("web_research") if tool_context is not None else None
     return value if isinstance(value, str) and value.strip() else None
 
 
@@ -170,7 +162,8 @@ def upsert_knowledge_entry(
         valid_until: Optional ISO date when the fact stopped being true.
         source_url: REQUIRED. URL of the primary evidence source. Every KB entry must have an external source.
         source_name: REQUIRED. Name of the source (e.g., Reuters, PolitiFact).
-        source_type: REQUIRED. Source tier. Must be one of: tier1_wire_service, tier1_factchecker, tier2_major_news, tier3_regional_news, official_source. 'other' is rejected as a sole source.
+        source_type: REQUIRED. Source tier. Must be one of: tier1_wire_service, tier1_factchecker,
+            tier2_major_news, tier3_regional_news, official_source. 'other' is rejected as a sole source.
         source_title: Title of the source article.
         source_excerpt: Relevant excerpt from the source (50-200 words).
         publication_date: Publication date of the source in ISO format (YYYY-MM-DD), if known.

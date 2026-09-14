@@ -244,13 +244,18 @@ def _bilingual_texts(value) -> list[str]:
     return []
 
 
+def mentions_falsity(text: str) -> bool:
+    """True when ``text`` contains one of the FALSITY_TERMS (case- and accent-insensitive)."""
+    folded = _fold(text or "")
+    return any(term in folded for term in _FOLDED_FALSITY_TERMS)
+
+
 def asserts_falsity(analysis: dict) -> bool:
     """True when any disinformation category or explanation text asserts that something is fabricated."""
     texts = list(_bilingual_texts(analysis.get("explanation")))
     for category in analysis.get("disinformation_categories") or []:
         texts.extend(_bilingual_texts(category))
-    folded = _fold(" | ".join(texts))
-    return any(term in folded for term in _FOLDED_FALSITY_TERMS)
+    return mentions_falsity(" | ".join(texts))
 
 
 def has_contradicting_evidence(verification_evidence: dict | None) -> bool:

@@ -4,7 +4,9 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "scripts"))
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _REPO_ROOT)  # the script imports via `src.processing_pipeline...` like import_prompts_to_db
+sys.path.insert(0, os.path.join(_REPO_ROOT, "src", "scripts"))
 
 import reprocess_snippets as rs  # noqa: E402
 
@@ -52,6 +54,7 @@ class TestPureHelpers:
             ({"text": "Fabricated Event", "text_spanish": "Evento inventado"}, True),
             ({"text": "Election Fraud", "text_spanish": "Fraude electoral"}, False),
             ({"text": None, "text_spanish": "Esto no ocurrió"}, True),
+            ({"text": None, "text_spanish": "Esto no ocurrio"}, True),
         ],
     )
     def test_label_matches_falsity(self, label, expected):

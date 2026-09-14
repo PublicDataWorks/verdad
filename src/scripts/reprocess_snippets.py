@@ -23,22 +23,12 @@ from datetime import date, datetime, timezone
 from dotenv import load_dotenv
 from supabase import create_client
 
+from src.processing_pipeline.stage_3.models import FALSITY_TERMS, mentions_falsity
+
 load_dotenv()
 
 BATCH_SIZE = 500
 PAGE_SIZE = 1000
-FALSITY_TERMS = (
-    "fabricat",
-    "fabricado",
-    "ficticio",
-    "fictional",
-    "did not happen",
-    "no ocurrió",
-    "no existe",
-    "does not exist",
-    "invented",
-    "inventado",
-)
 STAGE_TARGET_STATUS = {3: "New", 4: "Ready for review"}
 REASON_FLAGS = ("fabricated_label", "disliked", "commented", "ids_file")
 
@@ -77,8 +67,7 @@ def parse_ids_file(text: str) -> list[str]:
 
 
 def label_matches_falsity(label: dict) -> bool:
-    haystack = " ".join(str(label.get(key) or "") for key in ("text", "text_spanish")).lower()
-    return any(term in haystack for term in FALSITY_TERMS)
+    return mentions_falsity(" ".join(str(label.get(key) or "") for key in ("text", "text_spanish")))
 
 
 def overall_confidence(snippet: dict):
@@ -157,7 +146,8 @@ def build_sql(args, target_status: str) -> str:
 
 def chunked(items: list, size: int):
     for start in range(0, len(items), size):
-        yield items[start:start + size]
+        end = start + size
+        yield items[start:end]
 
 
 # --- Supabase access -----------------------------------------------------------------------------------------
