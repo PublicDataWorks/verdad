@@ -1,0 +1,15 @@
+-- cleanup_2026_09 / step 01: add the 'Quarantined' label to processing_status.
+--
+-- processing_status currently has: New, Processing, Processed, Error,
+-- Ready for review, Reviewing. 'Quarantined' is a parking state that no poller
+-- selects (Stage 3 reserves 'New', Stage 4 reserves 'Ready for review') and that
+-- the feed RPC get_snippets never returns (it filters status = 'Processed').
+--
+-- IMPORTANT: run this file ALONE, as its own statement, and let it commit before
+-- running any file that references 'Quarantined' (02..09).
+--   * ALTER TYPE ... ADD VALUE cannot run inside a transaction block that also
+--     uses the new value (PostgreSQL raises "unsafe use of new value").
+--   * In the Supabase SQL editor, paste and run only this statement.
+--   * Via the Management API, send it as a single-statement request.
+-- IF NOT EXISTS makes it safe to re-run.
+ALTER TYPE public.processing_status ADD VALUE IF NOT EXISTS 'Quarantined';
