@@ -52,7 +52,7 @@ cd server && fly deploy -c fly.server.toml    # the server app builds from serve
 `delete_flow_runs.py` deletes old cancelled flow runs in batches (`BATCH_SIZE`, `DELAY_BETWEEN_BATCHES`).
 
 Why the full restart exists is **not documented** in the repo. Observable facts: every flow loops forever
-(`repeat=True`) and sleeps 60 s when idle; workers `serve(..., limit=100)`; the restart is the only thing that
+(`repeat=True`, or `limit` for stage 1) and sleeps 60 s when idle; the stage workers `serve(..., limit=100)`; the restart is the only thing that
 re-creates flow runs after a worker machine dies. Treat it as load-bearing until someone confirms otherwise.
 
 ## Triggering one stage run against production

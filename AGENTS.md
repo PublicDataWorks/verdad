@@ -68,7 +68,7 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
   It is read at import time, so set it before importing anything from `src/`.
 - Prompts live in the DB. Editing `prompts/*.md` changes nothing until `import_prompts_to_db.py` runs.
 - The coverage gate (`fail_under`) is set to the real number and is meant to ratchet upward; do not lower it.
-- Stage flows loop forever with `repeat=True` in production and sleep 60s when idle; pass `repeat=False`
+- Stage flows loop with `repeat=True` (stage 1: `limit`, set to 1000/10000 in production) and sleep 60s when idle; pass `repeat=False`
   (or a specific id) when calling them yourself.
 - Snippets with overall confidence >= 95 (`CONFIDENCE_THRESHOLD`) go to stage 4 review; the rest are `Processed`.
 - Import sorting (`ruff` rule `I`) is intentionally off until a formatting-only commit lands; do not reformat
