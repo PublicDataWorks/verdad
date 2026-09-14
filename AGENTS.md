@@ -19,7 +19,9 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
 - `prompts/`: source of truth for LLM prompts, but the pipeline reads prompts from the `prompt_versions` table.
   `src/scripts/import_prompts_to_db.py` pushes files to the DB; the `.claude/skills/verdad-heuristics-updater`
   skill wraps that workflow for heuristics changes.
-- `supabase/`: 5 migrations plus loose SQL in `supabase/database/sql/` (not migrations). `server/`: separate
+- `supabase/`: `migrations/` is the source of truth (generated baseline of the live schema + one file per
+  applied version); `supabase/database/sql/` is historical hand-applied SQL, see its README and the
+  "Database schema and migrations" section of `docs/OPERATIONS.md`. `server/`: separate
   Express/TS app (Liveblocks auth, Resend email) with its own Dockerfile and `fly.server.toml`.
 - `scripts/*.sh` + `Dockerfile.*` + `fly.*.toml`: deploy and cron. See `docs/OPERATIONS.md`.
 - `docs/design-2024.md`: historical design doc (two-stage era). Do not treat it as current.
