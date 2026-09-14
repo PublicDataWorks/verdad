@@ -1,11 +1,14 @@
-# VERDAD backend
+@AGENTS.md
 
-Python 3.11+ Prefect pipeline (recording -> stage 1-5 analysis) on Fly.io, data in Supabase (Postgres), audio in Cloudflare R2.
+## Claude-specific notes
 
-- Install: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` (done by `.claude/hooks/session-start.sh` on the web)
-- Test: `pytest tests/path/test_x.py` (full run: `pytest`, coverage gate 90%)
-- Lint/format: `flake8 --max-line-length=120 src tests`, `black --line-length 120 src tests`, `isort --profile black --line-length 120 src tests`
-- Fly apps: `fly.prefect.toml` (prefect), `fly.recording_worker.toml`, `fly.generic_recording_worker.toml`, `fly.processing_worker.toml`, `fly.searxng.toml`, `fly.dev.toml`, `server/fly.server.toml`
+- `.claude/settings.json` runs `.claude/hooks/session-start.sh` on SessionStart in web sessions only: it creates
+  `.venv`, installs `requirements.txt` and ffmpeg, installs the `flyctl` and `supabase` CLIs, and exports
+  `PYTHONPATH=src` and `ENABLE_PREFECT_DECORATOR=false` for the session.
+- `.claude/skills/verdad-heuristics-updater/`: use this skill for any change to disinformation categories,
+  heuristics or detection prompts (`prompts/`); it knows the bilingual format and the Supabase import step.
+- Use plan mode before touching `src/processing_pipeline/*/flows.py`, `supabase/migrations/`, `fly.*.toml`
+  or `Dockerfile.*`; those changes affect the production topology.
 
 ## Cloud environment
 
