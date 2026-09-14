@@ -11,7 +11,7 @@
 -- used by get_snippets is index-only too. Built size: 72 MB.
 --
 -- The functions only benefit once their filter is written as "radio_station_code = ANY(text[])"
--- (see 20260914_optimize_get_trending_topics.sql and 20260914_get_snippets_include_count.sql);
+-- (see 20260915000300_optimize_get_trending_topics.sql and 20260915000400_get_snippets_include_count.sql);
 -- the current "IN (SELECT jsonb_array_elements_text(...))" form is estimated as matching
 -- every row and never uses an index.
 --

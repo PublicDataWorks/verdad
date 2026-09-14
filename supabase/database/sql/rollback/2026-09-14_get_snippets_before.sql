@@ -1,6 +1,6 @@
 -- Rollback: live definition of public.get_snippets captured 2026-09-14 from production
--- (before the 20260914_* migrations). Re-run this file to restore the previous version.
--- NOTE: the 20260914 migration changes the signature (adds p_include_count). To roll back,
+-- (before the 2026-09-14 migrations, versions 20260915000100-20260915000400). Re-run this file to restore the previous version.
+-- NOTE: migration 20260915000400_get_snippets_include_count.sql changes the signature (adds p_include_count). To roll back,
 -- first: DROP FUNCTION IF EXISTS public.get_snippets(text,jsonb,integer,integer,text,text,boolean);
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text)
  RETURNS jsonb

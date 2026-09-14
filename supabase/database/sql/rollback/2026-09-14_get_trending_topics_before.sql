@@ -1,5 +1,5 @@
 -- Rollback: live definition of public.get_trending_topics captured 2026-09-14 from production
--- (before the 20260914_* migrations). Re-run this file to restore the previous version.
+-- (before the 2026-09-14 migrations, versions 20260915000100-20260915000400). Re-run this file to restore the previous version.
 CREATE OR REPLACE FUNCTION public.get_trending_topics(p_timespan text DEFAULT '7d'::text, p_filter jsonb DEFAULT NULL::jsonb, p_language text DEFAULT 'english'::text, p_limit integer DEFAULT 10)
  RETURNS jsonb
  LANGUAGE plpgsql

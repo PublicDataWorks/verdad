@@ -12,7 +12,7 @@
 --     LIMIT and in the returned array). The previous version left tie order to the planner,
 --     so equal-count topics could swap places between calls.
 --  3. states / sources filters use "= ANY(text[])" so the planner gets a real row estimate
---     and can use the audio_files indexes (see 20260914_add_audio_files_radio_station_code_index.sql).
+--     and can use the audio_files indexes (see 20260915000200_add_audio_files_radio_station_code_index.sql).
 --
 -- Same signature, so CREATE OR REPLACE is enough; grants are preserved.
 -- Rollback: supabase/database/sql/rollback/2026-09-14_get_trending_topics_before.sql

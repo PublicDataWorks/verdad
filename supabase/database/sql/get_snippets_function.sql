@@ -15,7 +15,7 @@ DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text,
 -- - state filter: ~134ms -> <50ms
 -- - source filter: similar improvement
 --
--- 2026-09-14 (see supabase/migrations/20260914_get_snippets_include_count.sql):
+-- 2026-09-14 (see supabase/migrations/20260915000400_get_snippets_include_count.sql):
 -- - p_include_count boolean DEFAULT true: when false, skips the total count and returns
 --   num_of_snippets / total_pages as null (the frontend only needs them on page 0)
 -- - one plain ORDER BY branch per p_order_by value so 'latest' is served from

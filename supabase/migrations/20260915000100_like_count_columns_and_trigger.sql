@@ -4,7 +4,7 @@
 -- like_count_trigger.sql), but no migration file records them. This file is idempotent and
 -- matches the live definitions captured 2026-09-14 (columns: integer NULL DEFAULT 0).
 -- Safe to run on production (no-op there) and needed on fresh environments before
--- 20260914_get_snippets_include_count.sql, which reads like_count / dislike_count.
+-- 20260915000400_get_snippets_include_count.sql, which reads like_count / dislike_count.
 
 ALTER TABLE public.snippets ADD COLUMN IF NOT EXISTS like_count integer DEFAULT 0;
 ALTER TABLE public.snippets ADD COLUMN IF NOT EXISTS dislike_count integer DEFAULT 0;
