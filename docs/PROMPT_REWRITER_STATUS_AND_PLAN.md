@@ -93,7 +93,7 @@ Finish or reimplement #68 as a Prefect flow over `downvote_review_queue` that us
 
 ### Phase 2.5: evaluation harness
 
-The script from the operating model above: rerun Stage 3 with the active and a draft prompt over a snippet list and report false positives fixed and true positives lost.
+Tracked in [VER-327](https://linear.app/pdw/issue/VER-327/phase-25-evaluation-harness-rerun-stage-3-with-a-draft-prompt-version). The script from the operating model above: rerun Stage 3 with the active and a draft prompt over a snippet list and report false positives fixed and true positives lost.
 
 ### Phase 3: Prompt Rewriter Agent v1 (ADK, human in the loop)
 
@@ -125,6 +125,7 @@ After a change is activated, reprocess similar historic snippets under a budget 
 - Phase 0: [VER-311](https://linear.app/pdw/issue/VER-311/phase-0-document-the-prompt-system-and-add-a-prompts-vs-database-drift)
 - Phase 1: [VER-312](https://linear.app/pdw/issue/VER-312); Phase 1b: [VER-313](https://linear.app/pdw/issue/VER-313)
 - Phase 2: [VER-314](https://linear.app/pdw/issue/VER-314)
+- Phase 2.5: [VER-327](https://linear.app/pdw/issue/VER-327/phase-25-evaluation-harness-rerun-stage-3-with-a-draft-prompt-version)
 - Phase 3: [VER-315](https://linear.app/pdw/issue/VER-315)
 - Phase 4: [VER-316](https://linear.app/pdw/issue/VER-316)
 - Phase 5: [VER-317](https://linear.app/pdw/issue/VER-317)
