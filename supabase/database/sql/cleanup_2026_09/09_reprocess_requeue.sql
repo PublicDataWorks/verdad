@@ -12,6 +12,10 @@
 -- The Python equivalent, src/scripts/reprocess_snippets.py, is being added on
 -- the hotfix branch; use one or the other, not both at once.
 --
+-- GUARD: do not run for a batch until 04b_snapshot_analyses.sql has a snapshot
+-- for every log row of that batch (snapshot count = log count; query at the end
+-- of 04b and in README.md). Reprocessing overwrites the analysis columns.
+--
 -- The matching snippet_quarantine_log rows get restored_at stamped so they no
 -- longer count as "currently quarantined" and 05 will not try to restore them.
 

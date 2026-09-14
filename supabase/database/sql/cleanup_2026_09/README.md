@@ -23,6 +23,7 @@ This folder parks the affected snippets in a new `Quarantined` status (out of th
 | 02 | `02_create_snippet_quarantine_log.sql` | DDL (table) | once |
 | 03 | `03_quarantine_select.sql` | no | as needed; produces the counts below |
 | 04 | `04_quarantine_execute.sql` | yes | repeat per 2,000-row batch until 0 rows |
+| 04b | `04b_snapshot_analyses.sql` | DDL (audit table) + yes | after 04 for each batch; repeat per 2,000 until 0 rows; required before 09 |
 | 05 | `05_quarantine_rollback.sql` | yes | only to undo 04 |
 | 06 | `06_kb_deactivate_select.sql` | no | as needed; produces the KB counts |
 | 07 | `07_kb_deactivate_execute.sql` | DDL (log table) + yes | once per approved KB batch (`-kb-negation`, `-kb-unsourced`); idempotent |
@@ -36,9 +37,10 @@ Recommended sequence:
 3. `02`.
 4. `03` per 10-day slice; confirm the totals still match the approved set.
 5. `04` with `params.batch = 'cleanup-2026-09-narrow'`, repeated until the `UPDATE` reports 0 rows (about 4 runs). If the broad set is approved as well, run it again with `'cleanup-2026-09-broad'` (about 4 more runs for the ~6,920 additional rows, since narrow-A is a subset of broad and is already gone).
+5b. `04b` for each quarantined batch, repeated until the `INSERT` reports 0 rows, then the guard query below must show `equal = true`. Not urgent for the feed (quarantine alone changes nothing on the snippet row), but mandatory before step 8.
 6. `06`, then `07` once with `params.batch = 'cleanup-2026-09-kb-negation'` and once with `'cleanup-2026-09-kb-unsourced'` (each is a separate approval; either can be run alone).
 7. Record the **after** numbers.
-8. Later, after the fixed pipeline is deployed: `09` in chunks of 500 (or `src/scripts/reprocess_snippets.py` from the hotfix PR, not both).
+8. Later, after the fixed pipeline is deployed and the snapshot guard passes: `09` in chunks of 500 (or `src/scripts/reprocess_snippets.py` from the hotfix PR, not both).
 
 ### Running a file
 
@@ -168,6 +170,62 @@ Expected after `04` (narrow only): `feed_visible_90d` drops by ~4,981; `snippets
 
 ---
 
+## snapshot_restore_note: before/after comparison
+
+`04b_snapshot_analyses.sql` copies each quarantined snippet's analysis (`status`, `title`, `summary`, `explanation`, `disinformation_categories`, `confidence_scores`, `grounding_metadata`, `thought_summaries`, `analyzed_by`, `reviewed_by`, `reviewed_at`, `stage_3_prompt_version_id`) plus its labels (`snippet_labels` joined to `labels`, as a jsonb array of `{label_id, text, is_ai_suggested, applied_by, upvote_count}`) into `snippet_analysis_snapshot`, one row per `(snippet, batch)`. Nothing restores from it automatically; it is the reference for reviewing what reprocessing changed.
+
+**Guard: `09` must not run for a batch until this returns `equal = true` for it.**
+
+```sql
+SELECT l.batch, l.n AS logged, coalesce(x.n, 0) AS snapshotted, l.n = coalesce(x.n, 0) AS equal
+FROM (SELECT batch, count(*) n FROM snippet_quarantine_log GROUP BY batch) l
+LEFT JOIN (SELECT batch, count(*) n FROM snippet_analysis_snapshot GROUP BY batch) x USING (batch);
+```
+
+Compare before (snapshot) and after (live row) once snippets have been reprocessed:
+
+```sql
+-- Per-snippet before/after for one batch: score, verification status, categories, title
+SELECT
+    x.snippet,
+    x.status                                        AS status_before,
+    s.status                                        AS status_after,
+    (x.confidence_scores->>'overall')::int          AS overall_before,
+    (s.confidence_scores->>'overall')::int          AS overall_after,
+    x.confidence_scores->>'verification_status'     AS verification_before,
+    s.confidence_scores->>'verification_status'     AS verification_after,
+    x.disinformation_categories                     AS categories_before,
+    s.disinformation_categories                     AS categories_after,
+    x.title->>'english'                             AS title_before,
+    s.title->>'english'                             AS title_after,
+    jsonb_array_length(x.labels)                    AS labels_before,
+    x.stage_3_prompt_version_id                     AS prompt_before,
+    s.stage_3_prompt_version_id                     AS prompt_after
+FROM snippet_analysis_snapshot x
+JOIN snippets s ON s.id = x.snippet
+WHERE x.batch = 'cleanup-2026-09-narrow'
+  AND s.status = 'Processed'               -- already reprocessed
+ORDER BY s.recorded_at DESC;
+
+-- Aggregate: how many came back above the feed threshold, and how many dropped the fabrication label
+SELECT
+    count(*)                                                                          AS reprocessed,
+    count(*) FILTER (WHERE (s.confidence_scores->>'overall')::int >= 95)              AS back_in_feed,
+    count(*) FILTER (WHERE (x.confidence_scores->>'overall')::int >= 95
+                       AND (s.confidence_scores->>'overall')::int <  95)              AS dropped_below_95,
+    count(*) FILTER (WHERE EXISTS (SELECT 1 FROM unnest(x.disinformation_categories) d WHERE d::text ILIKE '%fabricat%')
+                       AND NOT EXISTS (SELECT 1 FROM unnest(s.disinformation_categories) d WHERE d::text ILIKE '%fabricat%')) AS lost_fabrication_label
+FROM snippet_analysis_snapshot x
+JOIN snippets s ON s.id = x.snippet
+WHERE x.batch = 'cleanup-2026-09-narrow'
+  AND s.status = 'Processed'
+  AND s.updated_at > x.snapshot_at;
+```
+
+The snapshot is never deleted by any file here. Labels are stored as data only; reprocessing does not touch `snippet_labels`, so `labels_before` is a reference, not something that needs restoring.
+
+---
+
 ## Rollback
 
 Every write is logged with the previous state, and every rollback is a single file run per batch:
@@ -193,5 +251,5 @@ Every write is logged with the previous state, and every rollback is a single fi
 * **Embeddings.** `search_kb_entries` filters `kb_entries.status = 'active'`, but `find_duplicate_kb_entries` does not; it assumes deactivated entries lose their `Processed` embedding. `07` therefore marks the embeddings `Deactivated` rather than deleting them so `08` can restore without a re-embedding backfill. This differs from the pipeline's own `deactivate_kb_entry`, which deletes the embedding row; `backfill_kb_embeddings.py` only looks at active entries with no row, so it is not affected either way.
 * **Batch interaction.** `04` selects `status = 'Processed'`, so running `-broad` after `-narrow` logs only the additional rows under the broad batch; each log row belongs to the batch that moved the snippet, and `05` is per batch. To undo everything run `05` once per batch. The same holds for the two KB batches and `08`.
 * **Why K1 is a class-level deactivation.** Negation "facts" ("no credible evidence exists that X happened") encode a moment's absence of search results as a permanent truth with no expiry; RAG then feeds them back and the model concludes that a real event never happened (a Wikipedia-sourced "there has never been a Pope Leo XIV" existed). They are the self-poisoning loop itself, so K1 is deactivated as a class rather than only when unsourced, but as its own batch so it is approved as a distinct decision. Properly sourced, dated fact-checks (allowlisted fact-checker/wire host *and* an explicit date in the fact) are kept; everything is reversible through `kb_deactivation_log`.
-* **No foreign keys on the log tables.** `snippet_quarantine_log.snippet` and `kb_deactivation_log.kb_entry` are plain `NOT NULL uuid` columns. The pipeline deletes snippets (`SupabaseClient.delete_snippet`, Stage 2 redo flow), and a `REFERENCES ... ON DELETE CASCADE` would have erased the audit row with the snippet. `05`/`08`/`09` join to the live table and skip ids that no longer exist.
+* **No foreign keys on the log tables.** `snippet_quarantine_log.snippet`, `kb_deactivation_log.kb_entry` and `snippet_analysis_snapshot.snippet` are plain `NOT NULL uuid` columns. The pipeline deletes snippets (`SupabaseClient.delete_snippet`, Stage 2 redo flow), and a `REFERENCES ... ON DELETE CASCADE` would have erased the audit row with the snippet. `05`/`08`/`09` join to the live table and skip ids that no longer exist.
 * **Two-minute statement timeout** applies to the Management API and SQL editor alike; the batch sizes above were chosen for it and have not yet been timed against a real write.
