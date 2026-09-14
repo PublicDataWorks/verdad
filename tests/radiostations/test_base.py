@@ -34,9 +34,12 @@ class TestRadioStation:
     @pytest.fixture
     def mock_webdriver(self):
         """Mock Selenium WebDriver"""
-        with patch("selenium.webdriver.Chrome") as mock_chrome, patch(
-            "selenium.webdriver.chrome.service.Service"
-        ) as mock_service, patch("webdriver_manager.chrome.ChromeDriverManager") as mock_manager:
+        # Patch the names as bound in radiostations.base: patching the source modules leaves
+        # base.Service/base.ChromeDriverManager untouched and the real ChromeDriverManager
+        # downloads chromedriver over the network.
+        with patch("selenium.webdriver.Chrome") as mock_chrome, patch("radiostations.base.Service") as mock_service, patch(
+            "radiostations.base.ChromeDriverManager"
+        ) as mock_manager:
             mock_driver = Mock()
             mock_chrome.return_value = mock_driver
             yield {"chrome": mock_chrome, "service": mock_service, "manager": mock_manager, "driver": mock_driver}
@@ -128,6 +131,9 @@ class TestRadioStation:
 
         # Verify driver setup
         assert radio_station.driver == mock_webdriver["driver"]
+        mock_webdriver["manager"].return_value.install.assert_called_once_with()
+        mock_webdriver["service"].assert_called_once_with(mock_webdriver["manager"].return_value.install.return_value)
+        assert mock_webdriver["chrome"].call_args[1]["service"] is mock_webdriver["service"].return_value
 
         # Verify Chrome options
         chrome_options_calls = mock_webdriver["chrome"].call_args[1]["options"]

@@ -2,7 +2,7 @@ import glob
 import json
 import os
 import uuid
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, patch
 
 import pytest
 from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory
@@ -735,7 +735,3 @@ class TestMaintenanceFlows:
 
         mock_supabase_client.set_stage_1_llm_response_status.assert_not_called()
         mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_not_called()
-
-    def test_regenerate_timestamped_transcript_sleep_calls(self, mock_supabase_client):
-        """Sanity check that call() is importable for assert_has_calls users; keeps the helper import honest"""
-        assert call(60) == call(60)
