@@ -33,6 +33,14 @@ ENV PREFECT_SERVER_API_HOST=0.0.0.0
 ENV PREFECT_SERVER_API_PORT=4200
 ENV PREFECT_API_URL="https://prefect.fly.dev/api"
 
+# The prefect base image already ships pyyaml and pydantic (both are prefect dependencies),
+# which is everything src/stations.py needs.
+
+# Copy the station list and its loader: start_recording.sh derives the deployments to trigger
+# from config/stations.yaml via `python -m stations prefect-runs`.
+COPY config/stations.yaml /app/config/stations.yaml
+COPY src/stations.py /app/src/stations.py
+
 # Copy necessary scripts into the container
 COPY scripts/start_prefect_server.sh /app
 COPY scripts/start_recording.sh /app
