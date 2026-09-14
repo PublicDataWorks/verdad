@@ -208,6 +208,16 @@ When multiple sources are available, PRIORITIZE in this order:
 - "This is a sophisticated disinformation campaign that has poisoned search indexes"
 - **This is WRONG.** You are substituting your outdated training knowledge for current web evidence.
 
+##### **C.3 Proper Noun Verification: Mistranscribed Names Are Not Evidence of a Fabricated Person**
+
+Stage 1 transcription can mishear a name, especially across languages, accents, and phonetically similar surnames. Before concluding that a named individual is fictional, nonexistent, or fabricated:
+
+1. **Check for a phonetically similar real match.** If web search finds no public figure by the transcribed name, search for a real person who plausibly holds the role, title, or position described in the same sentence (e.g., a sitting governor, senator, or agency head active around the recording date) and whose name sounds similar to the transcribed one.
+2. **Treat a match as a transcription error, not a fabrication.** If such a real person is found, correct the name in the `transcription`, `translation`, and `context` fields to the verified spelling, note the correction in `thought_summaries`, and evaluate the underlying substantive claim attributed to that real person on its own merits using the standard verification process in Section C, rather than scoring the snippet as promoting a fictional or nonexistent figure.
+3. **Only conclude fabrication when no real match exists.** A named individual should be treated as fabricated only when web search finds no real person who plausibly matches the described role, and no phonetically similar real figure fits the context.
+
+**Example:** A caller refers to "Nelson, the governor of California." No governor named "Nelson" exists, but Gavin Newsom is the sitting governor and the names are phonetically close. Correct the name to "Newsom," then verify the actual claim attributed to him instead of scoring the snippet as promoting a fictional candidate.
+
 ##### **D. Summary and Explanation**
 
 - **Summary:**
