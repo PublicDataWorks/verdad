@@ -13,7 +13,8 @@ import psutil
 import sentry_sdk
 
 from processing_pipeline.supabase_utils import SupabaseClient
-from radiostations import RadioStation, Khot, Kisf, Krgt, Wado, Waqi, Wkaq
+from radiostations import GenericStation
+from stations import station_by_code, station_by_process_group
 from utils import optional_flow, optional_task
 
 load_dotenv()
@@ -111,21 +112,12 @@ def insert_recorded_audio_file_into_database(metadata, uploaded_path):
     task_runner=ConcurrentTaskRunner,
 )
 def generic_audio_processing_pipeline(station_code, duration_seconds, audio_birate, audio_channels, repeat):
-    RADIO_STATIONS: dict[str, type[RadioStation]] = {
-        Khot.code: Khot,
-        Kisf.code: Kisf,
-        Krgt.code: Krgt,
-        Wkaq.code: Wkaq,
-        Wado.code: Wado,
-        Waqi.code: Waqi,
-    }
-
     # Reconstruct the radio station object based on the station code
-    station_class = RADIO_STATIONS.get(station_code)
-    if not station_class:
+    station_config = station_by_code(station_code)
+    if station_config is None or station_config.recorder != "generic":
         raise ValueError(f"Invalid station code: {station_code}")
 
-    station = station_class()
+    station = GenericStation(station_config)
 
     try:
         station.setup_virtual_audio()
@@ -175,21 +167,12 @@ if __name__ == "__main__":
     process_group = os.environ.get("FLY_PROCESS_GROUP")
     print(f"======== Starting {process_group} ========")
 
-    match process_group:
-        case "radio_khot":
-            station = Khot()
-        case "radio_kisf":
-            station = Kisf()
-        case "radio_krgt":
-            station = Krgt()
-        case "radio_wkaq":
-            station = Wkaq()
-        case "radio_wado":
-            station = Wado()
-        case "radio_waqi":
-            station = Waqi()
-        case _:
-            raise Exception("Invalid process group")
+    # config/stations.yaml maps each FLY_PROCESS_GROUP to the generic station it records.
+    station_config = station_by_process_group(process_group)
+    if station_config is None:
+        raise Exception("Invalid process group")
+
+    station = GenericStation(station_config)
 
     duration_seconds = 1800  # Default to 30 minutes
     audio_birate = 64000  # Default to 64kbps bitrate
