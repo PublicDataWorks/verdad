@@ -182,7 +182,9 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         print("Review completed. Updating the snippet in Supabase")
         submit_snippet_review_result(supabase_client, snippet["id"], response, grounding_metadata, reviewer_model.value)
 
-        postprocess_snippet(supabase_client, snippet["id"], response["disinformation_categories"])
+        postprocess_snippet(
+            supabase_client, snippet["id"], response["disinformation_categories"], prune_stale_ai_labels=True
+        )
         print(f"Processing completed for snippet {snippet['id']}")
 
     except Exception as e:

@@ -156,8 +156,11 @@ class SearchResult(BaseModel):
 class SearchPerformed(BaseModel):
     query: str = Field(description="The exact search query used")
     search_intent: str = Field(description="What claim or fact this search was attempting to verify")
-    result_status: Literal["results_found", "no_results", "results_inconclusive"] = Field(
-        description="Whether the search returned actionable results"
+    result_status: Literal["results_found", "no_results", "results_inconclusive", "search_failed"] = Field(
+        description=(
+            "Whether the search returned actionable results. Use search_failed when the tool reported "
+            "failed=true (error/timeout): a failed search is not evidence of anything."
+        )
     )
     results: list[SearchResult] = Field(default_factory=list, description="Individual search results")
 

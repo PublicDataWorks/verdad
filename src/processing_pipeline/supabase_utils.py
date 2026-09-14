@@ -413,6 +413,20 @@ class SupabaseClient:
             )
             return response.data[0]
 
+    def get_snippet_labels(self, snippet_id):
+        """All snippet_labels rows for a snippet with their label text and who applied them."""
+        response = (
+            self.client.table("snippet_labels")
+            .select("id, applied_by, upvote_count, label(id, text, text_spanish, is_ai_suggested)")
+            .eq("snippet", snippet_id)
+            .execute()
+        )
+        return response.data if response.data else []
+
+    def delete_snippet_label(self, snippet_label_id):
+        response = self.client.table("snippet_labels").delete().eq("id", snippet_label_id).execute()
+        return response.data
+
     def reset_audio_file_status(self, ids):
         response = self.client.table("audio_files").update({"status": "New", "error_message": None}).in_("id", ids).execute()
         return response.data
