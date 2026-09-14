@@ -100,12 +100,32 @@ class TestSelectSnippets:
         "c": {"id": "c", "recorded_at": "2026-04-02T00:00:00+00:00", "confidence_scores": {"overall": 50}},
         "d": {"id": "d", "recorded_at": "2026-04-03T00:00:00+00:00", "confidence_scores": None},
     }
+    IN_FLIGHT = {
+        "p": {"id": "p", "status": "Processing", "recorded_at": "2026-04-03T00:00:00+00:00", "confidence_scores": None},
+        "r": {"id": "r", "status": "Reviewing", "recorded_at": "2026-04-03T00:00:00+00:00", "confidence_scores": None},
+        "e": {"id": "e", "status": "Error", "recorded_at": "2026-04-03T00:00:00+00:00", "confidence_scores": None},
+    }
 
     def test_union_and_counts(self):
         reasons = {"disliked": {"a", "b"}, "commented": {"b", "c"}}
         selected, counts = rs.select_snippets(reasons, self.SNIPPETS, None, None, set(), None)
         assert selected == ["a", "b", "c"]
-        assert counts == {"disliked": 2, "commented": 2, "union": 3, "after_filters": 3, "selected": 3}
+        assert counts == {
+            "disliked": 2,
+            "commented": 2,
+            "union": 3,
+            "skipped_in_flight": 0,
+            "after_filters": 3,
+            "selected": 3,
+        }
+
+    def test_in_flight_snippets_are_skipped_and_counted(self):
+        snippets = {**self.SNIPPETS, **self.IN_FLIGHT}
+        reasons = {"ids_file": {"a", "p", "r", "e"}}
+        selected, counts = rs.select_snippets(reasons, snippets, None, None, set(), None)
+        assert selected == ["a", "e"]
+        assert counts["skipped_in_flight"] == 2
+        assert counts["after_filters"] == 2 and counts["selected"] == 2
 
     def test_filters_since_confidence_hidden_and_limit(self):
         reasons = {"disliked": {"a", "b", "c", "d"}}
@@ -146,11 +166,13 @@ class TestBuildSql:
         assert "s.recorded_at >= '2026-03-23'" in sql
         assert "(s.confidence_scores->>'overall')::INTEGER >= 95" in sql
         assert "NOT IN (SELECT snippet FROM user_hide_snippets)" in sql
+        assert "s.status NOT IN ('Processing', 'Reviewing')" in sql
         assert "limited to the first 5" in sql
 
     def test_minimal_sql(self):
         sql = rs.build_sql(_args(disliked=True), "New")
         assert sql == (
             "UPDATE snippets s\nSET status = 'New', error_message = NULL\n"
-            "WHERE (s.id IN (SELECT snippet FROM user_like_snippets WHERE value = -1));"
+            "WHERE (s.id IN (SELECT snippet FROM user_like_snippets WHERE value = -1))\n"
+            "  AND s.status NOT IN ('Processing', 'Reviewing');"
         )

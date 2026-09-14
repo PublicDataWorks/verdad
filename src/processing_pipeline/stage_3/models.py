@@ -227,6 +227,12 @@ FALSITY_TERMS = (
     "does not exist",
     "invented",
     "inventado",
+    "never happened",
+    "never occurred",
+    "nunca ocurrió",
+    "nunca sucedió",
+    "hoax",
+    "made up",
 )
 EVIDENCE_GATE_NOTE_PREFIX = "[Evidence gate]"
 
@@ -240,13 +246,14 @@ def _fold(text: str) -> str:
 # Terms match at a word start only ("prefabricated" is not "fabricated") and do not count when negated:
 # "not fabricated", "no fabricated content detected", "no evidence of fabrication", "isn't fictional",
 # "no fue inventado" and "Fabricated content: none" all describe absent fabrication, not an assertion of it.
-# A negation only reaches a term within the same sentence ("Is it real? No. The story was fabricated." asserts
-# fabrication), and a "label: value" only negates when the value is a bare negation ("Fabricated claim: no
-# source confirms it" asserts fabrication).
+# A negation only reaches a term within the same sentence and across at most two intervening words ("This never
+# happened and is fabricated" asserts fabrication; "Is it real? No. The story was fabricated." does too), and a
+# "label: value" only negates when the value is a bare negation ("Fabricated claim: no source confirms it" asserts
+# fabrication).
 _FALSITY_TERM_RE = re.compile(r"\b(?:" + "|".join(re.escape(_fold(term)) for term in FALSITY_TERMS) + ")")
 _NEGATED_BEFORE_RE = re.compile(
     r"\b(?:not|no|non|never|nothing|neither|nor|without|\w+n't|nunca|ningun\w*|nada|tampoco|ni)"
-    r"(?:[^\w.;!?\n]+\w+){0,3}?[^\w.;!?\n]*$"
+    r"(?:[^\w.;!?\n]+\w+){0,2}?[^\w.;!?\n]*$"
 )
 _NEGATED_AFTER_RE = re.compile(
     r"^\w*(?:\s+\w+){0,2}\s*:\s*(?:none|no|n/a|ninguno|ninguna|not(?:\s+\w+)?)\b\s*(?:[.;,!?)\]]|$)"

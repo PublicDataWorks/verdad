@@ -11,7 +11,8 @@ Usage:
     python src/scripts/reprocess_snippets.py --ids-file ids.txt --stage 3 --execute --audit-file requeued.json
 
 Selection semantics: the "reason" criteria (--fabricated-label, --disliked, --commented, --ids-file) are OR-ed;
-the filters (--since, --min-confidence, --not-hidden, --limit) are AND-ed on top of that set.
+the filters (--since, --min-confidence, --not-hidden, --limit) are AND-ed on top of that set. Snippets currently
+in flight (status Processing or Reviewing) are always skipped so a worker mid-run is never flipped underneath.
 """
 
 import argparse
@@ -30,6 +31,9 @@ load_dotenv()
 BATCH_SIZE = 100  # ids go into the request URL as an `in.(...)` filter; 100 UUIDs stay well under URL limits
 PAGE_SIZE = 1000
 STAGE_TARGET_STATUS = {3: "New", 4: "Ready for review"}
+# A snippet a worker is currently handling must not be flipped mid-run: Stage 3 writes its result and status at the
+# end of the run and would clobber (or be clobbered by) the requeue.
+IN_FLIGHT_STATUSES = ("Processing", "Reviewing")
 REASON_FLAGS = ("fabricated_label", "disliked", "commented", "ids_file")
 
 
@@ -99,12 +103,18 @@ def select_snippets(
     counts["union"] = len(candidates)
 
     selected = []
+    skipped_in_flight = 0
     for snippet_id in sorted(candidates):
         snippet = snippets_by_id.get(snippet_id)
         if snippet is None:
             continue
-        if passes_filters(snippet, since, min_confidence, hidden_ids):
-            selected.append(snippet_id)
+        if not passes_filters(snippet, since, min_confidence, hidden_ids):
+            continue
+        if snippet.get("status") in IN_FLIGHT_STATUSES:
+            skipped_in_flight += 1
+            continue
+        selected.append(snippet_id)
+    counts["skipped_in_flight"] = skipped_in_flight
     counts["after_filters"] = len(selected)
     if limit is not None:
         selected = selected[:limit]
@@ -134,6 +144,7 @@ def build_sql(args, target_status: str) -> str:
         filters.append(f"(s.confidence_scores->>'overall')::INTEGER >= {args.min_confidence}")
     if args.not_hidden:
         filters.append("s.id NOT IN (SELECT snippet FROM user_hide_snippets)")
+    filters.append("s.status NOT IN (" + ", ".join(f"'{status}'" for status in IN_FLIGHT_STATUSES) + ")")
 
     where = "(" + " OR ".join(reasons) + ")"
     if filters:
@@ -243,6 +254,9 @@ def main(argv=None):
     print("Counts by criterion:")
     for name, count in counts.items():
         print(f"  {name}: {count}")
+    if counts["skipped_in_flight"]:
+        statuses = " / ".join(IN_FLIGHT_STATUSES)
+        print(f"  ({counts['skipped_in_flight']} skipped because their status is {statuses}; re-run once they finish)")
     print("\nEquivalent SQL:\n" + build_sql(args, target_status))
     print(f"\n{len(selected)} snippet(s) would be set to '{target_status}'")
 

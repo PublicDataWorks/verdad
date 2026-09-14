@@ -85,6 +85,21 @@ class TestFalsityDetection:
     def test_negation_far_from_the_term_still_counts(self, text):
         assert mentions_falsity(text)
 
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "This never happened and is fabricated.",
+            "The rally never happened.",
+            "The shooting never occurred.",
+            "El evento nunca ocurrió.",
+            "Esto nunca sucedió.",
+            "The story is a hoax.",
+            "The quote was made up.",
+        ],
+    )
+    def test_never_happened_and_other_falsity_phrases_count(self, text):
+        assert mentions_falsity(text)
+
     @pytest.mark.parametrize("text", ["Fabricated content: not detected.", "Fabricated Content: none", "Fabricated: no"])
     def test_bare_negated_value_after_colon_does_not_count(self, text):
         assert not mentions_falsity(text)
