@@ -232,7 +232,8 @@ def diff_prompts(stages: list = None, show_diff: bool = False) -> int:
         status, differing = compare_prompt_entry(local, db_row)
 
         detail = f" ({', '.join(differing)})" if differing else ""
-        version = f" [db v{db_row['version']}, {(db_row.get('created_at') or '')[:10]}]" if db_row else ""
+        created = (db_row.get("created_at") or "")[:10] if db_row else ""
+        version = f" [db v{db_row['version']}, {created}]" if db_row else ""
         print(f"{label}: {status}{detail}{version}")
         if status != "in sync":
             all_in_sync = False

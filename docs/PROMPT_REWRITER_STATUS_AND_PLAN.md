@@ -54,7 +54,7 @@ This persists on `gemini-2.5-pro` with Stage 3 prompt 1.3.0 (21 of 22 commented 
 
 **Caveats.** n = 80 comments; analyst self-selection (19 false-positive threads come from one September 2026 review sweep); 28 legacy threads lack model and prompt provenance.
 
-**Tracking.** Linear VER-310 (parent); the two quick-win issues for items 1 and 2 are its children (see VER-310 children).
+**Tracking.** Linear VER-310 (parent). Quick wins: [VER-325](https://linear.app/pdw/issue/VER-325/quick-win-require-a-dated-contradicting-source-before-labelling) (require a dated contradicting source before labelling "Fabricated Content", item 1) and [VER-326](https://linear.app/pdw/issue/VER-326/seed-dated-knowledge-base-facts-for-recurring-entities-analysts-have) (seed dated KB facts for recurring entities, item 2).
 
 ## Operating model: self-sustaining sweep, PR as approval
 
