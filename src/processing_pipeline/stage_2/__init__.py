@@ -1,5 +1,6 @@
 from .tasks import (
     fetch_a_new_stage_1_llm_response_from_supabase,
+    convert_formatted_time_str_to_seconds,
     download_audio_file_from_s3,
     upload_to_r2_and_clean_up,
     extract_snippet_clip,
@@ -20,6 +21,7 @@ from .flows import (
 
 __all__ = [
     "audio_clipping",
+    "convert_formatted_time_str_to_seconds",
     "delete_snippet_from_r2",
     "delete_snippet_from_supabase",
     "download_audio_file_from_s3",

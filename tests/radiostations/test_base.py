@@ -175,12 +175,6 @@ class TestRadioStation:
         with pytest.raises(Exception, match=f"Failed to start audio for {radio_station.url}"):
             radio_station.start_playing()
 
-    def test_is_audio_playing_success(self, radio_station, mock_subprocess):
-        """Test audio playing check success"""
-        mock_subprocess["run"].return_value.stdout = f"State: RUNNING\nName: {radio_station.sink_name}"
-
-        assert radio_station.is_audio_playing() is True
-
     def test_is_audio_playing_failure(self, radio_station, mock_subprocess):
         """Test audio playing check failure"""
         mock_subprocess["run"].return_value.stdout = f"State: SUSPENDED\nName: {radio_station.sink_name}"
@@ -263,21 +257,6 @@ class TestRadioStation:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-
-    def test_execute_command_success(self, radio_station, mock_subprocess):
-        """Test command execution success"""
-        mock_subprocess["run"].return_value.stdout = "test output"
-
-        radio_station.execute_command(["test", "command"])
-
-        assert mock_subprocess["run"].called
-
-    def test_execute_command_failure(self, radio_station, mock_subprocess):
-        """Test command execution failure"""
-        mock_subprocess["run"].side_effect = Exception("Command failed")
-
-        radio_station.execute_command(["test", "command"])
-        # Should not raise exception, just print error message
 
     def test_is_audio_playing_success(self, radio_station, mock_subprocess):
         """Test audio playing check success"""

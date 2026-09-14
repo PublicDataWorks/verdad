@@ -1,66 +1,100 @@
+import asyncio
+import os
 from unittest import mock
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
+
 import pytest
+from google.genai import errors
+from google.genai.types import FinishReason
+
+from processing_pipeline.constants import GeminiModel, ProcessingStatus
 from processing_pipeline.stage_3 import (
-    fetch_a_specific_snippet_from_supabase,
-    fetch_a_new_snippet_from_supabase,
-    download_audio_file_from_s3,
-    update_snippet_in_supabase,
-    get_metadata,
-    process_snippet,
-    in_depth_analysis,
     Stage3Executor,
+    download_audio_file_from_s3,
+    fetch_a_new_snippet_from_supabase,
+    fetch_a_specific_snippet_from_supabase,
+    get_metadata,
+    in_depth_analysis,
+    process_snippet,
+    update_snippet_in_supabase,
 )
-from processing_pipeline.constants import GeminiModel
+
+SNIPPET_SELECT = (
+    "*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, "
+    'recording_day_of_week), stage_1_llm_response("detection_result")'
+)
+
+PROMPT_VERSION = {
+    "id": "pv-3",
+    "user_prompt": "Analyze this clip.",
+    "system_instruction": "system",
+    "output_schema": {"type": "object"},
+}
+
+
+class StopLoop(Exception):
+    """Raised from a mocked sleep to break out of a repeat=True flow loop"""
 
 
 class TestStage3:
     @pytest.fixture
     def mock_supabase_client(self):
-        """Create a mock Supabase client"""
         with patch("processing_pipeline.stage_3.flows.SupabaseClient") as MockSupabaseClient:
             mock_client = Mock()
             mock_client.get_snippet_by_id.return_value = None
             mock_client.get_a_new_snippet_and_reserve_it.return_value = None
-            mock_client.set_snippet_status.return_value = None
-            mock_client.update_snippet.return_value = None
+            mock_client.get_active_prompt.return_value = PROMPT_VERSION
             MockSupabaseClient.return_value = mock_client
             yield mock_client
 
     @pytest.fixture
     def mock_s3_client(self):
-        """Create a mock S3 client"""
-        with patch("boto3.client") as mock:
+        with patch("boto3.client") as mock_boto:
             s3_client = Mock()
-            mock.return_value = s3_client
+            mock_boto.return_value = s3_client
             yield s3_client
 
     @pytest.fixture
+    def mock_gemini_client(self):
+        """A genai.Client double: sync files API, async models API"""
+        client = Mock()
+        uploaded = Mock()
+        uploaded.state.name = "PROCESSED"
+        uploaded.name = "files/test-audio"
+        client.files.upload.return_value = uploaded
+        client.files.get.return_value = uploaded
+        client.aio.models.generate_content = AsyncMock()
+        return client
+
+    @pytest.fixture
     def mock_gemini_response(self):
-        """Create a mock Gemini response"""
+        """Shape of Stage3Output as consumed by update_snippet_in_supabase"""
         return {
             "transcription": "Test transcription",
             "translation": "Test translation",
             "title": "Test title",
             "summary": "Test summary",
             "explanation": "Test explanation",
-            "disinformation_categories": [
-                {
-                    "english": "Misinformation",
-                    "spanish": "Desinformación",
-                },
-            ],
+            "disinformation_categories": [{"english": "Misinformation", "spanish": "Desinformación"}],
             "keywords_detected": ["keyword1", "keyword2"],
             "language": "es",
-            "confidence_scores": {"accuracy": 0.9},
+            "confidence_scores": {"overall": 96},
             "emotional_tone": "neutral",
             "context": "Test context",
             "political_leaning": "neutral",
         }
 
     @pytest.fixture
+    def analysis_result(self, mock_gemini_response):
+        """What Stage3Executor.run_async returns"""
+        return {
+            "response": mock_gemini_response,
+            "grounding_metadata": "test_grounding_metadata",
+            "thought_summaries": "test thoughts",
+        }
+
+    @pytest.fixture
     def sample_snippet(self):
-        """Create a sample snippet for testing"""
         return {
             "id": "test-id",
             "file_path": "test/path.mp3",
@@ -72,8 +106,8 @@ class TestStage3:
                             "transcription": "Test transcription",
                             "keywords_detected": ["keyword1"],
                             "explanation": "Test explanation",
-                            "start_time": "00:00:30",  # Added this
-                            "end_time": "00:01:30",  # Added this
+                            "start_time": "00:00:30",
+                            "end_time": "00:01:30",
                         }
                     ]
                 }
@@ -92,289 +126,340 @@ class TestStage3:
             "recorded_at": "2024-01-01T00:00:00+00:00",
         }
 
+    # --- tasks ---------------------------------------------------------------
+
     def test_fetch_specific_snippet(self, mock_supabase_client):
-        """Test fetching a specific snippet"""
         expected_response = {"id": "test-id", "status": "New"}
         mock_supabase_client.get_snippet_by_id.return_value = expected_response
 
-        result = fetch_a_specific_snippet_from_supabase(mock_supabase_client, "test-id")
+        assert fetch_a_specific_snippet_from_supabase(mock_supabase_client, "test-id") == expected_response
+        mock_supabase_client.get_snippet_by_id.assert_called_once_with(id="test-id", select=SNIPPET_SELECT)
 
-        assert result == expected_response
-        mock_supabase_client.get_snippet_by_id.assert_called_once_with(
-            id="test-id",
-            select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("detection_result")',
-        )
+    def test_fetch_specific_snippet_missing(self, mock_supabase_client):
+        assert fetch_a_specific_snippet_from_supabase(mock_supabase_client, "missing") is None
 
     def test_fetch_new_snippet(self, mock_supabase_client):
-        """Test fetching a new snippet"""
         expected_response = {"id": "test-id", "status": "New"}
         mock_supabase_client.get_a_new_snippet_and_reserve_it.return_value = expected_response
 
-        result = fetch_a_new_snippet_from_supabase(mock_supabase_client)
-
-        assert result == expected_response
+        assert fetch_a_new_snippet_from_supabase(mock_supabase_client) == expected_response
         mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_called_once()
 
     def test_download_audio_file(self, mock_s3_client):
-        """Test downloading audio file from S3"""
-        result = download_audio_file_from_s3(mock_s3_client, "test-bucket", "test/path.mp3")
-
-        assert result == "path.mp3"
-        mock_s3_client.download_file.assert_called_once_with(
-            "test-bucket",
-            "test/path.mp3",
-            "path.mp3",
-        )
+        assert download_audio_file_from_s3(mock_s3_client, "test-bucket", "test/path.mp3") == "path.mp3"
+        mock_s3_client.download_file.assert_called_once_with("test-bucket", "test/path.mp3", "path.mp3")
 
     def test_update_snippet(self, mock_supabase_client, mock_gemini_response):
-        """Test updating snippet"""
         update_snippet_in_supabase(
             supabase_client=mock_supabase_client,
             snippet_id="test-id",
             gemini_response=mock_gemini_response,
-            grounding_metadata=None,
-            status="Processed",
+            grounding_metadata="gm",
+            thought_summaries="thoughts",
+            analyzed_by=GeminiModel.GEMINI_2_5_PRO,
+            status=ProcessingStatus.PROCESSED,
             error_message=None,
         )
 
-        mock_supabase_client.update_snippet.assert_called_once()
+        mock_supabase_client.update_snippet.assert_called_once_with(
+            id="test-id",
+            transcription="Test transcription",
+            translation="Test translation",
+            title="Test title",
+            summary="Test summary",
+            explanation="Test explanation",
+            disinformation_categories=mock_gemini_response["disinformation_categories"],
+            keywords_detected=["keyword1", "keyword2"],
+            language="es",
+            confidence_scores={"overall": 96},
+            emotional_tone="neutral",
+            context="Test context",
+            political_leaning="neutral",
+            grounding_metadata="gm",
+            thought_summaries="thoughts",
+            analyzed_by=GeminiModel.GEMINI_2_5_PRO,
+            status=ProcessingStatus.PROCESSED,
+            error_message=None,
+            stage_3_prompt_version_id=None,
+        )
 
     def test_get_metadata(self, sample_snippet):
-        """Test metadata extraction"""
         result = get_metadata(sample_snippet)
 
-        assert "transcription" in result
-        assert "additional_info" in result
+        assert result["transcription"] == "Test transcription"
         assert result["additional_info"]["time_zone"] == "UTC"
+        assert result["additional_info"]["recorded_at"] == "January 1, 2024 12:00 AM"
+        assert result["additional_info"]["recording_day_of_week"] == "Monday"
         assert result["start_time"] == "00:30"
         assert result["end_time"] == "01:30"
         assert result["duration"] == "01:00"
+        # Fields deliberately withheld from the model for now
+        assert "explanation" not in result
+        assert "keywords_detected" not in result
 
-    @patch("processing_pipeline.stage_3.Stage3Executor.run")
-    def test_process_snippet_skip_review_false(
-        self, mock_run, mock_supabase_client, sample_snippet, mock_gemini_response
-    ):
-        """Test processing a snippet with skip_review=False"""
-        mock_run.return_value = (mock_gemini_response, "test_grounding_metadata")
+    # --- process_snippet -------------------------------------------------------
 
-        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=False)
-
-        # Verify update_snippet was called with "Ready for review" status
-        mock_supabase_client.update_snippet.assert_called_once_with(
-            id=sample_snippet["id"],
-            transcription=mock_gemini_response["transcription"],
-            translation=mock_gemini_response["translation"],
-            title=mock_gemini_response["title"],
-            summary=mock_gemini_response["summary"],
-            explanation=mock_gemini_response["explanation"],
-            disinformation_categories=mock_gemini_response["disinformation_categories"],
-            keywords_detected=mock_gemini_response["keywords_detected"],
-            language=mock_gemini_response["language"],
-            confidence_scores=mock_gemini_response["confidence_scores"],
-            emotional_tone=mock_gemini_response["emotional_tone"],
-            context=mock_gemini_response["context"],
-            political_leaning=mock_gemini_response["political_leaning"],
-            grounding_metadata="test_grounding_metadata",
-            status="Ready for review",
-            error_message=None,
-        )
-
-    @patch("processing_pipeline.stage_3.tasks.postprocess_snippet")
-    @patch("processing_pipeline.stage_3.Stage3Executor.run")
-    def test_process_snippet_skip_review_true(
-        self, mock_run, mock_postprocess, mock_supabase_client, sample_snippet, mock_gemini_response
-    ):
-        """Test processing a snippet with skip_review=True"""
-        mock_run.return_value = (mock_gemini_response, "test_grounding_metadata")
-
-        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=True)
-
-        # Verify update_snippet was called with "Processed" status
-        mock_supabase_client.update_snippet.assert_called_once_with(
-            id=sample_snippet["id"],
-            transcription=mock_gemini_response["transcription"],
-            translation=mock_gemini_response["translation"],
-            title=mock_gemini_response["title"],
-            summary=mock_gemini_response["summary"],
-            explanation=mock_gemini_response["explanation"],
-            disinformation_categories=mock_gemini_response["disinformation_categories"],
-            keywords_detected=mock_gemini_response["keywords_detected"],
-            language=mock_gemini_response["language"],
-            confidence_scores=mock_gemini_response["confidence_scores"],
-            emotional_tone=mock_gemini_response["emotional_tone"],
-            context=mock_gemini_response["context"],
-            political_leaning=mock_gemini_response["political_leaning"],
-            grounding_metadata="test_grounding_metadata",
-            status="Processed",
-            error_message=None,
-        )
-
-        # Verify postprocess_snippet was called
-        mock_postprocess.assert_called_once_with(
-            mock_supabase_client, sample_snippet["id"], mock_gemini_response["disinformation_categories"]
-        )
-
-    @patch("google.genai.Client")
-    def test_process_snippet_error(self, mock_client_class, mock_supabase_client, sample_snippet):
-        """Test processing snippet with error"""
-        # Configure mock audio file
-        mock_audio_file = Mock()
-        mock_audio_file.state.name = "PROCESSED"
-        mock_audio_file.name = "test-audio-file"
-
-        # Configure mock client to raise error
-        mock_client = Mock()
-        mock_client.files.upload.return_value = mock_audio_file
-        mock_client.files.get.return_value = mock_audio_file
-        mock_client.files.delete = Mock()
-        mock_client.models.generate_content.side_effect = Exception("Test error")
-
-        mock_client_class.return_value = mock_client
-
-        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=False)
-
-        mock_supabase_client.set_snippet_status.assert_called_with(sample_snippet["id"], "Error", "Test error")
-
-    @patch("google.genai.Client")
-    def test_stage_3_executor(self, mock_client_class):
-        """Test Stage3Executor"""
-        mock_audio_file = Mock()
-        mock_audio_file.state.name = "PROCESSED"
-        mock_audio_file.name = "test-audio-file"
-
-        # Configure mock client
-        mock_client = Mock()
-        mock_client.files.upload.return_value = mock_audio_file
-        mock_client.files.get.return_value = mock_audio_file
-        mock_client.files.delete = Mock()
-
-        # Mock the analysis response with grounding metadata
-        mock_analysis_response = Mock()
-        mock_analysis_response.text = '{"test": "response"}'
-        mock_analysis_response.candidates = [Mock(grounding_metadata="test_grounding_metadata")]
-
-        # Mock the structured response
-        mock_structured_response = Mock()
-        mock_structured_response.parsed = {"test": "response", "is_convertible": True}
-
-        # Return different responses for different calls
-        mock_client.models.generate_content.side_effect = [mock_analysis_response, mock_structured_response]
-
-        mock_client_class.return_value = mock_client
-
-        result = Stage3Executor.run(
-            gemini_key="test-key",
-            model_name=GeminiModel.GEMINI_FLASH_LATEST,
-            audio_file="test.mp3",
-            metadata={"test": "metadata"},
-        )
-
-        # Result should be a tuple (response, grounding_metadata)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        response, grounding_metadata = result
-        assert isinstance(response, dict)
-        assert grounding_metadata is not None
-
-    def test_stage_3_executor_without_api_key(self):
-        """Test Stage3Executor without API key"""
-        with pytest.raises(ValueError, match="Google Gemini API key was not set!"):
-            Stage3Executor.run(None, GeminiModel.GEMINI_FLASH_LATEST, "test.mp3", {})
-
-    @patch("time.sleep")
-    def test_in_depth_analysis_flow(self, mock_sleep, mock_supabase_client, mock_s3_client, sample_snippet):
-        """Test in-depth analysis flow"""
-        mock_supabase_client.get_a_new_snippet_and_reserve_it.return_value = sample_snippet
-
-        with patch("os.remove"):
-            in_depth_analysis(snippet_ids=None, repeat=False, skip_review=True)
-
-            mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_called_once()
-            mock_s3_client.download_file.assert_called_once()
-
-    def test_in_depth_analysis_with_specific_snippets(self, mock_supabase_client, mock_s3_client, sample_snippet):
-        """Test in-depth analysis with specific snippet IDs"""
-        mock_supabase_client.get_snippet_by_id.return_value = sample_snippet
-
-        with patch("os.remove"):
-            in_depth_analysis(snippet_ids=["test-id"], repeat=False, skip_review=True)
-
-            mock_supabase_client.get_snippet_by_id.assert_called_once_with(
-                id="test-id",
-                select='*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, recording_day_of_week), stage_1_llm_response("detection_result")',
+    def _process(self, supabase_client, snippet, skip_review, gemini_client=None):
+        return asyncio.run(
+            process_snippet(
+                supabase_client=supabase_client,
+                gemini_client=gemini_client or Mock(),
+                snippet=snippet,
+                local_file="test.mp3",
+                skip_review=skip_review,
+                prompt_version=PROMPT_VERSION,
             )
-            mock_s3_client.download_file.assert_called_once()
+        )
 
-    def test_in_depth_analysis_with_repeat(self, mock_supabase_client, mock_s3_client, sample_snippet):
-        """Test in-depth analysis with repeat enabled"""
-        # Mock responses for consecutive calls
-        mock_supabase_client.get_a_new_snippet_and_reserve_it.side_effect = [
-            sample_snippet,
-            None,  # Second call returns None to end the loop
-            None,  # Add an extra None to prevent StopIteration
+    def test_process_snippet_high_confidence_goes_to_review(self, mock_supabase_client, sample_snippet, analysis_result):
+        gemini_client = Mock()
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(return_value=analysis_result)
+        ) as mock_run, patch("processing_pipeline.stage_3.tasks.postprocess_snippet") as mock_postprocess:
+            self._process(mock_supabase_client, sample_snippet, skip_review=False, gemini_client=gemini_client)
+
+        mock_run.assert_awaited_once_with(
+            gemini_client=gemini_client,
+            model_name=GeminiModel.GEMINI_2_5_PRO,
+            audio_file="test.mp3",
+            metadata=mock.ANY,
+            prompt_version=PROMPT_VERSION,
+        )
+        kwargs = mock_supabase_client.update_snippet.call_args.kwargs
+        assert kwargs["status"] == ProcessingStatus.READY_FOR_REVIEW
+        assert kwargs["analyzed_by"] == GeminiModel.GEMINI_2_5_PRO
+        assert kwargs["grounding_metadata"] == "test_grounding_metadata"
+        assert kwargs["thought_summaries"] == "test thoughts"
+        assert kwargs["stage_3_prompt_version_id"] == "pv-3"
+        # Ready-for-review snippets are labelled by stage 4, not here
+        mock_postprocess.assert_not_called()
+
+    def test_process_snippet_skip_review(self, mock_supabase_client, sample_snippet, analysis_result):
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(return_value=analysis_result)
+        ), patch("processing_pipeline.stage_3.tasks.postprocess_snippet") as mock_postprocess:
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == ProcessingStatus.PROCESSED
+        mock_postprocess.assert_called_once_with(
+            mock_supabase_client, "test-id", analysis_result["response"]["disinformation_categories"]
+        )
+
+    def test_process_snippet_low_confidence_is_processed(self, mock_supabase_client, sample_snippet, analysis_result):
+        analysis_result["response"]["confidence_scores"]["overall"] = 50
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(return_value=analysis_result)
+        ), patch("processing_pipeline.stage_3.tasks.postprocess_snippet") as mock_postprocess:
+            self._process(mock_supabase_client, sample_snippet, skip_review=False)
+
+        assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == ProcessingStatus.PROCESSED
+        mock_postprocess.assert_called_once()
+
+    def test_process_snippet_no_disinformation_categories(self, mock_supabase_client, sample_snippet, analysis_result):
+        analysis_result["response"]["disinformation_categories"] = []
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(return_value=analysis_result)
+        ), patch("processing_pipeline.stage_3.tasks.postprocess_snippet") as mock_postprocess:
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        assert mock_supabase_client.update_snippet.call_args.kwargs["disinformation_categories"] == []
+        mock_postprocess.assert_called_once_with(mock_supabase_client, "test-id", [])
+
+    def test_process_snippet_falls_back_to_flash_on_server_error(self, mock_supabase_client, sample_snippet, analysis_result):
+        server_error = errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async",
+            new=AsyncMock(side_effect=[server_error, analysis_result]),
+        ) as mock_run, patch("processing_pipeline.stage_3.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        assert mock_run.await_count == 2
+        assert mock_run.await_args_list[0].kwargs["model_name"] == GeminiModel.GEMINI_2_5_PRO
+        assert mock_run.await_args_list[1].kwargs["model_name"] == GeminiModel.GEMINI_2_5_FLASH
+        assert mock_supabase_client.update_snippet.call_args.kwargs["analyzed_by"] == GeminiModel.GEMINI_2_5_FLASH
+
+    def test_process_snippet_auth_error_is_not_retried(self, mock_supabase_client, sample_snippet):
+        auth_error = errors.ClientError(401, {"error": {"message": "bad key", "status": "UNAUTHENTICATED"}})
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(side_effect=auth_error)
+        ) as mock_run:
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        assert mock_run.await_count == 1
+        mock_supabase_client.update_snippet.assert_not_called()
+        snippet_id, status, error_message = mock_supabase_client.set_snippet_status.call_args.args
+        assert (snippet_id, status) == ("test-id", ProcessingStatus.ERROR)
+        assert error_message.startswith("ClientError:")
+
+    def test_process_snippet_error(self, mock_supabase_client, sample_snippet):
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(side_effect=RuntimeError("Test error"))
+        ):
+            self._process(mock_supabase_client, sample_snippet, skip_review=False)
+
+        mock_supabase_client.set_snippet_status.assert_called_once_with(
+            "test-id", ProcessingStatus.ERROR, "RuntimeError: Test error"
+        )
+
+    def test_process_snippet_invalid_response(self, mock_supabase_client, sample_snippet, mock_gemini_client):
+        """Unparseable analysis + failed schema restructuring is recorded as an error on the snippet"""
+        analysis_response = Mock(text="not json at all", candidates=[Mock(content=Mock(parts=[]))])
+        restructure_response = Mock(parsed=None, candidates=[Mock(finish_reason=FinishReason.STOP)])
+        mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
+
+        self._process(mock_supabase_client, sample_snippet, skip_review=False, gemini_client=mock_gemini_client)
+
+        snippet_id, status, error_message = mock_supabase_client.set_snippet_status.call_args.args
+        assert (snippet_id, status) == ("test-id", ProcessingStatus.ERROR)
+        assert "step 2" in error_message
+        mock_supabase_client.update_snippet.assert_not_called()
+
+    # --- Stage3Executor ------------------------------------------------------------
+
+    def _run_executor(self, gemini_client, metadata=None):
+        return asyncio.run(
+            Stage3Executor.run_async(
+                gemini_client=gemini_client,
+                model_name=GeminiModel.GEMINI_2_5_PRO,
+                audio_file="test.mp3",
+                metadata=metadata or {"additional_info": {"recorded_at": "January 1, 2024 12:00 AM"}},
+                prompt_version=PROMPT_VERSION,
+            )
+        )
+
+    def test_stage_3_executor_restructures_with_schema(self, mock_gemini_client):
+        analysis_response = Mock(text='{"test": "response"}', candidates=[Mock(content=Mock(parts=[]))])
+        restructure_response = Mock(parsed={"test": "response", "is_convertible": True})
+        mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
+
+        result = self._run_executor(mock_gemini_client)
+
+        assert result["response"] == {"test": "response", "is_convertible": True}
+        assert result["grounding_metadata"] == "null"  # no verification_evidence in the output
+        assert result["thought_summaries"] is None
+        assert mock_gemini_client.aio.models.generate_content.await_count == 2
+        first_call = mock_gemini_client.aio.models.generate_content.await_args_list[0].kwargs
+        assert first_call["model"] == GeminiModel.GEMINI_2_5_PRO
+        assert first_call["contents"][0].startswith("Analyze this clip.")
+        assert "BREAKING NEWS PROTOCOL" not in first_call["contents"][0]  # recording is years old
+        second_call = mock_gemini_client.aio.models.generate_content.await_args_list[1].kwargs
+        assert second_call["model"] == GeminiModel.GEMINI_2_5_FLASH
+        assert second_call["config"].response_schema is not None
+        mock_gemini_client.files.upload.assert_called_once_with(file="test.mp3")
+        mock_gemini_client.files.delete.assert_called_once_with(name="files/test-audio")
+
+    def test_stage_3_executor_collects_thoughts(self, mock_gemini_client):
+        thought_part = Mock(thought=True, text="thinking...")
+        answer_part = Mock(thought=False, text='{"test": "response"}')
+        analysis_response = Mock(
+            text='{"test": "response"}', candidates=[Mock(content=Mock(parts=[thought_part, answer_part]))]
+        )
+        restructure_response = Mock(parsed={"test": "response", "is_convertible": True})
+        mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
+
+        result = self._run_executor(mock_gemini_client)
+
+        assert result["thought_summaries"] == "thinking..."
+
+    def test_stage_3_executor_waits_for_upload_processing(self, mock_gemini_client):
+        processing = Mock(name="files/test-audio")
+        processing.state.name = "PROCESSING"
+        processing.name = "files/test-audio"
+        mock_gemini_client.files.upload.return_value = processing
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            Mock(text='{"x": 1}', candidates=[Mock(content=Mock(parts=[]))]),
+            Mock(parsed={"is_convertible": True}),
         ]
 
-        with patch("os.remove"), patch("time.sleep") as mock_sleep, patch(
-            "processing_pipeline.stage_3.flows.process_snippet"
-        ) as mock_process:
+        with patch("processing_pipeline.stage_3.executors.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+            self._run_executor(mock_gemini_client)
 
-            try:
-                in_depth_analysis(snippet_ids=None, repeat=True, skip_review=True)
-            except StopIteration:
-                pass  # Ignore StopIteration as we expect it
+        mock_sleep.assert_awaited_once_with(1)
+        mock_gemini_client.files.get.assert_called_once_with(name="files/test-audio")
 
-            assert mock_supabase_client.get_a_new_snippet_and_reserve_it.call_count >= 1
-            assert mock_sleep.call_count >= 1
-            mock_sleep.assert_called_with(60)  # Should sleep when no new snippets found
+    def test_stage_3_executor_max_tokens(self, mock_gemini_client):
+        mock_gemini_client.aio.models.generate_content.return_value = Mock(
+            text=None, candidates=[Mock(content=Mock(parts=[]), finish_reason=FinishReason.MAX_TOKENS)]
+        )
 
-    def test_in_depth_analysis_no_snippets(self, mock_supabase_client, mock_s3_client):
-        """Test in-depth analysis when no snippets are found"""
-        mock_supabase_client.get_snippet_by_id.return_value = None
+        with pytest.raises(ValueError, match="too long"):
+            self._run_executor(mock_gemini_client)
 
-        in_depth_analysis(snippet_ids=["test-id"], repeat=False, skip_review=True)
+        mock_gemini_client.files.delete.assert_called_once()
+
+    def test_stage_3_executor_not_convertible(self, mock_gemini_client):
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            Mock(text="prose", candidates=[Mock(content=Mock(parts=[]))]),
+            Mock(parsed={"is_convertible": False}),
+        ]
+
+        with pytest.raises(ValueError, match="could not be converted"):
+            self._run_executor(mock_gemini_client)
+
+    # --- in_depth_analysis flow ------------------------------------------------------
+
+    @pytest.fixture
+    def mock_flow_deps(self):
+        with patch("processing_pipeline.stage_3.flows.genai") as mock_genai, patch(
+            "processing_pipeline.stage_3.flows.process_snippet", new=AsyncMock()
+        ) as mock_process, patch("os.remove") as mock_remove:
+            yield {"genai": mock_genai, "process": mock_process, "remove": mock_remove}
+
+    def test_in_depth_analysis_requires_gemini_key(self, mock_supabase_client, mock_s3_client):
+        with patch.dict(os.environ, {"GOOGLE_GEMINI_KEY": ""}), pytest.raises(ValueError, match="No Gemini API key set"):
+            asyncio.run(in_depth_analysis(snippet_ids=[], skip_review=False, repeat=False))
+
+    def test_in_depth_analysis_flow(self, mock_supabase_client, mock_s3_client, sample_snippet, mock_flow_deps):
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.return_value = sample_snippet
+
+        asyncio.run(in_depth_analysis(snippet_ids=None, skip_review=True, repeat=False))
+
+        mock_flow_deps["genai"].Client.assert_called_once_with(api_key="test-key")
+        mock_supabase_client.get_active_prompt.assert_called_once()
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_called_once()
+        mock_s3_client.download_file.assert_called_once_with("test-bucket", "test/path.mp3", "path.mp3")
+        mock_flow_deps["process"].assert_awaited_once_with(
+            supabase_client=mock_supabase_client,
+            gemini_client=mock_flow_deps["genai"].Client.return_value,
+            snippet=sample_snippet,
+            local_file="path.mp3",
+            skip_review=True,
+            prompt_version=PROMPT_VERSION,
+        )
+        mock_flow_deps["remove"].assert_called_once_with("path.mp3")
+
+    def test_in_depth_analysis_with_specific_snippets(
+        self, mock_supabase_client, mock_s3_client, sample_snippet, mock_flow_deps
+    ):
+        mock_supabase_client.get_snippet_by_id.return_value = sample_snippet
+
+        asyncio.run(in_depth_analysis(snippet_ids=["test-id"], skip_review=False, repeat=False))
+
+        mock_supabase_client.get_snippet_by_id.assert_called_once_with(id="test-id", select=SNIPPET_SELECT)
+        mock_supabase_client.set_snippet_status.assert_called_once_with("test-id", ProcessingStatus.PROCESSING)
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_not_called()
+        mock_s3_client.download_file.assert_called_once()
+        mock_flow_deps["process"].assert_awaited_once()
+
+    def test_in_depth_analysis_no_snippets(self, mock_supabase_client, mock_s3_client, mock_flow_deps):
+        asyncio.run(in_depth_analysis(snippet_ids=["test-id"], skip_review=True, repeat=False))
 
         mock_s3_client.download_file.assert_not_called()
+        mock_flow_deps["process"].assert_not_awaited()
 
-    @patch("processing_pipeline.stage_3.Stage3Executor.run")
-    def test_process_snippet_no_disinformation_categories(
-        self,
-        mock_run,
-        mock_supabase_client,
-        sample_snippet,
-        mock_gemini_response,
-    ):
-        """Test processing snippet without disinformation categories"""
-        mock_gemini_response["disinformation_categories"] = []
-        # Mock Stage3Executor.run to return a tuple (response, grounding_metadata)
-        mock_run.return_value = (mock_gemini_response, "test_grounding_metadata")
+    def test_in_depth_analysis_with_repeat(self, mock_supabase_client, mock_s3_client, sample_snippet, mock_flow_deps):
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.side_effect = [sample_snippet, None]
+        sleep_calls = []
 
-        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=False)
+        async def fake_sleep(seconds):
+            sleep_calls.append(seconds)
+            if len(sleep_calls) == 2:
+                raise StopLoop()
 
-        # Verify the snippet was updated with empty disinformation categories
-        mock_supabase_client.update_snippet.assert_called_once()
-        call_kwargs = mock_supabase_client.update_snippet.call_args.kwargs
-        assert call_kwargs["disinformation_categories"] == []
+        with patch("processing_pipeline.stage_3.flows.asyncio.sleep", new=fake_sleep), pytest.raises(StopLoop):
+            asyncio.run(in_depth_analysis(snippet_ids=None, skip_review=True, repeat=True))
 
-    @patch("google.genai.Client")
-    def test_process_snippet_invalid_response(self, mock_client_class, mock_supabase_client, sample_snippet):
-        """Test processing snippet with invalid Gemini response"""
-        mock_audio_file = Mock()
-        mock_audio_file.state.name = "PROCESSED"
-        mock_audio_file.name = "test-audio-file"
-
-        # Configure mock client
-        mock_client = Mock()
-        mock_client.files.upload.return_value = mock_audio_file
-        mock_client.files.get.return_value = mock_audio_file
-        mock_client.files.delete = Mock()
-
-        mock_result = Mock()
-        mock_result.text = "invalid json"
-        mock_result.parsed = None
-        mock_client.models.generate_content.return_value = mock_result
-
-        mock_client_class.return_value = mock_client
-
-        process_snippet(mock_supabase_client, sample_snippet, "test.mp3", "test-key", skip_review=False)
-
-        mock_supabase_client.set_snippet_status.assert_called_with(sample_snippet["id"], "Error", mock.ANY)
+        # Short sleep after processing a snippet, long sleep when the queue is empty
+        assert sleep_calls == [2, 60]
+        assert mock_supabase_client.get_a_new_snippet_and_reserve_it.call_args_list == [call(), call()]
+        mock_flow_deps["process"].assert_awaited_once()

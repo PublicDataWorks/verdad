@@ -1,3 +1,4 @@
+import importlib
 import os
 import sys
 from unittest.mock import Mock, patch
@@ -180,7 +181,7 @@ class TestMainProcessing:
         monkeypatch.setenv('SENTRY_DSN', test_dsn)
 
         with patch.dict('sys.modules', {'sentry_sdk': Mock(init=mock_init)}):
-            import processing_pipeline.main
+            importlib.import_module('processing_pipeline.main')  # importing runs sentry_sdk.init
 
             mock_init.assert_called_once_with(dsn=test_dsn)
 
@@ -193,45 +194,9 @@ class TestMainProcessing:
         monkeypatch.delenv('SENTRY_DSN', raising=False)
 
         with patch.dict('sys.modules', {'sentry_sdk': Mock(init=mock_init)}):
-            import processing_pipeline.main
+            importlib.import_module('processing_pipeline.main')  # importing runs sentry_sdk.init
 
             mock_init.assert_called_once_with(dsn=None)
-
-    def test_module_import_with_different_process_groups(self):
-        """Test module import with different process groups"""
-        process_groups = [
-            'initial_disinformation_detection',
-            'regenerate_timestamped_transcript',
-            'redo_main_detection',
-            'undo_disinformation_detection',
-            'audio_clipping',
-            'undo_audio_clipping',
-            'in_depth_analysis',
-            'embedding',
-            'invalid_group'
-        ]
-
-        for group in process_groups:
-            with patch('sentry_sdk.init'), \
-                 patch.dict('os.environ', {
-                     'FLY_PROCESS_GROUP': group,
-                     'SENTRY_DSN': 'test-dsn'
-                 }, clear=True):
-
-                # Remove module if it exists
-                if 'processing_pipeline.main' in sys.modules:
-                    del sys.modules['processing_pipeline.main']
-
-                # Import should work without errors for valid groups
-                from processing_pipeline import main
-
-                if group == 'invalid_group':
-                    # Invalid group should still allow import but raise error when executed
-                    with pytest.raises(ValueError, match=f"Invalid process group: {group}"):
-                        process_group = os.environ.get("FLY_PROCESS_GROUP")
-                        match process_group:
-                            case _:
-                                raise ValueError(f"Invalid process group: {process_group}")
 
     def test_environment_variable_handling(self, monkeypatch):
         """Test environment variable handling"""
@@ -265,7 +230,7 @@ class TestMainProcessing:
                 monkeypatch.delenv('SENTRY_DSN', raising=False)
 
             with patch.dict('sys.modules', {'sentry_sdk': Mock(init=mock_init)}):
-                import processing_pipeline.main
+                importlib.import_module('processing_pipeline.main')  # importing runs sentry_sdk.init
 
                 mock_init.assert_called_once_with(dsn=case['expected_dsn'])
                 mock_init.reset_mock()
@@ -342,7 +307,7 @@ class TestMainProcessing:
         monkeypatch.delenv('FLY_PROCESS_GROUP', raising=False)
 
         with patch.dict('sys.modules', {'sentry_sdk': Mock(init=mock_init)}):
-            import processing_pipeline.main
+            importlib.import_module('processing_pipeline.main')  # importing runs sentry_sdk.init
 
             with pytest.raises(ValueError, match="Invalid process group: None"):
                 process_group = None
@@ -374,7 +339,7 @@ class TestMainProcessing:
             monkeypatch.setenv('SENTRY_DSN', 'test-dsn')
 
             with patch.dict('sys.modules', {'sentry_sdk': Mock(init=mock_init)}):
-                import processing_pipeline.main
+                importlib.import_module('processing_pipeline.main')  # importing runs sentry_sdk.init
 
                 if group == 'invalid_group':
                     with pytest.raises(ValueError, match=f"Invalid process group: {group}"):

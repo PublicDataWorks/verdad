@@ -278,7 +278,7 @@ class TestRecording:
             patch('recording.upload_to_r2_and_clean_up') as mock_upload, \
             patch('recording.insert_recorded_audio_file_into_database') as mock_insert, \
             patch('recording.reconstruct_radio_station', return_value=sample_station), \
-            patch('time.sleep') as mock_sleep:  # Mock sleep to speed up test
+            patch('time.sleep'):  # Mock sleep to speed up test
 
             # Setup mock to run once then return None to break the loop
             mock_capture.return_value = {
