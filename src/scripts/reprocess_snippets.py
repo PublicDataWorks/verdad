@@ -9,10 +9,21 @@ Usage:
     python src/scripts/reprocess_snippets.py --fabricated-label --since 2026-03-23 --stage 3
     python src/scripts/reprocess_snippets.py --disliked --commented --min-confidence 95 --not-hidden --stage 4 --execute
     python src/scripts/reprocess_snippets.py --ids-file ids.txt --stage 3 --execute --audit-file requeued.json
+    python src/scripts/reprocess_snippets.py --quarantine-batch hide-2026-09-15-heuristics --stage 3 --limit 500
+    python src/scripts/reprocess_snippets.py --error-keyerror --stage 3 --execute
 
-Selection semantics: the "reason" criteria (--fabricated-label, --disliked, --commented, --ids-file) are OR-ed;
-the filters (--since, --min-confidence, --not-hidden, --limit) are AND-ed on top of that set. Snippets currently
-in flight (status Processing or Reviewing) are always skipped so a worker mid-run is never flipped underneath.
+Selection semantics: the "reason" criteria (--fabricated-label, --disliked, --commented, --ids-file,
+--quarantine-batch, --error-keyerror) are OR-ed; the filters (--since, --min-confidence, --not-hidden, --limit) are
+AND-ed on top of that set. Candidates are ordered newest recorded_at first (the order the Stage 3 poller uses), so
+--limit takes the newest ones. Snippets currently in flight (status Processing or Reviewing) are always skipped so
+a worker mid-run is never flipped underneath.
+
+--quarantine-batch reads snippet_quarantine_log (batch = NAME, restored_at IS NULL). The 2026-09 cleanup hid those
+snippets through user_hide_snippets without changing snippets.status, so they are still 'Processed' here; this
+script only re-queues them and never stamps restored_at or removes the hide row. That happens afterwards, per
+batch, in supabase/database/sql/cleanup_2026_09/10_unhide_after_reprocess.sql once the new analysis is in. Do not
+combine --quarantine-batch with --not-hidden: every quarantined snippet is hidden by construction.
+--error-keyerror selects status = 'Error' with error_message starting 'KeyError:' (VER-363 backfill).
 """
 
 import argparse
@@ -34,7 +45,8 @@ STAGE_TARGET_STATUS = {3: "New", 4: "Ready for review"}
 # A snippet a worker is currently handling must not be flipped mid-run: Stage 3 writes its result and status at the
 # end of the run and would clobber (or be clobbered by) the requeue.
 IN_FLIGHT_STATUSES = ("Processing", "Reviewing")
-REASON_FLAGS = ("fabricated_label", "disliked", "commented", "ids_file")
+REASON_FLAGS = ("fabricated_label", "disliked", "commented", "ids_file", "quarantine_batch", "error_keyerror")
+KEYERROR_PREFIX = "KeyError:"
 
 
 def parse_args(argv=None):
@@ -45,6 +57,17 @@ def parse_args(argv=None):
     parser.add_argument("--disliked", action="store_true", help="snippets with at least one dislike")
     parser.add_argument("--commented", action="store_true", help="snippets with at least one comment")
     parser.add_argument("--ids-file", help="file with snippet ids (one per line, or a JSON list)")
+    parser.add_argument(
+        "--quarantine-batch",
+        action="append",
+        metavar="NAME",
+        help="snippets in snippet_quarantine_log with this batch and restored_at IS NULL (repeatable)",
+    )
+    parser.add_argument(
+        "--error-keyerror",
+        action="store_true",
+        help=f"snippets with status 'Error' and error_message starting '{KEYERROR_PREFIX}' (VER-363 backfill)",
+    )
     parser.add_argument("--since", type=date.fromisoformat, metavar="YYYY-MM-DD", help="recorded_at on/after this date")
     parser.add_argument("--min-confidence", type=int, metavar="N", help="confidence_scores.overall >= N")
     parser.add_argument("--not-hidden", action="store_true", help="exclude snippets present in user_hide_snippets")
@@ -54,7 +77,10 @@ def parse_args(argv=None):
     parser.add_argument("--audit-file", help="JSON file for the selected ids (default: reprocess_<stage>_<utc>.json)")
     args = parser.parse_args(argv)
     if not any(getattr(args, flag) for flag in REASON_FLAGS):
-        parser.error("select at least one of --fabricated-label, --disliked, --commented, --ids-file")
+        parser.error(
+            "select at least one of --fabricated-label, --disliked, --commented, --ids-file, "
+            "--quarantine-batch, --error-keyerror"
+        )
     return args
 
 
@@ -80,6 +106,15 @@ def overall_confidence(snippet: dict):
     return value if isinstance(value, (int, float)) else None
 
 
+def recorded_at_key(snippet: dict):
+    """Sort key for newest-first ordering; snippets without recorded_at sort last."""
+    recorded = snippet.get("recorded_at") or ""
+    if not recorded:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    parsed = datetime.fromisoformat(recorded.replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 def passes_filters(snippet: dict, since: date | None, min_confidence: int | None, hidden_ids: set) -> bool:
     if since is not None:
         recorded = snippet.get("recorded_at") or ""
@@ -97,17 +132,18 @@ def passes_filters(snippet: dict, since: date | None, min_confidence: int | None
 def select_snippets(
     reason_ids: dict[str, set], snippets_by_id: dict[str, dict], since, min_confidence, hidden_ids, limit
 ):
-    """Union the reason sets, apply the filters, return (ordered ids, counts by criterion)."""
+    """Union the reason sets, apply the filters, return (ids newest recorded_at first, counts by criterion)."""
     candidates = set().union(*reason_ids.values()) if reason_ids else set()
     counts = {reason: len(ids) for reason, ids in reason_ids.items()}
     counts["union"] = len(candidates)
 
+    known = [snippets_by_id[sid] for sid in candidates if sid in snippets_by_id]
+    known.sort(key=lambda snippet: (recorded_at_key(snippet), snippet["id"]), reverse=True)
+
     selected = []
     skipped_in_flight = 0
-    for snippet_id in sorted(candidates):
-        snippet = snippets_by_id.get(snippet_id)
-        if snippet is None:
-            continue
+    for snippet in known:
+        snippet_id = snippet["id"]
         if not passes_filters(snippet, since, min_confidence, hidden_ids):
             continue
         if snippet.get("status") in IN_FLIGHT_STATUSES:
@@ -120,6 +156,11 @@ def select_snippets(
         selected = selected[:limit]
     counts["selected"] = len(selected)
     return selected, counts
+
+
+def selectors_by_id(reason_ids: dict[str, set], selected: list) -> dict[str, list]:
+    """Which selector(s) produced each selected id, for the audit file."""
+    return {sid: sorted(reason for reason, ids in reason_ids.items() if sid in ids) for sid in selected}
 
 
 def build_sql(args, target_status: str) -> str:
@@ -139,6 +180,14 @@ def build_sql(args, target_status: str) -> str:
         reasons.append("s.comment_count > 0")
     if args.ids_file:
         reasons.append(f"s.id IN (<ids from {args.ids_file}>)")
+    if args.quarantine_batch:
+        batches = ", ".join(f"'{name}'" for name in args.quarantine_batch)
+        reasons.append(
+            "s.id IN (SELECT snippet FROM snippet_quarantine_log WHERE batch IN (" + batches + ") "
+            "AND restored_at IS NULL)"
+        )
+    if args.error_keyerror:
+        reasons.append(f"(s.status = 'Error' AND s.error_message LIKE '{KEYERROR_PREFIX}%')")
 
     filters = []
     if args.since:
@@ -154,7 +203,7 @@ def build_sql(args, target_status: str) -> str:
         where += "\n  AND " + "\n  AND ".join(filters)
     sql = f"UPDATE snippets s\nSET status = '{target_status}', error_message = NULL\nWHERE {where}"
     if args.limit is not None:
-        sql += f"\n  -- limited to the first {args.limit} ids by the script"
+        sql += f"\n  -- limited to the first {args.limit} ids (newest recorded_at first) by the script"
     return sql + ";"
 
 
@@ -210,6 +259,24 @@ def fetch_commented_snippet_ids(client) -> set:
     return {row["id"] for row in rows}
 
 
+def fetch_quarantine_batch_snippet_ids(client, batches: list) -> set:
+    """Snippets logged under any of the batches and not yet restored (restored_at IS NULL)."""
+    rows = fetch_all(
+        lambda: client.table("snippet_quarantine_log")
+        .select("snippet")
+        .in_("batch", list(batches))
+        .is_("restored_at", "null")
+    )
+    return {row["snippet"] for row in rows}
+
+
+def fetch_keyerror_snippet_ids(client) -> set:
+    rows = fetch_all(
+        lambda: client.table("snippets").select("id").eq("status", "Error").like("error_message", f"{KEYERROR_PREFIX}%")
+    )
+    return {row["id"] for row in rows}
+
+
 def fetch_hidden_snippet_ids(client) -> set:
     rows = fetch_all(lambda: client.table("user_hide_snippets").select("snippet"))
     return {row["snippet"] for row in rows}
@@ -245,6 +312,10 @@ def main(argv=None):
     if args.ids_file:
         with open(args.ids_file, encoding="utf-8") as f:
             reason_ids["ids_file"] = set(parse_ids_file(f.read()))
+    if args.quarantine_batch:
+        reason_ids["quarantine_batch"] = fetch_quarantine_batch_snippet_ids(client, args.quarantine_batch)
+    if args.error_keyerror:
+        reason_ids["error_keyerror"] = fetch_keyerror_snippet_ids(client)
 
     candidate_ids = sorted(set().union(*reason_ids.values()))
     snippets_by_id = fetch_snippets(client, candidate_ids)
@@ -279,6 +350,7 @@ def main(argv=None):
                 "criteria": {k: (v.isoformat() if isinstance(v, date) else v) for k, v in vars(args).items()},
                 "counts": counts,
                 "previous_status": {sid: snippets_by_id[sid].get("status") for sid in selected},
+                "selected_by": selectors_by_id(reason_ids, selected),
                 "snippet_ids": selected,
             },
             f,

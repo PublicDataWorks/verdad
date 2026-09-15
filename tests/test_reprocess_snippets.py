@@ -18,6 +18,8 @@ def _args(**overrides):
         disliked=False,
         commented=False,
         ids_file=None,
+        quarantine_batch=None,
+        error_keyerror=False,
         since=None,
         min_confidence=None,
         not_hidden=False,
@@ -41,6 +43,15 @@ class TestParseArgs:
         )
         assert args.disliked and args.since.isoformat() == "2026-03-23" and args.min_confidence == 95
         assert args.stage == 4 and args.limit == 10 and not args.execute
+
+    def test_quarantine_batch_is_repeatable_and_counts_as_a_reason(self):
+        args = rs.parse_args(["--quarantine-batch", "hide-a", "--quarantine-batch", "hide-b", "--stage", "3"])
+        assert args.quarantine_batch == ["hide-a", "hide-b"]
+        assert not args.execute
+
+    def test_error_keyerror_counts_as_a_reason(self):
+        args = rs.parse_args(["--error-keyerror", "--stage", "3"])
+        assert args.error_keyerror is True and args.quarantine_batch is None
 
 
 class TestPureHelpers:
@@ -108,10 +119,10 @@ class TestSelectSnippets:
         "e": {"id": "e", "status": "Error", "recorded_at": "2026-04-03T00:00:00+00:00", "confidence_scores": None},
     }
 
-    def test_union_and_counts(self):
+    def test_union_and_counts_newest_first(self):
         reasons = {"disliked": {"a", "b"}, "commented": {"b", "c"}}
         selected, counts = rs.select_snippets(reasons, self.SNIPPETS, None, None, set(), None)
-        assert selected == ["a", "b", "c"]
+        assert selected == ["c", "a", "b"]  # recorded_at DESC
         assert counts == {
             "disliked": 2,
             "commented": 2,
@@ -125,7 +136,7 @@ class TestSelectSnippets:
         snippets = {**self.SNIPPETS, **self.IN_FLIGHT}
         reasons = {"ids_file": {"a", "p", "r", "e"}}
         selected, counts = rs.select_snippets(reasons, snippets, None, None, set(), None)
-        assert selected == ["a", "e"]
+        assert selected == ["e", "a"]
         assert counts["skipped_in_flight"] == 2
         assert counts["after_filters"] == 2 and counts["selected"] == 2
 
@@ -136,10 +147,39 @@ class TestSelectSnippets:
         assert selected == ["a"]
 
         selected, _ = rs.select_snippets(reasons, self.SNIPPETS, since, None, {"a"}, None)
-        assert selected == ["c", "d"]
+        assert selected == ["d", "c"]
 
         selected, counts = rs.select_snippets(reasons, self.SNIPPETS, None, None, set(), 2)
-        assert selected == ["a", "b"] and counts["after_filters"] == 4 and counts["selected"] == 2
+        assert selected == ["d", "c"] and counts["after_filters"] == 4 and counts["selected"] == 2
+
+    def test_limit_and_since_take_the_newest_quarantined_snippets(self):
+        reasons = {"quarantine_batch": {"a", "b", "c", "d"}}
+        since = rs.date.fromisoformat("2026-04-02")
+        selected, counts = rs.select_snippets(reasons, self.SNIPPETS, since, None, set(), 1)
+        assert selected == ["d"] and counts == {
+            "quarantine_batch": 4,
+            "union": 4,
+            "skipped_in_flight": 0,
+            "after_filters": 2,
+            "selected": 1,
+        }
+
+    def test_missing_recorded_at_sorts_last_and_z_suffix_is_accepted(self):
+        snippets = {
+            "z": {"id": "z", "recorded_at": "2026-05-01T00:00:00Z", "confidence_scores": None},
+            "n": {"id": "n", "recorded_at": None, "confidence_scores": None},
+            **self.SNIPPETS,
+        }
+        selected, _ = rs.select_snippets({"ids_file": {"z", "n", "a"}}, snippets, None, None, set(), None)
+        assert selected == ["z", "a", "n"]
+
+    def test_selectors_by_id_records_every_selector_per_id(self):
+        reasons = {"quarantine_batch": {"a", "b"}, "error_keyerror": {"b", "c"}, "disliked": set()}
+        assert rs.selectors_by_id(reasons, ["c", "a", "b"]) == {
+            "c": ["error_keyerror"],
+            "a": ["quarantine_batch"],
+            "b": ["error_keyerror", "quarantine_batch"],
+        }
 
     def test_unknown_ids_are_dropped(self):
         selected, _ = rs.select_snippets({"ids_file": {"zzz", "a"}}, self.SNIPPETS, None, None, set(), None)
@@ -153,6 +193,8 @@ class TestBuildSql:
             disliked=True,
             commented=True,
             ids_file="ids.txt",
+            quarantine_batch=["hide-2026-09-15-heuristics", "hide-2026-09-15-embeddings"],
+            error_keyerror=True,
             since=rs.date(2026, 3, 23),
             min_confidence=95,
             not_hidden=True,
@@ -166,6 +208,11 @@ class TestBuildSql:
         assert "user_like_snippets WHERE value = -1" in sql
         assert "s.comment_count > 0" in sql
         assert "<ids from ids.txt>" in sql
+        assert (
+            "SELECT snippet FROM snippet_quarantine_log WHERE batch IN "
+            "('hide-2026-09-15-heuristics', 'hide-2026-09-15-embeddings') AND restored_at IS NULL" in sql
+        )
+        assert "(s.status = 'Error' AND s.error_message LIKE 'KeyError:%')" in sql
         assert "s.recorded_at >= '2026-03-23'" in sql
         assert "(s.confidence_scores->>'overall')::INTEGER >= 95" in sql
         assert "NOT IN (SELECT snippet FROM user_hide_snippets)" in sql
@@ -179,3 +226,53 @@ class TestBuildSql:
             "WHERE (s.id IN (SELECT snippet FROM user_like_snippets WHERE value = -1))\n"
             "  AND s.status NOT IN ('Processing', 'Reviewing');"
         )
+
+
+class _FakeBuilder:
+    """Records the postgrest filter chain and returns canned rows."""
+
+    def __init__(self, rows, calls):
+        self._rows, self._calls = rows, calls
+
+    def __getattr__(self, name):
+        def method(*args):
+            self._calls.append((name, args))
+            return self
+
+        return method
+
+    def execute(self):
+        return Mock(data=self._rows)
+
+
+class _FakeClient:
+    def __init__(self, rows):
+        self.rows, self.calls = rows, []
+
+    def table(self, name):
+        self.calls.append(("table", (name,)))
+        return _FakeBuilder(self.rows, self.calls)
+
+
+class TestFetchSelectors:
+    def test_quarantine_batch_filters_by_batch_and_unrestored(self):
+        client = _FakeClient([{"snippet": "s1"}, {"snippet": "s2"}])
+        ids = rs.fetch_quarantine_batch_snippet_ids(client, ["hide-a", "hide-b"])
+        assert ids == {"s1", "s2"}
+        assert client.calls[:4] == [
+            ("table", ("snippet_quarantine_log",)),
+            ("select", ("snippet",)),
+            ("in_", ("batch", ["hide-a", "hide-b"])),
+            ("is_", ("restored_at", "null")),
+        ]
+        assert client.calls[4][0] == "range"
+
+    def test_keyerror_filters_on_error_status_and_message_prefix(self):
+        client = _FakeClient([{"id": "e1"}])
+        assert rs.fetch_keyerror_snippet_ids(client) == {"e1"}
+        assert client.calls[:4] == [
+            ("table", ("snippets",)),
+            ("select", ("id",)),
+            ("eq", ("status", "Error")),
+            ("like", ("error_message", "KeyError:%")),
+        ]
