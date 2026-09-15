@@ -78,6 +78,36 @@ def test_parse_output_cap_reasons_empty_when_gate_absent_or_unreadable(grounding
     assert ep.parse_output(stage3_output(85), grounding).cap_reasons == []
 
 
+CREDIBILITY_REASON = "only one contradicting source (apnews.com, tier 1)"
+
+
+def credibility_gate(capped, reason=CREDIBILITY_REASON):
+    # Shape written by apply_credibility_gate; the executor stores it in grounding_metadata on every run.
+    return {"capped": capped, "corroboration": {"satisfied": not capped, "reason": reason}}
+
+
+def test_parse_output_reports_a_credibility_cap_as_a_distinct_reason():
+    grounding = json.dumps({"searches_performed": [], "credibility_gate": credibility_gate(True)})
+    assert ep.parse_output(stage3_output(40), grounding).cap_reasons == [f"credibility gate: {CREDIBILITY_REASON}"]
+
+    both = json.dumps(
+        {"evidence_gate": {"applied": True, "reasons": [CAP_REASON]}, "credibility_gate": credibility_gate(True)}
+    )
+    assert ep.parse_output(stage3_output(40), both).cap_reasons == [
+        CAP_REASON,
+        f"credibility gate: {CREDIBILITY_REASON}",
+    ]
+
+    inline = {**stage3_output(40), "credibility_gate": credibility_gate(True, reason="")}
+    assert ep.parse_output(inline).cap_reasons == ["credibility gate: no independent corroboration"]
+
+
+def test_parse_output_ignores_an_uncapped_credibility_gate_record():
+    grounding = json.dumps({"searches_performed": [], "credibility_gate": credibility_gate(False, reason="ok")})
+    assert ep.parse_output(stage3_output(85), grounding).cap_reasons == []
+    assert ep.parse_output(stage3_output(85), json.dumps({"credibility_gate": "junk"})).cap_reasons == []
+
+
 def test_is_flagged_uses_threshold_and_flag_on():
     r = ep.parse_output({"confidence_scores": {"overall": 40, "categories": [{"category": "X", "score": 90}]}})
     assert not ep.is_flagged(r, 70, "overall")
@@ -564,9 +594,10 @@ def test_describe_exception_keeps_location_when_capped():
         text = ep.describe_exception(e)
     assert len(text) == 500
     assert text.endswith(")") and " (at " in text
-    assert ep.failure_histogram([ep.SnippetResult("s", ep.REPORTED, baseline_runs=[ep.RunResult(error=text)])])[0][
-        "kind"
-    ] == "ValueError"
+    assert (
+        ep.failure_histogram([ep.SnippetResult("s", ep.REPORTED, baseline_runs=[ep.RunResult(error=text)])])[0]["kind"]
+        == "ValueError"
+    )
 
 
 def test_gemini_runner_reports_error_with_location(monkeypatch):
