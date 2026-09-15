@@ -446,3 +446,44 @@ def test_fail_on_regression_flag_parsing():
     assert parser.parse_args([]).fail_on_regression is None
     assert parser.parse_args(["--fail-on-regression"]).fail_on_regression == 0
     assert parser.parse_args(["--fail-on-regression", "2"]).fail_on_regression == 2
+
+
+# ---------------------------------------------------------------- error descriptions
+
+
+def _raise_nested(exc):
+    def inner():
+        raise exc
+
+    inner()
+
+
+def test_describe_exception_includes_innermost_frame():
+    try:
+        _raise_nested(KeyError("search"))
+    except KeyError as e:
+        text = ep.describe_exception(e)
+    assert text.startswith("KeyError: 'search' (at ")
+    assert text.endswith(f"tests/test_evaluate_prompt.py:{_raise_nested.__code__.co_firstlineno + 2})")
+
+
+def test_describe_exception_keeps_location_when_capped():
+    try:
+        _raise_nested(ValueError("x" * 600))
+    except ValueError as e:
+        text = ep.describe_exception(e)
+    assert len(text) == 500
+    assert text.endswith(")") and " (at " in text
+    assert ep.failure_histogram([ep.SnippetResult("s", ep.REPORTED, baseline_runs=[ep.RunResult(error=text)])])[0][
+        "kind"
+    ] == "ValueError"
+
+
+def test_gemini_runner_reports_error_with_location(monkeypatch):
+    async def exploding_run_async(**kwargs):
+        _raise_nested(KeyError("search"))
+
+    monkeypatch.setattr(ep.Stage3Executor, "run_async", exploding_run_async)
+    result = asyncio.run(ep.GeminiRunner(gemini_client=None, model="m").run({"id": "p"}, "a.mp3", {}))
+    assert not result.ok
+    assert result.error.startswith("KeyError: 'search' (at ") and "test_evaluate_prompt.py:" in result.error

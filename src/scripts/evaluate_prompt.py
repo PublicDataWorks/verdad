@@ -34,6 +34,7 @@ import random
 import sys
 import tempfile
 import time
+import traceback
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from itertools import combinations
@@ -537,6 +538,19 @@ def client_http_options() -> dict:
         return {}
 
 
+def describe_exception(e: BaseException, limit: int = 500) -> str:
+    """``ClassName: message (at path/to/file.py:LINE)`` for the innermost frame, capped at ``limit`` characters.
+
+    The location is kept when the message is truncated, so a failure stays locatable in the report."""
+    frames = traceback.extract_tb(e.__traceback__)
+    location = ""
+    if frames:
+        frame = frames[-1]
+        location = f" (at {'/'.join(frame.filename.replace(os.sep, '/').split('/')[-3:])}:{frame.lineno})"
+    message = f"{type(e).__name__}: {e}"
+    return message[: max(limit - len(location), 0)] + location
+
+
 class GeminiRunner:
     """Thin, mockable wrapper around the Stage 3 executor (no Supabase access)."""
 
@@ -563,7 +577,7 @@ class GeminiRunner:
             result = parse_output(response["response"])
             result.usage = response.get("usage") or {}
         except Exception as e:  # keep going; the failure is reported per run
-            result = RunResult(error=f"{type(e).__name__}: {e}"[:500])
+            result = RunResult(error=describe_exception(e))
         result.seconds = time.monotonic() - started
         return result
 
@@ -621,7 +635,7 @@ async def evaluate_snippet(
         metadata = get_metadata(copy.deepcopy(snippet))
         audio_file = data_source.download_audio(snippet, workdir)
     except Exception as e:
-        result.error = f"{type(e).__name__}: {e}"[:300]
+        result.error = describe_exception(e, limit=300)
         return result
 
     async def guarded(prompt_version, side):

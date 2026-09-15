@@ -5,10 +5,15 @@ import json
 from google import genai
 from google.genai.types import (
     AutomaticFunctionCallingConfig,
+    Content,
     File,
     FinishReason,
+    FunctionCall,
+    FunctionDeclaration,
     GenerateContentConfig,
+    Part,
     ThinkingConfig,
+    Tool,
 )
 from pydantic import ValidationError
 
@@ -16,6 +21,13 @@ from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import get_safety_settings
 from processing_pipeline.stage_3.models import Stage3Output
 from processing_pipeline.stage_3.web_tools import searxng_web_search, web_url_read
+
+
+# The web tools the model may call during the analysis, keyed by the name Gemini must use.
+WEB_TOOLS = {tool.__name__: tool for tool in (searxng_web_search, web_url_read)}
+
+# Upper bound on model turns per analysis (one final answer plus up to 19 rounds of tool calls).
+MAX_MODEL_TURNS = 20
 
 
 USAGE_FIELDS = (
@@ -149,8 +161,12 @@ class Stage3Executor:
         """
         Analyze using the GenAI SDK with web search tools.
 
-        Uses searxng_web_search and web_url_read as plain Python function tools
-        with the SDK's automatic function calling.
+        Exposes searxng_web_search and web_url_read as function tools and runs the
+        tool-calling loop explicitly instead of via the SDK's automatic function
+        calling: the SDK looks each requested tool up with ``function_map[name]``, so a
+        hallucinated tool name (``search``, ``run``, ``call``, ...) escapes as a bare
+        ``KeyError`` and fails the whole analysis. Here an unknown name is answered
+        with a function-response error, which lets the model correct itself.
 
         Returns:
             tuple: (analysis_text, thought_summaries, usage) where usage is the token
@@ -158,24 +174,52 @@ class Stage3Executor:
         """
         print("Analyzing with SDK + web search tools...")
 
-        response = await gemini_client.aio.models.generate_content(
-            model=model_name,
-            contents=[user_prompt, uploaded_audio_file],
-            config=GenerateContentConfig(
-                system_instruction=system_instruction,
-                max_output_tokens=32768,
-                tools=[searxng_web_search, web_url_read],
-                automatic_function_calling=AutomaticFunctionCallingConfig(
-                    maximum_remote_calls=20,
-                ),
-                thinking_config=ThinkingConfig(thinking_budget=4096, include_thoughts=True),
-                safety_settings=get_safety_settings(),
-            ),
+        config = GenerateContentConfig(
+            system_instruction=system_instruction,
+            max_output_tokens=32768,
+            tools=[
+                Tool(
+                    function_declarations=[
+                        FunctionDeclaration.from_callable_with_api_option(callable=tool) for tool in WEB_TOOLS.values()
+                    ]
+                )
+            ],
+            automatic_function_calling=AutomaticFunctionCallingConfig(disable=True),
+            thinking_config=ThinkingConfig(thinking_budget=4096, include_thoughts=True),
+            safety_settings=get_safety_settings(),
         )
+        contents = [
+            Content(
+                role="user",
+                parts=[
+                    Part.from_text(text=user_prompt),
+                    Part.from_uri(file_uri=uploaded_audio_file.uri, mime_type=uploaded_audio_file.mime_type),
+                ],
+            )
+        ]
+
+        response = None
+        function_calls = []
+        for _ in range(MAX_MODEL_TURNS):
+            response = await gemini_client.aio.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config,
+            )
+            function_calls = cls.__function_calls(response)
+            if not function_calls:
+                break
+            contents.append(response.candidates[0].content)
+            contents.append(
+                Content(role="user", parts=[await cls.__call_tool(function_call) for function_call in function_calls])
+            )
+
+        if function_calls:
+            raise ValueError(f"Gemini kept calling tools and gave no final answer within {MAX_MODEL_TURNS} turns.")
 
         thoughts = ""
         if response.candidates and response.candidates[0].content:
-            for part in response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts or []:
                 if part.thought and part.text:
                     thoughts += part.text
 
@@ -189,6 +233,38 @@ class Stage3Executor:
             raise ValueError("No response from Gemini.")
 
         return response.text, thoughts, usage_metadata_to_dict(response.usage_metadata)
+
+    @staticmethod
+    def __function_calls(response) -> list[FunctionCall]:
+        """The function calls requested by the first candidate of ``response`` (empty for a final answer)."""
+        if not response or not response.candidates:
+            return []
+        content = response.candidates[0].content
+        if not content or not content.parts:
+            return []
+        return [part.function_call for part in content.parts if part.function_call]
+
+    @classmethod
+    async def __call_tool(cls, function_call: FunctionCall) -> Part:
+        """Run one requested tool and wrap its result (or error) as a function-response part."""
+        name = function_call.name or ""
+        # JSON numbers arrive as floats; integer-valued ones are meant for int parameters (e.g. pageno=1.0).
+        args = {
+            key: int(value) if isinstance(value, float) and value.is_integer() else value
+            for key, value in (function_call.args or {}).items()
+        }
+
+        tool = WEB_TOOLS.get(name)
+        if tool is None:
+            print(f"Model called unknown tool {name!r} with {args}; telling it which tools exist.")
+            payload = {"error": f"Unknown tool {name!r}. The only available tools are: {', '.join(WEB_TOOLS)}."}
+        else:
+            try:
+                payload = {"result": await tool(**args)}
+            except Exception as e:  # the model gets the error and may retry with different arguments
+                payload = {"error": f"{type(e).__name__}: {e}"}
+
+        return Part.from_function_response(name=name or "unknown_tool", response=payload)
 
     @classmethod
     def __validate_with_pydantic(cls, response_text: str):
