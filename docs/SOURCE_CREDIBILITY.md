@@ -56,10 +56,14 @@ own row when present and `rt.com` otherwise, and `en.m.wikipedia.org` resolves t
 `owner` key defaults to the registrable domain when a row leaves it blank.
 
 **Official domains without a row.** After the table lookup and before the tier-3 default, `official_tier_for()`
-gives hosts on government or intergovernmental suffixes tier 1, category `official`, owner = registrable domain:
-the `.gov`, `.mil` and `.int` TLDs; a `gov.`, `gob.`, `gouv.`, `go.` or `gc.` second-level label under a two-letter
-country code (`km.gov.lv`, `gob.mx`, `service.gov.uk`, `economie.gouv.fr`, `mofa.go.jp`, `canada.gc.ca`); and
-`europa.eu`. These ratings carry `source: "heuristic:official_tld"` in `credibility_gate.evidence_tiers` so an
+gives hosts on government or intergovernmental suffixes tier 1, category `official`: the `.gov`, `.mil` and `.int`
+TLDs; a `gov.`, `gob.`, `gouv.`, `go.` or `gc.` second-level label under a two-letter country code (`km.gov.lv`,
+`gob.mx`, `service.gov.uk`, `economie.gouv.fr`, `mofa.go.jp`, `canada.gc.ca`); and `europa.eu`. One government is
+one voice for the independence test, matching the seeded `us-government` rows: `.gov`/`.mil` hosts get owner
+`us-government`, a country-code shape gets `<cc>-government` (`lv-government`, `mx-government`, `ca-government`),
+`europa.eu` hosts get `eu-institutions`, and each `.int` body keeps its registrable domain as owner. So state.gov
+plus eia.gov do not corroborate each other, while state.gov plus km.gov.lv, or michigan.gov plus an independent
+tier-2 outlet, do. These ratings carry `source: "heuristic:official_tld"` in `credibility_gate.evidence_tiers` so an
 analyst can tell a heuristic hit from a table row. An explicit row always wins (`vtv.gob.ve` stays denied), so a
 captured or propaganda government site is handled by adding a row, never by editing the heuristic. The heuristic
 exists because the seed cannot list every ministry: the September 2026 evaluation lost a true positive (Michigan

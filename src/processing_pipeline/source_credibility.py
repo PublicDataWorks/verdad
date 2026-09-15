@@ -238,24 +238,30 @@ def official_tier_for(host: str) -> DomainRating | None:
     * EU institutions under ``europa.eu``.
 
     ``gov.example.com`` or ``go.com`` do not qualify (the TLD is not a country code). Callers apply this only after
-    the table lookup, so an explicit row (``vtv.gob.ve`` at tier 5) always wins. Owner is the registrable domain,
-    and ``source`` names the heuristic so the rating can be told apart from a table row in the gate record.
+    the table lookup, so an explicit row (``vtv.gob.ve`` at tier 5) always wins.
+
+    One government is one voice for the independence test, matching the seeded ``us-government`` rows: ``.gov`` and
+    ``.mil`` hosts share owner ``us-government``; a country-code shape shares ``<cc>-government`` (``lv-government``
+    for ``km.gov.lv``, ``mx-government`` for ``gob.mx``, ``ca-government`` for ``canada.gc.ca``); ``europa.eu``
+    hosts share ``eu-institutions``; each ``.int`` treaty body is its own owner (registrable domain). ``source``
+    names the heuristic so the rating can be told apart from a table row in the gate record.
     """
     host = normalize_domain(host)
     labels = host.split(".")
     if len(labels) < 2 or not all(labels):
         return None
     tld, second = labels[-1], labels[-2]
-    official = (
-        tld in _OFFICIAL_TLDS
-        or (len(tld) == 2 and tld.isalpha() and second in _OFFICIAL_CC_SECOND_LEVEL)
-        or any(host == suffix or host.endswith("." + suffix) for suffix in _OFFICIAL_SUFFIXES)
-    )
-    if not official:
+    if tld in ("gov", "mil"):
+        owner = "us-government"
+    elif tld in _OFFICIAL_TLDS:  # .int: who.int, nato.int, ... are distinct intergovernmental bodies
+        owner = registrable_domain(host)
+    elif len(tld) == 2 and tld.isalpha() and second in _OFFICIAL_CC_SECOND_LEVEL:
+        owner = f"{tld}-government"
+    elif any(host == suffix or host.endswith("." + suffix) for suffix in _OFFICIAL_SUFFIXES):
+        owner = "eu-institutions"
+    else:
         return None
-    return DomainRating(
-        domain=host, tier=1, category="official", owner=registrable_domain(host), source=OFFICIAL_HEURISTIC_SOURCE
-    )
+    return DomainRating(domain=host, tier=1, category="official", owner=owner, source=OFFICIAL_HEURISTIC_SOURCE)
 
 
 # --- Row validation (shared by the loader, the import script and the CSV tests) ---------------------------------

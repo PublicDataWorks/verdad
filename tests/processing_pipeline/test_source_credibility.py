@@ -184,20 +184,21 @@ class TestOfficialHeuristic:
     @pytest.mark.parametrize(
         "url, expected_domain, expected_owner",
         [
-            ("https://www.state.gov/x", "state.gov", "state.gov"),
-            ("https://www.eia.gov/outlooks/x", "eia.gov", "eia.gov"),
-            ("https://www.michigan.gov/sos/elections", "michigan.gov", "michigan.gov"),
-            ("https://www.army.mil/x", "army.mil", "army.mil"),
+            ("https://www.state.gov/x", "state.gov", "us-government"),
+            ("https://www.eia.gov/outlooks/x", "eia.gov", "us-government"),
+            ("https://www.michigan.gov/sos/elections", "michigan.gov", "us-government"),
+            ("https://www.army.mil/x", "army.mil", "us-government"),
             ("https://www.nato.int/x", "nato.int", "nato.int"),
-            ("https://www.km.gov.lv/lv/x", "km.gov.lv", "km.gov.lv"),
-            ("https://www.gob.mx/salud", "gob.mx", "gob.mx"),
-            ("https://coronavirus.gob.mx/x", "coronavirus.gob.mx", "coronavirus.gob.mx"),
-            ("https://www.service.gov.uk/x", "service.gov.uk", "service.gov.uk"),
-            ("https://ec.europa.eu/commission/x", "ec.europa.eu", "europa.eu"),
-            ("https://www.economie.gouv.fr/x", "economie.gouv.fr", "gouv.fr"),
-            ("https://www.canada.gc.ca/x", "canada.gc.ca", "gc.ca"),
-            ("https://www.mofa.go.jp/x", "mofa.go.jp", "go.jp"),
-            ("https://www.korea.go.kr/x", "korea.go.kr", "go.kr"),
+            ("https://www.km.gov.lv/lv/x", "km.gov.lv", "lv-government"),
+            ("https://www.gob.mx/salud", "gob.mx", "mx-government"),
+            ("https://coronavirus.gob.mx/x", "coronavirus.gob.mx", "mx-government"),
+            ("https://www.service.gov.uk/x", "service.gov.uk", "uk-government"),
+            ("https://ec.europa.eu/commission/x", "ec.europa.eu", "eu-institutions"),
+            ("https://europa.eu/x", "europa.eu", "eu-institutions"),
+            ("https://www.economie.gouv.fr/x", "economie.gouv.fr", "fr-government"),
+            ("https://www.canada.gc.ca/x", "canada.gc.ca", "ca-government"),
+            ("https://www.mofa.go.jp/x", "mofa.go.jp", "jp-government"),
+            ("https://www.korea.go.kr/x", "korea.go.kr", "kr-government"),
         ],
     )
     def test_official_hosts_are_tier_1(self, credibility, url, expected_domain, expected_owner):
@@ -242,6 +243,9 @@ class TestOfficialHeuristic:
         assert sc.official_tier_for(".gov") is None
         assert sc.official_tier_for("https://km.gov.lv/x").domain == "km.gov.lv"
         assert sc.official_tier_for("who.int").owner == "who.int"
+        assert not independent(sc.official_tier_for("state.gov"), sc.official_tier_for("eia.gov"))
+        assert not independent(sc.official_tier_for("km.gov.lv"), sc.official_tier_for("vid.gov.lv"))
+        assert independent(sc.official_tier_for("who.int"), sc.official_tier_for("nato.int"))
 
 
 class TestIndependence:
@@ -290,6 +294,14 @@ class TestCorroboration:
     def test_two_unlisted_official_sources_of_different_governments_satisfied(self, credibility):
         result = evaluate_corroboration(_items("https://www.km.gov.lv/x", "https://www.state.gov/y"), credibility)
         assert result.satisfied and sorted(result.independent_sources) == ["km.gov.lv", "state.gov"]
+
+    def test_two_unlisted_agencies_of_one_government_not_satisfied(self, credibility):
+        # One government is one voice, exactly like the seeded cdc.gov/fda.gov us-government rows
+        result = evaluate_corroboration(_items("https://www.state.gov/x", "https://www.eia.gov/y"), credibility)
+        assert not result.satisfied and "us-government" in result.reason
+        # ... and an unlisted agency is the same voice as a listed one
+        mixed = evaluate_corroboration(_items("https://www.state.gov/x", "https://cdc.gov/y"), credibility)
+        assert not mixed.satisfied and "us-government" in mixed.reason
 
     def test_tier1_plus_fact_checker_satisfied(self, credibility):
         # chequeado.com is tier 3 in the fixture, so only the fact-checker rule can satisfy this pair
@@ -397,5 +409,6 @@ class TestSeedCsvValidity:
             assert (rating.tier, rating.category, rating.source) == (1, "official", sc.OFFICIAL_HEURISTIC_SOURCE), url
         assert evaluate_corroboration(_items("https://www.eia.gov/x", "https://oec.world/y"), seeded).satisfied
         assert evaluate_corroboration(_items("https://www.km.gov.lv/x", "https://www.lsm.lv/y"), seeded).satisfied
+        assert not evaluate_corroboration(_items("https://www.state.gov/x", "https://www.eia.gov/y"), seeded).satisfied
         # Listed federal agencies still share one owner key and so do not corroborate each other
         assert not evaluate_corroboration(_items("https://cdc.gov/a", "https://fda.gov/b"), seeded).satisfied
