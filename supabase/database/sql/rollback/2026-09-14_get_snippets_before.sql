@@ -1,33 +1,8 @@
--- The signature changed on 2026-09-14 (p_include_count added); drop the old overload so
--- PostgREST does not see two get_snippets functions.
-DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text, text);
-
--- Optimized get_snippets function
--- Key optimizations:
--- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
--- 2. Uses JOINs with pre-filtered CTEs for state/source filters (avoids IN subquery on audio_files)
--- 3. Single query with CTE chain — filter CTEs defined once, count + data in one pass
---
--- Performance improvements:
--- - starredBy filter: timeout (>30s) -> <1s
--- - labeledBy filter: timeout (>30s) -> <1s
--- - upvotedBy filter: 6.7s -> <1s
--- - state filter: ~134ms -> <50ms
--- - source filter: similar improvement
---
--- 2026-09-14 (see supabase/migrations/20260915000400_get_snippets_include_count.sql):
--- - p_include_count boolean DEFAULT true: when false, skips the total count and returns
---   num_of_snippets / total_pages as null (the frontend only needs them on page 0)
--- - one plain ORDER BY branch per p_order_by value so 'latest' is served from
---   idx_snippets_visible_recorded_at (20260915000500) instead of sorting every visible
---   snippet by a CASE
--- - states/sources filters use "= ANY(text[])" so audio_files indexes are usable
--- 2026-09-15:
--- - full-text search evaluated in the same bitmap scan as the visibility predicates
---   (candidate_snippets UNION ALL with a via_search discriminator) instead of a materialized
---   search CTE hash-joined to a second scan of every visible snippet ('trump': 14-19 s -> <1 s)
-
-CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
+-- Rollback: live definition of public.get_snippets captured 2026-09-14 from production
+-- (before the 2026-09-14 migrations, versions 20260915000100-20260915000400). Re-run this file to restore the previous version.
+-- NOTE: migration 20260915000400_get_snippets_include_count.sql changes the signature (adds p_include_count). To roll back,
+-- first: DROP FUNCTION IF EXISTS public.get_snippets(text,jsonb,integer,integer,text,text,boolean);
+CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -50,12 +25,9 @@ DECLARE
     has_upvoted_filter BOOLEAN;
     filter_upvoted_by_me BOOLEAN;
     filter_upvoted_by_others BOOLEAN;
-    -- State/source filters, pre-extracted as text[] (NULL = filter not set).
-    -- "col = ANY(text[])" gives the planner a usable row estimate, unlike
-    -- "col IN (SELECT jsonb_array_elements_text(...))" (estimated as every row), so the
-    -- audio_files indexes (radio_station_code, id) / (location_state) can actually be used.
-    state_codes TEXT[];
-    source_codes TEXT[];
+    -- State/source filter flags
+    has_state_filter BOOLEAN;
+    has_source_filter BOOLEAN;
 BEGIN
     current_user_id := auth.uid();
     IF current_user_id IS NULL THEN
@@ -88,12 +60,13 @@ BEGIN
     filter_upvoted_by_me := has_upvoted_filter AND p_filter->'upvotedBy' ? 'by_me';
     filter_upvoted_by_others := has_upvoted_filter AND p_filter->'upvotedBy' ? 'by_others';
 
-    IF p_filter IS NOT NULL AND p_filter ? 'states' AND jsonb_array_length(p_filter->'states') > 0 THEN
-        state_codes := ARRAY(SELECT jsonb_array_elements_text(p_filter->'states'));
-    END IF;
-    IF p_filter IS NOT NULL AND p_filter ? 'sources' AND jsonb_array_length(p_filter->'sources') > 0 THEN
-        source_codes := ARRAY(SELECT jsonb_array_elements_text(p_filter->'sources'));
-    END IF;
+    -- State/source filter flags
+    has_state_filter := p_filter IS NOT NULL
+        AND p_filter ? 'states'
+        AND jsonb_array_length(p_filter->'states') > 0;
+    has_source_filter := p_filter IS NOT NULL
+        AND p_filter ? 'sources'
+        AND jsonb_array_length(p_filter->'sources') > 0;
 
     WITH
     -- Pre-filter CTEs (defined once, reused by filtered_snippets)
@@ -128,55 +101,30 @@ BEGIN
     ),
     state_filtered_audio_ids AS (
         SELECT id FROM audio_files
-        WHERE state_codes IS NOT NULL
-        AND location_state = ANY(state_codes)
+        WHERE has_state_filter
+        AND location_state IN (SELECT jsonb_array_elements_text(p_filter->'states'))
     ),
     source_filtered_audio_ids AS (
         SELECT id FROM audio_files
-        WHERE source_codes IS NOT NULL
-        AND radio_station_code = ANY(source_codes)
+        WHERE has_source_filter
+        AND radio_station_code IN (SELECT jsonb_array_elements_text(p_filter->'sources'))
     ),
-    -- Base set of candidate snippets, as a two-branch UNION ALL of the snippets table with a
-    -- constant discriminator (via_search) and NO WHERE clause in either branch. The branches
-    -- carry no quals on purpose: the planner only flattens UNION ALL branches into one append
-    -- relation when they have none (is_safe_append_member), and only flattened branches let
-    -- the ORDER BY ... LIMIT of the paginated_ids branches below be served by an index walk
-    -- (with quals they stay Subquery Scans that are planned for full retrieval). All
-    -- predicates live in filtered_snippets and are pushed down into each branch, where
-    -- via_search is a constant and the search guard folds away:
-    --  * no search term: only the via_search = FALSE branch survives (the other is planned
-    --    away, or gated by a One-Time Filter in a generic plan); the 'latest' ORDER BY branch
-    --    walks idx_snippets_visible_recorded_at (recorded_at DESC, id DESC) WHERE visible and
-    --    stops after page_size rows instead of counting/sorting every visible snippet.
-    --  * search term: only the via_search = TRUE branch survives and the pgroonga OR is
-    --    evaluated together with the visibility predicates in ONE bitmap scan of snippets
-    --    (BitmapAnd of BitmapOr(8 pgroonga indexes) with the visible partial index; 'trump':
-    --    9,443 heap blocks, ~200-600 ms warm). The previous shape (materialized search CTE
-    --    LEFT JOINed to a separate visible scan) heap-fetched every search hit (66k rows for
-    --    'trump') AND every visible row (43k) and hash-joined them: 14-19 s cold, over the
-    --    8 s authenticated statement_timeout.
-    -- The heavy text columns are only referenced by the pushed-down search predicate; the
-    -- flattened branches are plain scans of snippets, so nothing is copied or materialized.
-    candidate_snippets AS NOT MATERIALIZED (
-        SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
-               s.like_count, s.audio_file, s.language, s.political_leaning,
-               s.status, s.confidence_scores,
-               s.title, s.explanation, s.summary, s.transcription, s.translation,
-               FALSE AS via_search
+    search_matched_ids AS (
+        SELECT s.id
         FROM snippets s
-        UNION ALL
-        SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
-               s.like_count, s.audio_file, s.language, s.political_leaning,
-               s.status, s.confidence_scores,
-               s.title, s.explanation, s.summary, s.transcription, s.translation,
-               TRUE AS via_search
-        FROM snippets s
+        WHERE trimmed_search_term != '' AND (
+            (s.title ->> 'english') &@ trimmed_search_term
+            OR (s.title ->> 'spanish') &@ trimmed_search_term
+            OR (s.explanation ->> 'english') &@ trimmed_search_term
+            OR (s.explanation ->> 'spanish') &@ trimmed_search_term
+            OR (s.summary ->> 'english') &@ trimmed_search_term
+            OR (s.summary ->> 'spanish') &@ trimmed_search_term
+            OR s.transcription &@ trimmed_search_term
+            OR s.translation &@ trimmed_search_term
+        )
     ),
-    -- Lightweight filtered IDs (for count + pagination, no heavy columns).
-    -- NOT MATERIALIZED so that each ORDER BY branch below is planned against the base
-    -- tables and can walk an index (idx_snippets_visible_recorded_at) for the top-N instead
-    -- of sorting a materialized copy of every visible snippet.
-    filtered_snippets AS NOT MATERIALIZED (
+    -- Lightweight filtered IDs (for count + pagination, no heavy columns)
+    filtered_snippets AS (
         SELECT
             s.id,
             s.recorded_at,
@@ -184,43 +132,21 @@ BEGIN
             s.upvote_count,
             s.comment_count,
             COALESCE(s.like_count, 0) AS like_count
-        FROM candidate_snippets s
+        FROM snippets s
         LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
         LEFT JOIN starred_snippet_ids ssi ON ssi.snippet = s.id
         LEFT JOIN labeled_snippet_ids lsi ON lsi.snippet = s.id
         LEFT JOIN upvoted_snippet_ids usi ON usi.snippet = s.id
-        -- The "<filter> IS NOT NULL AND" guard inside the ON clause folds the whole join
-        -- condition to FALSE when the filter is not set, so s.audio_file is not needed at all
-        -- and the count / default page can run as Index Only Scans on the partial indexes
-        -- (idx_snippets_visible, idx_snippets_visible_recorded_at) instead of a 33k-block
-        -- heap scan. (Semantics are unchanged: with the filter unset the WHERE below accepts
-        -- every row anyway.) Kept as LEFT JOIN + IS NOT NULL rather than IN (SELECT ...): the
-        -- semi-join form planned as a hashed SubPlan over a seq scan of audio_files and made
-        -- state/station filters 4-30x slower on production (measured 2026-09-15).
-        LEFT JOIN state_filtered_audio_ids sfa ON state_codes IS NOT NULL AND sfa.id = s.audio_file
-        LEFT JOIN source_filtered_audio_ids srfa ON source_codes IS NOT NULL AND srfa.id = s.audio_file
+        LEFT JOIN state_filtered_audio_ids sfa ON sfa.id = s.audio_file
+        LEFT JOIN source_filtered_audio_ids srfa ON srfa.id = s.audio_file
+        LEFT JOIN search_matched_ids smi ON smi.id = s.id
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
-        -- Search guard: picks the candidate_snippets branch (see above) and, when searching,
-        -- applies the full-text match in the same scan as the visibility predicates.
-        AND (
-            (trimmed_search_term = '' AND NOT s.via_search)
-            OR (trimmed_search_term <> '' AND s.via_search AND (
-                (s.title ->> 'english') &@ trimmed_search_term
-                OR (s.title ->> 'spanish') &@ trimmed_search_term
-                OR (s.explanation ->> 'english') &@ trimmed_search_term
-                OR (s.explanation ->> 'spanish') &@ trimmed_search_term
-                OR (s.summary ->> 'english') &@ trimmed_search_term
-                OR (s.summary ->> 'spanish') &@ trimmed_search_term
-                OR s.transcription &@ trimmed_search_term
-                OR s.translation &@ trimmed_search_term
-            ))
-        )
         AND (user_is_admin OR uhs.snippet IS NULL)
         AND (NOT has_starred_filter OR ssi.snippet IS NOT NULL)
         AND (NOT has_labeled_filter OR lsi.snippet IS NOT NULL)
         AND (NOT has_upvoted_filter OR usi.snippet IS NOT NULL)
-        AND (state_codes IS NULL OR sfa.id IS NOT NULL)
-        AND (source_codes IS NULL OR srfa.id IS NOT NULL)
+        AND (NOT has_state_filter OR sfa.id IS NOT NULL)
+        AND (NOT has_source_filter OR srfa.id IS NOT NULL)
         AND (
             p_filter IS NULL OR
             NOT p_filter ? 'languages' OR
@@ -254,49 +180,24 @@ BEGIN
                 )
             )
         )
+        AND (trimmed_search_term = '' OR smi.id IS NOT NULL)
     ),
-    -- Total count is only computed when requested (p_include_count). It requires a scan of
-    -- every matching snippet, which is the dominant cost of a page load; the frontend only
-    -- needs it for the first page.
     total_count_cte AS (
-        SELECT CASE WHEN p_include_count THEN (SELECT COUNT(*) FROM filtered_snippets) END AS cnt
+        SELECT COUNT(*) AS cnt FROM filtered_snippets
     ),
-    -- One plain ORDER BY branch per accepted p_order_by value. Only the branch whose
-    -- WHERE matches is executed (the others are eliminated by a one-time filter); a plain
-    -- sort key lets the planner serve the top-N from an existing index instead of sorting
-    -- every row by a CASE expression. "id DESC" is a deterministic tiebreak.
     paginated_ids AS (
-        (
-            SELECT fs.id
-            FROM filtered_snippets fs
-            WHERE p_order_by = 'upvotes'
-            ORDER BY fs.upvote_count + fs.like_count DESC, fs.recorded_at DESC, fs.id DESC
-            LIMIT page_size OFFSET page * page_size
-        )
-        UNION ALL
-        (
-            SELECT fs.id
-            FROM filtered_snippets fs
-            WHERE p_order_by = 'comments'
-            ORDER BY fs.comment_count DESC, fs.recorded_at DESC, fs.id DESC
-            LIMIT page_size OFFSET page * page_size
-        )
-        UNION ALL
-        (
-            SELECT fs.id
-            FROM filtered_snippets fs
-            WHERE p_order_by = 'activities'
-            ORDER BY fs.user_last_activity DESC NULLS LAST, fs.recorded_at DESC, fs.id DESC
-            LIMIT page_size OFFSET page * page_size
-        )
-        UNION ALL
-        (
-            SELECT fs.id
-            FROM filtered_snippets fs
-            WHERE p_order_by IS NULL OR p_order_by NOT IN ('upvotes', 'comments', 'activities')
-            ORDER BY fs.recorded_at DESC, fs.id DESC
-            LIMIT page_size OFFSET page * page_size
-        )
+        SELECT id
+        FROM filtered_snippets fs
+        ORDER BY
+            CASE
+                WHEN p_order_by = 'upvotes' THEN fs.upvote_count + fs.like_count
+                WHEN p_order_by = 'comments' THEN fs.comment_count
+                WHEN p_order_by = 'activities' THEN
+                    CASE WHEN fs.user_last_activity IS NULL THEN 0 ELSE EXTRACT(EPOCH FROM fs.user_last_activity) END
+            END DESC,
+            fs.recorded_at DESC
+        LIMIT page_size
+        OFFSET page * page_size
     ),
     label_summary AS (
         SELECT
@@ -371,7 +272,6 @@ BEGIN
             FROM label_summary
             GROUP BY snippet_id
         ) ld ON p.id = ld.snippet_id
-        -- Same ordering as the selected paginated_ids branch (only page_size rows here)
         ORDER BY
             CASE
                 WHEN p_order_by = 'upvotes' THEN s.upvote_count + COALESCE(s.like_count, 0)
@@ -382,8 +282,7 @@ BEGIN
                         ELSE EXTRACT(EPOCH FROM s.user_last_activity)
                     END
             END DESC,
-            s.recorded_at DESC,
-            s.id DESC
+            s.recorded_at DESC
     )
     SELECT
         jsonb_agg(
@@ -416,7 +315,6 @@ BEGIN
     INTO result, total_count
     FROM paginated_snippets ps;
 
-    -- NULL when p_include_count = false
     total_pages := CEIL(total_count::FLOAT / page_size);
 
     RETURN jsonb_build_object(
@@ -427,8 +325,7 @@ BEGIN
         'total_pages', total_pages
     );
 END;
-$function$;
-
-GRANT EXECUTE ON FUNCTION public.get_snippets(text, jsonb, integer, integer, text, text, boolean) TO anon, authenticated, service_role;
-
+$function$
+;
+GRANT EXECUTE ON FUNCTION public.get_snippets(text,jsonb,integer,integer,text,text) TO anon, authenticated, service_role;
 NOTIFY pgrst, 'reload schema';
