@@ -1,5 +1,6 @@
 -- Re-adds an index on audio_files.radio_station_code, which has had no index since
--- idx_audio_files_radio_station was dropped in 20260129_cleanup_unused_indexes.sql.
+-- idx_audio_files_radio_station was dropped in 20260129_cleanup_unused_indexes.sql
+-- (renamed to 20260129202429_cleanup_unused_indexes.sql by PR #83).
 -- Station ("sources") filters in get_snippets / get_trending_topics currently seq-scan or
 -- pkey-probe the 1.55M-row, 573 MB audio_files heap (2-4 s warm, 8 s+ cold).
 --
