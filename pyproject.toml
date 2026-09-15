@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 [tool.pytest.ini_options]
 addopts = "--cov=src --cov-report=html --cov-report=term-missing"
 testpaths = ["tests"]
+# Repo root on sys.path so tests can import `src.scripts.*` (tests/conftest.py adds `src/` itself).
+pythonpath = ["."]
 
 [tool.coverage.run]
 source = ["src"]
