@@ -37,13 +37,38 @@ if [ -z "$id" ]; then
   echo "::error::could not find the machine id in flyctl output"
   exit 1
 fi
-trap 'fly machine destroy "$id" -a "$FLY_APP" --force >/dev/null 2>&1 || true' EXIT
+# Stream the machine's log while it runs: `fly logs --no-tail` after the fact only returns the
+# last ~100 buffered lines, which hid the per-call errors of the first evaluation run.
+stream_log=$(mktemp)
+stream_pid=""
+stop_stream() {
+  if [ -n "$stream_pid" ] && kill -0 "$stream_pid" 2>/dev/null; then
+    kill "$stream_pid" 2>/dev/null || true
+    wait "$stream_pid" 2>/dev/null || true
+  fi
+  stream_pid=""
+}
+cleanup() {
+  stop_stream
+  fly machine destroy "$id" -a "$FLY_APP" --force >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 # Lets the workflow's always() step destroy the machine if this job is cancelled mid-wait.
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "machine_id=$id" >> "$GITHUB_OUTPUT"
 fi
 
+start_stream() {
+  # Process substitution keeps $! pointing at flyctl itself, so stop_stream kills the right process.
+  fly logs -a "$FLY_APP" -m "$id" > >(tee -a "$stream_log") 2>&1 &
+  stream_pid=$!
+}
+start_stream
+
+# Fallback for lines the stream missed (e.g. it started late or disconnected).
 fetch_logs() {
+  stop_stream
+  echo "--- last buffered log lines for machine $id ($(wc -l <"$stream_log" | tr -d ' ') streamed above) ---"
   timeout 60 fly logs -a "$FLY_APP" -m "$id" --no-tail || true
 }
 
@@ -110,6 +135,11 @@ while :; do
   if [ $((now - last_heartbeat)) -ge "$HEARTBEAT_INTERVAL" ]; then
     echo "$(date -u +%H:%M:%S) machine $id is $state ($(((now - start) / 60))m elapsed)"
     last_heartbeat=$now
+  fi
+  # flyctl drops long-lived log streams now and then; reattach while the machine is still running.
+  if [ -n "$stream_pid" ] && ! kill -0 "$stream_pid" 2>/dev/null; then
+    echo "$(date -u +%H:%M:%S) log stream ended; reattaching"
+    start_stream
   fi
   sleep "$POLL_INTERVAL"
 done
