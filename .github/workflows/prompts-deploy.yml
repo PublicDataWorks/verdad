@@ -1,0 +1,50 @@
+name: Prompts deploy
+
+# Merging a manifest bump to main deploys it: every prompts/manifest.json entry whose version
+# differs from the active database version is imported and activated. The import runs on a
+# one-off Fly Machine in the processing-worker app, so the Supabase key never leaves Fly.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "prompts/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prompts-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Fly token
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::FLY_API_TOKEN secret is required to deploy prompts (see docs/PROMPT_EVALUATION.md)"
+            exit 1
+          fi
+
+      - name: Install flyctl
+        run: |
+          curl -L https://fly.io/install.sh | sh -s 0.4.102
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+
+      - name: Import manifest versions that differ from the database
+        id: job
+        env:
+          VERDAD_SHA: ${{ github.sha }}
+        run: scripts/ci/fly_prompt_job.sh deploy
+
+      - name: Destroy the machine if the job was cancelled
+        if: always() && steps.job.outputs.machine_id != ''
+        run: fly machine destroy "${{ steps.job.outputs.machine_id }}" -a processing-worker --force || true
