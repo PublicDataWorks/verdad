@@ -110,8 +110,11 @@ def validate_kb_source(
             "source_type 'other' cannot be the sole source of a KB entry. Cite a wire service, fact-checker, "
             "major/regional news outlet or official source."
         )
-    if publication_date is not None and parse_iso_date(publication_date) is None:
-        return f"publication_date '{publication_date}' is not an ISO date (YYYY-MM-DD)."
+    if parse_iso_date(publication_date) is None:
+        return (
+            f"publication_date {publication_date!r} is required and must be an ISO date (YYYY-MM-DD): the date the "
+            "source was published. A source without one cannot back a KB entry."
+        )
     if not web_research:
         print("  [KB Upsert] web research text unavailable in session state; skipping URL provenance check")
     elif not url_appears_in_text(source_url, web_research):
@@ -166,7 +169,7 @@ def upsert_knowledge_entry(
             tier2_major_news, tier3_regional_news, official_source. 'other' is rejected as a sole source.
         source_title: Title of the source article.
         source_excerpt: Relevant excerpt from the source (50-200 words).
-        publication_date: Publication date of the source in ISO format (YYYY-MM-DD), if known.
+        publication_date: REQUIRED. Publication date of the source in ISO format (YYYY-MM-DD).
         snippet_id: UUID of the snippet that triggered this KB entry.
 
     Returns:

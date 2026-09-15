@@ -12,6 +12,7 @@ VALID = dict(
     source_url="https://apnews.com/article/abc",
     source_name="AP News",
     source_type="tier1_wire_service",
+    publication_date="2026-03-01",
 )
 
 
@@ -46,21 +47,23 @@ class TestValidateKbSource:
     def test_rejects_unknown_source_type(self):
         assert "Invalid source_type" in tools.validate_kb_source("https://apnews.com/a", "AP", "blog", None, None)
 
-    def test_rejects_bad_publication_date(self):
-        assert "ISO date" in tools.validate_kb_source("https://apnews.com/a", "AP", "official_source", "Jan 2", None)
+    @pytest.mark.parametrize("publication_date", ["Jan 2", "", None])
+    def test_rejects_bad_or_missing_publication_date(self, publication_date):
+        error = tools.validate_kb_source("https://apnews.com/a", "AP", "official_source", publication_date, None)
+        assert "ISO date" in error
 
     def test_requires_url_in_web_research_when_available(self):
         research = "Checked https://reuters.com/x only."
-        error = tools.validate_kb_source("https://apnews.com/a", "AP", "tier1_wire_service", None, research)
+        error = tools.validate_kb_source("https://apnews.com/a", "AP", "tier1_wire_service", "2026-01-02", research)
         assert "does not appear in this session's web research" in error
-        assert tools.validate_kb_source("https://reuters.com/x", "R", "tier1_wire_service", None, research) is None
+        assert (
+            tools.validate_kb_source("https://reuters.com/x", "R", "tier1_wire_service", "2026-01-02", research) is None
+        )
 
 
 class TestUpsertKnowledgeEntry:
     def test_creates_entry_with_publication_date(self, supabase):
-        result = tools.upsert_knowledge_entry(
-            **VALID, publication_date="2026-03-01", snippet_id="snip", tool_context=_tool_context(VALID["source_url"])
-        )
+        result = tools.upsert_knowledge_entry(**VALID, snippet_id="snip", tool_context=_tool_context(VALID["source_url"]))
 
         assert result["status"] == "success" and result["action"] == "created"
         source_kwargs = supabase.insert_kb_entry_source.call_args.kwargs
@@ -68,6 +71,11 @@ class TestUpsertKnowledgeEntry:
         assert source_kwargs["url"] == VALID["source_url"]
         supabase.upsert_kb_entry_embedding.assert_called_once()
         supabase.record_kb_usage.assert_called_once_with("new-id", "snip", "triggered_creation")
+
+    def test_rejects_undated_source(self, supabase):
+        result = tools.upsert_knowledge_entry(**{**VALID, "publication_date": None})
+        assert result["status"] == "error" and "publication_date" in result["error_message"]
+        supabase.insert_kb_entry.assert_not_called()
 
     def test_rejects_low_confidence_before_touching_db(self, supabase):
         result = tools.upsert_knowledge_entry(**{**VALID, "confidence_score": 60})
