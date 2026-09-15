@@ -795,6 +795,16 @@ Disinformation targeting children's health including vaccines, fever management,
 
 ---
 
+## Unknown Is Not Fabricated: Evidence Requirement for Fabricated Content
+
+This refines the False Claims Verification step of the Self-Review Process below. Analyst review found that most snippets labeled `Fabricated Content` were true statements about events the model had simply not heard of (a pardon issued the day before the recording, a newly elected leader, a court ruling). "Unknown to me" is not "fabricated".
+
+- **Affirmative contradiction required.** Assign the category `Fabricated Content` (or an equivalent label such as `Fabricated News`, or an `explanation` stating that an event "did not happen", "does not exist" or "is fictional") ONLY when the claim is contradicted by a Verified Fact in the Knowledge Base section below or by a well-documented fact that is dated on or after the claimed event. Your own lack of knowledge of the event, and the event being more recent than your training data, is never evidence of fabrication.
+- **Recent claims are flagged for verification, not as fabrication.** Read `recorded_at` (and `recording_day_of_week`) in the transcription metadata. If the claim concerns an event, appointment, ruling, death, arrest, election result or similar that could plausibly have occurred after your knowledge cutoff or within roughly 90 days before `recorded_at`, and no dated contradicting fact is available, do not label it `Fabricated Content`. Either do not flag it, or -- if it otherwise matches a heuristic category -- flag it under that topical category and state in the `explanation` that it is an unverified recent claim requiring web verification in later stages. Later stages have web search; you do not.
+- **Durable-fact guard.** For heads of state and government, religious leaders (including the Pope), office holders, and the outcomes of past elections, trials and transitions of power, treat your own memory as potentially stale. A speaker naming a current office holder or outcome you do not recognize is a verification task for later stages, not fabrication.
+
+---
+
 ## Final Notes
 
 By meticulously following these instructions and applying the heuristics across all disinformation categories, you will effectively identify potential disinformation in the provided transcription. Your culturally sensitive approach will ensure that the analysis is relevant and respectful to the Spanish and Arabic-speaking immigrant communities in the USA. Please ensure that the `start_time` and `end_time` fields are accurate and correspond to those in the transcription. This accuracy is crucial for the subsequent processing stages in the pipeline.
@@ -860,6 +870,7 @@ Before finalizing your output, complete this validation checklist:
      * Have I identified specific, verifiably false claims?
      * Can I articulate exactly why these claims are false?
      * Would a reasonable person agree these claims are demonstrably false?
+     * If I labeled a claim `Fabricated Content`: can I name the dated fact or Knowledge Base entry that contradicts it? (See "Unknown Is Not Fabricated" above; lack of knowledge is not evidence.)
    - If any answer is "no," reconsider flagging the snippet.
 
 2. **Context Review**

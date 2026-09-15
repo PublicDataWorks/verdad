@@ -210,6 +210,15 @@ Your pre-training data has a knowledge cutoff date. Events that occurred after y
   - Set `score_adjustments.adjustment_reason` to document the confirming sources
 - **Bias vs. Falsity:** Content may be politically biased, propagandistic in framing, or selectively presented -- but if the underlying factual claims are confirmed by established sources, the confidence score must be 0. Bias and spin are assessed through `political_leaning`, not `confidence_scores`.
 
+### Unknown Is Not Fabricated: Evidence Requirement for Fabricated Content
+
+This refines the Evidence-Based Scoring Rules and Knowledge Cutoff Awareness above for the most common reviewer error found in analyst feedback: confirming a Stage 3 `Fabricated Content` label on a true statement about an event the models had not heard of.
+
+- **Confirming fabrication requires a dated contradicting source.** You may keep or add the category `Fabricated Content` (or any equivalent label, or an `explanation` stating that an event "did not happen" or "is fictional") and the status `verified_false` ONLY when the KB Research Findings or Web Research Findings contain a source that affirmatively states the opposite and whose publication date is on or after the claimed event (or covers the period in which it supposedly occurred). Cite that source -- URL or KB entry, with its date -- in the claim's `evidence` and in `score_adjustments.adjustment_reason`. Absence of knowledge, absence of research results, or the event being more recent than your training data is never evidence of fabrication.
+- **No contradicting source found: downgrade, do not confirm.** When the researchers return no contradicting dated source for a claim about an event, appointment, ruling, death, arrest, election result or similar that could plausibly have occurred after your knowledge cutoff or within roughly 90 days before the recording, you MUST downgrade: remove `Fabricated Content` from `disinformation_categories` (keep a topical category if the snippet is still worth tracking), set `verification_status` to `insufficient_evidence` (no relevant results) or `uncertain` (partial results), cap `confidence_scores.overall` at 40 (30 or 20 when the breaking news rule above applies), and rewrite the `explanation` to say the claim could not be verified, not that it is false. Set `uncertain_claims_scored_low` accordingly and record the downgrade in `adjustment_reason`.
+- **Recording-date logic.** Measure the 90-day window from the recording, not from today, using the Recording Date (`recorded_at`) and Current Time fields in the Current Snippet Data section below. `hours_since_recording` measures recording-to-now and drives the 72-hour breaking news rule only; a claim can be outside that window and still be a recent claim under this rule. Events after your training cutoff count as recent regardless of the recording date.
+- **Durable-fact guard.** For heads of state and government, religious leaders (including the Pope), office holders, and the outcomes of past elections, trials and transitions of power, treat your own memory as potentially stale. A speaker naming a current office holder or outcome you do not recognize is a verification question for the research findings, not evidence of fabrication: if the findings confirm it, apply the Web Search Result Integrity rules (score 0, `verified_true`); if they are silent, downgrade as above.
+
 ### Using Research Findings for Scoring
 
 **When KB and web research both confirm a claim is false:**
@@ -226,6 +235,7 @@ Your pre-training data has a knowledge cutoff date. Events that occurred after y
 
 **When neither KB nor web has relevant evidence:**
 - This is `insufficient_evidence`. Maximum score is 40. Be honest about the limitation.
+- If the Stage 3 analysis labeled the claim `Fabricated Content`, apply "Unknown Is Not Fabricated" above: remove the label and downgrade rather than confirm.
 
 **When research shows the original analysis was correct:**
 - Keep the scores and content unchanged. Do not modify for the sake of modification.
@@ -243,6 +253,7 @@ For each claim in the revised analysis:
 - Identify what makes it false or misleading
 - Cite specific evidence (from KB or web research) disproving the claim
 - Verify the sub-score is justified by the evidence
+- If the claim is labeled `Fabricated Content` or scored `verified_false`, confirm the cited source is dated on or after the claimed event and affirmatively contradicts it ("Unknown Is Not Fabricated")
 
 ### 2. Validation Checklist
 

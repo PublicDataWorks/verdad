@@ -332,6 +332,22 @@ Based on your verification results, apply the appropriate maximum confidence sco
 
 **THE GOLDEN RULE: For claims less than 72 hours old where no contradictory evidence is found, the MAXIMUM confidence score is 30 (out of 100), regardless of how extraordinary the claim appears.**
 
+##### **H.2 Unknown Is Not Fabricated: Evidence Requirement for Fabricated Content**
+
+This section refines Sections C.2, H and H.1 for one specific failure: treating a claim as fabricated because you do not know about it. Analyst review of flagged snippets found that most `Fabricated Content` labels were attached to true statements about events the model had simply not heard of (a pardon issued the day before the recording, a new head of state, a court ruling). "Unknown to me" is not "fabricated".
+
+**Rule 1 -- Affirmative, dated contradiction required.** You may assign the category `Fabricated Content` (Spanish: `Contenido fabricado`) or any equivalent label (`Fabricated News`, `Fabricated Events`, `Non-existent Event`, etc.), set `verification_status` to `verified_false`, or write an `explanation` stating that an event "did not happen", "does not exist" or "is fictional" ONLY when `verification_evidence` contains at least one entry with `relevance_to_claim: contradicts_claim` whose source affirmatively states the opposite and whose `publication_date` is on or after the date of the claimed event (or covers the period in which it was claimed to occur). Absence of knowledge, absence of search results (`no_results`, `results_inconclusive`), or the event being more recent than your training data is never evidence of fabrication.
+
+**Rule 2 -- Unverified recent claims.** If the claim concerns an event, appointment, ruling, death, arrest, election result or similar that could plausibly have occurred after your knowledge cutoff or within roughly 90 days before the recording, and Rule 1 is not met, treat it as an **unverified recent claim**:
+- Set `verification_status` to `insufficient_evidence` (no relevant results) or `uncertain` (partial or mixed results).
+- Cap `confidence_scores.overall` and the category score at 40, or lower when H.1 applies (30 within 72 hours, 20 within 24 hours).
+- Do NOT assign `Fabricated Content`. Use the topical category (e.g. `Political Figures and Movements`) if the snippet is still worth flagging; otherwise score 0.
+- State in the `explanation` that the claim could not be verified as of the current date, not that it is false.
+
+**Recording-date logic.** The 90-day window is measured from the recording, not from today: use `recorded_at` in `additional_info` (the recording date) together with the **Current date and time** in the Snippet Data section. `hours_since_recording` measures recording-to-now and drives H.1 only; a claim can be outside the 72-hour breaking-news window and still be a recent claim under this rule (for example, a recording from three weeks ago about a ruling issued the week before it). Events after your training cutoff are recent claims regardless of the recording date.
+
+**Rule 3 -- Durable-fact guard.** For heads of state and government, religious leaders (including the Pope), office holders, and the outcomes of past elections, trials and transitions of power, treat your own memory as potentially stale. A speaker naming a current office holder, leader or outcome you do not recognize is a verification task: search for it (Section C); if the search confirms it, score 0 (Section C.2); if the search finds nothing, apply Rule 2. Never score it as fabricated on memory alone.
+
 ##### **I. Required Self-Review Process**
 
 After completing your initial analysis, perform this structured review:
@@ -351,6 +367,7 @@ After completing your initial analysis, perform this structured review:
    - [ ] Would these scores be defensible to fact-checkers?
    - [ ] Are my explanations consistent with my scores?
    - [ ] For uncertain claims: Did I score them 0-40 maximum?
+   - [ ] For any claim labeled `Fabricated Content` or scored as `verified_false`: Did I cite a dated source that affirmatively contradicts it and postdates the claimed event (Section H.2)?
 
 3. **Score Adjustment Protocol**
    If any validation fails:
