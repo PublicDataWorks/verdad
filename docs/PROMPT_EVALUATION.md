@@ -13,20 +13,35 @@ How a Stage 3 prompt change gets measured, reviewed and deployed. Companion to
    each `stage/sub_stage` entry and which semver version the working tree represents;
    `import_prompts_to_db.py` derives its `PROMPT_MAPPING` from it.
 3. **Open a pull request.** Two workflows run:
-   - `prompts-check.yml` runs the unit tests and a `--from-manifest --dry-run` that prints, per
-     entry, whether the manifest version is `up-to-date`, will be `import`ed, or `conflict`s with
-     an existing inactive version (bump again).
+   - `prompts-check.yml` runs the unit tests on a GitHub runner (no credentials needed).
    - `prompt-evaluation.yml` runs the harness (`src/scripts/evaluate_prompt.py`) with the PR's
-     working-tree Stage 3 files as the candidate and the active database version as the baseline,
-     on every eval set in `prompts/eval/` (or the sets named in the PR body with `Eval-set: <name>`
-     lines), then posts one PR comment containing the report and updates it on every push. The
-     report is also attached as a workflow artifact.
+     Stage 3 files as the candidate and the active database version as the baseline, on every
+     eval set in `prompts/eval/` (or the sets named in the PR body with `Eval-set: <name>` lines),
+     then posts one PR comment containing the report and updates it on every push. The harness
+     itself runs on a one-off Fly Machine (see below); the workflow log carries the machine's
+     output.
 4. **Review the evidence comment.** The summary table gives "false positives fixed" on the reported
    snippets and "true positives lost" on the control snippets; the Evidence section quotes the
    candidate's explanation for every fixed case, and Regressions quotes it for every lost one.
-5. **Merge.** `prompts-deploy.yml` runs `import --from-manifest` on `main`, which imports and
-   activates only the entries whose manifest version differs from the active database version,
-   then lists the active versions and fails if a second planning pass still has work to do.
+5. **Merge.** `prompts-deploy.yml` runs `import --from-manifest` at the merged commit, which
+   imports and activates only the entries whose manifest version differs from the active database
+   version, then lists the active versions and fails if a second planning pass still has work to do.
+
+## Where the jobs run
+
+Evaluation and deploy both execute inside the `processing-worker` Fly app, not on the GitHub
+runner: `scripts/ci/fly_prompt_job.sh` starts a one-off Machine from the app's current image, which
+already holds every secret the pipeline needs (Supabase, Gemini, R2, SearXNG) and the same
+dependencies and egress as production. The Machine downloads the repo tarball at the PR's commit,
+runs `scripts/ci/run_prompt_job.sh`, posts the PR comment through `scripts/ci/post_pr_comment.py`,
+and is destroyed when it exits; the runner only relays logs and the exit code. Consequences:
+
+- GitHub holds one secret, `FLY_API_TOKEN`; no production credential is copied into Actions.
+- A PR that adds a Python dependency cannot be evaluated until a Fly deploy has rebuilt the image.
+- The job's short-lived `GITHUB_TOKEN` is passed to the Machine as an environment variable so it
+  can post the comment; it expires when the workflow run ends.
+- Run limits: `WAIT_TIMEOUT` (default 120m) in `fly_prompt_job.sh`, `timeout-minutes` in the
+  workflows. A Machine that outlives the wait is destroyed and the job fails.
 
 The direct-RPC path (`import --version x.y.z --stages ...`) and the SQL recipe in the
 `verdad-heuristics-updater` skill remain available for emergencies; anything deployed that way
@@ -121,17 +136,15 @@ magnitude: one eval set of 24 snippets at `--runs 2` is about 100 Stage 3 calls 
 search and thinking, i.e. tens of dollars on the main model, and 30 to 60 minutes of wall time.
 Use `--max-snippets` or `--runs 1` for quick iterations and the full set before merging.
 
-## Secrets to add (GitHub repository settings, Actions secrets)
+## Secret to add (GitHub repository settings, Actions secrets)
 
 | Secret | Used by | Purpose |
 |---|---|---|
-| `SUPABASE_URL` | all three workflows | Supabase project URL |
-| `SUPABASE_KEY` | all three workflows | Service-role key (bypasses RLS; needed to insert `prompt_versions`) |
-| `GOOGLE_GEMINI_KEY` | `prompt-evaluation.yml` | Gemini API key (the env var name the pipeline uses) |
-| `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | `prompt-evaluation.yml` | Read the snippet audio clips Stage 3 analyzes |
-| `SEARXNG_URL` (secret or repository variable) | `prompt-evaluation.yml` | Stage 3 web search tool endpoint |
+| `FLY_API_TOKEN` | `prompt-evaluation.yml`, `prompts-deploy.yml` | Deploy token scoped to the `processing-worker` app: `fly tokens create deploy -a processing-worker -x 8760h` |
 
-`prompts-deploy.yml` targets the `production` environment so the Supabase secrets can be scoped
-there with required reviewers if desired. Without the secrets, `prompts-check.yml` skips the
-dry run with a notice, `prompt-evaluation.yml` prints a notice and posts nothing (pull requests
-from forks never receive secrets), and `prompts-deploy.yml` fails with a clear error.
+The pipeline credentials (`SUPABASE_URL`, `SUPABASE_KEY`, `GOOGLE_GEMINI_KEY`, `R2_*`,
+`SEARXNG_URL`) stay as Fly app secrets on `processing-worker`, where they already are. Without the
+token, `prompt-evaluation.yml` prints a notice and posts nothing (pull requests from forks never
+receive secrets) and `prompts-deploy.yml` fails with a clear error. To require a human click before
+each deploy, add `environment: production` to the deploy job and give that GitHub environment
+required reviewers.

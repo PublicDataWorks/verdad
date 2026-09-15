@@ -1,7 +1,8 @@
 name: Prompts deploy
 
 # Merging a manifest bump to main deploys it: every prompts/manifest.json entry whose version
-# differs from the active database version is imported and activated.
+# differs from the active database version is imported and activated. The import runs on a
+# one-off Fly Machine in the processing-worker app, so the Supabase key never leaves Fly.
 
 on:
   push:
@@ -20,38 +21,30 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production
+    timeout-minutes: 30
     env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      PYTHONPATH: .:src
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check secrets
+      - name: Check Fly token
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
-            echo "::error::SUPABASE_URL and SUPABASE_KEY secrets are required to deploy prompts (see docs/PROMPT_EVALUATION.md)"
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::FLY_API_TOKEN secret is required to deploy prompts (see docs/PROMPT_EVALUATION.md)"
             exit 1
           fi
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install flyctl
+        run: |
+          curl -L https://fly.io/install.sh | sh -s 0.4.102
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
 
       - name: Import manifest versions that differ from the database
-        run: python src/scripts/import_prompts_to_db.py import --from-manifest
+        id: job
+        env:
+          VERDAD_SHA: ${{ github.sha }}
+        run: scripts/ci/fly_prompt_job.sh deploy
 
-      - name: Verify active versions
-        run: |
-          python src/scripts/import_prompts_to_db.py list --active
-          # A second planning pass must report nothing left to import.
-          python src/scripts/import_prompts_to_db.py import --from-manifest --dry-run | tee plan.txt
-          if grep -Eq "\((import|conflict)\b" plan.txt; then
-            echo "::error::Database does not match the manifest after deploy"
-            exit 1
-          fi
+      - name: Destroy the machine if the job was cancelled
+        if: always() && steps.job.outputs.machine_id != ''
+        run: fly machine destroy "${{ steps.job.outputs.machine_id }}" -a processing-worker --force || true

@@ -8,6 +8,8 @@ on:
       - "tests/test_evaluate_prompt.py"
       - "tests/test_prompt_manifest.py"
       - "tests/test_import_prompts_diff.py"
+      - "tests/test_post_pr_comment.py"
+      - "scripts/ci/**"
       - ".github/workflows/prompts-check.yml"
 
 permissions:
@@ -27,9 +29,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Unit tests (harness and manifest)
+      - name: Unit tests (harness, manifest, CI helpers)
         run: |
-          python -m pytest tests/test_evaluate_prompt.py tests/test_prompt_manifest.py --no-cov
+          python -m pytest tests/test_evaluate_prompt.py tests/test_prompt_manifest.py tests/test_post_pr_comment.py --no-cov
           # The prompt drift test ships with PR #70; run it only once it exists on this branch.
           if [ -f tests/test_import_prompts_diff.py ]; then
             python -m pytest tests/test_import_prompts_diff.py --no-cov
@@ -37,14 +39,5 @@ jobs:
             echo "::notice::tests/test_import_prompts_diff.py not present; skipping"
           fi
 
-      - name: Manifest vs database (dry run)
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          PYTHONPATH: .:src
-        run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
-            echo "::notice::SUPABASE_URL / SUPABASE_KEY secrets not available; skipping manifest dry run"
-            exit 0
-          fi
-          python src/scripts/import_prompts_to_db.py import --from-manifest --dry-run
+      - name: Shell syntax
+        run: bash -n scripts/ci/fly_prompt_job.sh scripts/ci/run_prompt_job.sh
