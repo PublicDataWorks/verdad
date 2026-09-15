@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from processing_pipeline.kb_sources import is_http_url, parse_iso_date
+from processing_pipeline.kb_sources import is_http_url
 
 
 class Title(BaseModel):
@@ -319,7 +319,11 @@ def asserts_falsity(analysis: dict) -> bool:
 
 
 def has_contradicting_evidence(verification_evidence: dict | None) -> bool:
-    """True when at least one recorded search result contradicts the claim with a dated http(s) URL."""
+    """True when at least one recorded search result contradicts the claim and carries an http(s) URL.
+
+    The publication date is not required: Stage 3 often cannot read one off the page, and an undated
+    contradicting source is still a source the analyst can open. Date normalisation is asked of the prompt.
+    """
     if not isinstance(verification_evidence, dict):
         return False
     for search in verification_evidence.get("searches_performed") or []:
@@ -328,11 +332,7 @@ def has_contradicting_evidence(verification_evidence: dict | None) -> bool:
         for result in search.get("results") or []:
             if not isinstance(result, dict):
                 continue
-            if (
-                result.get("relevance_to_claim") == "contradicts_claim"
-                and is_http_url(result.get("url"))
-                and parse_iso_date(result.get("publication_date")) is not None
-            ):
+            if result.get("relevance_to_claim") == "contradicts_claim" and is_http_url(result.get("url")):
                 return True
     return False
 
@@ -371,10 +371,12 @@ def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = Non
         reasons.append(f"verification_status is '{status}'")
     evidenced = has_contradicting_evidence(verification_evidence)
     if status == "verified_false" and not evidenced:
-        reasons.append("verification_status is 'verified_false' but no dated search result is marked contradicts_claim")
+        reasons.append(
+            "verification_status is 'verified_false' but no search result with a URL is marked contradicts_claim"
+        )
     if asserts_falsity(result) and not evidenced:
         reasons.append(
-            "the analysis asserts the content is fabricated/false but no dated search result with a URL is "
+            "the analysis asserts the content is fabricated/false but no search result with a URL is "
             "marked contradicts_claim"
         )
 
