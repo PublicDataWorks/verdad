@@ -156,6 +156,12 @@ class TestLookup:
         credibility.configure(Mock())  # a bare Mock is not iterable
         assert credibility.source == "csv"
 
+    def test_missing_csv_degrades_to_defaults(self, tmp_path):
+        broken = SourceCredibility(domains_csv=str(tmp_path / "nope.csv"), stations_csv=str(tmp_path / "nope2.csv"))
+        assert broken.tier_for("https://rt.com/x").tier == DEFAULT_TIER
+        assert broken.provenance_for("SPMN").provenance == "unknown"
+        assert broken.source == "none"
+
     def test_ttl_triggers_reload(self, credibility, monkeypatch):
         credibility.ttl_seconds = 0.01
         credibility.load()

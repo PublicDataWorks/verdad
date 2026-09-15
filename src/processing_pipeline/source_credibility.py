@@ -329,9 +329,14 @@ class SourceCredibility:
                 print(f"[source_credibility] Supabase load failed, falling back to CSV: {type(e).__name__}: {e}")
                 domain_rows = station_rows = None
         if domain_rows is None:
-            domain_rows = read_csv_rows(self.domains_csv)
-            station_rows = read_csv_rows(self.stations_csv)
-            self.source = "csv"
+            try:
+                domain_rows = read_csv_rows(self.domains_csv)
+                station_rows = read_csv_rows(self.stations_csv)
+                self.source = "csv"
+            except OSError as e:  # unreadable seed: run with defaults (tier 3 / unknown) rather than stop the pipeline
+                print(f"[source_credibility] CSV load failed, using defaults only: {type(e).__name__}: {e}")
+                domain_rows, station_rows = [], []
+                self.source = "none"
         with self._lock:
             self._domains = _build_domain_index(domain_rows)
             self._stations = _build_station_index(station_rows or [])
