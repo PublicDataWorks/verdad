@@ -185,6 +185,66 @@ def test_render_report_contains_tables_and_evidence():
     assert "- one note" in report
 
 
+def test_failure_histogram_groups_by_exception_class():
+    r1 = ep.SnippetResult(snippet_id="11111111-aaaa", kind=ep.REPORTED)
+    r1.baseline_runs = [run(90), run(error="ServerError: 503 UNAVAILABLE. The model is overloaded")]
+    r1.candidate_runs = [run(error="ClientError: 429 RESOURCE_EXHAUSTED"), run(error="ClientError: 429 quota")]
+    r2 = ep.SnippetResult(snippet_id="22222222-bbbb", kind=ep.CONTROL)
+    r2.baseline_runs = [run(error="ServerError: 500 INTERNAL"), run(90)]
+    r2.candidate_runs = [run(90), run(error="no colon here")]
+    for r in (r1, r2):
+        r.finalize(threshold=70, flag_on="overall")
+
+    hist = ep.failure_histogram([r1, r2])
+    assert [(b["kind"], b["count"]) for b in hist] == [("ClientError", 2), ("ServerError", 2), ("no colon here", 1)]
+    server = next(b for b in hist if b["kind"] == "ServerError")
+    assert server["example"] == "ServerError: 503 UNAVAILABLE. The model is overloaded"
+    assert server["snippet_id"] == "11111111-aaaa" and server["side"] == "baseline"
+    assert ep.failure_histogram([make_result("ok", ep.REPORTED, [90], [90])]) == []
+
+
+def test_render_report_failures_section():
+    config = {
+        "baseline": "b",
+        "candidate": "c",
+        "model": "gemini-2.5-pro",
+        "runs": 2,
+        "threshold": 70,
+        "flag_on": "overall",
+    }
+    clean = [make_result("11111111-aaaa", ep.REPORTED, [90, 85], [30, 20], cand_cats=())]
+    report = ep.render_report(clean, ep.aggregate(clean, "gemini-2.5-pro"), config)
+    assert "## Failures" not in report
+
+    r = ep.SnippetResult(snippet_id="33333333-cccc", kind=ep.REPORTED)
+    r.baseline_runs = [run(90), run(error="ServerError: 503 UNAVAILABLE | overloaded")]
+    r.candidate_runs = [run(error="ClientError: 429 RESOURCE_EXHAUSTED"), run(error="ClientError: 429 again")]
+    r.finalize(threshold=70, flag_on="overall")
+    report = ep.render_report([r], ep.aggregate([r], "gemini-2.5-pro"), config, notes=["a note"])
+    failures = report.split("## Failures")[1]
+    assert "3 of 4 model calls failed" in failures
+    assert "| `ClientError` | 2 | `33333333` candidate: ClientError: 429 RESOURCE_EXHAUSTED |" in failures
+    assert "| `ServerError` | 1 | `33333333` baseline: ServerError: 503 UNAVAILABLE \\| overloaded |" in failures
+    assert failures.index("ClientError") < failures.index("ServerError")  # most frequent first
+    assert "## Notes" in failures  # notes still follow the failures section
+
+
+def test_client_http_options_enables_retries():
+    options = ep.client_http_options()
+    assert set(options) == {"http_options"}
+    retry = options["http_options"].retry_options
+    assert retry.attempts == ep.RETRY_ATTEMPTS
+    assert retry.initial_delay == ep.RETRY_INITIAL_DELAY and retry.max_delay == ep.RETRY_MAX_DELAY
+
+
+def test_client_http_options_falls_back_without_sdk_support(monkeypatch, capsys):
+    import google.genai.types as types
+
+    monkeypatch.delattr(types, "HttpRetryOptions")
+    assert ep.client_http_options() == {}
+    assert "retry options unavailable" in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------- selection helpers
 
 
@@ -319,7 +379,7 @@ def fake_snippet(snippet_id):
     }
 
 
-def test_evaluate_snippets_end_to_end_with_fakes():
+def test_evaluate_snippets_end_to_end_with_fakes(capsys):
     data = FakeDataSource(
         {"rep-1": fake_snippet("rep-1"), "ctl-1": fake_snippet("ctl-1"), "ctl-2": fake_snippet("ctl-2")}
     )
@@ -344,6 +404,7 @@ def test_evaluate_snippets_end_to_end_with_fakes():
     assert by_id["ctl-2"].verdict == ep.LOST
     assert data.downloads == 3
     assert len(runner.calls) == 12 and all(exists for _, _, exists in runner.calls)
+    assert "run failed:" not in capsys.readouterr().out
     # get_metadata was applied: Stage 3 metadata shape reaches the runner unchanged across runs
     assert {uuid for _, uuid, _ in runner.calls} == {"rep-1", "ctl-1", "ctl-2"}
 
@@ -351,6 +412,26 @@ def test_evaluate_snippets_end_to_end_with_fakes():
     assert agg["false_positives_fixed"] == 1 and agg["true_positives_lost"] == 1 and agg["no_data"] == 1
     payload = ep.results_to_json(results, agg, {"model": "m"}, [])
     json.dumps(payload)  # serializable
+
+
+class FailingRunner:
+    async def run(self, prompt_version, audio_file, metadata):
+        if prompt_version["id"] == "candidate":
+            return run(error="ServerError: 503 UNAVAILABLE")
+        return run(90)
+
+
+def test_evaluate_snippets_prints_each_failed_run(capsys):
+    data = FakeDataSource({"rep-1": fake_snippet("rep-1")})
+    results = asyncio.run(
+        ep.evaluate_snippets(
+            [("rep-1", ep.REPORTED)], data, FailingRunner(), {"id": "baseline"}, {"id": "candidate"}, runs=2
+        )
+    )
+    out = capsys.readouterr().out
+    assert out.count("run failed: rep-1 candidate: ServerError: 503 UNAVAILABLE") == 2
+    assert "run failed: rep-1 baseline" not in out
+    assert results[0].verdict == ep.NO_DATA and len(results[0].candidate.errors) == 2
 
 
 def test_main_exits_2_without_environment(monkeypatch, capsys):

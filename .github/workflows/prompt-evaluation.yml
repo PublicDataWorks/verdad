@@ -9,6 +9,7 @@ on:
     paths:
       - "prompts/**"
       - "scripts/ci/**"
+      - "src/scripts/evaluate_prompt.py"
   workflow_dispatch:
     inputs:
       eval_set:

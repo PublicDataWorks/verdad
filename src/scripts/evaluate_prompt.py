@@ -55,6 +55,12 @@ load_dotenv()
 STAGE_3_LABEL = "stage_3"
 DEFAULT_THRESHOLD = 70
 DEFAULT_RUNS = 2
+DEFAULT_CONCURRENCY = 2
+# Gemini SDK retry policy for 429 / 5xx responses (exponential backoff, seconds).
+RETRY_ATTEMPTS = 5
+RETRY_INITIAL_DELAY = 2
+RETRY_MAX_DELAY = 60
+FAILURE_EXAMPLE_CHARS = 300
 FLAG_ON_CHOICES = ("overall", "category")
 EVIDENCE_CHARS = 300
 MISSING_ENV_EXIT_CODE = 2
@@ -291,6 +297,23 @@ def aggregate(results: list[SnippetResult], model: str) -> dict:
     }
 
 
+def failure_histogram(results: list[SnippetResult]) -> list[dict]:
+    """Failed model calls grouped by exception class (the text before the first colon), most frequent first."""
+    buckets: dict[str, dict] = {}
+    for r in results:
+        for side, runs in (("baseline", r.baseline_runs), ("candidate", r.candidate_runs)):
+            for run in runs:
+                if run.ok:
+                    continue
+                error = run.error or "unknown error"
+                kind = error.split(":", 1)[0].strip() or "unknown error"
+                bucket = buckets.setdefault(
+                    kind, {"kind": kind, "count": 0, "example": error, "snippet_id": r.snippet_id, "side": side}
+                )
+                bucket["count"] += 1
+    return sorted(buckets.values(), key=lambda b: (-b["count"], b["kind"]))
+
+
 def _fmt_categories(summary: RunSummary) -> str:
     if not summary.n_ok:
         return "error" if summary.errors else "-"
@@ -365,6 +388,24 @@ def render_report(results: list[SnippetResult], agg: dict, config: dict, notes: 
         for r in lost:
             quote = _md(r.candidate.explanation)[:EVIDENCE_CHARS]
             lines += [f"### `{r.snippet_id}` {_md(r.title)}".rstrip(), "", f"> {quote}", ""]
+
+    failures = failure_histogram(results)
+    if failures:
+        lines += [
+            "## Failures",
+            "",
+            f"{agg['runs_failed']} of {agg['runs_total']} model calls failed. "
+            "Failed calls are excluded from the per-snippet majority votes above.",
+            "",
+            "| Error | Count | Example |",
+            "|---|---|---|",
+        ]
+        for bucket in failures:
+            example = _md(bucket["example"])[:FAILURE_EXAMPLE_CHARS]
+            lines.append(
+                f"| `{_md(bucket['kind'])}` | {bucket['count']} | `{bucket['snippet_id'][:8]}` {bucket['side']}: {example} |"
+            )
+        lines.append("")
 
     if notes:
         lines += ["## Notes", ""] + [f"- {n}" for n in notes]
@@ -480,6 +521,22 @@ class EvalDataSource:
         return [row["id"] for row in response.data or []]
 
 
+def client_http_options() -> dict:
+    """``genai.Client`` kwargs enabling SDK-level retries; empty when the installed SDK lacks them.
+
+    Four agentic conversations in flight with no retry lost more than half the calls of the first
+    real run to 429/5xx. The SDK retries those status codes itself when asked.
+    """
+    try:
+        from google.genai.types import HttpOptions, HttpRetryOptions
+
+        retry = HttpRetryOptions(attempts=RETRY_ATTEMPTS, initial_delay=RETRY_INITIAL_DELAY, max_delay=RETRY_MAX_DELAY)
+        return {"http_options": HttpOptions(retry_options=retry)}
+    except (ImportError, TypeError, ValueError) as e:
+        print(f"warning: google-genai retry options unavailable ({type(e).__name__}: {e}); no retries", flush=True)
+        return {}
+
+
 class GeminiRunner:
     """Thin, mockable wrapper around the Stage 3 executor (no Supabase access)."""
 
@@ -491,7 +548,7 @@ class GeminiRunner:
     def from_env(cls, model: str):
         from google import genai
 
-        return cls(genai.Client(api_key=os.getenv("GOOGLE_GEMINI_KEY")), model)
+        return cls(genai.Client(api_key=os.getenv("GOOGLE_GEMINI_KEY"), **client_http_options()), model)
 
     async def run(self, prompt_version: dict, audio_file: str, metadata: dict) -> RunResult:
         started = time.monotonic()
@@ -567,14 +624,17 @@ async def evaluate_snippet(
         result.error = f"{type(e).__name__}: {e}"[:300]
         return result
 
-    async def guarded(prompt_version):
+    async def guarded(prompt_version, side):
         async with semaphore:
-            return await runner.run(prompt_version, audio_file, metadata)
+            run_result = await runner.run(prompt_version, audio_file, metadata)
+        if not run_result.ok:
+            print(f"    run failed: {snippet_id} {side}: {run_result.error}", flush=True)
+        return run_result
 
     try:
         baseline_and_candidate = await asyncio.gather(
-            *[guarded(baseline_prompt) for _ in range(runs)],
-            *[guarded(candidate_prompt) for _ in range(runs)],
+            *[guarded(baseline_prompt, "baseline") for _ in range(runs)],
+            *[guarded(candidate_prompt, "candidate") for _ in range(runs)],
         )
         result.baseline_runs = list(baseline_and_candidate[:runs])
         result.candidate_runs = list(baseline_and_candidate[runs:])
@@ -595,7 +655,7 @@ async def evaluate_snippets(
     runs: int = DEFAULT_RUNS,
     threshold: int = DEFAULT_THRESHOLD,
     flag_on: str = "overall",
-    concurrency: int = 4,
+    concurrency: int = DEFAULT_CONCURRENCY,
     workdir: str | None = None,
 ) -> list[SnippetResult]:
     """Evaluate ``selection`` = [(snippet_id, kind), ...]; snippets run sequentially, model calls concurrently."""
@@ -670,7 +730,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--flag-on", choices=FLAG_ON_CHOICES, default="overall", help="Score the flag uses (default overall)"
     )
-    run.add_argument("--concurrency", type=int, default=4, help="Concurrent model calls per snippet (default 4)")
+    run.add_argument(
+        "--concurrency",
+        type=int,
+        default=DEFAULT_CONCURRENCY,
+        help=f"Concurrent model calls per snippet (default {DEFAULT_CONCURRENCY})",
+    )
 
     out = parser.add_argument_group("output")
     out.add_argument("--out", default="eval-report.md", help="Markdown report path (default eval-report.md)")

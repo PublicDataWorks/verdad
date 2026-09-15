@@ -70,7 +70,8 @@ PYTHONPATH=.:src python src/scripts/evaluate_prompt.py \
 
 Useful flags: `--runs K` (default 2), `--model` (default is the Stage 3 main model; both prompts
 always use the same model, with no fallback), `--threshold` (default 70) and `--flag-on
-overall|category`, `--max-snippets`, `--concurrency` (model calls in flight per snippet),
+overall|category`, `--max-snippets`, `--concurrency` (model calls in flight per snippet, default 2;
+the Gemini client retries 429/5xx responses up to 5 times with exponential backoff),
 `--fail-on-regression [N]` (exit 1 when more than N control snippets lose their flag).
 
 The harness is **read-only** against Supabase. It never writes `snippets`, `snippet_labels`,
