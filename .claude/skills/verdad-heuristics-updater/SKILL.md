@@ -109,6 +109,20 @@ When you DON'T have file access (Claude.ai), construct the updated `user_prompt`
 
 The pipeline reads prompts from the Supabase `prompt_versions` table at runtime.
 
+**Preferred path (when you have file access):** bump the changed entries in
+`prompts/manifest.json` (semver; minor bump for a new category) with a one-line `description`,
+then open a pull request. CI runs the Stage 3 evaluation harness on the PR and posts an evidence
+comment (false positives fixed vs true positives lost on the eval sets in `prompts/eval/`);
+merging to `main` imports and activates the bumped versions via `import_prompts_to_db.py import
+--from-manifest`. See `docs/PROMPT_EVALUATION.md`. Skip the SQL below in that case.
+
+**Emergency path (no file access, or CI unavailable):** the direct RPC/SQL recipe below still
+works. Afterwards, bring the repository back in sync, in this order: copy the deployed content into
+every affected prompt file under `prompts/`, bump the entry in `prompts/manifest.json` to the version
+you deployed, then run `PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff` and confirm
+it reports no drift. Bumping only the manifest makes the entry look up to date while the files stay
+stale, so the next deploy would overwrite the emergency change.
+
 **Supabase project ID**: `dzujjhzgzguciwryzwlx`
 
 #### Check current versions
@@ -168,18 +182,22 @@ SELECT id, stage, version, is_active,
 FROM prompt_versions WHERE is_active = true ORDER BY stage;
 ```
 
-With file access and `SUPABASE_URL`/`SUPABASE_KEY` set, `PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff` confirms the local files match the active database rows (see `docs/PROMPT_MANAGEMENT.md`).
+With file access and `SUPABASE_URL`/`SUPABASE_KEY` set, `PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff` (run from the repository root) confirms the local files match the active database rows (see `docs/PROMPT_MANAGEMENT.md`).
 
 Repeat for both Stage 1 (`disinformation_detection`) and Stage 3.
 
 ### Step 6: Push to GitHub (if file access available)
 
 ```bash
-git add prompts/stage_1/main/heuristics.md prompts/stage_1/main/detection_user_prompt.md \
+git checkout -b heuristics/category-{N}
+git add prompts/manifest.json \
+       prompts/stage_1/main/heuristics.md prompts/stage_1/main/detection_user_prompt.md \
        prompts/stage_3/heuristics.md prompts/stage_3/analysis_prompt.md
 git commit -m "Add category {N}: {Name} disinformation heuristics"
-git push origin main
+git push -u origin heuristics/category-{N}
 ```
+
+Open a PR; the evaluation comment is the review evidence and the merge is the deploy.
 
 ## Gotchas
 

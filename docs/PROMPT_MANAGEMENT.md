@@ -14,7 +14,7 @@ Related: [PROMPT_REWRITER_STATUS_AND_PLAN.md](PROMPT_REWRITER_STATUS_AND_PLAN.md
 
 ## 2. Inventory
 
-The mapping from files to `(stage, sub_stage)` is `PROMPT_MAPPING` in `src/scripts/import_prompts_to_db.py:34-72`. Line numbers in the "Loaded by" column point at where the prompt text is actually used.
+The mapping from files to `(stage, sub_stage)`, and the version each entry is at, is `prompts/manifest.json` (read by `src/scripts/prompt_manifest.py`; `import_prompts_to_db.py` derives its `PROMPT_MAPPING` from it). Line numbers in the "Loaded by" column point at where the prompt text is actually used.
 
 | stage / sub_stage | Files under `prompts/` | Loaded by | Notes |
 |---|---|---|---|
@@ -36,7 +36,7 @@ Not imported:
 ## 3. Changing a prompt
 
 1. Edit the file(s) under `prompts/`. For Stage 1 user prompts, keep the three `{placeholders}` and do not add other literal braces.
-2. Pick a new semver version. `import_prompts_to_db.py` applies the same version string to every entry it imports, so either import everything with a new version or restrict with `--stages`.
+2. Bump the entry's `version` (semver) in `prompts/manifest.json`; `import --from-manifest` imports and activates every entry whose manifest version differs from the active database version (this is what CI runs on merge). Alternatively, `import --version X.Y.Z` applies one explicit version string to every entry it imports, so either import everything with a new version or restrict with `--stages`.
 3. Import. The script must run from the repo root with `PYTHONPATH=.:src` (it imports `src.processing_pipeline.*`, and those packages import `processing_pipeline.*`), and it reads `SUPABASE_URL` and `SUPABASE_KEY` from the environment or `.env` (`python-dotenv`). The key must be allowed to insert into `prompt_versions`; the anon key is blocked by row-level security.
 
    ```bash
@@ -45,7 +45,7 @@ Not imported:
        --stages stage_1/disinformation_detection stage_3
    ```
 
-   Flags: `--version` (required, `X.Y.Z`), `--description` (default "Imported from files", max 500 chars), `--no-active` (insert without activating), `--stages` (one or more `stage/sub_stage` labels; default all), `--dry-run` (print what would be imported; still requires the env vars). Rows are created with `created_by = 'import_script'`.
+   Flags: `--version` (`X.Y.Z`) or `--from-manifest` (exactly one is required), `--description` (default "Imported from files", max 500 chars), `--no-active` (insert without activating), `--stages` (one or more `stage/sub_stage` labels; default all), `--dry-run` (print what would be imported; still requires the env vars). Rows are created with `created_by = 'import_script'`.
 4. Restart the affected flows so they load the new active row.
 5. Commit the prompt files.
 
@@ -58,7 +58,7 @@ The heuristics-updater skill (`.claude/skills/verdad-heuristics-updater/SKILL.md
 
 ### Checking drift
 
-`PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff` compares each `PROMPT_MAPPING` entry against the active database row and prints one line per entry: `in sync`, `differs (system_instruction, user_prompt)`, `no active version in db` or `missing local file`. `output_schema` is compared as parsed JSON, and NULL and empty text are treated as equal. `--stages` restricts the check, `--show-diff` prints a unified diff of the differing fields. Exit code 0 means everything is in sync, 1 means drift, 2 means the database could not be reached or the env vars are missing. Run it before and after an import, and whenever prompts were edited directly in the database.
+`PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff` compares each manifest entry against the active database row and prints one line per entry: `in sync`, `differs (system_instruction, user_prompt)`, `no active version in db` or `missing local file`. `output_schema` is compared as parsed JSON, and NULL and empty text are treated as equal. `--stages` restricts the check, `--show-diff` prints a unified diff of the differing fields. Exit code 0 means everything is in sync, 1 means drift, 2 means the database could not be reached or the env vars are missing. Run it before and after an import, and whenever prompts were edited directly in the database.
 
 ### Provenance
 

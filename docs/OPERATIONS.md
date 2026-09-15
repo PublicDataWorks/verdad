@@ -26,7 +26,12 @@ fly deploy -c fly.processing_worker.toml      # from the repo root; same for the
 cd server && fly deploy -c fly.server.toml    # the server app builds from server/
 ```
 
-- Deploys are manual; there is no deploy workflow in `.github/`. `.github/workflows/ci.yml` only runs lint + tests.
+- App deploys are manual; no workflow in `.github/` runs `fly deploy`. `.github/workflows/ci.yml` runs lint + tests.
+  Prompt changes are the exception: `prompts-check.yml` (PR: unit tests + manifest bump check),
+  `prompt-evaluation.yml` (PR: runs `src/scripts/evaluate_prompt.py` and posts a report comment) and
+  `prompts-deploy.yml` (push to `main`: `import_prompts_to_db.py import --from-manifest`). The last two start a
+  one-off Machine in the `processing-worker` app via `scripts/ci/fly_prompt_job.sh`, authenticated with the
+  `FLY_API_TOKEN` repository secret; see `docs/PROMPT_EVALUATION.md`.
 - Secrets (`SUPABASE_*`, `R2_*`, `GOOGLE_GEMINI_KEY`, `OPENAI_API_KEY`, `SEARXNG_URL`, `SENTRY_DSN`, ...) are Fly
   secrets per app (`fly secrets list -a <app>`); their values are not in the repo. `PREFECT_API_URL` is set in each
   `fly.*.toml` `[env]` (and hard-coded as `https://prefect.fly.dev/api` in `scripts/*.sh` and `Dockerfile.prefect`).

@@ -1,0 +1,96 @@
+name: Prompt evaluation
+
+# Runs the Stage 3 evaluation harness for every PR that touches prompts on a one-off Fly Machine
+# in the processing-worker app (its image, its secrets) and posts the evidence report as a
+# single, updated PR comment. GitHub holds only FLY_API_TOKEN. Read-only against Supabase.
+
+on:
+  pull_request:
+    paths:
+      - "prompts/**"
+      - "scripts/ci/**"
+      - "src/scripts/evaluate_prompt.py"
+  workflow_dispatch:
+    inputs:
+      eval_set:
+        description: "Eval set name(s) under prompts/eval/ without .json, space-separated (empty = all)"
+        required: false
+        default: ""
+      runs:
+        description: "Runs per prompt per snippet"
+        required: false
+        default: "2"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: prompt-evaluation-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Fly token
+        id: fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::notice::Prompt evaluation skipped; FLY_API_TOKEN secret missing (forks never receive secrets)"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve eval sets
+        id: sets
+        if: steps.fly.outputs.available == 'true'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          INPUT_SETS: ${{ github.event.inputs.eval_set }}
+        run: |
+          # Sets come from the workflow_dispatch input, then from `Eval-set: <name>` lines in the PR body,
+          # and default to every file in prompts/eval/.
+          sets="$INPUT_SETS"
+          if [ -z "$sets" ]; then
+            sets=$(printf '%s\n' "$PR_BODY" | tr -d '\r' | sed -n 's/^[Ee]val-[Ss]et:[[:space:]]*//p' | tr '\n' ' ')
+          fi
+          if [ -z "$(echo "$sets" | tr -d '[:space:]')" ]; then
+            sets=$(ls prompts/eval/*.json 2>/dev/null | xargs -n1 basename | sed 's/\.json$//' | tr '\n' ' ')
+          fi
+          if [ -z "$(echo "$sets" | tr -d '[:space:]')" ]; then
+            echo "::notice::No eval sets found under prompts/eval/; nothing to evaluate"
+          fi
+          echo "sets=$sets" >> "$GITHUB_OUTPUT"
+          echo "Eval sets: $sets"
+
+      - name: Install flyctl
+        if: steps.fly.outputs.available == 'true' && steps.sets.outputs.sets != ''
+        run: |
+          curl -L https://fly.io/install.sh | sh -s 0.4.102
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+
+      - name: Run harness on Fly and post the report
+        id: job
+        if: steps.fly.outputs.available == 'true' && steps.sets.outputs.sets != ''
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.event_name == 'pull_request' && secrets.GITHUB_TOKEN || '' }}
+          VERDAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVAL_SETS: ${{ steps.sets.outputs.sets }}
+          RUNS: ${{ github.event.inputs.runs || '2' }}
+          WAIT_TIMEOUT: 180m
+        run: scripts/ci/fly_prompt_job.sh evaluate
+
+      - name: Destroy the machine if the job was cancelled
+        if: always() && steps.job.outputs.machine_id != ''
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: fly machine destroy "${{ steps.job.outputs.machine_id }}" -a processing-worker --force || true
