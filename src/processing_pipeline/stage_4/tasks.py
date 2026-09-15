@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import postprocess_snippet
+from processing_pipeline.stage_3.models import apply_evidence_caps
 from processing_pipeline.stage_4.executor import Stage4Executor
 from processing_pipeline.supabase_utils import SupabaseClient
 from utils import optional_task
@@ -101,6 +102,38 @@ def submit_snippet_review_result(
     )
 
 
+def extract_stage_3_verification_evidence(grounding_metadata) -> dict | None:
+    """Return the Stage 3 structured search record from a snippet's grounding_metadata.
+
+    Stage 3 writes the verification_evidence dict itself (``searches_performed`` / ``verification_summary``);
+    after a Stage 4 review it lives under ``stage_3_verification_evidence``. Anything else yields None.
+    """
+    if isinstance(grounding_metadata, str):
+        try:
+            grounding_metadata = json.loads(grounding_metadata)
+        except ValueError:
+            return None
+    if not isinstance(grounding_metadata, dict):
+        return None
+    if isinstance(grounding_metadata.get("stage_3_verification_evidence"), dict):
+        return grounding_metadata["stage_3_verification_evidence"]
+    if "searches_performed" in grounding_metadata:
+        return grounding_metadata
+    return None
+
+
+def merge_grounding_metadata(
+    stage_4_grounding_metadata: str | None, stage_3_verification_evidence, evidence_gate
+) -> str:
+    """Combine the Stage 4 research record (JSON string or None) with the Stage 3 search record and the gate."""
+    merged = json.loads(stage_4_grounding_metadata) if stage_4_grounding_metadata else {}
+    if stage_3_verification_evidence:
+        merged["stage_3_verification_evidence"] = stage_3_verification_evidence
+    if evidence_gate and evidence_gate.get("applied"):
+        merged["evidence_gate"] = evidence_gate
+    return json.dumps(merged)
+
+
 @optional_task(log_prints=True)
 async def process_snippet(supabase_client, snippet, prompt_versions):
     try:
@@ -134,6 +167,15 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
             prompt_versions=prompt_versions,
             reviewer_model=reviewer_model,
         )
+
+        # Deterministic evidence gate. The reviewer output has no structured evidence of its own, so the
+        # falsity check relies on the Stage 3 search record preserved in grounding_metadata.
+        stage_3_evidence = extract_stage_3_verification_evidence(previous_analysis.get("grounding_metadata"))
+        response = apply_evidence_caps(response, verification_evidence=stage_3_evidence)
+        evidence_gate = response.pop("evidence_gate")
+        if evidence_gate.get("applied"):
+            print(f"Evidence gate applied: {evidence_gate['note']}")
+        grounding_metadata = merge_grounding_metadata(grounding_metadata, stage_3_evidence, evidence_gate)
 
         print("Review completed. Updating the snippet in Supabase")
         submit_snippet_review_result(supabase_client, snippet["id"], response, grounding_metadata, reviewer_model.value)
