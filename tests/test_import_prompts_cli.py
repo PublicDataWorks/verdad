@@ -1,6 +1,5 @@
 """Tests for the import / list / diff commands of src/scripts/import_prompts_to_db.py (no database access)."""
 
-import json
 import os
 import sys
 from types import SimpleNamespace
@@ -101,7 +100,7 @@ class TestClient:
     def test_create_client_requires_env(self, monkeypatch):
         monkeypatch.delenv("SUPABASE_URL", raising=False)
         monkeypatch.delenv("SUPABASE_KEY", raising=False)
-        with pytest.raises(ValueError, match="SUPABASE_URL and SUPABASE_KEY"):
+        with pytest.raises(mod.MissingEnvError, match="SUPABASE_URL and SUPABASE_KEY"):
             mod._create_client()
 
     def test_create_client_uses_env(self, env, monkeypatch):
@@ -176,7 +175,7 @@ class TestImport:
     def test_requires_env_even_for_dry_run(self, monkeypatch):
         monkeypatch.delenv("SUPABASE_URL", raising=False)
         monkeypatch.delenv("SUPABASE_KEY", raising=False)
-        with pytest.raises(ValueError, match="SUPABASE_URL and SUPABASE_KEY"):
+        with pytest.raises(mod.MissingEnvError, match="SUPABASE_URL and SUPABASE_KEY"):
             mod.import_prompts("1.0.0", "desc", dry_run=True)
 
     def test_dry_run_previews_without_a_client(self, env, monkeypatch, capsys):
@@ -202,12 +201,9 @@ class TestImport:
         assert payload["p_version"] == "2.0.0"
         assert payload["p_description"] == "new"
         assert payload["p_set_active"] is True
-        assert payload["p_system_instruction"] == mod.read_file(
-            "prompts/stage_1/preprocess/initial_detection_system_instruction.md"
-        )
-        assert payload["p_output_schema"] == mod.read_json(
-            "prompts/stage_1/preprocess/initial_detection_output_schema.json"
-        )
+        local = mod.load_local_prompt(mod.PROMPT_MAPPING[INITIAL_DETECTION])
+        assert payload["p_system_instruction"] == local["system_instruction"]
+        assert payload["p_output_schema"] == local["output_schema"]
         out = capsys.readouterr().out
         assert "Created prompt version: new-row" in out
         assert "Set as active version for stage_1/initial_detection" in out
@@ -258,7 +254,7 @@ class TestList:
 
 class TestMain:
     def test_import_command(self, monkeypatch):
-        import_prompts = MagicMock()
+        import_prompts = MagicMock(return_value=0)
         monkeypatch.setattr(mod, "import_prompts", import_prompts)
         argv = [
             "prog",
@@ -279,7 +275,7 @@ class TestMain:
         )
 
     def test_import_command_defaults(self, monkeypatch):
-        import_prompts = MagicMock()
+        import_prompts = MagicMock(return_value=0)
         monkeypatch.setattr(mod, "import_prompts", import_prompts)
         monkeypatch.setattr(sys, "argv", ["prog", "import", "--version", "1.2.0"])
         mod.main()
@@ -290,9 +286,32 @@ class TestMain:
     def test_list_command(self, monkeypatch):
         list_versions = MagicMock()
         monkeypatch.setattr(mod, "list_versions", list_versions)
-        monkeypatch.setattr(sys, "argv", ["prog", "list"])
+        monkeypatch.setattr(sys, "argv", ["prog", "list", "--active"])
         mod.main()
-        list_versions.assert_called_once_with()
+        list_versions.assert_called_once_with(active_only=True)
+
+    def test_from_manifest_command(self, monkeypatch):
+        import_from_manifest = MagicMock(return_value=0)
+        monkeypatch.setattr(mod, "import_from_manifest", import_from_manifest)
+        monkeypatch.setattr(sys, "argv", ["prog", "import", "--from-manifest", "--dry-run"])
+        mod.main()
+        import_from_manifest.assert_called_once_with(dry_run=True)
+
+    def test_import_requires_exactly_one_source(self, monkeypatch):
+        for argv in (["prog", "import"], ["prog", "import", "--version", "1.0.0", "--from-manifest"]):
+            monkeypatch.setattr(sys, "argv", argv)
+            with pytest.raises(SystemExit) as exc:
+                mod.main()
+            assert exc.value.code == 2
+
+    def test_missing_env_exits_with_code_2(self, monkeypatch, capsys):
+        monkeypatch.delenv("SUPABASE_URL", raising=False)
+        monkeypatch.delenv("SUPABASE_KEY", raising=False)
+        monkeypatch.setattr(sys, "argv", ["prog", "list"])
+        with pytest.raises(SystemExit) as exc:
+            mod.main()
+        assert exc.value.code == mod.MISSING_ENV_EXIT_CODE
+        assert "SUPABASE_URL and SUPABASE_KEY" in capsys.readouterr().err
 
     def test_diff_command_exits_with_status(self, monkeypatch):
         diff_prompts = MagicMock(return_value=1)
@@ -315,8 +334,42 @@ class TestMain:
         assert "usage:" in capsys.readouterr().out
 
 
-def test_read_json_and_read_file(tmp_path):
-    (tmp_path / "a.json").write_text(json.dumps({"k": 1}), encoding="utf-8")
-    (tmp_path / "a.md").write_text("text", encoding="utf-8")
-    assert mod.read_json(str(tmp_path / "a.json")) == {"k": 1}
-    assert mod.read_file(str(tmp_path / "a.md")) == "text"
+def manifest_client(db_rows, rpc_result=None):
+    """A client whose prompt_versions listing returns db_rows and whose upsert RPC returns rpc_result"""
+    client = MagicMock()
+    client.table.return_value.select.return_value.execute.return_value = SimpleNamespace(data=db_rows)
+    client.rpc.return_value.execute.return_value = SimpleNamespace(data=rpc_result)
+    return client
+
+
+class TestImportFromManifest:
+    def test_imports_only_entries_whose_version_differs(self, env, monkeypatch, capsys):
+        current = {"stage": "stage_3", "sub_stage": None, "version": mod.MANIFEST["stage_3"]["version"], "is_active": True}
+        client = manifest_client([current], rpc_result={"id": "new-row"})
+        monkeypatch.setattr(mod, "create_client", MagicMock(return_value=client))
+
+        assert mod.import_from_manifest() == 0
+
+        imported = [c.args[1] for c in client.rpc.call_args_list]
+        assert len(imported) == len(mod.MANIFEST) - 1
+        assert all(p["p_set_active"] is True for p in imported)
+        assert ("stage_3", None) not in {(p["p_stage"], p["p_sub_stage"]) for p in imported}
+        out = capsys.readouterr().out
+        assert "stage_3" in out and "up-to-date" in out
+        assert f"Imported {len(mod.MANIFEST) - 1} entries; 1 up to date; 0 error(s)." in out
+
+    def test_inactive_existing_version_is_a_conflict(self, env, monkeypatch, capsys):
+        rows = []
+        for label, entry in mod.MANIFEST.items():
+            stage, sub_stage = mod.split_stage_label(label)
+            rows.append({"stage": stage, "sub_stage": sub_stage, "version": entry["version"], "is_active": False})
+        client = manifest_client(rows)
+        monkeypatch.setattr(mod, "create_client", MagicMock(return_value=client))
+
+        assert mod.import_from_manifest(dry_run=True) == len(mod.MANIFEST)
+
+        client.rpc.assert_not_called()
+        out = capsys.readouterr().out
+        assert "DRY RUN MODE" in out
+        assert "Conflict: stage_3: version" in out
+        assert f"Would import 0 entries; 0 up to date; {len(mod.MANIFEST)} error(s)." in out

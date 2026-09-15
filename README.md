@@ -282,10 +282,12 @@ python scripts/run_stage.py --stage 3 --snippet-id <uuid> --skip-review
 python scripts/run_stage.py --stage 4 --snippet-id <uuid>
 ```
 
-Prompts are read from the `prompt_versions` table, not from `prompts/`. After editing a prompt file, import it:
+Prompts are read from the `prompt_versions` table, not from `prompts/`. To change one, edit the file, bump its
+entry in `prompts/manifest.json` and open a PR: CI evaluates the change and, on merge to `main`, imports it
+(`docs/PROMPT_EVALUATION.md`). To import by hand:
 
 ```bash
-PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py import --version 1.2.0 --description "..." --dry-run
+PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py import --from-manifest --dry-run
 ```
 
 ## Contributing

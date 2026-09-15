@@ -7,8 +7,10 @@ paths:
 
 ## What conftest already does
 
-`tests/conftest.py` inserts `<repo>/src` on `sys.path` (so imports are `from processing_pipeline...`, not
-`from src...`) and sets dummy `GOOGLE_GEMINI_KEY`, `GOOGLE_GEMINI_PAID_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`,
+`tests/conftest.py` inserts `<repo>/src` on `sys.path` (so pipeline imports are `from processing_pipeline...`;
+only the `src/scripts/*` tests import `from src.scripts ...`, because those scripts import
+`src.processing_pipeline.*` themselves and `pythonpath = ["."]` in `pyproject.toml` puts the repo root on the
+path) and sets dummy `GOOGLE_GEMINI_KEY`, `GOOGLE_GEMINI_PAID_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`,
 `R2_*` and `SENTRY_DSN` **before** any test imports. It also sets `ENABLE_PREFECT_DECORATOR=false`, which
 `optional_flow`/`optional_task` read at import time, so flows and tasks are plain functions in tests - call
 them directly, do not expect Prefect behavior, and do not import anything from `src/` before conftest runs.

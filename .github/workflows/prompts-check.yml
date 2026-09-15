@@ -1,0 +1,50 @@
+name: Prompts check
+
+on:
+  pull_request:
+    paths:
+      - "prompts/**"
+      - "src/scripts/**"
+      - "src/processing_pipeline/stage_3/**"
+      - "tests/test_evaluate_prompt.py"
+      - "tests/test_prompt_manifest.py"
+      - "tests/test_import_prompts_diff.py"
+      - "tests/test_post_pr_comment.py"
+      - "tests/test_upload_eval_artifacts.py"
+      - "tests/test_check_manifest_bump.py"
+      - "tests/processing_pipeline/test_stage_3_tool_loop.py"
+      - "scripts/ci/**"
+      - ".github/workflows/prompts-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Unit tests (harness, manifest, Stage 3 tool loop, CI helpers)
+        run: |
+          python -m pytest tests/test_evaluate_prompt.py tests/test_prompt_manifest.py tests/test_import_prompts_diff.py \
+            tests/test_post_pr_comment.py tests/test_upload_eval_artifacts.py tests/test_check_manifest_bump.py \
+            tests/processing_pipeline/test_stage_3_tool_loop.py --no-cov
+
+      - name: Changed prompt files need a manifest version bump
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          PYTHONPATH=. python scripts/ci/check_manifest_bump.py "$BASE_SHA"
+
+      - name: Shell syntax
+        run: bash -n scripts/ci/fly_prompt_job.sh scripts/ci/run_prompt_job.sh
