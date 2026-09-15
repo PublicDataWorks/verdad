@@ -18,6 +18,7 @@ from processing_pipeline.stage_3 import (
     process_snippet,
     update_snippet_in_supabase,
 )
+from processing_pipeline.stage_3.executors import USAGE_FIELDS
 
 SNIPPET_SELECT = (
     "*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, "
@@ -34,6 +35,20 @@ PROMPT_VERSION = {
 
 class StopLoop(Exception):
     """Raised from a mocked sleep to break out of a repeat=True flow loop"""
+
+
+def text_part(text, thought=False):
+    """A response part carrying text (or a thought summary) and no tool call"""
+    return Mock(text=text, thought=thought, function_call=None)
+
+
+def model_response(text, parts=(), finish_reason=FinishReason.STOP):
+    """A generate_content response double: one candidate, no tool calls, no token usage"""
+    return Mock(
+        text=text,
+        usage_metadata=None,
+        candidates=[Mock(content=Mock(parts=list(parts)), finish_reason=finish_reason)],
+    )
 
 
 class TestStage3:
@@ -61,6 +76,8 @@ class TestStage3:
         uploaded = Mock()
         uploaded.state.name = "PROCESSED"
         uploaded.name = "files/test-audio"
+        uploaded.uri = "https://files.example/test-audio"
+        uploaded.mime_type = "audio/mpeg"
         client.files.upload.return_value = uploaded
         client.files.get.return_value = uploaded
         client.aio.models.generate_content = AsyncMock()
@@ -303,7 +320,7 @@ class TestStage3:
 
     def test_process_snippet_invalid_response(self, mock_supabase_client, sample_snippet, mock_gemini_client):
         """Unparseable analysis + failed schema restructuring is recorded as an error on the snippet"""
-        analysis_response = Mock(text="not json at all", candidates=[Mock(content=Mock(parts=[]))])
+        analysis_response = model_response("not json at all")
         restructure_response = Mock(parsed=None, candidates=[Mock(finish_reason=FinishReason.STOP)])
         mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
 
@@ -328,7 +345,7 @@ class TestStage3:
         )
 
     def test_stage_3_executor_restructures_with_schema(self, mock_gemini_client):
-        analysis_response = Mock(text='{"test": "response"}', candidates=[Mock(content=Mock(parts=[]))])
+        analysis_response = model_response('{"test": "response"}')
         restructure_response = Mock(parsed={"test": "response", "is_convertible": True})
         mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
 
@@ -337,11 +354,15 @@ class TestStage3:
         assert result["response"] == {"test": "response", "is_convertible": True}
         assert result["grounding_metadata"] == "null"  # no verification_evidence in the output
         assert result["thought_summaries"] is None
+        assert result["usage"] == dict.fromkeys(USAGE_FIELDS, 0)  # the response double reports no usage
         assert mock_gemini_client.aio.models.generate_content.await_count == 2
         first_call = mock_gemini_client.aio.models.generate_content.await_args_list[0].kwargs
         assert first_call["model"] == GeminiModel.GEMINI_2_5_PRO
-        assert first_call["contents"][0].startswith("Analyze this clip.")
-        assert "BREAKING NEWS PROTOCOL" not in first_call["contents"][0]  # recording is years old
+        prompt_part, audio_part = first_call["contents"][0].parts
+        assert prompt_part.text.startswith("Analyze this clip.")
+        assert "BREAKING NEWS PROTOCOL" not in prompt_part.text  # recording is years old
+        assert audio_part.file_data.file_uri == "https://files.example/test-audio"
+        assert first_call["config"].automatic_function_calling.disable is True
         second_call = mock_gemini_client.aio.models.generate_content.await_args_list[1].kwargs
         assert second_call["model"] == GeminiModel.GEMINI_2_5_FLASH
         assert second_call["config"].response_schema is not None
@@ -349,11 +370,9 @@ class TestStage3:
         mock_gemini_client.files.delete.assert_called_once_with(name="files/test-audio")
 
     def test_stage_3_executor_collects_thoughts(self, mock_gemini_client):
-        thought_part = Mock(thought=True, text="thinking...")
-        answer_part = Mock(thought=False, text='{"test": "response"}')
-        analysis_response = Mock(
-            text='{"test": "response"}', candidates=[Mock(content=Mock(parts=[thought_part, answer_part]))]
-        )
+        thought_part = text_part("thinking...", thought=True)
+        answer_part = text_part('{"test": "response"}')
+        analysis_response = model_response('{"test": "response"}', parts=[thought_part, answer_part])
         restructure_response = Mock(parsed={"test": "response", "is_convertible": True})
         mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
 
@@ -367,7 +386,7 @@ class TestStage3:
         processing.name = "files/test-audio"
         mock_gemini_client.files.upload.return_value = processing
         mock_gemini_client.aio.models.generate_content.side_effect = [
-            Mock(text='{"x": 1}', candidates=[Mock(content=Mock(parts=[]))]),
+            model_response('{"x": 1}'),
             Mock(parsed={"is_convertible": True}),
         ]
 
@@ -378,8 +397,8 @@ class TestStage3:
         mock_gemini_client.files.get.assert_called_once_with(name="files/test-audio")
 
     def test_stage_3_executor_max_tokens(self, mock_gemini_client):
-        mock_gemini_client.aio.models.generate_content.return_value = Mock(
-            text=None, candidates=[Mock(content=Mock(parts=[]), finish_reason=FinishReason.MAX_TOKENS)]
+        mock_gemini_client.aio.models.generate_content.return_value = model_response(
+            None, finish_reason=FinishReason.MAX_TOKENS
         )
 
         with pytest.raises(ValueError, match="too long"):
@@ -389,7 +408,7 @@ class TestStage3:
 
     def test_stage_3_executor_not_convertible(self, mock_gemini_client):
         mock_gemini_client.aio.models.generate_content.side_effect = [
-            Mock(text="prose", candidates=[Mock(content=Mock(parts=[]))]),
+            model_response("prose"),
             Mock(parsed={"is_convertible": False}),
         ]
 

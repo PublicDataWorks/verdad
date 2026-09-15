@@ -1,0 +1,31 @@
+{
+  "description": "Analyst-reported true claims labelled Fabricated Content (Sep 2026 comment analysis)",
+  "reported": [
+    "85add309-e0ad-4e13-a0c5-ecc2da0c3a89",
+    "36a7de99-501a-4dbf-bb04-f1c7ac5a839e",
+    "a0669f8f-c093-4b7e-9580-cc3c4d328cbd",
+    "b0f5b278-c749-4a02-a721-665df39edeb5",
+    "ed9a0e83-fa61-4934-9004-6eaf4f96e6b4",
+    "de1984fb-9821-4d1b-9c82-c62222bd7b6c",
+    "402a806c-e2b0-46a7-a67c-f61e8814bc00",
+    "02b0b8fe-7631-4fc5-a2fc-6759a7a3622c",
+    "9826dccf-5123-4c3c-bf58-5d9ab5541931",
+    "29061ae8-405d-4b81-a63b-3b6695661d38",
+    "45a01704-92e1-44e6-8dd5-53d4c61e4910",
+    "e48b6bf7-b23e-4a28-9a3c-5376b6e15449"
+  ],
+  "control": [
+    "e1cca2ee-8522-4b93-b18b-efa173d88c77",
+    "ed8e2e7e-9bb4-4cbd-954a-520e04a5340a",
+    "3bf8fe72-4652-4960-a79b-d5e217abac32",
+    "7d18be46-4491-41d7-b953-d8b131fca831",
+    "f4bbd6a5-0b4a-4716-8b7e-787b9b53d78f",
+    "e2f22586-dec7-435b-86dc-98fb55de09db",
+    "f3759ada-778a-4815-a0b5-f5c875cda2bf",
+    "1a8beccc-b191-48e4-99be-03f538ba5be1",
+    "59f4704f-9000-4589-9a53-9c5274308bc6",
+    "96038f67-9f5b-450a-ba81-2e2ee7cabc8b",
+    "f61dce35-92f0-4fb1-a271-fffa350a89dd",
+    "4303ae8b-7ee1-4795-82d7-610fae7c6660"
+  ]
+}
