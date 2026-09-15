@@ -18,6 +18,7 @@ def credibility(tmp_path):
         "apnews.com,1,wire,US,en,ap,x,\n"
         "reuters.com,1,wire,GB,en,reuters,x,\n"
         "politifact.com,1,fact_checker,US,en,poynter,x,\n"
+        "nytimes.com,2,broadsheet,US,en,nyt,x,\n"
         "rt.com,5,state_controlled,RU,en,ano-tv-novosti,EU:Reg2022/350,\n",
         encoding="utf-8",
     )
@@ -81,6 +82,25 @@ class TestCapApplied:
             {"domain": "apnews.com", "tier": 1, "category": "wire"},
             {"domain": "rt.com", "tier": 5, "category": "state_controlled"},
         ]
+
+    def test_unlisted_official_source_plus_tier2_is_not_capped(self, credibility):
+        analysis = _analysis(urls=["https://www.michigan.gov/sos/elections", "https://nytimes.com/b"])
+        result = apply_credibility_gate(analysis, "WLEL", credibility=credibility)
+        gate = result["credibility_gate"]
+        assert not gate["capped"] and result["confidence_scores"]["overall"] == 98
+        assert gate["corroboration"]["satisfied"]
+        assert sorted(gate["corroboration"]["independent_sources"]) == ["michigan.gov", "nytimes.com"]
+        assert gate["evidence_tiers"] == [
+            {"domain": "michigan.gov", "tier": 1, "category": "official", "source": "heuristic:official_tld"},
+            {"domain": "nytimes.com", "tier": 2, "category": "broadsheet"},
+        ]
+        assert CREDIBILITY_GATE_NOTE_PREFIX not in result["explanation"]["english"]
+
+    def test_unlisted_official_source_alone_still_caps(self, credibility):
+        result = apply_credibility_gate(_analysis(urls=["https://www.state.gov/x"]), "WLEL", credibility=credibility)
+        gate = result["credibility_gate"]
+        assert gate["capped"] and "only one contradicting source (state.gov, tier 1)" in gate["note"]
+        assert gate["evidence_tiers"][0]["source"] == "heuristic:official_tld"
 
     def test_stale_note_is_replaced_not_duplicated(self, credibility):
         first = apply_credibility_gate(_analysis(urls=["https://apnews.com/a"]), "SPMN", credibility=credibility)

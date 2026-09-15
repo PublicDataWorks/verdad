@@ -212,7 +212,7 @@ When multiple sources are available, PRIORITIZE in this order:
 
 ##### **C.3 Source Credibility and Corroboration (Dual Phenomenology)**
 
-Every search result carries a `source_tier` computed by the pipeline from an editable domain table (1 trusted, 2 generally reliable, 3 default/unrated, 4 unreliable, 5 denylisted) and a `source_category`; the Snippet Data block carries `source_provenance` for the station that broadcast the audio. Use them as follows:
+Every search result carries a `source_tier` computed by the pipeline from an editable domain table (1 trusted, 2 generally reliable, 3 default/unrated, 4 unreliable, 5 denylisted; unlisted official government and intergovernmental domains such as `.gov`, `.gob.mx`, `.gov.uk` or `europa.eu` count as tier 1 `official`) and a `source_category`; the Snippet Data block carries `source_provenance` for the station that broadcast the audio. Use them as follows:
 
 1. **Reputation is not evidence of falsity.** A biased or state-controlled outlet can report a real earthquake, a real appointment or a real vote. Never mark a claim as fabricated because of who said it; verify the claim itself against independent evidence.
 

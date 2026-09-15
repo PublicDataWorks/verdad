@@ -44,6 +44,7 @@ larepublica.pe,1,fact_checker,PE,es,grupo-la-republica,IFCN Verified Signatory '
 lasillavacia.com,1,fact_checker,CO,es,lasillavacia.com,IFCN:signatory,
 leadstories.com,1,fact_checker,US,en;es,leadstories.com,IFCN Verified Signatory; EFCSN member (lead-stories),Has Spanish-language fact-checks
 lupa.news,1,fact_checker,BR,pt,lupa.news,"IFCN signatory (In Renewal, approved 2024-01-19); EFCSN member (lupa); LatamChequea",Portuguese-language
+lsm.lv,1,public_broadcaster,LV,lv;ru;en,lsm.lv,Ownership:public-broadcaster-statutory; Latvian Public Media (Latvijas Sabiedriskie mediji) established by the Public Electronic Media Law (2020) with an independent council; EBU member,Joint portal of LTV and Latvijas Radio; English edition at eng.lsm.lv; Russian edition at rus.lsm.lv
 malaespinacheck.cl,1,fact_checker,CL,es,malaespinacheck.cl,IFCN Verified Signatory (approved 2025-10-27); LatamChequea member,
 maldita.es,1,fact_checker,ES,es,maldita,"IFCN signatory (status 'In Renewal', last approved 2023-11-03); EFCSN member (fundaci-n-maldita-es); LatamChequea; co-founder of Factchequeado",Tracks Spanish disinformation sites; Maldito Bulo
 misbar.com,1,fact_checker,JO/QA,ar;en,misbar.com,NOT found in current IFCN signatory JSON (2026-09); previously a signatory,Tier 2 pending status check
@@ -98,6 +99,7 @@ es.wikipedia.org,2,other,INT,es,wikimedia,WikipediaRSP:generally-unreliable,See 
 excelsior.com.mx,2,broadsheet,MX,es,excelsior.com.mx,No MBFC page found,Tier 3 (unrated) pending admin review
 ft.com,2,broadsheet,GB,en,ft.com,RSP Generally reliable; MBFC High,
 infobae.com,2,broadsheet,AR,es;en,infobae.com,MBFC Left-Center / HIGH / High Credibility (mediabiasfactcheck.com/infobae/); Lin2023 pc1=0.775,Very high traffic across LatAm and US Hispanic audiences
+jstor.org,2,other,US,en,ithaka,Ownership:academic; non-profit digital library run by ITHAKA holding peer-reviewed journals and primary sources,Academic archive rather than a news outlet; cite the underlying article
 lajornada.com.mx,2,broadsheet,MX,es,lajornada.com.mx,MBFC Left / HIGH / High Credibility (mediabiasfactcheck.com/la-jornada/),Left-leaning; strong factual record per MBFC
 lanacion.com.ar,2,broadsheet,AR,es,lanacion.com.ar,MBFC Right-Center / HIGH / High Credibility (mediabiasfactcheck.com/la-nacion/),
 laopinion.com,2,broadsheet,US,es,impremedia,MBFC Left-Center / MOSTLY FACTUAL / High Credibility (mediabiasfactcheck.com/la-opinion/),Largest US Spanish-language daily (LA); Impremedia
@@ -109,6 +111,7 @@ miamiherald.com,2,broadsheet,US,en,mcclatchy,WikipediaRSP:generally-reliable,
 milenio.com,2,broadsheet,MX,es,grupo-multimedios,No MBFC page found; no Lin entry,Tier 3 (unrated) pending admin review
 nbcnews.com,2,broadcaster,US,en,comcast,WikipediaRSP:generally-reliable,
 nytimes.com,2,broadsheet,US,en;es,new-york-times-company,Lin2023 pc1=0.859; RSP Generally reliable; MBFC High,NYT en Español discontinued as standalone in 2019 but nytimes.com/es still exists
+oec.world,2,other,US,en;es,oec.world,Ownership:academic; Observatory of Economic Complexity originated at the MIT Media Lab (Collective Learning group) and is run by Datawheel; aggregates UN Comtrade and BACI trade statistics,Trade-statistics reference; the primary data are UN Comtrade
 proceso.com.mx,2,broadsheet,MX,es,proceso.com.mx,No MBFC page found,Tier 3 (unrated) pending admin review
 reforma.com,2,broadsheet,MX,es,grupo-reforma,MBFC Right-Center / HIGH / High Credibility (mediabiasfactcheck.com/reforma/),Paywalled; Grupo Reforma
 skynewsarabia.com,2,broadcaster,AE,ar,skynewsarabia.com,No MBFC page found; no Lin entry; Sky/ADMIC (Abu Dhabi) JV,Tier 3 pending review

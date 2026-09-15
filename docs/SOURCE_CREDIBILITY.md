@@ -55,6 +55,17 @@ subdomains. Lookup falls back through parent domains up to the registrable domai
 own row when present and `rt.com` otherwise, and `en.m.wikipedia.org` resolves to the `wikipedia.org` row. The
 `owner` key defaults to the registrable domain when a row leaves it blank.
 
+**Official domains without a row.** After the table lookup and before the tier-3 default, `official_tier_for()`
+gives hosts on government or intergovernmental suffixes tier 1, category `official`, owner = registrable domain:
+the `.gov`, `.mil` and `.int` TLDs; a `gov.`, `gob.`, `gouv.`, `go.` or `gc.` second-level label under a two-letter
+country code (`km.gov.lv`, `gob.mx`, `service.gov.uk`, `economie.gouv.fr`, `mofa.go.jp`, `canada.gc.ca`); and
+`europa.eu`. These ratings carry `source: "heuristic:official_tld"` in `credibility_gate.evidence_tiers` so an
+analyst can tell a heuristic hit from a table row. An explicit row always wins (`vtv.gob.ve` stays denied), so a
+captured or propaganda government site is handled by adding a row, never by editing the heuristic. The heuristic
+exists because the seed cannot list every ministry: the September 2026 evaluation lost a true positive (Michigan
+voting dates contradicted by michigan.gov) and capped several correct verdicts when unlisted official sources
+(state.gov, eia.gov, km.gov.lv) defaulted to tier 3.
+
 There is deliberately no regex matching. The Pravda / Portal Kombat network follows two shapes: language
 subdomains of one host (`(^|\.)news-pravda\.com$`, e.g. `es.news-pravda.com`), which the parent-domain fallback
 already resolves to the `news-pravda.com` row, and separate registrable domains (`^pravda-[a-z]{2,3}\.com$`, e.g.

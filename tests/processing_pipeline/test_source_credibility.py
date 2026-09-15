@@ -47,6 +47,8 @@ def credibility(tmp_path):
         "actualidad.rt.com,5,state_controlled,RU,es,ano-tv-novosti,EU:Reg2022/350,\n"
         "ria.ru,5,state_controlled,RU,ru,rossiya-segodnya,Ownership:state,\n"
         "bbc.co.uk,1,public_broadcaster,GB,en,bbc,WikipediaRSP:generally-reliable,\n"
+        "vtv.gob.ve,5,state_controlled,VE,es,venezuela-state,Ownership:state,\n"
+        "denied.gov,5,state_controlled,XX,en,xx-state,Ownership:state,a .gov row at tier 5 must beat the heuristic\n"
         "tabloid.example,4,other,GB,en,tabloid,WikipediaRSP:deprecated,\n"
         "uncited.example,4,other,,,,,tier 4 without a citation must be skipped\n"
         "badrow.example,9,wire,,,,,invalid tier must be skipped\n",
@@ -176,6 +178,72 @@ class TestLookup:
         assert instance.tier_for("https://www.reuters.com/x").tier == 1
 
 
+class TestOfficialHeuristic:
+    """Unlisted government / intergovernmental hosts are tier-1 official; lookalikes and explicit rows are not."""
+
+    @pytest.mark.parametrize(
+        "url, expected_domain, expected_owner",
+        [
+            ("https://www.state.gov/x", "state.gov", "state.gov"),
+            ("https://www.eia.gov/outlooks/x", "eia.gov", "eia.gov"),
+            ("https://www.michigan.gov/sos/elections", "michigan.gov", "michigan.gov"),
+            ("https://www.army.mil/x", "army.mil", "army.mil"),
+            ("https://www.nato.int/x", "nato.int", "nato.int"),
+            ("https://www.km.gov.lv/lv/x", "km.gov.lv", "km.gov.lv"),
+            ("https://www.gob.mx/salud", "gob.mx", "gob.mx"),
+            ("https://coronavirus.gob.mx/x", "coronavirus.gob.mx", "coronavirus.gob.mx"),
+            ("https://www.service.gov.uk/x", "service.gov.uk", "service.gov.uk"),
+            ("https://ec.europa.eu/commission/x", "ec.europa.eu", "europa.eu"),
+            ("https://www.economie.gouv.fr/x", "economie.gouv.fr", "gouv.fr"),
+            ("https://www.canada.gc.ca/x", "canada.gc.ca", "gc.ca"),
+            ("https://www.mofa.go.jp/x", "mofa.go.jp", "go.jp"),
+            ("https://www.korea.go.kr/x", "korea.go.kr", "go.kr"),
+        ],
+    )
+    def test_official_hosts_are_tier_1(self, credibility, url, expected_domain, expected_owner):
+        rating = credibility.tier_for(url)
+        assert (rating.domain, rating.tier, rating.category) == (expected_domain, 1, "official")
+        assert (rating.owner, rating.source) == (expected_owner, sc.OFFICIAL_HEURISTIC_SOURCE)
+        assert rating.matched_domain is None and not rating.denylisted
+        assert rating.as_dict() == {
+            "domain": expected_domain,
+            "tier": 1,
+            "category": "official",
+            "source": "heuristic:official_tld",
+        }
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://gov.example.com/x",  # 'gov' label but a generic TLD
+            "https://www.go.com/x",  # Disney, not go.<cc>
+            "https://mygov.com/x",
+            "https://gob.mx.evil.net/x",
+            "https://government.org/x",
+            "https://europa.eu.example.com/x",
+            "https://unknown-blog.example.org/x",
+        ],
+    )
+    def test_lookalikes_keep_the_default_tier(self, credibility, url):
+        rating = credibility.tier_for(url)
+        assert (rating.tier, rating.category, rating.source) == (DEFAULT_TIER, "other", "")
+        assert "source" not in rating.as_dict()
+
+    def test_explicit_row_beats_heuristic(self, credibility):
+        denied = credibility.tier_for("https://www.vtv.gob.ve/x")
+        assert (denied.tier, denied.matched_domain, denied.source) == (DENYLIST_TIER, "vtv.gob.ve", "")
+        assert credibility.tier_for("https://news.denied.gov/x").tier == DENYLIST_TIER
+        listed = credibility.tier_for("https://www.cdc.gov/x")
+        assert (listed.tier, listed.owner, listed.matched_domain, listed.source) == (1, "us-government", "cdc.gov", "")
+
+    def test_official_tier_for_edge_inputs(self):
+        assert sc.official_tier_for("") is None
+        assert sc.official_tier_for("gov") is None
+        assert sc.official_tier_for(".gov") is None
+        assert sc.official_tier_for("https://km.gov.lv/x").domain == "km.gov.lv"
+        assert sc.official_tier_for("who.int").owner == "who.int"
+
+
 class TestIndependence:
     def _r(self, domain, owner, tier=1, category="wire", country=""):
         return DomainRating(domain=domain, tier=tier, category=category, owner=owner, country=country)
@@ -210,6 +278,18 @@ class TestCorroboration:
     def test_tier1_plus_tier2_different_owners_satisfied(self, credibility):
         result = evaluate_corroboration(_items("https://apnews.com/a", "https://nytimes.com/b"), credibility)
         assert result.satisfied and sorted(result.independent_sources) == ["apnews.com", "nytimes.com"]
+
+    def test_unlisted_official_source_plus_tier2_satisfied(self, credibility):
+        # The 2026-09 evaluation lost the Michigan voting-dates true positive to an unlisted .gov at tier 3
+        result = evaluate_corroboration(
+            _items("https://www.michigan.gov/sos/elections", "https://nytimes.com/b"), credibility
+        )
+        assert result.satisfied and sorted(result.independent_sources) == ["michigan.gov", "nytimes.com"]
+        assert result.reason == "two independent tier<=2 sources"
+
+    def test_two_unlisted_official_sources_of_different_governments_satisfied(self, credibility):
+        result = evaluate_corroboration(_items("https://www.km.gov.lv/x", "https://www.state.gov/y"), credibility)
+        assert result.satisfied and sorted(result.independent_sources) == ["km.gov.lv", "state.gov"]
 
     def test_tier1_plus_fact_checker_satisfied(self, credibility):
         # chequeado.com is tier 3 in the fixture, so only the fact-checker rule can satisfy this pair
@@ -301,3 +381,21 @@ class TestSeedCsvValidity:
         assert (pravda.tier, pravda.matched_domain, pravda.owner) == (5, "news-pravda.com", "pravda-network")
         assert seeded.tier_for("https://pravda-es.com/x").owner == "pravda-network"
         assert seeded.tier_for("https://breitbart.com/x").tier == 4  # unreliable, not denied
+
+    def test_seed_answers_the_evaluation_report_gaps(self):
+        """Sources the 2026-09 evaluation left at tier 3 and thereby capped correct falsity verdicts."""
+        seeded = SourceCredibility()
+        lsm = seeded.tier_for("https://www.lsm.lv/raksts/x")
+        assert (lsm.tier, lsm.category, lsm.owner, lsm.matched_domain) == (1, "public_broadcaster", "lsm.lv", "lsm.lv")
+        assert seeded.tier_for("https://eng.lsm.lv/article/x").tier == 1
+        jstor = seeded.tier_for("https://www.jstor.org/stable/1")
+        assert (jstor.tier, jstor.category, jstor.owner) == (2, "other", "ithaka")
+        oec = seeded.tier_for("https://oec.world/en/profile/country/lva")
+        assert (oec.tier, oec.category, oec.owner) == (2, "other", "oec.world")
+        for url in ("https://www.state.gov/x", "https://www.eia.gov/x", "https://www.km.gov.lv/x"):
+            rating = seeded.tier_for(url)
+            assert (rating.tier, rating.category, rating.source) == (1, "official", sc.OFFICIAL_HEURISTIC_SOURCE), url
+        assert evaluate_corroboration(_items("https://www.eia.gov/x", "https://oec.world/y"), seeded).satisfied
+        assert evaluate_corroboration(_items("https://www.km.gov.lv/x", "https://www.lsm.lv/y"), seeded).satisfied
+        # Listed federal agencies still share one owner key and so do not corroborate each other
+        assert not evaluate_corroboration(_items("https://cdc.gov/a", "https://fda.gov/b"), seeded).satisfied

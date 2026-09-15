@@ -5,6 +5,8 @@ Two axes, both admin-editable in Supabase and git-seeded from ``data/source_cred
 * ``source_credibility_domains``: domain -> tier 1..5 (1 trusted: wires, IFCN fact-checkers, official sources,
   independent public broadcasters; 2 generally reliable; 3 default/mixed/unrated, also for unknown domains;
   4 unreliable, never corroborates; 5 denied, excluded from evidence and blocks KB writes), category, owner, country.
+  Unlisted hosts on government / intergovernmental suffixes (.gov, .gob.mx, .gov.uk, europa.eu, ...) get tier 1
+  ``official`` from ``official_tier_for()`` rather than the default, tagged ``source = "heuristic:official_tld"``.
 * ``source_provenance``: station code -> provenance (state_controlled, state_funded_independent, public, ...).
 
 The credibility gate implements *dual phenomenology*: an analysis that asserts something is fabricated needs two
@@ -87,6 +89,7 @@ KNOWN_NETWORKS = {
     "hearst": {"houstonchronicle.com"},
     "herring-networks": {"oann.com"},
     "impremedia": {"laopinion.com"},
+    "ithaka": {"jstor.org"},
     "maldita": {"maldita.es", "factchequeado.com"},
     "mcclatchy": {"miamiherald.com", "elnuevoherald.com"},
     "nash-holdings": {"washingtonpost.com"},
@@ -118,6 +121,12 @@ _GATE_NOTE_RE = re.compile(r"\s*" + re.escape(CREDIBILITY_GATE_NOTE_PREFIX) + r"
 _STRIP_PREFIXES = ("www.", "m.", "amp.")
 # Second-level labels under two-letter ccTLDs (co.uk, com.mx, gob.ve, ...) that are not themselves registrable
 _CC_SECOND_LEVEL = frozenset({"co", "com", "org", "net", "gov", "gob", "edu", "ac", "mil", "info"})
+
+# Government / intergovernmental suffixes recognised without a table row; see official_tier_for()
+OFFICIAL_HEURISTIC_SOURCE = "heuristic:official_tld"
+_OFFICIAL_TLDS = frozenset({"gov", "mil", "int"})  # state.gov, army.mil, who.int / nato.int
+_OFFICIAL_CC_SECOND_LEVEL = frozenset({"gov", "gob", "gouv", "go", "gc"})  # gov.uk, gob.mx, gouv.fr, go.jp, gc.ca
+_OFFICIAL_SUFFIXES = ("europa.eu",)  # EU institutions: ec.europa.eu, eur-lex.europa.eu
 
 
 def normalize_domain(url_or_host) -> str:
@@ -175,14 +184,18 @@ class DomainRating:
     category: str = DEFAULT_CATEGORY
     owner: str = ""
     country: str = ""
-    matched_domain: str | None = None  # table row that matched, None when the default applied
+    matched_domain: str | None = None  # table row that matched, None when the default or a heuristic applied
+    source: str = ""  # how the rating was derived when not from a row, e.g. OFFICIAL_HEURISTIC_SOURCE
 
     @property
     def denylisted(self) -> bool:
         return self.tier == DENYLIST_TIER
 
     def as_dict(self) -> dict:
-        return {"domain": self.domain, "tier": self.tier, "category": self.category}
+        record = {"domain": self.domain, "tier": self.tier, "category": self.category}
+        if self.source:
+            record["source"] = self.source  # auditable in credibility_gate.evidence_tiers
+        return record
 
 
 @dataclass(frozen=True)
@@ -209,6 +222,40 @@ class CorroborationResult:
 
     def as_dict(self) -> dict:
         return asdict(self)
+
+
+def official_tier_for(host: str) -> DomainRating | None:
+    """Tier-1 ``official`` rating for a government or intergovernmental host, or None when the host is not one.
+
+    The seed cannot list every ministry, agency or state portal, and an unlisted official source defaulting to
+    tier 3 loses real contradictions (michigan.gov on voting dates, km.gov.lv, state.gov, eia.gov in the 2026-09
+    evaluation). Recognised shapes, matched on the host's suffix because the registrable domain of ``km.gov.lv``
+    is the third label:
+
+    * generic TLDs reserved for governments and treaty organisations: ``.gov``, ``.mil``, ``.int``;
+    * a government second-level label under a two-letter country code: ``gov.uk``, ``km.gov.lv``, ``gob.mx``,
+      ``economie.gouv.fr``, ``mofa.go.jp``, ``canada.gc.ca``;
+    * EU institutions under ``europa.eu``.
+
+    ``gov.example.com`` or ``go.com`` do not qualify (the TLD is not a country code). Callers apply this only after
+    the table lookup, so an explicit row (``vtv.gob.ve`` at tier 5) always wins. Owner is the registrable domain,
+    and ``source`` names the heuristic so the rating can be told apart from a table row in the gate record.
+    """
+    host = normalize_domain(host)
+    labels = host.split(".")
+    if len(labels) < 2 or not all(labels):
+        return None
+    tld, second = labels[-1], labels[-2]
+    official = (
+        tld in _OFFICIAL_TLDS
+        or (len(tld) == 2 and tld.isalpha() and second in _OFFICIAL_CC_SECOND_LEVEL)
+        or any(host == suffix or host.endswith("." + suffix) for suffix in _OFFICIAL_SUFFIXES)
+    )
+    if not official:
+        return None
+    return DomainRating(
+        domain=host, tier=1, category="official", owner=registrable_domain(host), source=OFFICIAL_HEURISTIC_SOURCE
+    )
 
 
 # --- Row validation (shared by the loader, the import script and the CSV tests) ---------------------------------
@@ -356,7 +403,8 @@ class SourceCredibility:
             self.load()
 
     def tier_for(self, url_or_host) -> DomainRating:
-        """Rating for a URL or host, falling back through parent domains; unknown hosts get the default tier (3)."""
+        """Rating for a URL or host: its row or a parent domain's row, else the official-domain heuristic, else the
+        default tier (3)."""
         self._ensure_loaded()
         host = normalize_domain(url_or_host)
         for candidate in domain_candidates(host):
@@ -370,6 +418,9 @@ class SourceCredibility:
                     country=rating.country,
                     matched_domain=candidate,
                 )
+        official = official_tier_for(host)
+        if official is not None:
+            return official
         return DomainRating(domain=host, owner=registrable_domain(host) if host else "")
 
     def provenance_for(self, station_code) -> StationProvenance:
