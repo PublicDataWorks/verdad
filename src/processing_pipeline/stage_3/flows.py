@@ -8,6 +8,7 @@ from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import ProcessingStatus, PromptStage
+from processing_pipeline.source_credibility import configure_source_credibility
 from processing_pipeline.stage_3.tasks import (
     download_audio_file_from_s3,
     fetch_a_new_snippet_from_supabase,
@@ -56,6 +57,7 @@ async def in_depth_analysis(snippet_ids, skip_review, repeat):
 
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
+    configure_source_credibility(supabase_client)  # domain tiers / station provenance tables (CSV fallback)
 
     # Load prompt version
     prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_3)

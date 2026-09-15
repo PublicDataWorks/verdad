@@ -1,6 +1,7 @@
 # WARNING: Do not delete the docstrings of exported functions (search_knowledge_base, upsert_knowledge_entry, deactivate_knowledge_entry).
 # They are used by Gemini ADK as tool descriptions.
 
+import json
 import os
 
 from google.adk.tools.tool_context import ToolContext
@@ -20,6 +21,7 @@ from processing_pipeline.kb_sources import (
     url_appears_in_text,
 )
 from processing_pipeline.processing_utils import normalize_embedding
+from processing_pipeline.source_credibility import get_source_credibility
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -112,6 +114,12 @@ def validate_kb_source(
         )
     if publication_date is not None and parse_iso_date(publication_date) is None:
         return f"publication_date '{publication_date}' is not an ISO date (YYYY-MM-DD)."
+    rating = get_source_credibility().tier_for(source_url)
+    if rating.denylisted:
+        return (
+            f"source_url domain '{rating.domain}' is denylisted (credibility tier 5, {rating.category}) and cannot "
+            "be cited as KB evidence. Cite an independent wire service, fact-checker or major outlet instead."
+        )
     if not web_research:
         print("  [KB Upsert] web research text unavailable in session state; skipping URL provenance check")
     elif not url_appears_in_text(source_url, web_research):
@@ -125,6 +133,28 @@ def validate_kb_source(
 def _web_research_text(tool_context: ToolContext | None) -> str | None:
     value = tool_context.state.get("web_research") if tool_context is not None else None
     return value if isinstance(value, str) and value.strip() else None
+
+
+def _station_code_from_context(tool_context: ToolContext | None) -> str | None:
+    """The reviewed snippet's station code, from the metadata JSON the Stage 4 executor puts in session state."""
+    metadata = tool_context.state.get("metadata") if tool_context is not None else None
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except ValueError:
+            return None
+    return metadata.get("radio_station_code") if isinstance(metadata, dict) else None
+
+
+def station_provenance_error(station_code: str | None) -> str | None:
+    """Snippets from state-controlled stations may not seed knowledge-base facts."""
+    provenance = get_source_credibility().provenance_for(station_code)
+    if provenance.state_controlled:
+        return (
+            f"This snippet was broadcast by a state-controlled source ({provenance.station_code}); facts surfaced "
+            "while reviewing it are not written to the knowledge base."
+        )
+    return None
 
 
 def upsert_knowledge_entry(
@@ -174,6 +204,10 @@ def upsert_knowledge_entry(
     """
     if confidence_score < 70:
         return _error("Confidence score must be >= 70 to store in the knowledge base.")
+
+    provenance_error = station_provenance_error(_station_code_from_context(tool_context))
+    if provenance_error:
+        return _error(provenance_error)
 
     source_error = validate_kb_source(
         source_url, source_name, source_type, publication_date, _web_research_text(tool_context)

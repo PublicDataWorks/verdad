@@ -4,6 +4,7 @@ import os
 from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import PromptStage
+from processing_pipeline.source_credibility import configure_source_credibility
 from processing_pipeline.stage_4.constants import Stage4SubStage
 from processing_pipeline.stage_4.tasks import (
     fetch_a_ready_for_review_snippet_from_supabase,
@@ -26,6 +27,7 @@ async def analysis_review(snippet_ids, repeat):
         supabase_url=os.getenv("SUPABASE_URL"),
         supabase_key=os.getenv("SUPABASE_KEY"),
     )
+    configure_source_credibility(supabase_client)  # domain tiers / station provenance tables (CSV fallback)
 
     # Load prompt versions from DB
     prompt_versions = {
