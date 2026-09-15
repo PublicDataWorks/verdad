@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from processing_pipeline.kb_sources import is_http_url
+from processing_pipeline.kb_sources import is_http_url, url_key
 
 
 class Title(BaseModel):
@@ -155,6 +155,13 @@ class SearchResult(BaseModel):
         description="How this result relates to the claim being verified"
     )
     content_fetched: bool = Field(default=False, description="Whether the full article content was fetched")
+    url_observed_in_tools: bool | None = Field(
+        default=None,
+        description=(
+            "Set by the pipeline, not the model: whether the URL of a contradicts_claim result was returned by a "
+            "search or fetch tool in the same session (null when not checked)"
+        ),
+    )
 
 
 class SearchPerformed(BaseModel):
@@ -318,14 +325,10 @@ def asserts_falsity(analysis: dict) -> bool:
     return any(mentions_falsity(text) for text in texts)
 
 
-def has_contradicting_evidence(verification_evidence: dict | None) -> bool:
-    """True when at least one recorded search result contradicts the claim and carries an http(s) URL.
-
-    The publication date is not required: Stage 3 often cannot read one off the page, and an undated
-    contradicting source is still a source the analyst can open. Date normalisation is asked of the prompt.
-    """
+def _contradicting_results(verification_evidence: dict | None):
+    """Yield every recorded search result marked contradicts_claim that carries an http(s) URL."""
     if not isinstance(verification_evidence, dict):
-        return False
+        return
     for search in verification_evidence.get("searches_performed") or []:
         if not isinstance(search, dict):
             continue
@@ -333,11 +336,42 @@ def has_contradicting_evidence(verification_evidence: dict | None) -> bool:
             if not isinstance(result, dict):
                 continue
             if result.get("relevance_to_claim") == "contradicts_claim" and is_http_url(result.get("url")):
-                return True
+                yield result
+
+
+def url_was_observed(url, observed_urls: set[str]) -> bool:
+    """True when ``url`` names a page in ``observed_urls`` (a set of ``url_key`` values); see ``url_key``."""
+    return url_key(url) in observed_urls
+
+
+def has_contradicting_evidence(verification_evidence: dict | None, observed_urls: set[str] | None = None) -> bool:
+    """True when at least one recorded search result contradicts the claim and carries an http(s) URL.
+
+    The publication date is not required: Stage 3 often cannot read one off the page, and an undated
+    contradicting source is still a source the analyst can open. Date normalisation is asked of the prompt.
+
+    ``observed_urls`` is the set of ``url_key`` values for every URL the search and fetch tools returned in
+    the same session. When it is given, a contradicting result only counts if its URL is in that set: the
+    model can invent a plausible URL (a reuters.com article about an election that never happened) and mark
+    it contradicts_claim, and such a URL never came back from a tool. When it is ``None`` (Stage 4, which has
+    no Stage 3 tool record; the evaluation harness reading stored records; offline callers) any http(s) URL
+    counts, as before.
+    """
+    for result in _contradicting_results(verification_evidence):
+        if observed_urls is None or url_was_observed(result.get("url"), observed_urls):
+            return True
     return False
 
 
-def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = None) -> dict:
+def _mark_observed(verification_evidence: dict | None, observed_urls: set[str]) -> None:
+    """Record on each contradicting result (in place) whether a tool returned its URL, for the audit trail."""
+    for result in _contradicting_results(verification_evidence):
+        result["url_observed_in_tools"] = url_was_observed(result.get("url"), observed_urls)
+
+
+def apply_evidence_caps(
+    analysis: dict, verification_evidence: dict | None = None, observed_urls: set[str] | None = None
+) -> dict:
     """Clamp confidence scores that are not backed by evidence.
 
     Returns a deep copy of ``analysis``. When a cap applies, ``confidence_scores.overall`` and every
@@ -348,6 +382,11 @@ def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = Non
 
     ``verification_evidence`` defaults to ``analysis["verification_evidence"]`` (Stage 3 output shape).
     Stage 4 passes the Stage 3 record explicitly because the reviewer output has no structured evidence.
+
+    ``observed_urls`` (``url_key`` values of every URL the session's search and fetch tools returned) makes a
+    contradicting result count only when a tool actually returned its URL; see ``has_contradicting_evidence``.
+    When given and the evidence is the copy's own, each contradicting result is also marked with
+    ``url_observed_in_tools`` so the outcome is auditable in the stored record.
     """
     result = copy.deepcopy(analysis)
     confidence_scores = result.get("confidence_scores")
@@ -357,6 +396,8 @@ def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = Non
 
     if verification_evidence is None:
         verification_evidence = result.get("verification_evidence")
+        if observed_urls is not None:
+            _mark_observed(verification_evidence, observed_urls)
 
     # A previous run's note (e.g. Stage 3's, echoed by the Stage 4 reviewer) must not be judged or kept
     explanation = result.get("explanation")
@@ -369,7 +410,7 @@ def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = Non
     status = confidence_scores.get("verification_status")
     if status in UNVERIFIED_STATUSES:
         reasons.append(f"verification_status is '{status}'")
-    evidenced = has_contradicting_evidence(verification_evidence)
+    evidenced = has_contradicting_evidence(verification_evidence, observed_urls)
     if status == "verified_false" and not evidenced:
         reasons.append(
             "verification_status is 'verified_false' but no search result with a URL is marked contradicts_claim"
@@ -379,6 +420,10 @@ def apply_evidence_caps(analysis: dict, verification_evidence: dict | None = Non
             "the analysis asserts the content is fabricated/false but no search result with a URL is "
             "marked contradicts_claim"
         )
+    if reasons and observed_urls is not None and has_contradicting_evidence(verification_evidence):
+        # The only contradicting URLs on record were never returned by a tool: say so, since the reasons
+        # above read as "no contradicting result" and the analyst will see one in the evidence.
+        reasons.append("contradicting URL not returned by any search or fetch tool in this session")
 
     if not reasons:
         result["evidence_gate"] = {"applied": False}

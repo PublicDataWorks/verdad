@@ -2,9 +2,11 @@ import json
 
 import pytest
 
+from processing_pipeline.kb_sources import url_key
 from processing_pipeline.stage_3.models import (
     EVIDENCE_CAP_MAX_SCORE,
     EVIDENCE_GATE_NOTE_PREFIX,
+    SearchResult,
     apply_evidence_caps,
     asserts_falsity,
     has_contradicting_evidence,
@@ -159,6 +161,47 @@ class TestContradictingEvidence:
     def test_none(self):
         assert not has_contradicting_evidence(None)
 
+    def test_observed_url_counts(self):
+        assert has_contradicting_evidence(_evidence(), observed_urls={url_key("https://apnews.com/article/x")})
+
+    def test_unobserved_url_does_not_count(self):
+        assert not has_contradicting_evidence(_evidence(), observed_urls={url_key("https://apnews.com/article/y")})
+        assert not has_contradicting_evidence(_evidence(), observed_urls=set())
+
+    def test_observed_urls_none_keeps_the_old_behaviour(self):
+        assert has_contradicting_evidence(_evidence(), observed_urls=None)
+        assert has_contradicting_evidence(_evidence())
+
+    @pytest.mark.parametrize(
+        "recorded, observed",
+        [
+            ("http://apnews.com/article/x", "https://apnews.com/article/x"),
+            ("https://www.apnews.com/article/x", "https://apnews.com/article/x"),
+            ("https://apnews.com/article/x/", "https://apnews.com/article/x"),
+            ("https://apnews.com/article/x#section", "https://apnews.com/article/x"),
+            ("https://APNews.com/article/x", "https://apnews.com/article/x"),
+            ("https://apnews.com/article/x", "http://www.apnews.com/article/x/#top"),
+        ],
+    )
+    def test_normalisation_treats_the_same_page_as_observed(self, recorded, observed):
+        assert has_contradicting_evidence(_evidence(url=recorded), observed_urls={url_key(observed)})
+
+    @pytest.mark.parametrize(
+        "recorded, observed",
+        [
+            ("https://apnews.com/article/x", "https://apnews.com/article/X"),
+            ("https://apnews.com/article/x?id=1", "https://apnews.com/article/x"),
+            ("https://apnews.com/article/x", "https://news.apnews.com/article/x"),
+        ],
+    )
+    def test_normalisation_does_not_conflate_different_pages(self, recorded, observed):
+        assert not has_contradicting_evidence(_evidence(url=recorded), observed_urls={url_key(observed)})
+
+    def test_url_key_of_a_non_url_never_matches(self):
+        assert url_key("not-a-url") == ""
+        assert url_key(None) == ""
+        assert not has_contradicting_evidence(_evidence(url="not-a-url"), observed_urls={""})
+
 
 class TestApplyEvidenceCaps:
     def test_insufficient_evidence_is_capped(self):
@@ -253,6 +296,79 @@ class TestApplyEvidenceCaps:
         result = apply_evidence_caps(_analysis(status="insufficient_evidence", overall=15))
         assert result["confidence_scores"]["overall"] == 15
         assert result["evidence_gate"]["applied"] is True
+
+    def test_contradicting_url_returned_by_a_tool_is_not_capped(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://www.apnews.com/article/x/")
+
+        result = apply_evidence_caps(analysis, observed_urls={url_key("http://apnews.com/article/x")})
+
+        assert result["confidence_scores"]["overall"] == 98
+        assert result["evidence_gate"] == {"applied": False}
+        assert result["verification_evidence"]["searches_performed"][0]["results"][0]["url_observed_in_tools"] is True
+
+    def test_contradicting_url_not_returned_by_any_tool_is_capped_with_its_own_reason(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://www.reuters.com/world/americas/never-happened/")
+
+        result = apply_evidence_caps(analysis, observed_urls={url_key("https://apnews.com/article/x")})
+
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["reasons"] == [
+            "verification_status is 'verified_false' but no search result with a URL is marked contradicts_claim",
+            "the analysis asserts the content is fabricated/false but no search result with a URL is "
+            "marked contradicts_claim",
+            "contradicting URL not returned by any search or fetch tool in this session",
+        ]
+        assert "not returned by any search or fetch tool" in result["explanation"]["english"]
+        recorded = result["verification_evidence"]["searches_performed"][0]["results"][0]
+        assert recorded["url_observed_in_tools"] is False
+        # the input is not annotated
+        assert "url_observed_in_tools" not in analysis["verification_evidence"]["searches_performed"][0]["results"][0]
+
+    def test_session_without_any_tool_urls_caps_every_contradicting_url(self):
+        analysis = _analysis(explanation_en="The claim does not hold up.")
+        analysis["verification_evidence"] = _evidence()
+
+        result = apply_evidence_caps(analysis, observed_urls=set())
+
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["reasons"][-1] == (
+            "contradicting URL not returned by any search or fetch tool in this session"
+        )
+
+    def test_echo_reason_is_not_added_when_there_is_no_contradicting_url_at_all(self):
+        analysis = _analysis(explanation_en="The claim does not hold up.")
+        analysis["verification_evidence"] = _evidence(relevance="provides_context")
+
+        result = apply_evidence_caps(analysis, observed_urls=set())
+
+        assert result["evidence_gate"]["reasons"] == [
+            "verification_status is 'verified_false' but no search result with a URL is marked contradicts_claim"
+        ]
+        assert "url_observed_in_tools" not in result["verification_evidence"]["searches_performed"][0]["results"][0]
+
+    def test_observed_urls_none_does_not_annotate_or_cap(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://www.reuters.com/world/americas/never-happened/")
+
+        result = apply_evidence_caps(analysis)
+
+        assert result["evidence_gate"] == {"applied": False}
+        assert "url_observed_in_tools" not in result["verification_evidence"]["searches_performed"][0]["results"][0]
+
+    def test_search_result_model_accepts_the_audit_field_and_defaults_it_to_none(self):
+        base = {
+            "url": "https://apnews.com/article/x",
+            "source_name": "AP",
+            "source_type": "tier1_wire_service",
+            "publication_date": None,
+            "title": "t",
+            "relevant_excerpt": "e",
+            "relevance_to_claim": "contradicts_claim",
+        }
+        assert SearchResult.model_validate(base).url_observed_in_tools is None
+        assert SearchResult.model_validate({**base, "url_observed_in_tools": False}).url_observed_in_tools is False
 
     def test_stage_4_uses_explicit_stage_3_evidence(self):
         analysis = _analysis(explanation_en="This is fictional.")
