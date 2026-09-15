@@ -57,15 +57,15 @@ if ! command -v flyctl >/dev/null 2>&1; then
   FLY_URL="https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}"
   FLY_TGZ="flyctl_${FLYCTL_VERSION}_Linux_x86_64.tar.gz"
   FLY_TMP="$(mktemp -d)"
-  # Pinned release + SHA256SUMS check instead of `curl install.sh | sh`, so a tampered download is refused.
+  # Pinned release + checksums.txt check instead of `curl install.sh | sh`, so a tampered download is refused.
   if (cd "$FLY_TMP" \
       && curl -fsSL -o "$FLY_TGZ" "$FLY_URL/$FLY_TGZ" \
-      && curl -fsSL -o SHA256SUMS "$FLY_URL/flyctl_${FLYCTL_VERSION}_SHA256SUMS" \
+      && curl -fsSL -o SHA256SUMS "$FLY_URL/flyctl_${FLYCTL_VERSION}_checksums.txt" \
       && grep " $FLY_TGZ\$" SHA256SUMS | sha256sum -c - \
       && tar -xzf "$FLY_TGZ" flyctl) >/dev/null 2>&1; then
     install -m 0755 "$FLY_TMP/flyctl" "$BIN/flyctl" && ln -sf "$BIN/flyctl" "$BIN/fly"
   else
-    warn "flyctl install failed (needs github.com egress; download must match SHA256SUMS)"
+    warn "flyctl install failed (needs github.com egress; download must match the release checksums.txt)"
   fi
   rm -rf "$FLY_TMP"
   command -v fly >/dev/null 2>&1 \
