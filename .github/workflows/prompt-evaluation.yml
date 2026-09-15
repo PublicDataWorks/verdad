@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - "prompts/**"
+      - "scripts/ci/**"
   workflow_dispatch:
     inputs:
       eval_set:

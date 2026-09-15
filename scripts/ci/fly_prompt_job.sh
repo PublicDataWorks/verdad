@@ -43,8 +43,63 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "machine_id=$id" >> "$GITHUB_OUTPUT"
 fi
 
-fly machine wait "$id" -a "$FLY_APP" --state stopped --wait-timeout "$WAIT_TIMEOUT"
-timeout 60 fly logs -a "$FLY_APP" -m "$id" --no-tail || true
+fetch_logs() {
+  timeout 60 fly logs -a "$FLY_APP" -m "$id" --no-tail || true
+}
+
+# WAIT_TIMEOUT accepts "2h", "120m", "90s" or plain seconds.
+if [[ "$WAIT_TIMEOUT" =~ ^([0-9]+)([smh]?)$ ]]; then
+  timeout_secs=${BASH_REMATCH[1]}
+  case "${BASH_REMATCH[2]}" in
+    h) timeout_secs=$((timeout_secs * 3600)) ;;
+    m) timeout_secs=$((timeout_secs * 60)) ;;
+  esac
+else
+  echo "::error::invalid WAIT_TIMEOUT: $WAIT_TIMEOUT (expected e.g. 120m, 2h or seconds)"
+  exit 1
+fi
+
+# The Machines API caps a single `fly machine wait` at about 60s whatever --wait-timeout says,
+# so poll the machine state instead. A transient flyctl error retries; MAX_POLL_ERRORS in a row fails.
+POLL_INTERVAL="${POLL_INTERVAL:-20}"
+HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-300}"
+MAX_POLL_ERRORS=10
+start=$(date +%s)
+last_heartbeat=$start
+errors=0
+state="unknown"
+echo "Waiting up to $WAIT_TIMEOUT for machine $id to stop"
+while :; do
+  if state=$(fly machine status "$id" -a "$FLY_APP" --json 2>/dev/null \
+      | python3 -c 'import json, sys; print(json.load(sys.stdin)["state"])' 2>/dev/null); then
+    errors=0
+    case "$state" in
+      stopped|destroyed) break ;;
+    esac
+  else
+    errors=$((errors + 1))
+    state="unknown"
+    if [ "$errors" -ge "$MAX_POLL_ERRORS" ]; then
+      echo "::error::could not read the state of machine $id after $errors consecutive attempts"
+      fetch_logs
+      exit 1
+    fi
+    echo "Could not read machine state (attempt $errors/$MAX_POLL_ERRORS); retrying in ${POLL_INTERVAL}s"
+  fi
+  now=$(date +%s)
+  if [ $((now - start)) -ge "$timeout_secs" ]; then
+    echo "::error::machine $id is still '$state' after $WAIT_TIMEOUT; giving up"
+    fetch_logs
+    exit 1
+  fi
+  if [ $((now - last_heartbeat)) -ge "$HEARTBEAT_INTERVAL" ]; then
+    echo "$(date -u +%H:%M:%S) machine $id is $state ($(((now - start) / 60))m elapsed)"
+    last_heartbeat=$now
+  fi
+  sleep "$POLL_INTERVAL"
+done
+echo "Machine $id is $state after $((($(date +%s) - start) / 60))m"
+fetch_logs
 
 # Fly omits exit_code from the exit event on a clean exit; a signal means the process was killed.
 code=$(fly machines list -a "$FLY_APP" --json | python3 -c '
