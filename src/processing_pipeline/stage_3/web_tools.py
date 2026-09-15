@@ -5,6 +5,8 @@ import aiohttp
 import certifi
 import html2text
 
+from processing_pipeline.source_credibility import get_source_credibility
+
 SEARXNG_URL = os.environ.get("SEARXNG_URL", "")
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
@@ -31,10 +33,12 @@ async def searxng_web_search(
 
     Returns:
         A dictionary with a list of search results, each containing
-        title, url, content snippet, and relevance score. When the search
-        could not be performed (network error, timeout, bad response) the
-        dictionary has failed=true and an error message, with an empty
-        results list: treat that as "search failed", not "no results".
+        title, url, content snippet, relevance score, and the source's
+        credibility tier (source_tier: 1 trusted, 2 generally reliable,
+        3 default/unrated, 4 unreliable, 5 denylisted) and source_category. When the search could not be performed (network
+        error, timeout, bad response) the dictionary has failed=true and an
+        error message, with an empty results list: treat that as "search
+        failed", not "no results".
     """
     try:
         return await _searxng_web_search(query, pageno, time_range, language, safesearch)
@@ -67,17 +71,27 @@ async def _searxng_web_search(query: str, pageno: int, time_range: str | None, l
     results = data.get("results", [])
     return {
         "query": query,
-        "results": [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "content": r.get("content", ""),
-                "score": r.get("score"),
-                "publishedDate": r.get("publishedDate"),
-                "engines": r.get("engines", []),
-            }
-            for r in results
-        ],
+        "results": [{**_result_fields(r), **_source_tier_fields(r.get("url", ""))} for r in results],
+    }
+
+
+def _result_fields(r: dict) -> dict:
+    return {
+        "title": r.get("title", ""),
+        "url": r.get("url", ""),
+        "content": r.get("content", ""),
+        "score": r.get("score"),
+        "publishedDate": r.get("publishedDate"),
+        "engines": r.get("engines", []),
+    }
+
+
+def _source_tier_fields(url: str) -> dict:
+    """Label each result with its credibility tier; denylisted results stay visible but are marked."""
+    rating = get_source_credibility().tier_for(url)
+    return {
+        "source_tier": rating.tier,
+        "source_category": "denylisted" if rating.denylisted else rating.category,
     }
 
 

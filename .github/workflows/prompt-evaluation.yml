@@ -32,7 +32,7 @@ concurrency:
 jobs:
   evaluate:
     runs-on: ubuntu-latest
-    timeout-minutes: 200
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
 
@@ -86,7 +86,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVAL_SETS: ${{ steps.sets.outputs.sets }}
           RUNS: ${{ github.event.inputs.runs || '2' }}
-          WAIT_TIMEOUT: 180m
+          WAIT_TIMEOUT: 300m
         run: scripts/ci/fly_prompt_job.sh evaluate
 
       - name: Destroy the machine if the job was cancelled

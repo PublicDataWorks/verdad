@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import get_safety_settings
+from processing_pipeline.source_credibility import apply_credibility_gate, get_source_credibility
 from processing_pipeline.stage_3.models import Stage3Output, apply_evidence_caps
 from processing_pipeline.stage_3.web_tools import searxng_web_search, web_url_read
 from processing_pipeline.temporal_context import build_temporal_context
@@ -80,6 +81,10 @@ class Stage3Executor:
         if not temporal["hours_since_recording"]:
             print("Warning: could not determine recording age; breaking news protocol notice not rendered")
 
+        # Broadcast-source provenance (state_controlled, public, ...) shown to the model next to the station name
+        station_code = additional_info.get("radio_station_code") if isinstance(additional_info, dict) else None
+        metadata = {**metadata, "source_provenance": get_source_credibility().provenance_for(station_code).as_dict()}
+
         # Prepare the user prompt
         user_prompt = (
             f"{prompt_version['user_prompt']}\n\n"
@@ -126,6 +131,13 @@ class Stage3Executor:
             if evidence_gate.get("applied"):
                 print(f"Evidence gate applied: {evidence_gate['note']}")
                 grounding_metadata["evidence_gate"] = evidence_gate
+
+            # Credibility gate: a falsity verdict needs two independent tier 1-2 contradicting sources
+            output = apply_credibility_gate(output, station_code)
+            credibility_gate = output.pop("credibility_gate")
+            if credibility_gate["capped"]:
+                print(f"Credibility gate applied: {credibility_gate['note']}")
+            grounding_metadata["credibility_gate"] = credibility_gate
 
             return {
                 "response": output,
