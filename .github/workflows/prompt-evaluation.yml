@@ -86,6 +86,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVAL_SETS: ${{ steps.sets.outputs.sets }}
           RUNS: ${{ github.event.inputs.runs || '2' }}
+          WAIT_TIMEOUT: 180m
         run: scripts/ci/fly_prompt_job.sh evaluate
 
       - name: Destroy the machine if the job was cancelled
