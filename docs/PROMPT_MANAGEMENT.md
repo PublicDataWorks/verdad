@@ -9,7 +9,7 @@ Related: [PROMPT_REWRITER_STATUS_AND_PLAN.md](PROMPT_REWRITER_STATUS_AND_PLAN.md
 - Prompts live in the Supabase table `prompt_versions`. Columns: `id`, `stage`, `sub_stage`, `version`, `system_instruction`, `user_prompt`, `output_schema` (JSONB), `is_active`, `description`, `created_by`, `created_at`, `updated_at`.
 - Exactly one row per `(stage, sub_stage)` is meant to be active. Activation is done atomically by the SQL function `upsert_prompt_version` (`supabase/database/sql/upsert_prompt_version.sql`): it inserts the new row as inactive, deactivates the other rows for the same key, then activates the new one.
 - Each Prefect flow fetches its prompts once at flow start with `SupabaseClient.get_active_prompt(stage, sub_stage)` (`src/processing_pipeline/supabase_utils.py:110-124`), which selects `is_active = true` for the key and raises `ValueError` if no row matches. Running flows do not pick up changes until they restart. `get_prompt_by_id` (`supabase_utils.py:126-135`) exists but has no callers.
-- The files under `prompts/` in git are the source of truth for prompt content. The table only holds what was imported from them. The DDL for `prompt_versions` is not in the repo; only the `upsert_prompt_version` function is.
+- The files under `prompts/` in git are the source of truth for prompt content. The table only holds what was imported from them. The DDL for `prompt_versions` and the `upsert_prompt_version` function are both in the baseline migration `supabase/migrations/20260915000000_baseline_public_schema.sql`.
 - `stage` values come from `PromptStage` (`src/processing_pipeline/constants.py:42-45`): `stage_1`, `stage_3`, `stage_4`. `sub_stage` values come from `Stage1SubStage` (`stage_1/constants.py`) and `Stage4SubStage` (`stage_4/constants.py`); Stage 3 has `sub_stage = NULL`.
 
 ## 2. Inventory
@@ -86,16 +86,15 @@ All of this is SQL and TypeScript; no Python in `src/` reads any of these tables
 - Thumbs up/down: the frontend calls the `like_snippet(snippet_id, value)` RPC (`like_snippet_function.sql`), which upserts a row in `user_like_snippets` with `value` in `{-1, 0, 1}`.
 - Trigger `update_like_count` (`like_count_trigger.sql`, `update_snippet_like_count.sql`) recomputes `snippets.like_count` and `snippets.dislike_count`.
 - Trigger `update_snippet_hidden_status_trigger` (`update_snippet_hidden_status.sql`) inserts into `user_hide_snippets` when a snippet reaches exactly two downvotes, hiding it from the app. Admins can also hide directly with the `hide_snippet` RPC (`hide_snippet.sql`).
-- `downvote_review_queue`: populated by a trigger proposed in the unmerged PR #68 (https://github.com/PublicDataWorks/verdad/pull/68); not in this repo.
+- `downvote_review_queue`: the table is in the baseline migration; the trigger that populates it was proposed in the unmerged PR #68 (https://github.com/PublicDataWorks/verdad/pull/68) and is not in this repo.
 - Comments: Liveblocks webhooks (`server/src/api/webhooks.ts:44-104`, events `commentCreated` / `commentEdited` / `commentDeleted`) are mirrored into the `comments` table by `server/src/services/commentService.ts`; `update_snippet_comment_count.sql` keeps `snippets.comment_count` current.
 
-The DDL for `user_like_snippets`, `user_hide_snippets`, `comments` and `downvote_review_queue` is not in the repo.
+The DDL for `user_like_snippets`, `user_hide_snippets`, `comments` and `downvote_review_queue` is in the baseline migration `supabase/migrations/20260915000000_baseline_public_schema.sql`.
 
 ## 6. Known gaps
 
 - Heuristics are prose inside two large prompts (890 and 2,681 lines) plus two reference files that must be edited in parallel by hand. Adding or fixing one heuristic means re-importing the whole prompt and bumping every category at once.
 - Feedback is collected (likes, dislikes, hides, comments) but never consumed by the pipeline or by anyone editing prompts, other than one manual review in March 2026.
-- No DDL in the repo for `prompt_versions` or the feedback tables, so the schema can only be recovered from the live database.
 - `src/processing_pipeline/constants.py:48-61` still has file-reading helpers (`get_user_prompt_for_stage_3`, `get_system_instruction_for_stage_3`, `get_output_schema_for_stage_3`, `get_gemini_timestamped_transcription_generation_prompt`). None is called from `src/` or `tests/`, and the last one opens `prompts/Gemini_timestamped_transcription_generation_prompt.md`, which does not exist.
 - The heuristics-updater SQL deployment path writes to the database without touching `prompt_versions` via the import script; `diff` (section 3) is the only check that git and the database agree.
 - `prompts/stage_4/output_schema.json` is imported but unused by the reviewer agent.

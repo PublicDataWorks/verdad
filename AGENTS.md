@@ -23,7 +23,9 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
   `src/scripts/evaluate_prompt.py` measures a Stage 3 prompt change on the eval sets in `prompts/eval/`. See
   `docs/PROMPT_MANAGEMENT.md` and `docs/PROMPT_EVALUATION.md`. The `.claude/skills/verdad-heuristics-updater`
   skill wraps that workflow for heuristics changes.
-- `supabase/`: 5 migrations plus loose SQL in `supabase/database/sql/` (not migrations). `server/`: separate
+- `supabase/`: `migrations/` is the source of truth (generated baseline of the live schema + one file per
+  applied version); `supabase/database/sql/` is historical hand-applied SQL, see its README and the
+  "Database schema and migrations" section of `docs/OPERATIONS.md`. `server/`: separate
   Express/TS app (Liveblocks auth, Resend email) with its own Dockerfile and `fly.server.toml`.
 - `scripts/*.sh` + `Dockerfile.*` + `fly.*.toml`: deploy and cron. See `docs/OPERATIONS.md`. `scripts/ci/`: helpers
   for the prompt CI workflows (`.github/workflows/prompts-*.yml`, `prompt-evaluation.yml`).
