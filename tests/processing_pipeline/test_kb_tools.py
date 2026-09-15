@@ -33,9 +33,18 @@ def _tool_context(web_research):
     return Mock(state={"web_research": web_research})
 
 
+RESEARCH = f"Found {VALID['source_url']} and https://reuters.com/x."
+
+
 class TestValidateKbSource:
     def test_accepts_good_source(self):
-        assert tools.validate_kb_source("https://apnews.com/a", "AP", "tier1_wire_service", "2026-01-02", None) is None
+        url, research = "https://apnews.com/a", "see https://apnews.com/a"
+        assert tools.validate_kb_source(url, "AP", "tier1_wire_service", "2026-01-02", research) is None
+
+    @pytest.mark.parametrize("web_research", [None, ""])
+    def test_rejects_when_no_web_research_is_recorded(self, web_research):
+        error = tools.validate_kb_source("https://apnews.com/a", "AP", "tier1_wire_service", "2026-01-02", web_research)
+        assert "No web research is recorded" in error
 
     @pytest.mark.parametrize("url", ["", "apnews.com/a", "ftp://apnews.com/a", "https://nohost"])
     def test_rejects_bad_url(self, url):
@@ -63,7 +72,7 @@ class TestValidateKbSource:
 
 class TestUpsertKnowledgeEntry:
     def test_creates_entry_with_publication_date(self, supabase):
-        result = tools.upsert_knowledge_entry(**VALID, snippet_id="snip", tool_context=_tool_context(VALID["source_url"]))
+        result = tools.upsert_knowledge_entry(**VALID, snippet_id="snip", tool_context=_tool_context(RESEARCH))
 
         assert result["status"] == "success" and result["action"] == "created"
         source_kwargs = supabase.insert_kb_entry_source.call_args.kwargs
@@ -73,12 +82,12 @@ class TestUpsertKnowledgeEntry:
         supabase.record_kb_usage.assert_called_once_with("new-id", "snip", "triggered_creation")
 
     def test_rejects_undated_source(self, supabase):
-        result = tools.upsert_knowledge_entry(**{**VALID, "publication_date": None})
+        result = tools.upsert_knowledge_entry(**{**VALID, "publication_date": None}, tool_context=_tool_context(RESEARCH))
         assert result["status"] == "error" and "publication_date" in result["error_message"]
         supabase.insert_kb_entry.assert_not_called()
 
     def test_rejects_low_confidence_before_touching_db(self, supabase):
-        result = tools.upsert_knowledge_entry(**{**VALID, "confidence_score": 60})
+        result = tools.upsert_knowledge_entry(**{**VALID, "confidence_score": 60}, tool_context=_tool_context(RESEARCH))
         assert result["status"] == "error"
         supabase.insert_kb_entry.assert_not_called()
 
@@ -88,19 +97,21 @@ class TestUpsertKnowledgeEntry:
         assert "web research" in result["error_message"]
         supabase.insert_kb_entry.assert_not_called()
 
-    def test_allows_when_web_research_unavailable(self, supabase):
-        result = tools.upsert_knowledge_entry(**VALID, tool_context=_tool_context(""))
-        assert result["status"] == "success"
+    @pytest.mark.parametrize("tool_context", [None, _tool_context(""), _tool_context("   ")])
+    def test_rejects_when_web_research_unavailable(self, supabase, tool_context):
+        result = tools.upsert_knowledge_entry(**VALID, tool_context=tool_context)
+        assert result["status"] == "error" and "No web research" in result["error_message"]
+        supabase.insert_kb_entry.assert_not_called()
 
     def test_rejects_other_source_type(self, supabase):
-        result = tools.upsert_knowledge_entry(**{**VALID, "source_type": "other"})
+        result = tools.upsert_knowledge_entry(**{**VALID, "source_type": "other"}, tool_context=_tool_context(RESEARCH))
         assert result["status"] == "error"
         supabase.insert_kb_entry.assert_not_called()
 
     def test_does_not_supersede_higher_confidence_active_entry(self, supabase):
         supabase.find_duplicate_kb_entries.return_value = [{"id": "old", "confidence_score": 95, "status": "active"}]
 
-        result = tools.upsert_knowledge_entry(**VALID)
+        result = tools.upsert_knowledge_entry(**VALID, tool_context=_tool_context(RESEARCH))
 
         assert result["status"] == "skipped" and result["entry_id"] == "old"
         supabase.supersede_kb_entry.assert_not_called()
@@ -110,11 +121,32 @@ class TestUpsertKnowledgeEntry:
     def test_supersedes_lower_confidence_entry(self, supabase):
         supabase.find_duplicate_kb_entries.return_value = [{"id": "old", "confidence_score": 80, "status": "active"}]
 
-        result = tools.upsert_knowledge_entry(**VALID, snippet_id="snip")
+        result = tools.upsert_knowledge_entry(**VALID, snippet_id="snip", tool_context=_tool_context(RESEARCH))
 
         assert result["action"] == "updated" and result["entry_id"] == "v2-id"
         supabase.supersede_kb_entry.assert_called_once()
         supabase.record_kb_usage.assert_called_once_with("v2-id", "snip", "triggered_update")
+
+
+class TestSearchKnowledgeBase:
+    def test_applies_the_stage_1_bar(self, supabase):
+        good = {"id": "good", "confidence_score": 90, "similarity": 0.8, "sources": [
+            {"url": "https://apnews.com/a", "source_type": "tier1_wire_service", "publication_date": "2026-01-02"}
+        ]}
+        unsourced = {"id": "weak", "confidence_score": 90, "similarity": 0.9, "sources": []}
+        supabase.search_kb_entries.return_value = [unsourced, good]
+
+        result = tools.search_knowledge_base("was the election certified?")
+
+        kwargs = supabase.search_kb_entries.call_args.kwargs
+        assert kwargs["match_threshold"] == 0.6 and kwargs["min_confidence"] == 85
+        assert [e["id"] for e in result["results"]] == ["good"] and result["count"] == 1
+
+    def test_nothing_trustworthy(self, supabase):
+        unsourced = {"id": "weak", "confidence_score": 90, "similarity": 0.9, "sources": []}
+        supabase.search_kb_entries.return_value = [unsourced]
+
+        assert tools.search_knowledge_base("q")["results"] == []
 
 
 class TestDeactivateKnowledgeEntry:
