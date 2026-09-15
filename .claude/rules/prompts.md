@@ -14,17 +14,24 @@ and `output_schema`). Editing anything under `prompts/` changes **nothing** unti
 fallback to the files (the `get_*_for_stage_3()` helpers in `processing_pipeline/constants.py` still read
 files but the flows do not use them).
 
-Import, from the repo root, in a venv:
+Import, from the repo root, in a venv (`SUPABASE_URL`/`SUPABASE_KEY` from the environment or `.env`):
 
 ```bash
 PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py import --version 1.2.0 --description "..." --dry-run
 PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py list        # existing versions
+PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff        # files vs active DB rows
 ```
 
 `--dry-run` previews; `--stages stage_1/initial_detection ...` imports a subset; `--no-active` uploads without
 activating. The stage -> file mapping is `PROMPT_MAPPING` at the top of the script - a new prompt file is not
 imported until it is listed there. **Never import to production unless explicitly asked**; the script writes
 to whatever `.env` points at, and a successful import flips `is_active` for that stage immediately.
+
+`diff` prints one line per `PROMPT_MAPPING` entry (`in sync`, `differs (...)`, `no active version in db`,
+`missing local file`); `--stages` restricts it and `--show-diff` prints unified diffs. Exit code 0 = in sync,
+1 = drift, 2 = DB unreachable or env vars missing. Run it before and after an import, and whenever prompts
+may have been edited directly in the database. Full details, the file -> stage inventory and the provenance
+columns: `docs/PROMPT_MANAGEMENT.md`.
 
 ## Heuristics files
 

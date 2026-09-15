@@ -5,9 +5,9 @@ Each rule must have YAML frontmatter with a `paths:` list of globs, and every gl
 one git-tracked file. A stale glob means the rule silently stops loading, which is hard to notice.
 """
 
+import re
 import subprocess
 import sys
-from fnmatch import fnmatch
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -47,11 +47,50 @@ def parse_paths(rule: Path) -> tuple[list[str], list[str]]:
     return globs, []
 
 
+def expand_braces(pattern: str) -> list[str]:
+    """Expand `{a,b}` groups, which Claude Code globs support, into separate patterns."""
+    match = re.search(r"\{([^{}]*)\}", pattern)
+    if not match:
+        return [pattern]
+    prefix, suffix = pattern[: match.start()], pattern[match.end() :]
+    return [expanded for option in match.group(1).split(",") for expanded in expand_braces(prefix + option + suffix)]
+
+
+def glob_to_regexes(glob: str) -> list[re.Pattern[str]]:
+    """Translate a Claude Code rules glob into regexes.
+
+    `**/` spans any number of leading directories, including none, and only ever matches at a path
+    boundary - so `**/__tests__/**` matches `__tests__/x.py` and `a/__tests__/x.py` but not
+    `a/foo__tests__/x.py`. A bare `**` spans anything; `*` and `?` stay inside one path segment.
+    fnmatch cannot express this: its `*` always crosses `/`.
+    """
+    regexes = []
+    for pattern in expand_braces(glob):
+        source = ""
+        i = 0
+        while i < len(pattern):
+            if pattern.startswith("**/", i):
+                source += "(?:.*/)?"
+                i += 3
+            elif pattern.startswith("**", i):
+                source += ".*"
+                i += 2
+            elif pattern[i] == "*":
+                source += "[^/]*"
+                i += 1
+            elif pattern[i] == "?":
+                source += "[^/]"
+                i += 1
+            else:
+                source += re.escape(pattern[i])
+                i += 1
+        regexes.append(re.compile(f"^{source}$"))
+    return regexes
+
+
 def matches(glob: str, files: list[str]) -> bool:
-    # Claude Code globs treat `**` as "any depth"; fnmatch's `*` already crosses `/`,
-    # so collapsing `**` to `*` is a conservative check.
-    pattern = glob.replace("**", "*")
-    return any(fnmatch(f, pattern) for f in files)
+    patterns = glob_to_regexes(glob)
+    return any(pattern.match(f) for pattern in patterns for f in files)
 
 
 def main() -> int:

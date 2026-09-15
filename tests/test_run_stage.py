@@ -36,11 +36,45 @@ class TestParseArgs:
             ["--stage", "1", "--snippet-id", "x"],
             ["--stage", "4", "--skip-review"],
             ["--stage", "6"],
+            ["--stage", "1", "--limit", "0"],
+            ["--stage", "1", "--limit", "-1"],
+            ["--stage", "1", "--audio-file-id", "x", "--limit", "2"],
+            ["--stage", "1", "--context-before-seconds", "10"],
+            ["--stage", "3", "--context-after-seconds", "30"],
+            ["--stage", "5", "--context-before-seconds", "10"],
         ],
     )
     def test_rejects_options_for_other_stages(self, run_stage, argv):
+        with pytest.raises(SystemExit) as excinfo:
+            run_stage.parse_args(argv)
+        assert excinfo.value.code == 2
+
+    @pytest.mark.parametrize(
+        ("argv", "expected"),
+        [
+            (["--stage", "1", "--limit", "0"], "--limit must be a positive integer"),
+            (["--stage", "1", "--audio-file-id", "x", "--limit", "2"], "--limit does not apply with --audio-file-id"),
+            (["--stage", "3", "--context-before-seconds", "10"], "only apply to --stage 2"),
+        ],
+    )
+    def test_rejection_message_explains_the_conflict(self, run_stage, capsys, argv, expected):
         with pytest.raises(SystemExit):
             run_stage.parse_args(argv)
+        assert expected in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--stage", "1", "--audio-file-id", "af-1"],
+            ["--stage", "1", "--limit", "3"],
+            ["--stage", "2", "--context-before-seconds", "10", "--context-after-seconds", "5"],
+            ["--stage", "3", "--snippet-id", "s-1", "--skip-review"],
+            ["--stage", "4", "--snippet-id", "s-1"],
+            ["--stage", "5"],
+        ],
+    )
+    def test_accepts_valid_options_per_stage(self, run_stage, argv):
+        assert run_stage.parse_args(argv).stage == int(argv[1])
 
 
 class TestDispatch:

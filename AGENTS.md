@@ -21,6 +21,8 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
 - `src/utils.py`: `optional_flow`/`optional_task` decorators and `fetch_radio_stations()` (see gotchas).
 - `src/processing_pipeline/supabase_utils.py`: the only DB access layer (`SupabaseClient`).
 - `prompts/`: prompt sources, but the pipeline reads prompts from the `prompt_versions` table.
+  `src/scripts/import_prompts_to_db.py` moves files to the DB (`import`, `list`, `diff`); see
+  `docs/PROMPT_MANAGEMENT.md` and `.claude/rules/prompts.md`.
 - `supabase/`: 5 migrations plus loose SQL in `supabase/database/sql/` (not migrations). `server/`: separate
   Express/TS app (Liveblocks auth, Resend email) with its own Dockerfile and `fly.server.toml`.
 - `scripts/*.sh` + `Dockerfile.*` + `fly.*.toml`: deploy and cron. See `docs/OPERATIONS.md`.
@@ -37,6 +39,7 @@ pytest tests/processing_pipeline/test_stage_3.py -k executor --no-cov     # one 
 make format         # ruff format; only run on files you are already changing (repo is not yet fully formatted)
 python scripts/run_stage.py --stage 3 --snippet-id <uuid>                  # run one stage locally, no Prefect
 PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py import --version 1.2.0 --description "..." [--dry-run]
+PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff [--stages stage_1/initial_detection ...] [--show-diff]   # prompts-vs-DB drift
 ```
 
 - `pre-commit install` enables ruff on staged files; `hooks/install-hooks.sh` installs a lint+test pre-push hook.
@@ -67,7 +70,8 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
 - `src/main.py` is an ad-hoc stage 4 smoke script with a hard-coded production snippet UUID. Do not run it.
 - `ENABLE_PREFECT_DECORATOR=false` (set by tests and `scripts/run_stage.py`) makes flows/tasks plain functions.
   It is read at import time, so set it before importing anything from `src/`.
-- Prompts live in the DB. Editing `prompts/*.md` changes nothing until `import_prompts_to_db.py` runs.
+- Prompts live in the DB. Editing `prompts/*.md` changes nothing until `import_prompts_to_db.py import` runs;
+  `import_prompts_to_db.py diff` shows whether files and the active DB rows agree (`docs/PROMPT_MANAGEMENT.md`).
 - The coverage gate (`fail_under`) is set to the real number and is meant to ratchet upward; do not lower it.
 - Import sorting (`ruff` rule `I`) is intentionally off until a formatting-only commit lands; do not reformat
   files you are not otherwise changing.
