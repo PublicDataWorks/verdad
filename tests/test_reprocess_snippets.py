@@ -18,6 +18,7 @@ def _args(**overrides):
         commented=False,
         ids_file=None,
         quarantine_batch=None,
+        quarantine_reason=None,
         error_keyerror=False,
         since=None,
         min_confidence=None,
@@ -47,6 +48,28 @@ class TestParseArgs:
         args = rs.parse_args(["--quarantine-batch", "hide-a", "--quarantine-batch", "hide-b", "--stage", "3"])
         assert args.quarantine_batch == ["hide-a", "hide-b"]
         assert not args.execute
+
+    def test_quarantine_reason_is_repeatable_and_defaults_to_none(self):
+        args = rs.parse_args(
+            [
+                "--quarantine-batch",
+                "hide-a",
+                "--quarantine-reason",
+                "no_evidence_no_dated_source",
+                "--quarantine-reason",
+                "no_evidence",
+                "--stage",
+                "3",
+            ]
+        )
+        assert args.quarantine_reason == ["no_evidence_no_dated_source", "no_evidence"]
+        assert rs.parse_args(["--quarantine-batch", "hide-a", "--stage", "3"]).quarantine_reason is None
+
+    def test_quarantine_reason_requires_a_batch(self):
+        with pytest.raises(SystemExit):
+            rs.parse_args(["--quarantine-reason", "no_evidence", "--stage", "3"])
+        with pytest.raises(SystemExit):
+            rs.parse_args(["--disliked", "--quarantine-reason", "no_evidence", "--stage", "3"])
 
     def test_error_keyerror_counts_as_a_reason(self):
         args = rs.parse_args(["--error-keyerror", "--stage", "3"])
@@ -180,6 +203,22 @@ class TestSelectSnippets:
             "b": ["error_keyerror", "quarantine_batch"],
         }
 
+    def test_quarantine_selector_name_records_the_reason_filter(self):
+        assert rs.quarantine_selector_name(None) == "quarantine_batch"
+        assert rs.quarantine_selector_name([]) == "quarantine_batch"
+        assert rs.quarantine_selector_name(["no_evidence_no_dated_source"]) == (
+            "quarantine_batch[reason=no_evidence_no_dated_source]"
+        )
+        assert rs.quarantine_selector_name(["a", "b"]) == "quarantine_batch[reason=a,b]"
+
+    def test_selectors_by_id_names_the_quarantine_reason_filter(self):
+        key = rs.quarantine_selector_name(["no_evidence_no_dated_source"])
+        reasons = {key: {"a", "b"}, "disliked": {"b"}}
+        assert rs.selectors_by_id(reasons, ["a", "b"]) == {
+            "a": ["quarantine_batch[reason=no_evidence_no_dated_source]"],
+            "b": ["disliked", "quarantine_batch[reason=no_evidence_no_dated_source]"],
+        }
+
     def test_unknown_ids_are_dropped(self):
         selected, _ = rs.select_snippets({"ids_file": {"zzz", "a"}}, self.SNIPPETS, None, None, set(), None)
         assert selected == ["a"]
@@ -215,6 +254,24 @@ class TestBuildSql:
         assert "(s.confidence_scores->>'overall')::INTEGER >= 95" in sql
         assert "NOT IN (SELECT snippet FROM user_hide_snippets)" in sql
         assert "s.status NOT IN ('Processing', 'Reviewing')" in sql
+
+    def test_quarantine_reason_narrows_the_batch_subquery(self):
+        args = _args(
+            quarantine_batch=["hide-2026-09-15-heuristics"],
+            quarantine_reason=["no_evidence_no_dated_source", "no_evidence"],
+        )
+        sql = rs.build_sql(args, "New")
+        assert sql == (
+            "UPDATE snippets s\nSET status = 'New', error_message = NULL\n"
+            "WHERE (s.id IN (SELECT snippet FROM snippet_quarantine_log WHERE batch IN ('hide-2026-09-15-heuristics') "
+            "AND reason IN ('no_evidence_no_dated_source', 'no_evidence') AND restored_at IS NULL))\n"
+            "  AND s.status NOT IN ('Processing', 'Reviewing');"
+        )
+
+    def test_quarantine_sql_without_a_reason_is_unchanged(self):
+        sql = rs.build_sql(_args(quarantine_batch=["hide-a"]), "New")
+        assert "WHERE batch IN ('hide-a') AND restored_at IS NULL" in sql
+        assert "reason" not in sql
 
     def test_limit_targets_the_selected_ids_instead_of_the_criteria(self):
         sql = rs.build_sql(_args(disliked=True, limit=2), "New", ["a", "b"])
@@ -276,6 +333,26 @@ class TestFetchSelectors:
             ("is_", ("restored_at", "null")),
         ]
         assert client.calls[4][0] == "range"
+
+    def test_quarantine_reason_adds_a_reason_filter_between_batch_and_unrestored(self):
+        client = _FakeClient([{"snippet": "s1"}])
+        ids = rs.fetch_quarantine_batch_snippet_ids(
+            client, ["hide-2026-09-15-heuristics"], ["no_evidence_no_dated_source", "no_evidence"]
+        )
+        assert ids == {"s1"}
+        assert client.calls[:5] == [
+            ("table", ("snippet_quarantine_log",)),
+            ("select", ("snippet",)),
+            ("in_", ("batch", ["hide-2026-09-15-heuristics"])),
+            ("in_", ("reason", ["no_evidence_no_dated_source", "no_evidence"])),
+            ("is_", ("restored_at", "null")),
+        ]
+        assert client.calls[5][0] == "range"
+
+    def test_quarantine_empty_reason_list_means_no_reason_filter(self):
+        client = _FakeClient([{"snippet": "s1"}])
+        rs.fetch_quarantine_batch_snippet_ids(client, ["hide-a"], [])
+        assert [name for name, _ in client.calls] == ["table", "select", "in_", "is_", "range"]
 
     def test_keyerror_filters_on_error_status_and_message_prefix(self):
         client = _FakeClient([{"id": "e1"}])
