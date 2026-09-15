@@ -103,14 +103,37 @@ class RunResult:
     usage: dict = field(default_factory=dict)
     seconds: float = 0.0
     error: str | None = None
+    cap_reasons: list[str] = field(default_factory=list)  # evidence gate reasons; empty when no cap applied
 
     @property
     def ok(self) -> bool:
         return self.error is None
 
 
-def parse_output(response: dict) -> RunResult:
-    """Reduce a validated Stage 3 output dict to a :class:`RunResult`."""
+def cap_reasons_from(response: dict, grounding_metadata=None) -> list[str]:
+    """The evidence gate's reasons for a run, or ``[]`` when no cap applied or the record lacks the field.
+
+    The executor pops ``evidence_gate`` out of the output into the ``grounding_metadata`` JSON string (only
+    when a cap applied); older records have no such key, and an output that still carries ``evidence_gate``
+    inline is read too.
+    """
+    if isinstance(grounding_metadata, str):
+        try:
+            grounding_metadata = json.loads(grounding_metadata)
+        except ValueError:
+            grounding_metadata = None
+    for container in (grounding_metadata, response):
+        gate = container.get("evidence_gate") if isinstance(container, dict) else None
+        if isinstance(gate, dict):
+            return [str(r) for r in gate.get("reasons") or [] if r]
+    return []
+
+
+def parse_output(response: dict, grounding_metadata=None) -> RunResult:
+    """Reduce a validated Stage 3 output dict to a :class:`RunResult`.
+
+    ``grounding_metadata`` is the executor's JSON string (or parsed dict) holding the evidence gate record.
+    """
     scores = response.get("confidence_scores") or {}
     categories = []
     for item in response.get("disinformation_categories") or []:
@@ -130,6 +153,7 @@ def parse_output(response: dict) -> RunResult:
         category_scores=category_scores,
         verification_status=scores.get("verification_status"),
         explanation=str(explanation),
+        cap_reasons=cap_reasons_from(response, grounding_metadata),
     )
 
 
@@ -315,6 +339,20 @@ def failure_histogram(results: list[SnippetResult]) -> list[dict]:
     return sorted(buckets.values(), key=lambda b: (-b["count"], b["kind"]))
 
 
+def cap_histogram(results: list[SnippetResult]) -> list[dict]:
+    """Successful runs capped by the evidence gate, counted per reason and arm, most frequent first."""
+    buckets: dict[str, dict] = {}
+    for r in results:
+        for side, runs in (("baseline", r.baseline_runs), ("candidate", r.candidate_runs)):
+            for run in runs:
+                if not run.ok:
+                    continue
+                for reason in run.cap_reasons:
+                    bucket = buckets.setdefault(reason, {"reason": reason, "baseline": 0, "candidate": 0})
+                    bucket[side] += 1
+    return sorted(buckets.values(), key=lambda b: (-(b["baseline"] + b["candidate"]), b["reason"]))
+
+
 def _fmt_categories(summary: RunSummary) -> str:
     if not summary.n_ok:
         return "error" if summary.errors else "-"
@@ -389,6 +427,20 @@ def render_report(results: list[SnippetResult], agg: dict, config: dict, notes: 
         for r in lost:
             quote = _md(r.candidate.explanation)[:EVIDENCE_CHARS]
             lines += [f"### `{r.snippet_id}` {_md(r.title)}".rstrip(), "", f"> {quote}", ""]
+
+    caps = cap_histogram(results)
+    if caps:
+        lines += [
+            "## Capped runs by reason",
+            "",
+            "Successful model calls whose confidence the evidence gate clamped, by the reason it recorded.",
+            "",
+            "| Reason | Baseline runs | Candidate runs |",
+            "|---|---|---|",
+        ]
+        for bucket in caps:
+            lines.append(f"| {_md(bucket['reason'])} | {bucket['baseline']} | {bucket['candidate']} |")
+        lines.append("")
 
     failures = failure_histogram(results)
     if failures:
@@ -573,7 +625,7 @@ class GeminiRunner:
                 metadata=copy.deepcopy(metadata),
                 prompt_version=prompt_version,
             )
-            result = parse_output(response["response"])
+            result = parse_output(response["response"], response.get("grounding_metadata"))
             result.usage = response.get("usage") or {}
         except Exception as e:  # keep going; the failure is reported per run
             result = RunResult(error=describe_exception(e))

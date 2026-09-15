@@ -10,6 +10,8 @@ Usage:
     python src/scripts/reprocess_snippets.py --disliked --commented --min-confidence 95 --not-hidden --stage 4 --execute
     python src/scripts/reprocess_snippets.py --ids-file ids.txt --stage 3 --execute --audit-file requeued.json
     python src/scripts/reprocess_snippets.py --quarantine-batch hide-2026-09-15-heuristics --stage 3 --limit 500
+    python src/scripts/reprocess_snippets.py --quarantine-batch hide-2026-09-15-heuristics \
+        --quarantine-reason no_evidence_no_dated_source --stage 3 --limit 50
     python src/scripts/reprocess_snippets.py --error-keyerror --stage 3 --execute
 
 Selection semantics: the "reason" criteria (--fabricated-label, --disliked, --commented, --ids-file,
@@ -23,7 +25,9 @@ wrote (created by PR #81's cleanup_2026_09/02_create_snippet_quarantine_log.sql,
 hid those snippets through user_hide_snippets without changing snippets.status, so they are still 'Processed' here;
 this script only re-queues them and never stamps restored_at or removes the hide row. Unhiding is a separate manual
 step per batch once the new analysis is in. Do not combine --quarantine-batch with --not-hidden: every quarantined
-snippet is hidden by construction.
+snippet is hidden by construction. --quarantine-reason REASON (repeatable, only with --quarantine-batch) narrows
+the selection to log rows whose reason column is one of the given values, so a batch can be re-queued one reason
+at a time; the reason list is recorded in the audit file's selected_by entries and in the printed SQL.
 --error-keyerror selects status = 'Error' with error_message starting 'KeyError:' (VER-363 backfill).
 """
 
@@ -67,6 +71,12 @@ def parse_args(argv=None):
         help="snippets in snippet_quarantine_log with this batch and restored_at IS NULL (repeatable)",
     )
     parser.add_argument(
+        "--quarantine-reason",
+        action="append",
+        metavar="REASON",
+        help="with --quarantine-batch: only log rows whose reason is one of these (repeatable)",
+    )
+    parser.add_argument(
         "--error-keyerror",
         action="store_true",
         help=f"snippets with status 'Error' and error_message starting '{KEYERROR_PREFIX}' (VER-363 backfill)",
@@ -84,6 +94,8 @@ def parse_args(argv=None):
             "select at least one of --fabricated-label, --disliked, --commented, --ids-file, "
             "--quarantine-batch, --error-keyerror"
         )
+    if args.quarantine_reason and not args.quarantine_batch:
+        parser.error("--quarantine-reason only narrows --quarantine-batch; pass a batch name too")
     return args
 
 
@@ -161,6 +173,13 @@ def select_snippets(
     return selected, counts
 
 
+def quarantine_selector_name(reasons: list | None) -> str:
+    """Key for the quarantine selector in the counts and the audit file; names the reason filter when one is set."""
+    if not reasons:
+        return "quarantine_batch"
+    return "quarantine_batch[reason=" + ",".join(reasons) + "]"
+
+
 def selectors_by_id(reason_ids: dict[str, set], selected: list) -> dict[str, list]:
     """Which selector(s) produced each selected id, for the audit file."""
     return {sid: sorted(reason for reason, ids in reason_ids.items() if sid in ids) for sid in selected}
@@ -191,9 +210,13 @@ def build_sql(args, target_status: str, selected: list | None = None) -> str:
         reasons.append(f"s.id IN (<ids from {args.ids_file}>)")
     if args.quarantine_batch:
         batches = ", ".join(f"'{name}'" for name in args.quarantine_batch)
+        reason_filter = ""
+        if args.quarantine_reason:
+            reason_filter = " AND reason IN (" + ", ".join(f"'{r}'" for r in args.quarantine_reason) + ")"
         reasons.append(
-            "s.id IN (SELECT snippet FROM snippet_quarantine_log WHERE batch IN (" + batches + ") "
-            "AND restored_at IS NULL)"
+            "s.id IN (SELECT snippet FROM snippet_quarantine_log WHERE batch IN (" + batches + ")"
+            + reason_filter
+            + " AND restored_at IS NULL)"
         )
     if args.error_keyerror:
         reasons.append(f"(s.status = 'Error' AND s.error_message LIKE '{KEYERROR_PREFIX}%')")
@@ -263,14 +286,19 @@ def fetch_commented_snippet_ids(client) -> set:
     return {row["id"] for row in rows}
 
 
-def fetch_quarantine_batch_snippet_ids(client, batches: list) -> set:
-    """Snippets logged under any of the batches and not yet restored (restored_at IS NULL)."""
-    rows = fetch_all(
-        lambda: client.table("snippet_quarantine_log")
-        .select("snippet")
-        .in_("batch", list(batches))
-        .is_("restored_at", "null")
-    )
+def fetch_quarantine_batch_snippet_ids(client, batches: list, reasons: list | None = None) -> set:
+    """Snippets logged under any of the batches and not yet restored (restored_at IS NULL).
+
+    With ``reasons``, only log rows whose reason is one of them count (a subset of the batch).
+    """
+
+    def build_query():
+        query = client.table("snippet_quarantine_log").select("snippet").in_("batch", list(batches))
+        if reasons:
+            query = query.in_("reason", list(reasons))
+        return query.is_("restored_at", "null")
+
+    rows = fetch_all(build_query)
     return {row["snippet"] for row in rows}
 
 
@@ -326,7 +354,9 @@ def main(argv=None):
         with open(args.ids_file, encoding="utf-8") as f:
             reason_ids["ids_file"] = set(parse_ids_file(f.read()))
     if args.quarantine_batch:
-        reason_ids["quarantine_batch"] = fetch_quarantine_batch_snippet_ids(client, args.quarantine_batch)
+        reason_ids[quarantine_selector_name(args.quarantine_reason)] = fetch_quarantine_batch_snippet_ids(
+            client, args.quarantine_batch, args.quarantine_reason
+        )
     if args.error_keyerror:
         reason_ids["error_keyerror"] = fetch_keyerror_snippet_ids(client)
 

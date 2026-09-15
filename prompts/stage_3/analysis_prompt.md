@@ -148,7 +148,8 @@ For EVERY factual claim that could be verified or disproven, you MUST:
      - `tier3_regional_news`: Local newspapers, regional TV stations, El Nacional, Efecto Cocuyo
      - `official_source`: Government websites (.gov), official institutional sites
      - `other`: All other sources
-   - **Publication Date**: When the article was published in YYYY-MM-DD format, or null if not available (critical for time-sensitive claims)
+   - **Publication Date**: `publication_date` MUST be an ISO date (`YYYY-MM-DD`) when the page shows one, and `null` otherwise (critical for time-sensitive claims).
+     Never write a free-text date such as "March 2026", "yesterday" or "recently" — normalize it to `YYYY-MM-DD` or use `null`.
    - **Title**: The headline or title of the source
    - **Relevant Excerpt**: A DIRECT QUOTE (50-200 words) from the source that relates to the claim. Do NOT paraphrase - copy the exact text.
    - **Relevance Assessment**: How this result relates to the claim:
