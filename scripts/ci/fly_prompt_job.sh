@@ -61,6 +61,21 @@ fi
 
 # The Machines API caps a single `fly machine wait` at about 60s whatever --wait-timeout says,
 # so poll the machine state instead. A transient flyctl error retries; MAX_POLL_ERRORS in a row fails.
+# `fly machine status` has no --json flag (flyctl 0.4.x), so read the state from `fly machines list`.
+poll_err=$(mktemp)
+poll_state() {
+  fly machines list -a "$FLY_APP" --json 2>"$poll_err" | python3 -c '
+import json, sys
+wanted = sys.argv[1]
+for machine in json.load(sys.stdin):
+    if machine["id"] == wanted:
+        print(machine["state"])
+        sys.exit(0)
+print(f"machine {wanted} is not in the fly machines list", file=sys.stderr)
+sys.exit(1)
+' "$id" 2>>"$poll_err"
+}
+
 POLL_INTERVAL="${POLL_INTERVAL:-20}"
 HEARTBEAT_INTERVAL="${HEARTBEAT_INTERVAL:-300}"
 MAX_POLL_ERRORS=10
@@ -70,8 +85,7 @@ errors=0
 state="unknown"
 echo "Waiting up to $WAIT_TIMEOUT for machine $id to stop"
 while :; do
-  if state=$(fly machine status "$id" -a "$FLY_APP" --json 2>/dev/null \
-      | python3 -c 'import json, sys; print(json.load(sys.stdin)["state"])' 2>/dev/null); then
+  if state=$(poll_state); then
     errors=0
     case "$state" in
       stopped|destroyed) break ;;
@@ -79,12 +93,13 @@ while :; do
   else
     errors=$((errors + 1))
     state="unknown"
+    reason=$(tail -n 1 "$poll_err" 2>/dev/null || true)
     if [ "$errors" -ge "$MAX_POLL_ERRORS" ]; then
-      echo "::error::could not read the state of machine $id after $errors consecutive attempts"
+      echo "::error::could not read the state of machine $id after $errors consecutive attempts${reason:+: $reason}"
       fetch_logs
       exit 1
     fi
-    echo "Could not read machine state (attempt $errors/$MAX_POLL_ERRORS); retrying in ${POLL_INTERVAL}s"
+    echo "Could not read machine state (attempt $errors/$MAX_POLL_ERRORS)${reason:+: $reason}; retrying in ${POLL_INTERVAL}s"
   fi
   now=$(date +%s)
   if [ $((now - start)) -ge "$timeout_secs" ]; then
