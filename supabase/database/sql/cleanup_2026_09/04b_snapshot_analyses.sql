@@ -1,16 +1,26 @@
 -- cleanup_2026_09 / step 04b: snapshot the current analysis of every quarantined snippet (WRITES, audit only).
 --
--- Run after 04 has finished for a batch and BEFORE 09 re-queues anything from
--- that batch. Reprocessing overwrites title/summary/explanation/categories/
+-- Run after a batch has been logged in snippet_quarantine_log and BEFORE that
+-- batch is re-queued for reprocessing (reprocess_snippets.py --quarantine-batch,
+-- or 09). Reprocessing overwrites title/summary/explanation/categories/
 -- confidence_scores/grounding_metadata on the snippet row; this table keeps
 -- the pre-cleanup analysis so before/after can be compared and a wrong
 -- reprocessing result can be reviewed against what the public saw.
 --
+-- The ids come from snippet_quarantine_log only. It does not matter how the
+-- batch was parked: the 2026-09-15 hide left snippets.status = 'Processed' and
+-- used user_hide_snippets instead of a 'Quarantined' status, and this file
+-- snapshots those rows all the same (no status filter anywhere below).
+--
 -- One row per (snippet, batch): every snippet_quarantine_log row for the batch
 -- (restored or not) gets a snapshot. Idempotent: rows already present are
 -- skipped (NOT EXISTS + ON CONFLICT DO NOTHING). 2,000 per run, newest
--- recorded_at first; repeat until the INSERT reports 0 rows. Guard before 09:
+-- recorded_at first; repeat until the INSERT reports 0 rows. Guard before
+-- re-queueing and before 10:
 --   snapshot count for the batch = log count for the batch  (query in README.md).
+-- 10_unhide_after_reprocess.sql joins this table to tell a re-analysed snippet
+-- from one that was never re-queued, so a batch without a complete snapshot is
+-- never un-hidden.
 --
 -- Audit table: no foreign keys (rows must outlive the snippet), RLS on with no
 -- policies, service_role grant — same pattern as the two log tables.
@@ -55,8 +65,8 @@ GRANT ALL ON TABLE public.snippet_analysis_snapshot TO service_role;
 BEGIN;
 
 WITH params AS (
-    SELECT 'cleanup-2026-09-narrow'::text AS batch,   -- <- edit: -narrow or -broad
-           2000                          AS batch_size
+    SELECT 'hide-2026-09-15-heuristics'::text AS batch,   -- <- edit: -heuristics, -embeddings or -noevidence-premarch
+           2000                               AS batch_size
 ),
 todo AS (
     SELECT s.*, p.batch
@@ -95,7 +105,7 @@ ON CONFLICT (snippet, batch) DO NOTHING;
 
 COMMIT;
 
--- Guard before running 09 for the batch (must return equal = true):
+-- Guard before re-queueing (or running 10) for the batch (must return equal = true):
 -- SELECT l.batch, l.n AS logged, coalesce(x.n, 0) AS snapshotted, l.n = coalesce(x.n, 0) AS equal
 -- FROM (SELECT batch, count(*) n FROM public.snippet_quarantine_log GROUP BY batch) l
 -- LEFT JOIN (SELECT batch, count(*) n FROM public.snippet_analysis_snapshot GROUP BY batch) x USING (batch);

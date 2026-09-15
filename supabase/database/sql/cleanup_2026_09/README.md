@@ -3,7 +3,7 @@
 **Date prepared:** September 14, 2026
 **Prepared by:** Claude (Fable 5.1) for Rajiv Sinclair, from the review thread in Slack
 **Tracking:** VER-349 (snippet quarantine), VER-341 (knowledge-base cleanup); parent VER-338
-**Status:** SQL prepared and counts re-confirmed read-only. **Nothing in this folder has been executed.** An admin runs the files, in order, after Rajiv approves the counts in Slack.
+**Status (2026-09-15):** partly executed, partly superseded. See [Status 2026-09-15](#status-2026-09-15) before running anything. The KB deactivation (`06`–`08`) ran as written. The snippet quarantine was **not** done with a `Quarantined` status: it was executed directly in production as NULL-user rows in `user_hide_snippets`, audited in `snippet_quarantine_log`, with `snippets.status` unchanged. Files `01`, `03`, `04`, `05` and `09` are therefore superseded and must not be run; `04b` and the new `10` are the remaining steps.
 
 ---
 
@@ -11,36 +11,72 @@
 
 Stage 3 has been scoring snippets 95+ and labelling them *fabricated content* while its own explanation says it found **no evidence** for the claim and cites no source. Those snippets are in the public feed (`get_snippets` shows `status = 'Processed' AND overall >= 95 AND not hidden`). The same failure wrote knowledge-base "facts" that are really "no evidence exists" statements or have no real source URL, and those facts are now fed back to the model through RAG.
 
-This folder parks the affected snippets in a new `Quarantined` status (out of the feed, out of every poller), deactivates the bad KB entries, logs every change so it can be undone, and gives a re-queue statement to reprocess the parked snippets once the fixed prompts/code (evidence gate + temporal-context hotfix) are deployed.
+This folder was prepared to park the affected snippets in a new `Quarantined` status (out of the feed, out of every poller), deactivate the bad KB entries, log every change so it can be undone, and re-queue the parked snippets once the fixed prompts/code (evidence gate + temporal-context hotfix) are deployed. The KB half ran as prepared. For the snippet half the team chose to hide instead of re-status (no enum change, no new status for pollers and the app to learn, same feed effect), and that hide was executed from another session on 2026-09-15; the audit table and the reprocessing plan below are adjusted to it.
+
+---
+
+## Status 2026-09-15
+
+**Snippets: hidden, not re-statused (01/03/04/05/09 superseded).** Executed 2026-09-15 07:37 UTC directly in production:
+
+* Each selected snippet got a row in `public.user_hide_snippets (snippet, "user")` with `"user" IS NULL`. `get_snippets` excludes any snippet with a hide row, so the feed effect is the same as the planned status change. `snippets.status` was **not** changed (still `Processed`), so the snippets remain visible to Stage 4 / admin tooling exactly as before.
+* `public.snippet_quarantine_log` was created with `02_create_snippet_quarantine_log.sql` verbatim (`id, snippet, previous_status, reason, batch, quarantined_at, restored_at`, `UNIQUE (snippet, batch)`) and is the audit table: one row per hidden snippet, `previous_status = 'Processed'`, `restored_at IS NULL` while the hide is in place.
+* Batches (the `cleanup-2026-09-narrow` / `-broad` names were not used):
+
+| Batch | Reason | Rows | State |
+|-------|--------|-----:|-------|
+| `hide-2026-09-15-heuristics` | `fabrication_label` | 15,160 | executed 2026-09-15 07:37 UTC |
+| `hide-2026-09-15-heuristics` | `no_evidence_no_dated_source` | 2,685 | executed |
+| `hide-2026-09-15-heuristics` | `insufficient_evidence_high_score` | 10 | executed |
+| **`hide-2026-09-15-heuristics` total** | | **17,855** | |
+| `hide-2026-09-15-embeddings` | embedding-similarity selection | ~640 | approved, may be run by Rajiv in the SQL editor |
+| `hide-2026-09-15-noevidence-premarch` | no-evidence snippets recorded before March | ~5,900 | approved, may be run by Rajiv in the SQL editor |
+
+* **200 pre-existing `user_hide_snippets` rows also have `"user" IS NULL`** (written by the 2-dislike trigger). They are not in `snippet_quarantine_log` and must never be touched; every statement in this folder that deletes hide rows joins through the log for that reason.
+* Rollback per batch is a `DELETE` of the hide rows plus `restored_at`; see [Rollback](#rollback). `05_quarantine_rollback.sql` looks for `status = 'Quarantined'` and would do nothing.
+
+**Knowledge base: executed as prepared (06/07/08 valid).** `07` ran 2026-09-15 07:11–07:14 UTC, once per batch, logged in `kb_deactivation_log`:
+
+| Batch | Rows deactivated |
+|-------|-----------------:|
+| `cleanup-2026-09-kb-negation` | 3,880 |
+| `cleanup-2026-09-kb-unsourced` | 220 |
+| **total** | **4,100** (active `kb_entries` 11,190 → 7,092) |
+
+(The unsourced batch is small because it ran second: the 1,571 entries in both sets were logged under `-kb-negation`. Compare the 2026-09-14 estimate of 3,868 + 218 = 4,086; the extra rows are entries created between the count and the run.) `08` remains the rollback, per batch.
+
+**Gateway behaviour.** The Supabase Management API gateway returns **HTTP 502 after about 30 s** while the statement keeps running server-side and commits normally. A 502 is not a failure and not a reason to re-send: check `snippet_quarantine_log` / `kb_deactivation_log` (queries under [Verification](#verification-queries-read-only)) to see whether the write landed, then continue. Every write file here is idempotent per batch, so an accidental re-send is a no-op, but verifying first avoids double work against the 2-minute `statement_timeout`.
+
+**What remains.**
+
+1. `04b` for `hide-2026-09-15-heuristics` (and for each further batch once it is run) until the guard shows `equal = true`.
+2. After the hotfix (PR #80) is deployed: re-queue per batch with `src/scripts/reprocess_snippets.py --quarantine-batch <batch> --stage 3 [--limit N] [--since YYYY-MM-DD]`, dry-run first, then `--execute`. The script only sets `status = 'New'`; it does not touch hide rows or `restored_at`.
+3. Once Stage 3/4 have finished with a batch: `10_unhide_after_reprocess.sql` per batch, repeated until 0 rows. It removes the NULL-user hide row and stamps `restored_at` only for snippets that were re-analysed and now carry a real verdict at or above the feed threshold; everything else stays hidden and open in the log.
 
 ---
 
 ## Files and order of operations
 
-| # | File | Writes? | Run how often |
-|---|------|---------|---------------|
-| 01 | `01_add_quarantined_status.sql` | DDL (enum) | once, **alone**, committed before anything else |
-| 02 | `02_create_snippet_quarantine_log.sql` | DDL (table) | once |
-| 03 | `03_quarantine_select.sql` | no | as needed; produces the counts below |
-| 04 | `04_quarantine_execute.sql` | yes | repeat per 2,000-row batch until 0 rows |
-| 04b | `04b_snapshot_analyses.sql` | DDL (audit table) + yes | after 04 for each batch; repeat per 2,000 until 0 rows; required before 09 |
-| 05 | `05_quarantine_rollback.sql` | yes | only to undo 04 |
-| 06 | `06_kb_deactivate_select.sql` | no | as needed; produces the KB counts |
-| 07 | `07_kb_deactivate_execute.sql` | DDL (log table) + yes | once per approved KB batch (`-kb-negation`, `-kb-unsourced`); idempotent |
-| 08 | `08_kb_deactivate_rollback.sql` | yes | only to undo 07, per batch |
-| 09 | `09_reprocess_requeue.sql` | yes | **after the hotfix deploy**; repeat per 500 until 0 rows |
+| # | File | Writes? | State (2026-09-15) |
+|---|------|---------|--------------------|
+| 01 | `01_add_quarantined_status.sql` | DDL (enum) | **SUPERSEDED** – no `Quarantined` status was added; the hide went through `user_hide_snippets`. Do not run. |
+| 02 | `02_create_snippet_quarantine_log.sql` | DDL (table) | **EXECUTED** 2026-09-15 (verbatim) as the audit table for the hide |
+| 03 | `03_quarantine_select.sql` | no | **SUPERSEDED** – the executed selection used the `hide-2026-09-15-*` heuristics listed above, not NARROW/BROAD |
+| 04 | `04_quarantine_execute.sql` | yes | **SUPERSEDED** – replaced by the hide executed 2026-09-15 07:37 UTC (`hide-2026-09-15-heuristics`, 17,855 rows; `-embeddings` ~640 and `-noevidence-premarch` ~5,900 approved) |
+| 04b | `04b_snapshot_analyses.sql` | DDL (audit table) + yes | **TO RUN** per `hide-2026-09-15-*` batch before that batch is re-queued; repeat per 2,000 until 0 rows; reads ids from `snippet_quarantine_log` regardless of `snippets.status` |
+| 05 | `05_quarantine_rollback.sql` | yes | **SUPERSEDED** – matches `status = 'Quarantined'` only, so it is a no-op now; use the hide rollback under [Rollback](#rollback) |
+| 06 | `06_kb_deactivate_select.sql` | no | valid; produced the KB counts |
+| 07 | `07_kb_deactivate_execute.sql` | DDL (log table) + yes | **EXECUTED** 2026-09-15 07:11–07:14 UTC: `-kb-negation` 3,880, `-kb-unsourced` 220; active 11,190 → 7,092; log `kb_deactivation_log` |
+| 08 | `08_kb_deactivate_rollback.sql` | yes | valid; only to undo 07, per batch |
+| 09 | `09_reprocess_requeue.sql` | yes | **SUPERSEDED** – selects `status = 'Quarantined'`; re-queue with `reprocess_snippets.py --quarantine-batch` instead |
+| 10 | `10_unhide_after_reprocess.sql` | yes | **TO RUN** per batch after reprocessing; removes the NULL-user hide row and stamps `restored_at` for snippets that came back at 95+; repeat per 5,000 until 0 rows |
 
-Recommended sequence:
+Remaining sequence (the original 01–09 sequence is kept in git history for reference):
 
-1. Record the **before** numbers (verification queries below).
-2. `01` alone. `ALTER TYPE ... ADD VALUE` cannot be used in the same transaction that references the new label, so paste and run only that statement, then confirm with `select unnest(enum_range(null::processing_status))`.
-3. `02`.
-4. `03` per 10-day slice; confirm the totals still match the approved set.
-5. `04` with `params.batch = 'cleanup-2026-09-narrow'`, repeated until the `UPDATE` reports 0 rows (about 4 runs). If the broad set is approved as well, run it again with `'cleanup-2026-09-broad'` (about 4 more runs for the ~6,920 additional rows, since narrow-A is a subset of broad and is already gone).
-5b. `04b` for each quarantined batch, repeated until the `INSERT` reports 0 rows, then the guard query below must show `equal = true`. Not urgent for the feed (quarantine alone changes nothing on the snippet row), but mandatory before step 8.
-6. `06`, then `07` once with `params.batch = 'cleanup-2026-09-kb-negation'` and once with `'cleanup-2026-09-kb-unsourced'` (each is a separate approval; either can be run alone).
-7. Record the **after** numbers.
-8. Later, after the fixed pipeline is deployed and the snapshot guard passes: `09` in chunks of 500 (or `src/scripts/reprocess_snippets.py` from the hotfix PR, not both).
+1. `04b` with `params.batch = 'hide-2026-09-15-heuristics'`, repeated until the `INSERT` reports 0 rows; then the guard query under [snapshot_restore_note](#snapshot_restore_note-beforeafter-comparison) must show `equal = true` for the batch. Repeat for `-embeddings` and `-noevidence-premarch` once those batches exist in the log. Mandatory before step 2: reprocessing overwrites the analysis columns and `10` relies on the snapshot to recognise a re-analysed snippet.
+2. After the hotfix deploy: `python src/scripts/reprocess_snippets.py --quarantine-batch hide-2026-09-15-heuristics --stage 3 --limit 500` (dry-run, prints counts and the equivalent SQL), then the same with `--execute`. Repeat in chunks; `--since` narrows by `recorded_at`, and the selection is newest-first. Do not add `--not-hidden` (every quarantined snippet is hidden by construction). The audit JSON records `selected_by` and `previous_status` per id.
+3. When the Stage 3/4 pollers have drained the re-queued snippets: `10` with the same `params.batch`, repeated until the final `UPDATE` reports 0 rows. Record the verify-query numbers in Slack / Linear.
+4. Repeat 1–3 per batch.
 
 ### Running a file
 
@@ -54,7 +90,9 @@ curl -sS -X POST https://api.supabase.com/v1/projects/dzujjhzgzguciwryzwlx/datab
   -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'Content-Type: application/json' --data @body.json
 ```
 
-The project's `statement_timeout` is **2 minutes**. The full 90-day selection with the regexes does not finish inside that through the API, which is why `03` exposes `slice_lo/slice_hi` and `04` caps each run at 2,000 rows newest-first (`idx_snippets_processed_recorded_at` on `(recorded_at DESC) WHERE status = 'Processed'` lets the planner stop early). If a `04` run still times out, narrow `slice_lo/slice_hi` to a 10-day window.
+The project's `statement_timeout` is **2 minutes**. The full 90-day selection with the regexes does not finish inside that through the API, which is why `03` exposes `slice_lo/slice_hi` and `04` caps each run at 2,000 rows newest-first (`idx_snippets_processed_recorded_at` on `(recorded_at DESC) WHERE status = 'Processed'` lets the planner stop early). `04b` and `10` use the same chunking.
+
+**The API gateway times out before the statement does.** Observed on 2026-09-15: the Management API returns **HTTP 502 after roughly 30 s**, but the statement keeps running on the database and commits when it finishes (the `07` runs and the hide itself completed this way). Treat a 502 as "unknown outcome", not as a failure: wait, then check the log tables (`snippet_quarantine_log`, `kb_deactivation_log`, `snippet_analysis_snapshot`) with the verification queries before re-sending. The SQL editor has the same 2-minute statement limit but no 30 s gateway cut-off, so long chunks are better run there.
 
 ---
 
@@ -85,6 +123,8 @@ Schema facts checked on 2026-09-14: `processing_status` = New, Processing, Proce
 ---
 
 ## Counts
+
+**These are the 2026-09-14 estimates for the NARROW/BROAD plan, kept for the record.** The executed hide used different heuristics and batch names; its real counts are under [Status 2026-09-15](#status-2026-09-15).
 
 Re-confirmed read-only on 2026-09-14 (afternoon UTC) through the Management API, anchor `2026-09-14`. Snippet counts were taken in nine 10-day slices and summed (two lanes of sequential slices; nine in parallel overload the 2-minute gateway); KB counts in one query. The second pass re-ran everything after the review changes (evidence check on NARROW-A, K1 exception, KB batch split).
 
@@ -157,24 +197,35 @@ SELECT batch, reason, count(*) FILTER (WHERE restored_at IS NULL) AS quarantined
        count(*) FILTER (WHERE restored_at IS NOT NULL) AS released
 FROM snippet_quarantine_log GROUP BY batch, reason ORDER BY 1, 2;
 
+-- Hide rows written by the cleanup vs. the 200 pre-existing NULL-user rows (2-dislike trigger)
+SELECT count(*) FILTER (WHERE l.snippet IS NOT NULL) AS cleanup_hides,
+       count(*) FILTER (WHERE l.snippet IS NULL)     AS other_null_user_hides
+FROM user_hide_snippets h
+LEFT JOIN snippet_quarantine_log l ON l.snippet = h.snippet AND l.restored_at IS NULL
+WHERE h."user" IS NULL;
+
 -- Knowledge base
 SELECT status, count(*) FROM kb_entries GROUP BY status;
-SELECT reason, count(*) FROM kb_deactivation_log WHERE batch = 'cleanup-2026-09-kb' GROUP BY reason ORDER BY 2 DESC;
+SELECT batch, reason, count(*) FILTER (WHERE restored_at IS NULL) AS deactivated,
+       count(*) FILTER (WHERE restored_at IS NOT NULL) AS restored
+FROM kb_deactivation_log GROUP BY batch, reason ORDER BY 1, 3 DESC;
 SELECT status, count(*) FROM kb_entry_embeddings GROUP BY status;
 
--- Nothing should be picked up by the pollers from quarantine
-SELECT count(*) FROM snippets WHERE status IN ('New', 'Ready for review');
+-- Re-queue progress (snippets from the log that are back in the pipeline)
+SELECT s.status, count(*) FROM snippets s
+JOIN snippet_quarantine_log l ON l.snippet = s.id
+WHERE l.restored_at IS NULL GROUP BY 1 ORDER BY 2 DESC;
 ```
 
-Expected after `04` (narrow only): `feed_visible_90d` drops by ~4,981; `snippets.status = 'Quarantined'` = ~7,922; `New`/`Ready for review` counts unchanged by this step. After `07` (both KB batches): `kb_entries.status = 'deactivated'` rises by 4,086 (3,868 negation + 218 unsourced-only, or 1,789 + 2,297 if the unsourced batch runs first) and `kb_entry_embeddings.status = 'Deactivated'` = number of those entries that had an embedding.
+Observed after the hide (2026-09-15): `snippet_quarantine_log` has 17,855 open rows for `hide-2026-09-15-heuristics` (15,160 / 2,685 / 10 by reason), `other_null_user_hides` = 200, `snippets.status` distribution unchanged by the hide. After `07` (both batches): `kb_entries` active 11,190 → 7,092, `kb_deactivation_log` 3,880 + 220 rows. Expected after `10` for a batch: `unhidden` rises by the number of snippets that came back at 95+, `still_hidden` keeps the rest, `other_null_user_hides` stays 200.
 
 ---
 
 ## snapshot_restore_note: before/after comparison
 
-`04b_snapshot_analyses.sql` copies each quarantined snippet's analysis (`status`, `title`, `summary`, `explanation`, `disinformation_categories`, `confidence_scores`, `grounding_metadata`, `thought_summaries`, `analyzed_by`, `reviewed_by`, `reviewed_at`, `stage_3_prompt_version_id`) plus its labels (`snippet_labels` joined to `labels`, as a jsonb array of `{label_id, text, is_ai_suggested, applied_by, upvote_count}`) into `snippet_analysis_snapshot`, one row per `(snippet, batch)`. Nothing restores from it automatically; it is the reference for reviewing what reprocessing changed.
+`04b_snapshot_analyses.sql` takes its ids from `snippet_quarantine_log` only (no `snippets.status` filter), so it works unchanged for the hidden batches. It copies each logged snippet's analysis (`status`, `title`, `summary`, `explanation`, `disinformation_categories`, `confidence_scores`, `grounding_metadata`, `thought_summaries`, `analyzed_by`, `reviewed_by`, `reviewed_at`, `stage_3_prompt_version_id`) plus its labels (`snippet_labels` joined to `labels`, as a jsonb array of `{label_id, text, is_ai_suggested, applied_by, upvote_count}`) into `snippet_analysis_snapshot`, one row per `(snippet, batch)`. Nothing restores from it automatically; it is the reference for reviewing what reprocessing changed.
 
-**Guard: `09` must not run for a batch until this returns `equal = true` for it.**
+**Guard: a batch must not be re-queued (`reprocess_snippets.py --quarantine-batch`) and `10` must not run for it until this returns `equal = true` for it.** `10` joins the snapshot to tell a re-analysed snippet from one that was never re-queued, so a missing snapshot row means the snippet is never un-hidden.
 
 ```sql
 SELECT l.batch, l.n AS logged, coalesce(x.n, 0) AS snapshotted, l.n = coalesce(x.n, 0) AS equal
@@ -203,8 +254,8 @@ SELECT
     s.stage_3_prompt_version_id                     AS prompt_after
 FROM snippet_analysis_snapshot x
 JOIN snippets s ON s.id = x.snippet
-WHERE x.batch = 'cleanup-2026-09-narrow'
-  AND s.status = 'Processed'               -- already reprocessed
+WHERE x.batch = 'hide-2026-09-15-heuristics'
+  AND s.updated_at > x.snapshot_at         -- re-analysed since the snapshot (status alone no longer tells: it stayed 'Processed')
 ORDER BY s.recorded_at DESC;
 
 -- Aggregate: how many came back above the feed threshold, and how many dropped the fabrication label
@@ -217,7 +268,7 @@ SELECT
                        AND NOT EXISTS (SELECT 1 FROM unnest(s.disinformation_categories) d WHERE d::text ILIKE '%fabricat%')) AS lost_fabrication_label
 FROM snippet_analysis_snapshot x
 JOIN snippets s ON s.id = x.snippet
-WHERE x.batch = 'cleanup-2026-09-narrow'
+WHERE x.batch = 'hide-2026-09-15-heuristics'
   AND s.status = 'Processed'
   AND s.updated_at > x.snapshot_at;
 ```
@@ -228,28 +279,58 @@ The snapshot is never deleted by any file here. Labels are stored as data only; 
 
 ## Rollback
 
-Every write is logged with the previous state, and every rollback is a single file run per batch:
+Every write is logged with the previous state, and every rollback is one statement per batch:
 
-* Snippets: `05_quarantine_rollback.sql` with `params.batch` set to `'cleanup-2026-09-narrow'` or `'cleanup-2026-09-broad'`; repeat until 0 rows. Restores `previous_status` (normally `Processed`, so the snippets are back in the feed immediately) and stamps `restored_at`. Snippets already re-queued by `09` are not touched.
-* Knowledge base: `08_kb_deactivate_rollback.sql` with `params.batch` set to `'cleanup-2026-09-kb-negation'` or `'cleanup-2026-09-kb-unsourced'`. Restores `status = 'active'`, clears the `cleanup-2026-09:` reason, and sets `kb_entry_embeddings.status` back to `'Processed'`. Entries deactivated or superseded since for another reason are left alone.
-* The `Quarantined` enum label and the two log tables are intentionally left in place (removing an enum value is not supported by PostgreSQL; the tables are the audit trail).
+* **Snippets (hide rollback).** `05_quarantine_rollback.sql` is superseded: it restores `status` from `'Quarantined'`, and no snippet has that status. The executed hide is undone per batch by deleting exactly the NULL-user hide rows that the log accounts for, then stamping `restored_at`:
+
+  ```sql
+  BEGIN;
+  WITH params AS (SELECT 'hide-2026-09-15-heuristics'::text AS batch),
+  todo AS (
+      SELECT l.id AS log_id, l.snippet
+      FROM snippet_quarantine_log l CROSS JOIN params p
+      WHERE l.batch = p.batch AND l.restored_at IS NULL
+  ),
+  unhidden AS (
+      DELETE FROM user_hide_snippets h
+      USING todo t
+      WHERE h.snippet = t.snippet AND h."user" IS NULL
+      RETURNING h.snippet
+  )
+  UPDATE snippet_quarantine_log l SET restored_at = now()
+  FROM todo t WHERE l.id = t.log_id AND l.restored_at IS NULL;
+  COMMIT;
+  ```
+
+  The snippets are back in the feed immediately (`status` was never changed). `h."user" IS NULL` plus the join through the log keeps users' own hides and the 200 trigger-written NULL-user rows out of it. Log rows already stamped by `10` are not touched; a snippet that was re-queued but has not finished reprocessing is un-hidden by this and will show whatever analysis it ends up with. Add `LIMIT` to `todo` (and repeat) if the 2-minute `statement_timeout` is hit.
+* **Knowledge base.** `08_kb_deactivate_rollback.sql` with `params.batch` set to `'cleanup-2026-09-kb-negation'` (3,880 rows) or `'cleanup-2026-09-kb-unsourced'` (220 rows), as executed on 2026-09-15. Restores `status = 'active'`, clears the `cleanup-2026-09:` reason, and sets `kb_entry_embeddings.status` back to `'Processed'`. Entries deactivated or superseded since for another reason are left alone. Because the 1,571 entries in both sets were logged under `-kb-negation`, rolling back only `-kb-unsourced` re-activates just the 220 unsourced-only entries.
+* The log tables (`snippet_quarantine_log`, `kb_deactivation_log`, `snippet_analysis_snapshot`) are intentionally left in place as the audit trail. No enum value was added.
 
 ---
 
 ## Reprocessing (later)
 
-`09_reprocess_requeue.sql` (or `src/scripts/reprocess_snippets.py` from the hotfix PR, which selects `status = 'Quarantined'` and sets `'New'`) moves quarantined snippets back to `New`, 500 newest-first per run, and stamps `restored_at` on the log rows. The Stage 3 poller (`fetch_a_new_snippet_and_reserve_it`, `status = 'New' ORDER BY recorded_at DESC`) then re-analyses them with the deployed prompts and evidence gate; snippets that fail the new gates never return above the feed threshold.
+`09_reprocess_requeue.sql` is superseded (it selects `status = 'Quarantined'`). Re-queue with the hotfix PR's script instead:
 
-**Do not run 09 until the fixed code and prompts are deployed** (evidence gate, temporal context, and the Stage 3/4 prompt versions from the hotfix PR are active in `prompt_versions`). Re-queuing before that would reproduce the same analyses and put the snippets back in the feed.
+```sh
+python src/scripts/reprocess_snippets.py --quarantine-batch hide-2026-09-15-heuristics --stage 3 --limit 500            # dry-run
+python src/scripts/reprocess_snippets.py --quarantine-batch hide-2026-09-15-heuristics --stage 3 --limit 500 --execute  # writes
+```
+
+`--quarantine-batch` (repeatable) reads `snippet_quarantine_log` for `batch = NAME AND restored_at IS NULL`, skips snippets that are in flight (`Processing` / `Reviewing`), orders newest `recorded_at` first, and honours `--limit` / `--since`. With `--execute` it sets `status = 'New'` and writes an audit JSON with `previous_status` and `selected_by` per id. It does **not** stamp `restored_at` and does **not** delete hide rows: the snippet stays hidden while the Stage 3 poller (`fetch_a_new_snippet_and_reserve_it`, `status = 'New' ORDER BY recorded_at DESC`) re-analyses it with the deployed prompts and evidence gate.
+
+`10_unhide_after_reprocess.sql` then closes the loop per batch: for open log rows whose snippet was re-analysed (live analysis differs from the `04b` snapshot and `updated_at > quarantined_at`) and now has `status = 'Processed'` with `overall >= 95`, it deletes the NULL-user hide row and stamps `restored_at`. Snippets that now score below 95, or ended in `Error`, keep their hide row and open log row: the feed filter already excludes them, and the open row records that the cleanup's verdict stood. Rows with a non-NULL `"user"` are never touched.
+
+**Do not re-queue until the fixed code and prompts are deployed** (evidence gate, temporal context, and the Stage 3/4 prompt versions from the hotfix PR are active in `prompt_versions`), and not before `04b` has a snapshot for the whole batch. Re-queuing before the deploy would reproduce the same analyses and `10` would put the snippets back in the feed.
 
 ---
 
 ## Notes and open points
 
 * **RLS pattern.** `snippet_quarantine_log` and `kb_deactivation_log` have RLS enabled with no policies and a `service_role` grant only, the same as `user_hide_snippets` / `user_like_snippets` in production (RLS on, zero policies). `kb_entries` uses explicit policies because the web app reads it; nothing in the app reads these logs.
-* **Enum ALTER.** `ALTER TYPE ... ADD VALUE` is fine outside a transaction block but the new label cannot be *used* in the same transaction. Run `01` by itself. PostgreSQL 17.6 in production.
+* **Enum ALTER (not executed).** `01` was superseded by the hide, so `processing_status` still has no `Quarantined` label. If it is ever wanted: `ALTER TYPE ... ADD VALUE` is fine outside a transaction block but the new label cannot be *used* in the same transaction, so run it by itself. PostgreSQL 17.6 in production.
 * **Embeddings.** `search_kb_entries` filters `kb_entries.status = 'active'`, but `find_duplicate_kb_entries` does not; it assumes deactivated entries lose their `Processed` embedding. `07` therefore marks the embeddings `Deactivated` rather than deleting them so `08` can restore without a re-embedding backfill. This differs from the pipeline's own `deactivate_kb_entry`, which deletes the embedding row; `backfill_kb_embeddings.py` only looks at active entries with no row, so it is not affected either way.
-* **Batch interaction.** `04` selects `status = 'Processed'`, so running `-broad` after `-narrow` logs only the additional rows under the broad batch; each log row belongs to the batch that moved the snippet, and `05` is per batch. To undo everything run `05` once per batch. The same holds for the two KB batches and `08`.
+* **Batch interaction.** `snippet_quarantine_log` is `UNIQUE (snippet, batch)`, so a snippet selected by two hide batches has two log rows and one hide row. `10` and the hide rollback stamp only the batch they were run for, but the `DELETE ... WHERE h.snippet = t.snippet AND h."user" IS NULL` removes the single hide row; the other batch's row then stays open with no hide behind it (the `open_log_rows_without_hide` query at the end of `10` shows this). Run `10` / the rollback for every batch a snippet belongs to, or treat the open row as historical. For the KB batches each log row belongs to the batch that ran first (`07` only touches `active` rows), and `08` is per batch.
 * **Why K1 is a class-level deactivation.** Negation "facts" ("no credible evidence exists that X happened") encode a moment's absence of search results as a permanent truth with no expiry; RAG then feeds them back and the model concludes that a real event never happened (a Wikipedia-sourced "there has never been a Pope Leo XIV" existed). They are the self-poisoning loop itself, so K1 is deactivated as a class rather than only when unsourced, but as its own batch so it is approved as a distinct decision. Properly sourced, dated fact-checks (allowlisted fact-checker/wire host *and* an explicit date in the fact) are kept; everything is reversible through `kb_deactivation_log`.
 * **No foreign keys on the log tables.** `snippet_quarantine_log.snippet`, `kb_deactivation_log.kb_entry` and `snippet_analysis_snapshot.snippet` are plain `NOT NULL uuid` columns. The pipeline deletes snippets (`SupabaseClient.delete_snippet`, Stage 2 redo flow), and a `REFERENCES ... ON DELETE CASCADE` would have erased the audit row with the snippet. `05`/`08`/`09` join to the live table and skip ids that no longer exist.
-* **Two-minute statement timeout** applies to the Management API and SQL editor alike; the batch sizes above were chosen for it and have not yet been timed against a real write.
+* **Two-minute statement timeout** applies to the Management API and SQL editor alike; the batch sizes above were chosen for it. The `07` runs (about 4,000 rows each) finished within it on 2026-09-15 but past the gateway's ~30 s HTTP 502 cut-off, so the result was confirmed from `kb_deactivation_log` rather than from the HTTP response.
