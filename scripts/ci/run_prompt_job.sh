@@ -30,6 +30,15 @@ case "${PROMPT_JOB:?evaluate|deploy}" in
       if [ -f "eval-report-${eval_set}.md" ]; then
         { echo; echo "<details><summary>Eval set: ${eval_set}</summary>"; echo; cat "eval-report-${eval_set}.md"; echo; echo "</details>"; } >> eval-report.md
       fi
+      # The machine is destroyed after the job; keep the per-run JSON somewhere durable.
+      if [ -f "eval-results-${eval_set}.json" ]; then
+        prefix="prompt-eval/${VERDAD_SHA}"
+        if python scripts/ci/upload_eval_artifacts.py --prefix "$prefix" "eval-report-${eval_set}.md" "eval-results-${eval_set}.json"; then
+          echo "- Full results for \`$eval_set\`: \`r2://${R2_BUCKET_NAME:-?}/${prefix}/eval-results-${eval_set}.json\`" >> eval-report.md
+        else
+          echo "- Full results for \`$eval_set\`: upload to R2 failed (see workflow logs)" >> eval-report.md
+        fi
+      fi
     done
     cat eval-report.md
     if [ -n "${PR_NUMBER:-}" ]; then

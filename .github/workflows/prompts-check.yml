@@ -9,6 +9,7 @@ on:
       - "tests/test_prompt_manifest.py"
       - "tests/test_import_prompts_diff.py"
       - "tests/test_post_pr_comment.py"
+      - "tests/test_upload_eval_artifacts.py"
       - "scripts/ci/**"
       - ".github/workflows/prompts-check.yml"
 
@@ -31,7 +32,7 @@ jobs:
 
       - name: Unit tests (harness, manifest, CI helpers)
         run: |
-          python -m pytest tests/test_evaluate_prompt.py tests/test_prompt_manifest.py tests/test_post_pr_comment.py --no-cov
+          python -m pytest tests/test_evaluate_prompt.py tests/test_prompt_manifest.py tests/test_post_pr_comment.py tests/test_upload_eval_artifacts.py --no-cov
           # The prompt drift test ships with PR #70; run it only once it exists on this branch.
           if [ -f tests/test_import_prompts_diff.py ]; then
             python -m pytest tests/test_import_prompts_diff.py --no-cov

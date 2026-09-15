@@ -40,6 +40,9 @@ and is destroyed when it exits; the runner only relays logs and the exit code. C
 - A PR that adds a Python dependency cannot be evaluated until a Fly deploy has rebuilt the image.
 - The job's short-lived `GITHUB_TOKEN` is passed to the Machine as an environment variable so it
   can post the comment; it expires when the workflow run ends.
+- The per-run JSON (`eval-results-<set>.json`) and the markdown report are copied to R2 under
+  `prompt-eval/<commit sha>/` before the Machine is destroyed; the PR comment names the key.
+  Fetch with `aws s3 cp --endpoint-url $R2_ENDPOINT_URL s3://$R2_BUCKET_NAME/prompt-eval/<sha>/<file> .`
 - Run limits: `WAIT_TIMEOUT` (default 120m) in `fly_prompt_job.sh`, `timeout-minutes` in the
   workflows. A Machine that outlives the wait is destroyed and the job fails.
 
