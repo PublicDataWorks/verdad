@@ -59,6 +59,58 @@ DOMAIN_COLUMNS = ("domain", "tier", "category", "country", "languages", "owner",
 STATION_COLUMNS = ("station_code", "provenance", "owner", "country", "rating_sources", "notes")
 
 CREDIBILITY_CACHE_TTL_SECONDS = 600
+
+# Owner keys that legitimately span several registrable domains (parent companies, networks, governments).
+# Any other non-state row must use its registrable domain as owner, so the independence test cannot be gamed by
+# a mistyped key; state_controlled / disinformation_network rows may group by operator freely.
+KNOWN_NETWORKS = {
+    "afp": {"afp.com"},
+    "al-jazeera-media-network": {"aljazeera.com", "aljazeera.net"},
+    "annenberg-public-policy-center": {"factcheck.org"},
+    "associated-press": {"apnews.com"},
+    "bbc": {"bbc.com", "bbc.co.uk"},
+    "comcast": {"telemundo.com", "nbcnews.com"},
+    "consejo-de-redaccion": {"colombiacheck.com"},
+    "deutsche-welle": {"dw.com"},
+    "disney": {"go.com"},
+    "epoch-media-group": {"theepochtimes.com", "lagranepoca.com", "ntd.com"},
+    "france-medias-monde": {"france24.com", "rfi.fr", "mc-doualiya.com"},
+    "free-speech-systems": {"infowars.com"},
+    "gannett": {"usatoday.com"},
+    "gfr-media": {"elnuevodia.com"},
+    "grupo-animal": {"animalpolitico.com"},
+    "grupo-clarin": {"clarin.com"},
+    "grupo-la-republica": {"larepublica.pe"},
+    "grupo-multimedios": {"milenio.com"},
+    "grupo-reforma": {"reforma.com"},
+    "guardian-media-group": {"theguardian.com"},
+    "hearst": {"houstonchronicle.com"},
+    "herring-networks": {"oann.com"},
+    "impremedia": {"laopinion.com"},
+    "maldita": {"maldita.es", "factchequeado.com"},
+    "mcclatchy": {"miamiherald.com", "elnuevoherald.com"},
+    "nash-holdings": {"washingtonpost.com"},
+    "new-york-times-company": {"nytimes.com"},
+    "news-corp": {"wsj.com"},
+    "newsmax-media": {"newsmax.com"},
+    "paramount": {"cbsnews.com"},
+    "poynter": {"politifact.com"},
+    "prisa": {"elpais.com"},
+    "snopes-media-group": {"snopes.com"},
+    "srmg": {"aawsat.com"},
+    "televisa-univision": {"univision.com"},
+    "thomson-reuters": {"reuters.com"},
+    "tribune-publishing": {"sun-sentinel.com"},
+    "unidad-editorial": {"elmundo.es"},
+    "united-nations": {"who.int"},
+    "us-government": {"bls.gov", "cdc.gov", "census.gov", "fda.gov", "nih.gov", "usgs.gov"},
+    "usagm": {"alhurra.com", "rferl.org", "voanews.com", "martinoticias.com"},
+    "warner-bros-discovery": {"cnn.com"},
+    "wikimedia": {"wikipedia.org"},
+}
+OWNER_GROUPED_CATEGORIES = frozenset({"state_controlled", "disinformation_network"})
+
+
 CREDIBILITY_GATE_NOTE_PREFIX = "[Credibility gate]"
 _GATE_NOTE_RE = re.compile(r"\s*" + re.escape(CREDIBILITY_GATE_NOTE_PREFIX) + r"[^\n]*")
 
@@ -108,6 +160,12 @@ def domain_candidates(host: str) -> list[str]:
     while candidates[-1] != root and "." in candidates[-1]:
         candidates.append(candidates[-1].split(".", 1)[1])
     return candidates
+
+
+def owner_is_plausible(domain: str, owner: str, category: str) -> bool:
+    """True when ``owner`` is the registrable domain, a known network covering it, or a state/disinfo operator."""
+    root = registrable_domain(domain)
+    return owner == root or category in OWNER_GROUPED_CATEGORIES or root in KNOWN_NETWORKS.get(owner, ())
 
 
 @dataclass(frozen=True)

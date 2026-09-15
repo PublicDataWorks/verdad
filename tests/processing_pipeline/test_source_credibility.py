@@ -264,6 +264,16 @@ class TestSeedCsvValidity:
         assert tiers == {1, 2, 3, 4, 5}
         assert all(r["rating_sources"] for r in rows if int(r["tier"]) >= 4)
 
+    def test_owner_keys_are_registrable_domain_or_known_network(self):
+        rows = read_csv_rows(sc.DOMAINS_CSV)
+        offenders = [
+            (r["domain"], r["owner"]) for r in rows if not sc.owner_is_plausible(r["domain"], r["owner"], r["category"])
+        ]
+        assert offenders == []
+        assert not sc.owner_is_plausible("breitbart.com", "rossiya-segodnya", "hyperpartisan")
+        assert sc.owner_is_plausible("elnuevoherald.com", "mcclatchy", "broadsheet")
+        assert sc.owner_is_plausible("esrt.online", "rossiya-segodnya", "state_controlled")
+
     def test_stations_csv(self):
         rows = read_csv_rows(sc.STATIONS_CSV)
         assert list(rows[0].keys()) == list(sc.STATION_COLUMNS)
