@@ -73,6 +73,7 @@ REQUIRED_ENV = (
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
     "R2_BUCKET_NAME",
+    "SEARXNG_URL",
 )
 
 # USD per 1M tokens for the paid tier, prompts <= 200k tokens. Output includes thinking tokens.
@@ -198,7 +199,7 @@ def summarize_runs(runs: list[RunResult], threshold: int = DEFAULT_THRESHOLD, fl
     summary.category_stability = _mean(jaccard(a.categories, b.categories) for a, b in pairs) if pairs else 1.0
     summary.verification_statuses = sorted({r.verification_status for r in ok_runs if r.verification_status})
 
-    representative = next((r for r, f in zip(ok_runs, flags) if f == summary.flagged), ok_runs[0])
+    representative = next((r for r, f in zip(ok_runs, flags, strict=True) if f == summary.flagged), ok_runs[0])
     summary.explanation = representative.explanation
     return summary
 
@@ -704,6 +705,17 @@ def results_to_json(results: list[SnippetResult], agg: dict, config: dict, notes
 # --------------------------------------------------------------------------------------
 
 
+def non_negative_int(value: str) -> int:
+    """argparse type: an int >= 0 (a negative cap would slice the selection from the wrong end)."""
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}") from None
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {number}")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Compare a candidate Stage 3 prompt against the active one on real snippets (read-only).",
@@ -731,7 +743,9 @@ def build_parser() -> argparse.ArgumentParser:
     sel.add_argument("--control", type=int, default=0, metavar="N", help="Add N random liked/never-disliked snippets")
     sel.add_argument("--control-days", type=int, default=90, help="Recording window for --control (default 90)")
     sel.add_argument("--seed", type=int, default=2026, help="RNG seed for --control (default 2026)")
-    sel.add_argument("--max-snippets", type=int, help="Cap the number of snippets (reported first)")
+    sel.add_argument(
+        "--max-snippets", type=non_negative_int, help="Cap the number of snippets (reported first, >= 0)"
+    )
 
     run = parser.add_argument_group("run settings")
     run.add_argument(
@@ -817,8 +831,6 @@ def main(argv=None) -> int:
     if missing:
         print(f"Error: missing environment variables: {', '.join(missing)}", file=sys.stderr)
         return MISSING_ENV_EXIT_CODE
-    if not os.getenv("SEARXNG_URL"):
-        print("Warning: SEARXNG_URL is not set; the Stage 3 web search tool will fail inside the model calls.")
 
     started = time.monotonic()
     data_source = EvalDataSource.from_env()

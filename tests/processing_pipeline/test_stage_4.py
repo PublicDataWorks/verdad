@@ -1,120 +1,53 @@
+import asyncio
 import json
+import os
 from unittest import mock
-from unittest.mock import ANY, Mock, call, patch
+from unittest.mock import AsyncMock, Mock, call, patch
+
 import pytest
-import re
+
+from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_4 import (
-    prepare_snippet_for_review,
-    submit_snippet_review_result,
-    process_snippet,
+    Stage4Executor,
     analysis_review,
     fetch_a_ready_for_review_snippet_from_supabase,
     fetch_a_specific_snippet_from_supabase,
-    Stage4Executor,
+    prepare_snippet_for_review,
+    process_snippet,
+    submit_snippet_review_result,
 )
-from processing_pipeline.constants import GeminiModel
+from processing_pipeline.stage_4.constants import Stage4SubStage
+
+PROMPT_VERSIONS = {
+    sub_stage.value: {"id": f"pv-{sub_stage.value}", "system_instruction": f"{sub_stage.value} instructions"}
+    for sub_stage in Stage4SubStage
+}
+
+
+class StopLoop(Exception):
+    """Raised from a mocked sleep to break out of a repeat=True flow loop"""
 
 
 class TestStage4:
     @pytest.fixture
     def mock_supabase_client(self):
-        """Create a mock Supabase client"""
-        with patch("processing_pipeline.stage_4.SupabaseClient") as MockSupabaseClient:
+        with patch("processing_pipeline.stage_4.flows.SupabaseClient") as MockSupabaseClient:
             mock_client = Mock()
             mock_client.get_snippet_by_id.return_value = None
             mock_client.get_a_ready_for_review_snippet_and_reserve_it.return_value = None
-            mock_client.set_snippet_status.return_value = None
-            mock_client.submit_snippet_review.return_value = None
             mock_client.get_audio_file_by_id.return_value = {
                 "location_city": "Test City",
                 "location_state": "Test State",
                 "radio_station_code": "TEST-FM",
                 "radio_station_name": "Test Station",
             }
+            mock_client.get_active_prompt.side_effect = lambda stage, sub_stage: PROMPT_VERSIONS[sub_stage.value]
             MockSupabaseClient.return_value = mock_client
             yield mock_client
 
     @pytest.fixture
-    def mock_gemini_model(self):
-        """Create a mock Gemini model"""
-        with patch("google.genai.Client") as mock:
-            client = Mock()
-            models = Mock()
-            client.models = models
-
-            # Create mock response for both generate_content calls
-            response = Mock()
-            response.text = json.dumps(
-                {
-                    "is_convertible": True,
-                    "transcription": "Test transcription",
-                    "translation": "Test translation",
-                    "title": {"english": "Test title", "spanish": "Título de prueba"},
-                    "summary": {"english": "Test summary", "spanish": "Resumen de prueba"},
-                    "explanation": {"english": "Test explanation", "spanish": "Explicación de prueba"},
-                    "disinformation_categories": [{"english": "Category 1", "spanish": "Categoría 1"}],
-                    "keywords_detected": ["keyword1", "keyword2"],
-                    "language": {"primary_language": "es", "dialect": "standard", "register": "formal"},
-                    "confidence_scores": {
-                        "overall": 90,
-                        "analysis": {
-                            "claims": [],
-                            "validation_checklist": {
-                                "specific_claims_quoted": True,
-                                "evidence_provided": True,
-                                "scoring_falsity": True,
-                                "defensible_to_factcheckers": True,
-                                "consistent_explanations": True,
-                            },
-                            "score_adjustments": {
-                                "initial_score": 90,
-                                "final_score": 90,
-                                "adjustment_reason": "No adjustment needed",
-                            },
-                        },
-                        "categories": [],
-                    },
-                    "context": {
-                        "before": "Test before",
-                        "before_en": "Test before in English",
-                        "after": "Test after",
-                        "after_en": "Test after in English",
-                        "main": "Test main",
-                        "main_en": "Test main in English",
-                    },
-                    "political_leaning": {
-                        "score": 0.0,
-                        "evidence": {
-                            "policy_positions": [],
-                            "arguments": [],
-                            "rhetoric": [],
-                            "sources": [],
-                            "solutions": [],
-                        },
-                        "explanation": {
-                            "spanish": "Neutral",
-                            "english": "Neutral",
-                            "score_adjustments": {
-                                "initial_score": 0.0,
-                                "final_score": 0.0,
-                                "reasoning": "Content is neutral",
-                            },
-                        },
-                    },
-                }
-            )
-            response.candidates = [Mock(grounding_metadata={"sources": ["test-source"]})]
-
-            # Set up the generate_content method to return our mock response
-            models.generate_content = Mock(return_value=response)
-
-            # Return the mock client
-            mock.return_value = client
-            yield mock
-
-    @pytest.fixture
     def sample_snippet(self):
-        """Create a sample snippet for testing"""
+        """A stage-3 processed snippet as stored in `snippets`"""
         return {
             "id": "test-id",
             "transcription": "Test transcription",
@@ -125,665 +58,297 @@ class TestStage4:
             "disinformation_categories": [{"english": "Category 1", "spanish": "Categoría 1"}],
             "keywords_detected": ["keyword1", "keyword2"],
             "language": {"primary_language": "es", "dialect": "standard", "register": "formal"},
-            "confidence_scores": {
-                "overall": 90,
-                "analysis": {
-                    "claims": [],
-                    "validation_checklist": {
-                        "specific_claims_quoted": True,
-                        "evidence_provided": True,
-                        "scoring_falsity": True,
-                        "defensible_to_factcheckers": True,
-                        "consistent_explanations": True,
-                    },
-                    "score_adjustments": {
-                        "initial_score": 90,
-                        "final_score": 90,
-                        "adjustment_reason": "No adjustment needed",
-                    },
-                },
-                "categories": [],
-            },
-            "context": {
-                "before": "Test before",
-                "before_en": "Test before in English",
-                "after": "Test after",
-                "after_en": "Test after in English",
-                "main": "Test main",
-                "main_en": "Test main in English",
-            },
-            "political_leaning": {
-                "score": 0.0,
-                "evidence": {"policy_positions": [], "arguments": [], "rhetoric": [], "sources": [], "solutions": []},
-                "explanation": {
-                    "spanish": "Neutral",
-                    "english": "Neutral",
-                    "score_adjustments": {"initial_score": 0.0, "final_score": 0.0, "reasoning": "Content is neutral"},
-                },
-            },
+            "confidence_scores": {"overall": 90},
+            "context": {"before": "Test before", "main": "Test main", "after": "Test after"},
+            "political_leaning": {"score": 0.0},
             "recorded_at": "2024-01-01T00:00:00+00:00",
             "audio_file": "test-audio-file-id",
-            "previous_analysis": {
-                "id": "test-id",
-                "transcription": "Test transcription",
-                "translation": "Test translation",
-                "title": {"english": "Test title", "spanish": "Título de prueba"},
-                "summary": {"english": "Test summary", "spanish": "Resumen de prueba"},
-                "explanation": {"english": "Test explanation", "spanish": "Explicación de prueba"},
-                "disinformation_categories": [{"english": "Category 1", "spanish": "Categoría 1"}],
-                "keywords_detected": ["keyword1", "keyword2"],
-                "language": {"primary_language": "es", "dialect": "standard", "register": "formal"},
-                "confidence_scores": {
-                    "overall": 90,
-                    "analysis": {
-                        "claims": [],
-                        "validation_checklist": {
-                            "specific_claims_quoted": True,
-                            "evidence_provided": True,
-                            "scoring_falsity": True,
-                            "defensible_to_factcheckers": True,
-                            "consistent_explanations": True,
-                        },
-                        "score_adjustments": {
-                            "initial_score": 90,
-                            "final_score": 90,
-                            "adjustment_reason": "No adjustment needed",
-                        },
-                    },
-                    "categories": [],
-                },
-                "context": {
-                    "before": "Test before",
-                    "before_en": "Test before in English",
-                    "after": "Test after",
-                    "after_en": "Test after in English",
-                    "main": "Test main",
-                    "main_en": "Test main in English",
-                },
-                "political_leaning": {
-                    "score": 0.0,
-                    "evidence": {
-                        "policy_positions": [],
-                        "arguments": [],
-                        "rhetoric": [],
-                        "sources": [],
-                        "solutions": [],
-                    },
-                    "explanation": {
-                        "spanish": "Neutral",
-                        "english": "Neutral",
-                        "score_adjustments": {
-                            "initial_score": 0.0,
-                            "final_score": 0.0,
-                            "reasoning": "Content is neutral",
-                        },
-                    },
-                },
-                "recorded_at": "2024-01-01T00:00:00+00:00",
-                "audio_file": "test-audio-file-id",
-            },
+            "previous_analysis": None,
         }
 
     @pytest.fixture
-    def mock_sleep(self):
-        """Mock time.sleep"""
-        with patch("time.sleep") as mock:
-            yield mock
+    def review_result(self):
+        """What the reviewer agent produces"""
+        return {
+            "translation": "Reviewed translation",
+            "title": {"english": "Reviewed title", "spanish": "Título revisado"},
+            "summary": {"english": "Reviewed summary", "spanish": "Resumen revisado"},
+            "explanation": {"english": "Reviewed explanation", "spanish": "Explicación revisada"},
+            "disinformation_categories": [{"english": "Category 2", "spanish": "Categoría 2"}],
+            "keywords_detected": ["keyword3"],
+            "language": {"primary_language": "es", "dialect": "standard", "register": "formal"},
+            "confidence_scores": {"overall": 40},
+            "political_leaning": {"score": 0.1},
+            "thought_summaries": "reviewer thoughts",
+        }
+
+    # --- tasks ---------------------------------------------------------------
 
     def test_prepare_snippet_for_review(self, mock_supabase_client, sample_snippet):
-        """Test preparing snippet for review"""
-        # Mock the get_audio_file_by_id response
-        mock_supabase_client.get_audio_file_by_id.return_value = {
+        prepared = prepare_snippet_for_review(mock_supabase_client, sample_snippet)
+
+        mock_supabase_client.get_audio_file_by_id.assert_called_once_with(
+            "test-audio-file-id", select="location_city,location_state,radio_station_code,radio_station_name"
+        )
+        assert prepared["transcription"] == "Test transcription"
+        assert prepared["disinformation_snippet"] == "Test main"
+        assert prepared["recorded_at"] == "2024-01-01T00:00:00+00:00"
+        assert prepared["metadata"] == {
+            "recorded_at": "January 1, 2024 12:00 AM",
+            "recording_day_of_week": "Monday",
             "location_city": "Test City",
             "location_state": "Test State",
             "radio_station_code": "TEST-FM",
             "radio_station_name": "Test Station",
+            "time_zone": "UTC",
+        }
+        assert set(prepared["analysis_json"]) == {
+            "translation",
+            "title",
+            "summary",
+            "explanation",
+            "disinformation_categories",
+            "keywords_detected",
+            "language",
+            "confidence_scores",
+            "political_leaning",
         }
 
-        transcription, disinformation_snippet, metadata, analysis_json = prepare_snippet_for_review(
-            mock_supabase_client, sample_snippet
+    def test_prepare_snippet_for_review_invalid_date(self, mock_supabase_client, sample_snippet):
+        sample_snippet["recorded_at"] = "invalid-date"
+
+        with pytest.raises(ValueError):
+            prepare_snippet_for_review(mock_supabase_client, sample_snippet)
+
+    def test_prepare_snippet_for_review_missing_fields(self, mock_supabase_client):
+        with pytest.raises(KeyError):
+            prepare_snippet_for_review(mock_supabase_client, {"recorded_at": "2024-01-01T00:00:00+00:00"})
+
+    def test_submit_snippet_review_result(self, mock_supabase_client, review_result):
+        submit_snippet_review_result(mock_supabase_client, "test-id", review_result, "grounding", "gemini-2.5-pro")
+
+        mock_supabase_client.submit_snippet_review.assert_called_once_with(
+            id="test-id",
+            translation="Reviewed translation",
+            title=review_result["title"],
+            summary=review_result["summary"],
+            explanation=review_result["explanation"],
+            disinformation_categories=review_result["disinformation_categories"],
+            keywords_detected=["keyword3"],
+            language=review_result["language"],
+            confidence_scores={"overall": 40},
+            political_leaning={"score": 0.1},
+            grounding_metadata="grounding",
+            reviewed_by="gemini-2.5-pro",
+            thought_summaries="reviewer thoughts",
         )
 
-        assert isinstance(transcription, str)
-        assert isinstance(disinformation_snippet, str)
-        assert isinstance(metadata, dict)
-        assert isinstance(analysis_json, dict)
-        assert "recorded_at" in metadata
-        assert "recording_day_of_week" in metadata
-        assert "translation" in analysis_json
-        assert "context" not in analysis_json
+    def test_submit_snippet_review_result_with_none_values(self, mock_supabase_client):
+        response = dict.fromkeys(
+            [
+                "translation",
+                "title",
+                "summary",
+                "explanation",
+                "disinformation_categories",
+                "keywords_detected",
+                "language",
+                "confidence_scores",
+                "political_leaning",
+            ]
+        )
 
-    def test_submit_snippet_review_result(self, mock_supabase_client):
-        """Test submitting snippet review result"""
-        response = {
-            "translation": "Test translation",
-            "title": "Test title",
-            "summary": "Test summary",
-            "explanation": "Test explanation",
-            "disinformation_categories": [],
-            "keywords_detected": [],
-            "language": "es",
-            "confidence_scores": {},
-            "political_leaning": "neutral",
-        }
-        grounding_metadata = {"sources": ["test-source"]}
+        submit_snippet_review_result(mock_supabase_client, "test-id", response, None, "gemini-2.5-pro")
 
-        submit_snippet_review_result(mock_supabase_client, "test-id", response, grounding_metadata)
-
-        mock_supabase_client.submit_snippet_review.assert_called_once()
-
-    def test_process_snippet(self, mock_supabase_client, mock_gemini_model, sample_snippet):
-        """Test processing a snippet"""
-        mock_response = {
-            "translation": "Test translation",
-            "title": {"english": "Test title", "spanish": "Título de prueba"},
-            "summary": {"english": "Test summary", "spanish": "Resumen de prueba"},
-            "explanation": {"english": "Test explanation", "spanish": "Explicación de prueba"},
-            "disinformation_categories": [{"english": "Category 1", "spanish": "Categoría 1"}],
-            "keywords_detected": ["keyword1", "keyword2"],
-            "language": {"primary_language": "es", "dialect": "standard", "register": "formal"},
-            "confidence_scores": {
-                "overall": 90,
-                "analysis": {
-                    "claims": [],
-                    "validation_checklist": {
-                        "specific_claims_quoted": True,
-                        "evidence_provided": True,
-                        "scoring_falsity": True,
-                        "defensible_to_factcheckers": True,
-                        "consistent_explanations": True,
-                    },
-                    "score_adjustments": {
-                        "initial_score": 90,
-                        "final_score": 90,
-                        "adjustment_reason": "No adjustment needed",
-                    },
-                },
-                "categories": [],
-            },
-            "context": {
-                "before": "Test before",
-                "before_en": "Test before in English",
-                "after": "Test after",
-                "after_en": "Test after in English",
-                "main": "Test main",
-                "main_en": "Test main in English",
-            },
-            "political_leaning": {
-                "score": 0.0,
-                "evidence": {"policy_positions": [], "arguments": [], "rhetoric": [], "sources": [], "solutions": []},
-                "explanation": {
-                    "spanish": "Neutral",
-                    "english": "Neutral",
-                    "score_adjustments": {"initial_score": 0.0, "final_score": 0.0, "reasoning": "Content is neutral"},
-                },
-            },
-        }
-        mock_grounding = {"sources": ["test-source"]}
-
-        with patch(
-            "processing_pipeline.stage_4.Stage4Executor.run", return_value=(mock_response, mock_grounding)
-        ), patch("processing_pipeline.stage_4.postprocess_snippet") as mock_postprocess:
-
-            process_snippet(mock_supabase_client, sample_snippet)
-
-            # Verify submit_snippet_review was called
-            mock_supabase_client.submit_snippet_review.assert_called_once_with(
-                id=sample_snippet["id"],
-                translation=mock_response["translation"],
-                title=mock_response["title"],
-                summary=mock_response["summary"],
-                explanation=mock_response["explanation"],
-                disinformation_categories=mock_response["disinformation_categories"],
-                keywords_detected=mock_response["keywords_detected"],
-                language=mock_response["language"],
-                confidence_scores=mock_response["confidence_scores"],
-                political_leaning=mock_response["political_leaning"],
-                grounding_metadata=mock_grounding,
-            )
-
-            # Verify postprocess_snippet was called
-            mock_postprocess.assert_called_once_with(
-                mock_supabase_client, sample_snippet["id"], mock_response["disinformation_categories"]
-            )
-
-    def test_process_snippet_error(self, mock_supabase_client, sample_snippet):
-        """Test processing snippet with error"""
-        error_message = "Test error"
-        with patch("processing_pipeline.stage_4.Stage4Executor.run", side_effect=Exception(error_message)):
-            process_snippet(mock_supabase_client, sample_snippet)
-
-            mock_supabase_client.set_snippet_status.assert_called_with(
-                sample_snippet["id"], "Error", f"[Stage 4] {error_message}"
-            )
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["grounding_metadata"] is None
+        assert kwargs["thought_summaries"] is None  # not in the response -> .get() default
 
     def test_fetch_ready_for_review_snippet(self, mock_supabase_client):
-        """Test fetching ready for review snippet"""
         expected_response = {"id": "test-id", "status": "Ready for review"}
         mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.return_value = expected_response
 
-        result = fetch_a_ready_for_review_snippet_from_supabase(mock_supabase_client)
-
-        assert result == expected_response
+        assert fetch_a_ready_for_review_snippet_from_supabase(mock_supabase_client) == expected_response
         mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.assert_called_once()
 
+    def test_fetch_ready_for_review_snippet_none(self, mock_supabase_client):
+        assert fetch_a_ready_for_review_snippet_from_supabase(mock_supabase_client) is None
+
     def test_fetch_specific_snippet(self, mock_supabase_client):
-        """Test fetching specific snippet"""
         expected_response = {"id": "test-id", "status": "Ready for review"}
         mock_supabase_client.get_snippet_by_id.return_value = expected_response
 
-        result = fetch_a_specific_snippet_from_supabase(mock_supabase_client, "test-id")
-
-        assert result == expected_response
+        assert fetch_a_specific_snippet_from_supabase(mock_supabase_client, "test-id") == expected_response
         mock_supabase_client.get_snippet_by_id.assert_called_once_with(id="test-id")
 
-    def test_stage_4_executor(self, mock_gemini_model):
-        """Test Stage4Executor"""
-        # Reset the mock before the test
-        mock_gemini_model.reset_mock()
+    # --- process_snippet -------------------------------------------------------
 
-        transcription = "Test transcription"
-        metadata = {"recorded_at": "January 1, 2024 12:00 AM"}
-        analysis_json = {"test": "analysis"}
+    def _process(self, supabase_client, snippet):
+        return asyncio.run(process_snippet(supabase_client, snippet, PROMPT_VERSIONS))
 
-        # Set up the response for both calls
-        mock = Mock(
-            text=json.dumps(
-                {
-                    "is_convertible": True,
-                    "transcription": "Test transcription",
-                    "translation": "Test translation",
-                    "title": {"english": "Test title", "spanish": "Test title"},
-                    "summary": {"english": "Test summary", "spanish": "Test summary"},
-                    "explanation": {"english": "Test explanation", "spanish": "Test explanation"},
-                    "disinformation_categories": [],
-                    "keywords_detected": [],
-                    "language": {"primary_language": "en", "dialect": "standard", "register": "formal"},
-                    "confidence_scores": {
-                        "overall": 0,
-                        "analysis": {
-                            "claims": [],
-                            "validation_checklist": {
-                                "specific_claims_quoted": False,
-                                "evidence_provided": False,
-                                "scoring_falsity": False,
-                                "defensible_to_factcheckers": False,
-                                "consistent_explanations": False,
-                            },
-                            "score_adjustments": {"initial_score": 0, "final_score": 0, "adjustment_reason": ""},
-                        },
-                        "categories": [],
-                    },
-                    "context": {
-                        "before": "",
-                        "before_en": "",
-                        "after": "",
-                        "after_en": "",
-                        "main": "",
-                        "main_en": "",
-                    },
-                    "political_leaning": {
-                        "score": 0.0,
-                        "evidence": {
-                            "policy_positions": [],
-                            "arguments": [],
-                            "rhetoric": [],
-                            "sources": [],
-                            "solutions": [],
-                        },
-                        "explanation": {
-                            "spanish": "",
-                            "english": "",
-                            "score_adjustments": {"initial_score": 0.0, "final_score": 0.0, "reasoning": ""},
-                        },
-                    },
-                }
-            ),
-            candidates=[Mock(grounding_metadata={"sources": ["test-source"]})],
+    def test_process_snippet(self, mock_supabase_client, sample_snippet, review_result):
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, "grounding")),
+        ) as mock_run, patch("processing_pipeline.stage_4.tasks.postprocess_snippet") as mock_postprocess:
+            self._process(mock_supabase_client, sample_snippet)
+
+        # First review: the stage-3 analysis is backed up before it is overwritten
+        mock_supabase_client.update_snippet_previous_analysis.assert_called_once_with("test-id", sample_snippet)
+        mock_run.assert_awaited_once_with(
+            snippet_id="test-id",
+            transcription="Test transcription",
+            disinformation_snippet="Test main",
+            metadata=mock.ANY,
+            analysis_json=mock.ANY,
+            recorded_at="2024-01-01T00:00:00+00:00",
+            current_time=mock.ANY,
+            prompt_versions=PROMPT_VERSIONS,
+            reviewer_model=GeminiModel.GEMINI_2_5_PRO,
         )
-
-        mock_gemini_model.return_value.models.generate_content.side_effect = [mock, mock]
-
-        result, grounding = Stage4Executor.run(
-            transcription=transcription,
-            disinformation_snippet="Test disinformation",
-            metadata=metadata,
-            analysis_json=analysis_json,
+        assert mock_run.await_args.kwargs["analysis_json"]["translation"] == "Test translation"
+        mock_supabase_client.submit_snippet_review.assert_called_once()
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["id"] == "test-id"
+        assert kwargs["translation"] == "Reviewed translation"
+        assert kwargs["grounding_metadata"] == "grounding"
+        assert kwargs["reviewed_by"] == GeminiModel.GEMINI_2_5_PRO.value
+        mock_postprocess.assert_called_once_with(
+            mock_supabase_client, "test-id", review_result["disinformation_categories"]
         )
+        mock_supabase_client.set_snippet_status.assert_not_called()
 
-        assert isinstance(result, dict)
-        assert isinstance(grounding, str)
-
-        # Verify model was called once for the main analysis
-        assert mock_gemini_model.call_count == 1
-
-        # First call should be for main analysis
-        assert mock_gemini_model.return_value.models.generate_content.call_args_list[0] == call(
-            model=GeminiModel.GEMINI_2_5_PRO, contents=ANY, config=ANY
-        )
-
-    def test_stage_4_executor_without_valid_inputs(self):
-        """Test Stage4Executor without valid inputs"""
-        with pytest.raises(
-            ValueError, match=re.escape("All inputs (transcription, metadata, analysis_json) must be provided")
-        ):
-            Stage4Executor.run(None, None, None, None)
-
-    def test_analysis_review_flow(self, mock_sleep, mock_supabase_client, sample_snippet):
-        """Test analysis review flow"""
-        mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.side_effect = [
-            sample_snippet,
-            None,  # End the loop
-        ]
-
-        mock_response = {
-            "transcription": "Test transcription",
-            "translation": "Test translation",
-            "title": {"english": "Test title", "spanish": "Título de prueba"},
-            "summary": {"english": "Test summary", "spanish": "Resumen de prueba"},
-            "explanation": {"english": "Test explanation", "spanish": "Explicación de prueba"},
-            "disinformation_categories": [{"english": "Category 1", "spanish": "Categoría 1"}],
-            "keywords_detected": ["keyword1", "keyword2"],
-            "language": {"primary_language": "es", "dialect": "standard", "register": "formal"},
-            "confidence_scores": {
-                "overall": 90,
-                "analysis": {
-                    "claims": [],
-                    "validation_checklist": {
-                        "specific_claims_quoted": True,
-                        "evidence_provided": True,
-                        "scoring_falsity": True,
-                        "defensible_to_factcheckers": True,
-                        "consistent_explanations": True,
-                    },
-                    "score_adjustments": {
-                        "initial_score": 90,
-                        "final_score": 90,
-                        "adjustment_reason": "No adjustment needed",
-                    },
-                },
-                "categories": [],
-            },
-            "context": {
-                "before": "Test before",
-                "before_en": "Test before in English",
-                "after": "Test after",
-                "after_en": "Test after in English",
-                "main": "Test main",
-                "main_en": "Test main in English",
-            },
-            "political_leaning": {
-                "score": 0.0,
-                "evidence": {"policy_positions": [], "arguments": [], "rhetoric": [], "sources": [], "solutions": []},
-                "explanation": {
-                    "spanish": "Neutral",
-                    "english": "Neutral",
-                    "score_adjustments": {"initial_score": 0.0, "final_score": 0.0, "reasoning": "Content is neutral"},
-                },
-            },
-        }
-        mock_grounding = {"sources": ["test-source"]}
+    def test_process_snippet_reuses_previous_analysis(self, mock_supabase_client, sample_snippet, review_result):
+        """A re-review is always based on the original stage-3 analysis, not the last review"""
+        sample_snippet["previous_analysis"] = {**sample_snippet, "transcription": "Original transcription"}
 
         with patch(
-            "processing_pipeline.stage_4.Stage4Executor.run", return_value=(mock_response, mock_grounding)
-        ), patch("processing_pipeline.stage_4.postprocess_snippet") as mock_postprocess:
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, None)),
+        ) as mock_run, patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet)
 
-            analysis_review(snippet_ids=None, repeat=False)
-
-            # Verify process_snippet was called with the correct snippet
-            mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.assert_called_once()
-            mock_supabase_client.submit_snippet_review.assert_called_once()
-            mock_postprocess.assert_called_once_with(
-                mock_supabase_client, sample_snippet["id"], mock_response["disinformation_categories"]
-            )
-
-            # Since repeat=False, sleep should not be called
-            mock_sleep.assert_not_called()
-
-    def test_analysis_review_with_specific_snippets(self, mock_supabase_client, sample_snippet):
-        """Test analysis review with specific snippet IDs"""
-        mock_supabase_client.get_snippet_by_id.return_value = sample_snippet
-
-        with patch("processing_pipeline.stage_4.process_snippet") as mock_process:
-            analysis_review(snippet_ids=["test-id"], repeat=False)
-
-            mock_supabase_client.get_snippet_by_id.assert_called_once_with(id="test-id")
-            mock_process.assert_called_once_with(mock_supabase_client, sample_snippet)
-
-    def test_prepare_snippet_for_review_invalid_date(self, mock_supabase_client):
-        """Test preparing snippet with invalid date"""
-        invalid_snippet = {
-            "recorded_at": "invalid-date",
-            "transcription": "Test",
-            "translation": "Test",
-            "title": "Test",
-            "summary": "Test",
-            "explanation": "Test",
-            "disinformation_categories": [],
-            "keywords_detected": [],
-            "language": "es",
-            "confidence_scores": {},
-            "political_leaning": "neutral",
-            "context": {"main": "Test"},
-            "audio_file": "test-audio-id",
-        }
-
-        with pytest.raises(ValueError):
-            prepare_snippet_for_review(mock_supabase_client, invalid_snippet)
-
-    def test_process_snippet_with_empty_response(self, mock_supabase_client, mock_gemini_model, sample_snippet):
-        """Test processing snippet with empty response that is not convertible"""
-        mock_first_response = Mock()
-        mock_first_response.text = "Invalid JSON response that cannot be parsed"
-        mock_first_response.candidates = [Mock(grounding_metadata={"sources": []})]
-
-        mock_second_response = Mock()
-        mock_second_response.text = json.dumps(
-            {
-                "is_convertible": False,
-                "transcription": "",
-                "translation": "",
-                "title": {"english": "", "spanish": ""},
-                "summary": {"english": "", "spanish": ""},
-                "explanation": {"english": "", "spanish": ""},
-                "disinformation_categories": [],
-                "keywords_detected": [],
-                "language": {"primary_language": "", "register": ""},
-                "confidence_scores": {
-                    "overall": 0,
-                    "analysis": {
-                        "claims": [],
-                        "validation_checklist": {
-                            "specific_claims_quoted": False,
-                            "evidence_provided": False,
-                            "scoring_falsity": False,
-                            "defensible_to_factcheckers": False,
-                            "consistent_explanations": False,
-                        },
-                        "score_adjustments": {"initial_score": 0, "final_score": 0, "adjustment_reason": ""},
-                    },
-                    "categories": [],
-                },
-                "context": {"before": "", "before_en": "", "after": "", "after_en": "", "main": "", "main_en": ""},
-                "political_leaning": {
-                    "score": 0.0,
-                    "evidence": {
-                        "policy_positions": [],
-                        "arguments": [],
-                        "rhetoric": [],
-                        "sources": [],
-                        "solutions": [],
-                    },
-                    "explanation": {
-                        "spanish": "",
-                        "english": "",
-                        "score_adjustments": {"initial_score": 0.0, "final_score": 0.0, "reasoning": ""},
-                    },
-                },
-            }
-        )
-
-        mock_gemini_model.return_value.models.generate_content.side_effect = [
-            mock_first_response,
-            mock_second_response,
-        ]
-
-        process_snippet(mock_supabase_client, sample_snippet)
-
-        mock_supabase_client.set_snippet_status.assert_called_once_with(sample_snippet["id"], "Error", mock.ANY)
-
-        mock_supabase_client.submit_snippet_review.assert_not_called()
-        mock_supabase_client.create_new_label.assert_not_called()
-
-    def test_prepare_snippet_for_review_invalid_date_format(self, mock_supabase_client):
-        """Test prepare_snippet_for_review with invalid date format"""
-        invalid_snippet = {
-            "recorded_at": "invalid-date",
-            "transcription": "Test transcription",
-            "translation": None,
-            "title": None,
-            "summary": None,
-            "explanation": None,
-            "disinformation_categories": None,
-            "keywords_detected": None,
-            "language": None,
-            "confidence_scores": None,
-            "context": {"main": "Test"},
-            "political_leaning": None,
-            "audio_file": "test-audio-id",
-        }
-
-        with pytest.raises(ValueError):
-            prepare_snippet_for_review(mock_supabase_client, invalid_snippet)
-
-    def test_prepare_snippet_for_review_missing_fields(self, mock_supabase_client):
-        """Test prepare_snippet_for_review with missing fields"""
-        incomplete_snippet = {
-            "recorded_at": "2024-01-01T00:00:00+00:00"
-            # Missing other required fields
-        }
-
-        with pytest.raises(KeyError):
-            prepare_snippet_for_review(mock_supabase_client, incomplete_snippet)
-
-    def test_submit_snippet_review_result_with_none_values(self, mock_supabase_client):
-        """Test submitting snippet review with None values"""
-        response = {
-            "translation": None,
-            "title": None,
-            "summary": None,
-            "explanation": None,
-            "disinformation_categories": None,
-            "keywords_detected": None,
-            "language": None,
-            "confidence_scores": None,
-            "political_leaning": None,
-        }
-        grounding_metadata = None
-
-        submit_snippet_review_result(mock_supabase_client, "test-id", response, grounding_metadata)
-
-        mock_supabase_client.submit_snippet_review.assert_called_once()
-
-    def test_process_snippet_with_missing_fields(self, mock_supabase_client, mock_gemini_model):
-        """Test processing snippet with missing required fields"""
-        incomplete_snippet = {
-            "id": "test-id",
-            "recorded_at": "2024-01-01T00:00:00+00:00",
-            # Missing other required fields
-        }
-
-        process_snippet(mock_supabase_client, incomplete_snippet)
-
-        mock_supabase_client.set_snippet_status.assert_called_with("test-id", "Error", mock.ANY)
-
-    def test_analysis_review_with_invalid_snippet(self, mock_sleep, mock_supabase_client):
-        """Test analysis review with invalid snippet data"""
-        invalid_snippet = {
-            "id": "test-id",
-            "recorded_at": "invalid-date",
-            # Invalid or missing fields
-        }
-
-        mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.return_value = invalid_snippet
-
-        analysis_review(snippet_ids=None, repeat=False)
-
-        mock_supabase_client.set_snippet_status.assert_called_with("test-id", "Error", mock.ANY)
-
-    def test_stage_4_executor_invalid_input(self, mock_gemini_model):
-        """Test Stage4Executor with invalid input"""
-        with pytest.raises(ValueError):
-            Stage4Executor.run(transcription=None, disinformation_snippet=None, metadata=None, analysis_json=None)
-
-    def test_stage_4_executor_api_error(self, mock_gemini_model):
-        """Test Stage4Executor handling of API errors"""
-        mock_gemini_model.return_value.models.generate_content.side_effect = Exception("API Error")
-
-        with pytest.raises(Exception):
-            Stage4Executor.run(
-                transcription="Test transcription",
-                disinformation_snippet="Test disinformation",
-                metadata={"recorded_at": "January 1, 2024 12:00 AM"},
-                analysis_json={"test": "analysis"},
-            )
-
-    def test_analysis_review_with_specific_ids(self, mock_supabase_client):
-        """Test analysis review with specific snippet IDs"""
-        snippet_ids = ["test-id-1", "test-id-2"]
-
-        # Mock the behavior for both snippets
-        mock_supabase_client.get_snippet_by_id.side_effect = [
-            None,  # First snippet not found
-            Exception("Database error"),  # Second snippet causes error
-        ]
-
-        with patch("processing_pipeline.stage_4.process_snippet") as mock_process:
-
-            try:
-                analysis_review(snippet_ids=snippet_ids, repeat=False)
-            except Exception:
-                pass  # We expect an exception for the second snippet
-
-            # Verify calls for first snippet
-            mock_supabase_client.get_snippet_by_id.assert_any_call(id="test-id-1")
-
-            # Verify calls for second snippet
-            mock_supabase_client.get_snippet_by_id.assert_any_call(id="test-id-2")
-
-            # Verify process_snippet was not called (since both snippets failed)
-            mock_process.assert_not_called()
-
-            # Verify total number of get_snippet_by_id calls
-            assert mock_supabase_client.get_snippet_by_id.call_count == 2
+        mock_supabase_client.update_snippet_previous_analysis.assert_not_called()
+        assert mock_run.await_args.kwargs["transcription"] == "Original transcription"
 
     def test_process_snippet_with_empty_disinformation_categories(
-        self, mock_supabase_client, mock_gemini_model, sample_snippet
+        self, mock_supabase_client, sample_snippet, review_result
     ):
-        """Test processing snippet with empty disinformation categories"""
-        with patch("processing_pipeline.stage_4.Stage4Executor.run") as mock_run, patch(
-            "processing_pipeline.stage_4.postprocess_snippet"
-        ) as mock_postprocess:
+        review_result["disinformation_categories"] = []
 
-            mock_run.return_value = (
-                {
-                    "transcription": "Test",
-                    "translation": "Test",
-                    "title": {"english": "Test", "spanish": "Test"},
-                    "summary": {"english": "Test", "spanish": "Test"},
-                    "explanation": {"english": "Test", "spanish": "Test"},
-                    "disinformation_categories": [],  # Empty categories
-                    "keywords_detected": [],
-                    "language": {"primary_language": "en", "dialect": "standard", "register": "formal"},
-                    "confidence_scores": {"overall": 0},
-                    "political_leaning": {"score": 0.0},
-                },
-                {"sources": []},
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, None)),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet") as mock_postprocess:
+            self._process(mock_supabase_client, sample_snippet)
+
+        mock_postprocess.assert_called_once_with(mock_supabase_client, "test-id", [])
+        mock_supabase_client.submit_snippet_review.assert_called_once()
+
+    def test_process_snippet_error(self, mock_supabase_client, sample_snippet):
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(side_effect=RuntimeError("Test error")),
+        ):
+            self._process(mock_supabase_client, sample_snippet)
+
+        mock_supabase_client.submit_snippet_review.assert_not_called()
+        mock_supabase_client.set_snippet_status.assert_called_once_with("test-id", "Error", "[Stage 4] Test error")
+
+    def test_process_snippet_exception_group(self, mock_supabase_client, sample_snippet):
+        """Errors raised by the ADK agent pipeline arrive as ExceptionGroups; each is listed"""
+        group = ExceptionGroup("agents failed", [ValueError("bad value"), KeyError("missing")])
+        with patch("processing_pipeline.stage_4.tasks.Stage4Executor.run_async", new=AsyncMock(side_effect=group)):
+            self._process(mock_supabase_client, sample_snippet)
+
+        _, status, error_message = mock_supabase_client.set_snippet_status.call_args.args
+        assert status == "Error"
+        assert error_message == "[Stage 4] - ValueError: bad value\n- KeyError: 'missing'"
+
+    def test_process_snippet_with_missing_fields(self, mock_supabase_client):
+        incomplete_snippet = {"id": "test-id", "recorded_at": "2024-01-01T00:00:00+00:00", "previous_analysis": None}
+
+        with patch("processing_pipeline.stage_4.tasks.Stage4Executor.run_async", new=AsyncMock()) as mock_run:
+            self._process(mock_supabase_client, incomplete_snippet)
+
+        mock_run.assert_not_awaited()
+        mock_supabase_client.set_snippet_status.assert_called_once_with("test-id", "Error", mock.ANY)
+
+    # --- Stage4Executor ------------------------------------------------------------
+
+    def test_stage_4_executor_requires_inputs(self):
+        with pytest.raises(ValueError, match=r"All inputs \(transcription, metadata, analysis_json\) must be provided"):
+            asyncio.run(
+                Stage4Executor.run_async(
+                    snippet_id="test-id",
+                    transcription=None,
+                    disinformation_snippet=None,
+                    metadata=None,
+                    analysis_json=None,
+                    recorded_at="2024-01-01T00:00:00+00:00",
+                    current_time="2024-01-02T00:00:00+00:00",
+                    prompt_versions=PROMPT_VERSIONS,
+                    reviewer_model=GeminiModel.GEMINI_2_5_PRO,
+                )
             )
 
-            process_snippet(mock_supabase_client, sample_snippet)
+    def test_build_grounding_metadata(self):
+        assert Stage4Executor._build_grounding_metadata("", "", "") is None
+        assert json.loads(Stage4Executor._build_grounding_metadata("kb findings", "", "kb updated")) == {
+            "kb_research": "kb findings",
+            "kb_updates": "kb updated",
+        }
 
-            # Verify postprocess_snippet was called with empty categories
-            mock_postprocess.assert_called_once_with(mock_supabase_client, sample_snippet["id"], [])
-            # Verify other expected calls
-            mock_supabase_client.submit_snippet_review.assert_called_once()
+    # --- analysis_review flow --------------------------------------------------------
+
+    @pytest.fixture
+    def mock_process(self):
+        with patch("processing_pipeline.stage_4.flows.process_snippet", new=AsyncMock()) as mock_process:
+            yield mock_process
+
+    def test_analysis_review_flow(self, mock_supabase_client, sample_snippet, mock_process):
+        mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.return_value = sample_snippet
+
+        with patch("processing_pipeline.stage_4.flows.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+            asyncio.run(analysis_review(snippet_ids=None, repeat=False))
+
+        # The ADK agents read GOOGLE_API_KEY; the flow copies GOOGLE_GEMINI_KEY into it
+        assert os.environ["GOOGLE_API_KEY"] == os.environ["GOOGLE_GEMINI_KEY"]
+        assert mock_supabase_client.get_active_prompt.call_count == 4
+        mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.assert_called_once()
+        mock_process.assert_awaited_once_with(mock_supabase_client, sample_snippet, PROMPT_VERSIONS)
+        mock_sleep.assert_not_awaited()
+
+    def test_analysis_review_with_specific_snippets(self, mock_supabase_client, sample_snippet, mock_process):
+        mock_supabase_client.get_snippet_by_id.return_value = sample_snippet
+
+        asyncio.run(analysis_review(snippet_ids=["test-id"], repeat=False))
+
+        mock_supabase_client.get_snippet_by_id.assert_called_once_with(id="test-id")
+        mock_supabase_client.set_snippet_status.assert_called_once_with("test-id", "Reviewing")
+        mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.assert_not_called()
+        mock_process.assert_awaited_once_with(mock_supabase_client, sample_snippet, PROMPT_VERSIONS)
+
+    def test_analysis_review_with_specific_ids_not_found(self, mock_supabase_client, mock_process):
+        mock_supabase_client.get_snippet_by_id.side_effect = [None, RuntimeError("Database error")]
+
+        with pytest.raises(RuntimeError, match="Database error"):
+            asyncio.run(analysis_review(snippet_ids=["test-id-1", "test-id-2"], repeat=False))
+
+        assert mock_supabase_client.get_snippet_by_id.call_args_list == [call(id="test-id-1"), call(id="test-id-2")]
+        mock_process.assert_not_awaited()
+
+    def test_analysis_review_with_repeat(self, mock_supabase_client, sample_snippet, mock_process):
+        mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.side_effect = [sample_snippet, None]
+        sleep_calls = []
+
+        async def fake_sleep(seconds):
+            sleep_calls.append(seconds)
+            if len(sleep_calls) == 2:
+                raise StopLoop()
+
+        with patch("processing_pipeline.stage_4.flows.asyncio.sleep", new=fake_sleep), pytest.raises(StopLoop):
+            asyncio.run(analysis_review(snippet_ids=None, repeat=True))
+
+        assert sleep_calls == [2, 60]
+        mock_process.assert_awaited_once()

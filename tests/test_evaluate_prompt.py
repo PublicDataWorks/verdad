@@ -452,6 +452,28 @@ def test_main_exits_2_without_environment(monkeypatch, capsys):
     assert "missing environment variables" in capsys.readouterr().err
 
 
+def test_main_requires_searxng_url(monkeypatch, capsys):
+    # Stage3Executor always exposes searxng_web_search to the model, so a missing SEARXNG_URL would
+    # fail every run after the (paid) model calls had already started.
+    assert "SEARXNG_URL" in ep.REQUIRED_ENV
+    for name in ep.REQUIRED_ENV:
+        monkeypatch.setenv(name, "set")
+    monkeypatch.delenv("SEARXNG_URL")
+    assert ep.main(["--snippet-ids", "x"]) == ep.MISSING_ENV_EXIT_CODE
+    assert "SEARXNG_URL" in capsys.readouterr().err
+
+
+def test_max_snippets_rejects_negative_values(capsys):
+    parser = ep.build_parser()
+    assert parser.parse_args(["--max-snippets", "0"]).max_snippets == 0
+    assert parser.parse_args(["--max-snippets", "3"]).max_snippets == 3
+    for bad in ("-1", "x"):
+        with pytest.raises(SystemExit) as excinfo:
+            parser.parse_args(["--max-snippets", bad])
+        assert excinfo.value.code == 2
+    assert "non-negative" in capsys.readouterr().err
+
+
 def test_fail_on_regression_flag_parsing():
     parser = ep.build_parser()
     assert parser.parse_args([]).fail_on_regression is None
