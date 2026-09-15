@@ -18,6 +18,7 @@ primary_region = 'sea'
   undo_audio_clipping = ''
   analysis_review = ''
   analysis_review_2 = ''
+  downvote_review = ''
   embedding = ''
 
 [[vm]]
@@ -38,6 +39,12 @@ primary_region = 'sea'
   memory = '2gb'
   cpu_kind = 'shared'
   cpus = 8
+
+[[vm]]
+  processes = ["downvote_review"]
+  memory = '2gb'
+  cpu_kind = 'shared'
+  cpus = 4
 
 [[vm]]
   processes = ["regenerate_timestamped_transcript", "embedding"]
