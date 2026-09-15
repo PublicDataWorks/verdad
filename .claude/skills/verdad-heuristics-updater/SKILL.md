@@ -117,8 +117,11 @@ merging to `main` imports and activates the bumped versions via `import_prompts_
 --from-manifest`. See `docs/PROMPT_EVALUATION.md`. Skip the SQL below in that case.
 
 **Emergency path (no file access, or CI unavailable):** the direct RPC/SQL recipe below still
-works. Afterwards, update `prompts/manifest.json` to the version you deployed so the next
-`prompts-check` run does not report drift.
+works. Afterwards, bring the repository back in sync, in this order: copy the deployed content into
+every affected prompt file under `prompts/`, bump the entry in `prompts/manifest.json` to the version
+you deployed, then run `PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff` and confirm
+it reports no drift. Bumping only the manifest makes the entry look up to date while the files stay
+stale, so the next deploy would overwrite the emergency change.
 
 **Supabase project ID**: `dzujjhzgzguciwryzwlx`
 

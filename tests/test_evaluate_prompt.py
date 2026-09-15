@@ -309,6 +309,17 @@ def test_load_candidate_from_dir_reads_manifest_files(tmp_path):
     assert pv["id"].startswith("working-tree:")
 
 
+def test_load_candidate_from_dir_rejects_paths_outside_candidate_dir(tmp_path):
+    prompts = tmp_path / "prompts"
+    prompts.mkdir()
+    (tmp_path / "secret.md").write_text("SECRET")
+    (prompts / "manifest.json").write_text(
+        json.dumps({"stage_3": {"version": "9.9.9", "files": {"user_prompt": "../secret.md"}}})
+    )
+    with pytest.raises(ValueError, match="resolves outside"):
+        ep.load_candidate_from_dir(str(prompts))
+
+
 def test_load_candidate_from_repo_prompts_dir():
     pv = ep.load_candidate_from_dir(os.path.join(REPO_ROOT, "prompts"))
     assert pv["system_instruction"] and pv["user_prompt"] and pv["output_schema"]

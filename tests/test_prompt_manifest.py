@@ -126,3 +126,16 @@ def test_import_script_prompt_mapping_derives_from_manifest():
     for key, files in ipd.PROMPT_MAPPING.items():
         assert files == pm.manifest_files(manifest[ipd._stage_label(key)])
         assert ipd._parse_stage_label(ipd._stage_label(key)) == key
+
+
+def test_resolve_manifest_path_keeps_relative_paths_inside_root(tmp_path):
+    (tmp_path / "prompts" / "stage_3").mkdir(parents=True)
+    resolved = pm.resolve_manifest_path("prompts/stage_3/si.md", str(tmp_path), within=str(tmp_path / "prompts"))
+    assert resolved == os.path.realpath(str(tmp_path / "prompts" / "stage_3" / "si.md"))
+
+
+@pytest.mark.parametrize("path", ["/etc/passwd", "prompts/../../secret.md", "../secret.md", "other/si.md"])
+def test_resolve_manifest_path_rejects_escapes(tmp_path, path):
+    (tmp_path / "prompts").mkdir()
+    with pytest.raises(ValueError):
+        pm.resolve_manifest_path(path, str(tmp_path), within=str(tmp_path / "prompts"))

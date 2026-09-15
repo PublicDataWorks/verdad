@@ -297,9 +297,9 @@ def import_prompts(
     set_active: bool = True,
     stages: list = None,
     dry_run: bool = False,
-):
+) -> int:
     """
-    Import prompt files into the database at one explicit version.
+    Import prompt files into the database at one explicit version. Returns the number of entries that failed.
 
     Args:
         version: Version string (e.g., "1.0.0")
@@ -337,6 +337,7 @@ def import_prompts(
         print(f"\n=== DRY RUN COMPLETE - No changes were made ({len(keys_to_import)} entries previewed) ===")
     else:
         print(f"\nImport complete! Success: {success_count}, Errors: {error_count}")
+    return error_count
 
 
 def fetch_db_versions(client) -> list[dict]:
@@ -463,13 +464,14 @@ def main():
                 sys.exit(1)
         elif args.command == "import":
             stages = [_parse_stage_label(s) for s in args.stages] if args.stages else None
-            import_prompts(
+            if import_prompts(
                 version=args.version,
                 description=args.description,
                 set_active=not args.no_active,
                 stages=stages,
                 dry_run=args.dry_run,
-            )
+            ):
+                sys.exit(1)
         elif args.command == "list":
             list_versions(active_only=args.active)
         elif args.command == "diff":

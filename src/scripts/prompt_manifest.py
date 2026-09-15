@@ -68,6 +68,21 @@ def manifest_files(entry: dict) -> dict:
     return {file_type: path for file_type, path in entry["files"].items() if path}
 
 
+def resolve_manifest_path(path: str, root: str, within: str | None = None) -> str:
+    """
+    Join a manifest file path to ``root`` and return the resolved absolute path, refusing anything that
+    does not stay inside ``within`` (default ``root``): absolute paths, ``..`` segments and symlinks that
+    resolve elsewhere. A manifest from a pull-request checkout is untrusted input.
+    """
+    if os.path.isabs(path):
+        raise ValueError(f"manifest path {path!r} must be relative, not absolute")
+    allowed = os.path.realpath(within or root)
+    resolved = os.path.realpath(os.path.join(root, path))
+    if os.path.commonpath([allowed, resolved]) != allowed:
+        raise ValueError(f"manifest path {path!r} resolves outside {allowed}")
+    return resolved
+
+
 def read_prompt_files(entry: dict) -> dict:
     """Load the text/JSON contents named by a manifest entry (schema parsed as JSON)."""
     data = {}

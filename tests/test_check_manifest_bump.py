@@ -27,3 +27,19 @@ def test_changed_file_with_bump_passes():
 def test_unrelated_change_and_new_entry_pass():
     head = {**BASE, "stage_4/new": entry("1.0.0", "prompts/stage_4/new.md")}
     assert mod.unbumped_entries(head, BASE, {"prompts/stage_4/new.md", "README.md"}) == []
+
+
+def test_repointed_file_without_bump_is_reported():
+    # The version and every file's content are unchanged; only the mapping moved to another existing file.
+    head = {**BASE, "stage_3": entry("1.3.0", "prompts/stage_3/b.md")}
+    assert mod.unbumped_entries(head, BASE, set()) == ["stage_3"]
+
+
+def test_dropped_file_without_bump_is_reported():
+    head = {**BASE, "stage_1/x": {"version": "2.0.0", "files": {"f0": None}}}
+    assert mod.unbumped_entries(head, BASE, set()) == ["stage_1/x"]
+
+
+def test_mapping_change_with_bump_passes():
+    head = {**BASE, "stage_3": entry("1.4.0", "prompts/stage_3/b.md")}
+    assert mod.unbumped_entries(head, BASE, set()) == []

@@ -49,7 +49,7 @@ from processing_pipeline.stage_3.constants import MAIN_MODEL  # noqa: E402
 from processing_pipeline.stage_3.executors import Stage3Executor  # noqa: E402
 from processing_pipeline.stage_3.tasks import fetch_a_specific_snippet_from_supabase, get_metadata  # noqa: E402
 from processing_pipeline.supabase_utils import SupabaseClient  # noqa: E402
-from src.scripts.prompt_manifest import load_manifest, read_prompt_files  # noqa: E402
+from src.scripts.prompt_manifest import load_manifest, read_prompt_files, resolve_manifest_path  # noqa: E402
 
 load_dotenv()
 
@@ -590,9 +590,10 @@ def load_candidate_from_dir(candidate_dir: str) -> dict:
     """Build a prompt_version-shaped dict from the working-tree Stage 3 files."""
     manifest = load_manifest(os.path.join(candidate_dir, "manifest.json"))
     entry = manifest[STAGE_3_LABEL]
-    # Manifest paths are relative to the repo root, i.e. the parent of the prompts directory.
+    # Manifest paths are relative to the repo root, i.e. the parent of the prompts directory, and must
+    # resolve inside the candidate directory: the manifest comes from the pull-request checkout.
     root = os.path.dirname(os.path.abspath(candidate_dir))
-    files = {k: os.path.join(root, v) for k, v in entry["files"].items() if v}
+    files = {k: resolve_manifest_path(v, root, within=candidate_dir) for k, v in entry["files"].items() if v}
     data = read_prompt_files({"files": files})
     return {
         "id": f"working-tree:{candidate_dir}",
