@@ -8,11 +8,7 @@ from google.adk.tools.tool_context import ToolContext
 from openai import OpenAI
 from tiktoken import encoding_for_model
 
-from processing_pipeline.constants import (
-    KB_DEDUP_SIMILARITY_THRESHOLD,
-    KB_SEARCH_MATCH_THRESHOLD,
-    GeminiModel,
-)
+from processing_pipeline.constants import KB_DEDUP_SIMILARITY_THRESHOLD, GeminiModel
 from processing_pipeline.kb_sources import (
     VALID_SOURCE_TYPES,
     contains_http_url,
@@ -22,6 +18,8 @@ from processing_pipeline.kb_sources import (
 )
 from processing_pipeline.processing_utils import normalize_embedding
 from processing_pipeline.source_credibility import get_source_credibility
+from processing_pipeline.stage_1.constants import KB_STAGE1_MIN_CONFIDENCE, STAGE_1_KB_MATCH_THRESHOLD
+from processing_pipeline.stage_1.kb_context import select_trustworthy_entries
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -69,16 +67,19 @@ def search_knowledge_base(query: str, categories: list[str] | None = None, refer
     search_document = _generate_kb_document(query)
     embedding = _generate_embedding(search_document)
 
-    results = supabase_client.search_kb_entries(
+    # The reviewer gets the same bar as Stage 1 context: close match, high confidence, real dated source.
+    matched = supabase_client.search_kb_entries(
         query_embedding=embedding,
-        match_threshold=KB_SEARCH_MATCH_THRESHOLD,
+        match_threshold=STAGE_1_KB_MATCH_THRESHOLD,
         match_count=10,
         filter_categories=categories,
         reference_date=reference_date,
+        min_confidence=KB_STAGE1_MIN_CONFIDENCE,
     )
+    results = select_trustworthy_entries(matched)
 
     if not results:
-        print(f"  [KB Search] Query: '{query}' — 0 results")
+        print(f"  [KB Search] Query: '{query}' — 0 trustworthy results ({len(matched)} matched)")
         return {"results": [], "message": "No relevant knowledge base entries found."}
 
     print(f"  [KB Search] Query: '{query}' — {len(results)} results (top similarity: {results[0].get('similarity', 'N/A')})")
@@ -97,9 +98,8 @@ def validate_kb_source(
 ) -> str | None:
     """Return an error message when the source does not qualify as KB evidence, else None.
 
-    ``web_research`` is the web researcher's output for this session; when it is available the URL must
-    appear in it (the model may only cite what it actually found). When it is unavailable the check is
-    skipped and logged.
+    ``web_research`` is the web researcher's output for this session; the URL must appear in it (the model
+    may only cite what it actually found), so without it nothing can be written.
     """
     if not is_http_url(source_url):
         return "source_url must be an absolute http(s) URL with a host name (e.g. https://apnews.com/article/...)."
@@ -124,8 +124,11 @@ def validate_kb_source(
             "be cited as KB evidence. Cite an independent wire service, fact-checker or major outlet instead."
         )
     if not web_research:
-        print("  [KB Upsert] web research text unavailable in session state; skipping URL provenance check")
-    elif not url_appears_in_text(source_url, web_research):
+        return (
+            "No web research is recorded for this session, so the source cannot be verified as actually found. "
+            "The knowledge base only accepts sources returned by the search or read tools."
+        )
+    if not url_appears_in_text(source_url, web_research):
         return (
             f"source_url '{source_url}' does not appear in this session's web research. "
             "Only cite URLs that were actually returned by the search or read tools."
