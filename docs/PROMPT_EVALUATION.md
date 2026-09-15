@@ -134,9 +134,9 @@ Per run the harness reduces the Stage 3 output to: the English `disinformation_c
 
 ## Cost notes
 
-Token counts come from the SDK's `usage_metadata` on the final model turn of each Stage 3 call
-(the executor now returns them as `usage`); intermediate automatic-function-calling turns are not
-included, so treat the estimate as a floor. Prices live in `MODEL_PRICES_PER_M_TOKENS` in
+Token counts come from the SDK's `usage_metadata`, summed over every model turn of each Stage 3
+call including tool-calling rounds (the executor returns them as `usage`); the separate JSON
+coercion call is not included. Prices live in `MODEL_PRICES_PER_M_TOKENS` in
 `src/scripts/evaluate_prompt.py`; update them when Google changes pricing. Rough order of
 magnitude: one eval set of 24 snippets at `--runs 2` is about 100 Stage 3 calls with audio, web
 search and thinking, i.e. tens of dollars on the main model, and 30 to 60 minutes of wall time.

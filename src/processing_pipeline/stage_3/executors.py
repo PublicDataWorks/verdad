@@ -170,7 +170,7 @@ class Stage3Executor:
 
         Returns:
             tuple: (analysis_text, thought_summaries, usage) where usage is the token
-            accounting of the final model turn as a plain dict (see ``usage_metadata_to_dict``)
+            accounting summed over every model turn as a plain dict (see ``usage_metadata_to_dict``)
         """
         print("Analyzing with SDK + web search tools...")
 
@@ -200,12 +200,15 @@ class Stage3Executor:
 
         response = None
         function_calls = []
+        usage = dict.fromkeys(USAGE_FIELDS, 0)  # every turn is billed, so sum them
         for _ in range(MAX_MODEL_TURNS):
             response = await gemini_client.aio.models.generate_content(
                 model=model_name,
                 contents=contents,
                 config=config,
             )
+            for field, count in usage_metadata_to_dict(response.usage_metadata).items():
+                usage[field] += count
             function_calls = cls.__function_calls(response)
             if not function_calls:
                 break
@@ -232,7 +235,7 @@ class Stage3Executor:
             print(f"Response finish reason: {finish_reason}")
             raise ValueError("No response from Gemini.")
 
-        return response.text, thoughts, usage_metadata_to_dict(response.usage_metadata)
+        return response.text, thoughts, usage
 
     @staticmethod
     def __function_calls(response) -> list[FunctionCall]:

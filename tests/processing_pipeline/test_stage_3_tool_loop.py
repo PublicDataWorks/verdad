@@ -9,7 +9,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from google.genai.types import Candidate, Content, FunctionCall, GenerateContentResponse, Part
+from google.genai.types import (
+    Candidate,
+    Content,
+    FunctionCall,
+    GenerateContentResponse,
+    GenerateContentResponseUsageMetadata,
+    Part,
+)
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_3 import executors
@@ -116,6 +123,19 @@ def test_endless_tool_calls_stop_at_the_turn_budget():
         run(client)
 
     assert client.aio.models.generate_content.await_count == executors.MAX_MODEL_TURNS
+
+
+def test_usage_is_summed_over_every_turn():
+    first = model_turn(tool_call("search", query="q"))
+    first.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=100, total_token_count=120)
+    second = model_turn(Part.from_text(text="done"))
+    second.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=150, total_token_count=200)
+
+    _, _, usage = run(fake_client(first, second))
+
+    assert usage["prompt_token_count"] == 250
+    assert usage["total_token_count"] == 320
+    assert usage["thoughts_token_count"] == 0
 
 
 def test_automatic_function_calling_is_disabled_and_tools_are_declared():
