@@ -652,3 +652,13 @@ class SupabaseClient:
         else:
             response = self.client.table("kb_entry_snippet_usage").insert(data).execute()
         return response.data[0]
+
+    # Source credibility (VER-360)
+
+    def get_source_credibility_domains(self):
+        response = self.client.table("source_credibility_domains").select("*").execute()
+        return response.data or []
+
+    def get_source_provenance(self):
+        response = self.client.table("source_provenance").select("*").execute()
+        return response.data or []
