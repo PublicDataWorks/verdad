@@ -32,6 +32,7 @@ class TestParseArgs:
         "argv",
         [
             ["--stage", "2", "--audio-file-id", "x"],
+            ["--stage", "2", "--audio-file-id", ""],
             ["--stage", "3", "--limit", "2"],
             ["--stage", "1", "--snippet-id", "x"],
             ["--stage", "4", "--skip-review"],
@@ -39,6 +40,7 @@ class TestParseArgs:
             ["--stage", "1", "--limit", "0"],
             ["--stage", "1", "--limit", "-1"],
             ["--stage", "1", "--audio-file-id", "x", "--limit", "2"],
+            ["--stage", "1", "--audio-file-id", "", "--limit", "2"],
             ["--stage", "1", "--context-before-seconds", "10"],
             ["--stage", "3", "--context-after-seconds", "30"],
             ["--stage", "5", "--context-before-seconds", "10"],
@@ -54,6 +56,8 @@ class TestParseArgs:
         [
             (["--stage", "1", "--limit", "0"], "--limit must be a positive integer"),
             (["--stage", "1", "--audio-file-id", "x", "--limit", "2"], "--limit does not apply with --audio-file-id"),
+            (["--stage", "1", "--audio-file-id", "", "--limit", "2"], "--limit does not apply with --audio-file-id"),
+            (["--stage", "2", "--audio-file-id", ""], "--audio-file-id/--limit only apply to --stage 1"),
             (["--stage", "3", "--context-before-seconds", "10"], "only apply to --stage 2"),
         ],
     )

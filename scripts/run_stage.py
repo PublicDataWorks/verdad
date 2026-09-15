@@ -98,11 +98,11 @@ def parse_args(argv=None):
     def is_default(name):
         return getattr(args, name) == parser.get_default(name)
 
-    if args.stage != 1 and (args.audio_file_id or not is_default("limit")):
+    if args.stage != 1 and (args.audio_file_id is not None or not is_default("limit")):
         parser.error("--audio-file-id/--limit only apply to --stage 1")
     if args.limit < 1:
         parser.error("--limit must be a positive integer")
-    if args.audio_file_id and not is_default("limit"):
+    if args.audio_file_id is not None and not is_default("limit"):
         parser.error("--limit does not apply with --audio-file-id: stage 1 returns after that one file")
     if args.stage not in (3, 4) and args.snippet_ids:
         parser.error("--snippet-id only applies to --stage 3 or 4")

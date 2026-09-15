@@ -168,7 +168,7 @@ SELECT id, stage, version, is_active,
 FROM prompt_versions WHERE is_active = true ORDER BY stage;
 ```
 
-With file access and `SUPABASE_URL`/`SUPABASE_KEY` set, `PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff` confirms the local files match the active database rows (see `docs/PROMPT_MANAGEMENT.md`).
+With file access and `SUPABASE_URL`/`SUPABASE_KEY` set, `PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff` (run from the repository root) confirms the local files match the active database rows (see `docs/PROMPT_MANAGEMENT.md`).
 
 Repeat for both Stage 1 (`disinformation_detection`) and Stage 3.
 
