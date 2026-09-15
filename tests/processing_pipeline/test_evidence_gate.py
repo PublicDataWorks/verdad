@@ -15,7 +15,7 @@ from processing_pipeline.stage_4.tasks import extract_stage_3_verification_evide
 
 def _analysis(status="verified_false", overall=98, explanation_en="The claim is false.", categories=None):
     return {
-        "explanation": {"english": explanation_en, "spanish": "La afirmación es falsa."},
+        "explanation": {"english": explanation_en, "spanish": "La afirmación es engañosa."},
         "disinformation_categories": categories or [{"english": "Election Fraud", "spanish": "Fraude electoral"}],
         "confidence_scores": {
             "overall": overall,
@@ -25,12 +25,12 @@ def _analysis(status="verified_false", overall=98, explanation_en="The claim is 
     }
 
 
-def _evidence(relevance="contradicts_claim", url="https://apnews.com/article/x"):
+def _evidence(relevance="contradicts_claim", url="https://apnews.com/article/x", publication_date="2026-03-01"):
     return {
         "searches_performed": [
             {
                 "query": "q",
-                "results": [{"url": url, "relevance_to_claim": relevance}],
+                "results": [{"url": url, "relevance_to_claim": relevance, "publication_date": publication_date}],
             }
         ],
         "verification_summary": {},
@@ -99,10 +99,23 @@ class TestFalsityDetection:
             "The quote was made up.",
             "The story was made up",
             "The host made up a quote and attributed it to the senator.",
+            "The claim about the raid is false; no outlet reports it.",
+            "These figures are false.",
+            "La noticia es falsa.",
+            "Los datos son falsos.",
+            "Es una mentira.",
+            "The story is fake news.",
+            "The rally story was debunked by Reuters.",
+            "El rumor fue desmentido.",
+            "This claim is untrue.",
         ],
     )
     def test_never_happened_and_other_falsity_phrases_count(self, text):
         assert mentions_falsity(text)
+
+    @pytest.mark.parametrize("text", ["The claim is not false.", "No es falso.", "Nothing here is untrue."])
+    def test_negated_falsity_adjectives_do_not_count(self, text):
+        assert not mentions_falsity(text)
 
     @pytest.mark.parametrize("text", ["Fabricated content: not detected.", "Fabricated Content: none", "Fabricated: no"])
     def test_bare_negated_value_after_colon_does_not_count(self, text):
@@ -126,8 +139,13 @@ class TestContradictingEvidence:
     def test_present(self):
         assert has_contradicting_evidence(_evidence())
 
-    def test_missing_url(self):
-        assert not has_contradicting_evidence(_evidence(url=""))
+    @pytest.mark.parametrize("url", ["", "not-a-url", "apnews.com/article/x"])
+    def test_missing_or_invalid_url(self, url):
+        assert not has_contradicting_evidence(_evidence(url=url))
+
+    @pytest.mark.parametrize("publication_date", [None, "", "March 2026"])
+    def test_undated_result_is_not_evidence(self, publication_date):
+        assert not has_contradicting_evidence(_evidence(publication_date=publication_date))
 
     def test_other_relevance(self):
         assert not has_contradicting_evidence(_evidence(relevance="provides_context"))
@@ -169,13 +187,33 @@ class TestApplyEvidenceCaps:
         assert "[Evidence gate]" not in result["explanation"]["english"]
 
     def test_falsity_without_contradicting_source_is_capped(self):
-        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis = _analysis(status="verified_true", explanation_en="The rally was fabricated.")
         analysis["verification_evidence"] = _evidence(relevance="provides_context")
 
         result = apply_evidence_caps(analysis)
 
         assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
-        assert "contradicts_claim" in result["evidence_gate"]["reasons"][0]
+        assert result["evidence_gate"]["reasons"] == [
+            "the analysis asserts the content is fabricated/false but no dated search result with a URL is "
+            "marked contradicts_claim"
+        ]
+
+    def test_verified_false_without_any_evidence_is_capped_whatever_the_wording(self):
+        analysis = _analysis(explanation_en="The claim does not hold up.")
+        analysis["verification_evidence"] = {"searches_performed": [], "verification_summary": {}}
+
+        result = apply_evidence_caps(analysis)
+
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["reasons"] == [
+            "verification_status is 'verified_false' but no dated search result is marked contradicts_claim"
+        ]
+
+    def test_verified_false_with_undated_contradicting_source_is_capped(self):
+        analysis = _analysis(explanation_en="The claim does not hold up.")
+        analysis["verification_evidence"] = _evidence(publication_date=None)
+
+        assert apply_evidence_caps(analysis)["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
 
     def test_breaking_news_recording_with_no_evidence_is_capped(self):
         # 10-hour-old recording: model followed the protocol status but not the score
