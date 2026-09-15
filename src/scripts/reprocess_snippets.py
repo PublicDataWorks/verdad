@@ -2,8 +2,8 @@
 """
 Re-queue snippets for Stage 3 or Stage 4 by criteria.
 
-Dry-run by default: prints the counts per criterion, the equivalent SQL, and the ids that would change.
-Pass --execute to flip the status (in batches of 500) and write the selected ids to a JSON audit file.
+Dry-run by default: prints the counts per criterion and the equivalent SQL (with --limit, the SQL lists the
+selected ids). Pass --execute to flip the status in batches and write the selected ids to a JSON audit file.
 
 Usage:
     python src/scripts/reprocess_snippets.py --fabricated-label --since 2026-03-23 --stage 3
@@ -18,11 +18,12 @@ AND-ed on top of that set. Candidates are ordered newest recorded_at first (the 
 --limit takes the newest ones. Snippets currently in flight (status Processing or Reviewing) are always skipped so
 a worker mid-run is never flipped underneath.
 
---quarantine-batch reads snippet_quarantine_log (batch = NAME, restored_at IS NULL). The 2026-09 cleanup hid those
-snippets through user_hide_snippets without changing snippets.status, so they are still 'Processed' here; this
-script only re-queues them and never stamps restored_at or removes the hide row. That happens afterwards, per
-batch, in supabase/database/sql/cleanup_2026_09/10_unhide_after_reprocess.sql once the new analysis is in. Do not
-combine --quarantine-batch with --not-hidden: every quarantined snippet is hidden by construction.
+--quarantine-batch reads snippet_quarantine_log (batch = NAME, restored_at IS NULL), the table the 2026-09 cleanup
+wrote (created by PR #81's cleanup_2026_09/02_create_snippet_quarantine_log.sql, not yet in this tree). The cleanup
+hid those snippets through user_hide_snippets without changing snippets.status, so they are still 'Processed' here;
+this script only re-queues them and never stamps restored_at or removes the hide row. Unhiding is a separate manual
+step per batch once the new analysis is in. Do not combine --quarantine-batch with --not-hidden: every quarantined
+snippet is hidden by construction.
 --error-keyerror selects status = 'Error' with error_message starting 'KeyError:' (VER-363 backfill).
 """
 
@@ -35,7 +36,9 @@ from datetime import date, datetime, timezone
 from dotenv import load_dotenv
 from supabase import create_client
 
-from src.processing_pipeline.stage_3.models import FALSITY_TERMS, FALSITY_TERM_PATTERNS, mentions_falsity
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
+from processing_pipeline.stage_3.models import FALSITY_TERMS, FALSITY_TERM_PATTERNS, mentions_falsity  # noqa: E402
 
 load_dotenv()
 
@@ -163,8 +166,14 @@ def selectors_by_id(reason_ids: dict[str, set], selected: list) -> dict[str, lis
     return {sid: sorted(reason for reason, ids in reason_ids.items() if sid in ids) for sid in selected}
 
 
-def build_sql(args, target_status: str) -> str:
-    """The SQL equivalent of what the script does, for the audit trail / manual runs."""
+def build_sql(args, target_status: str, selected: list | None = None) -> str:
+    """SQL equivalent for the audit trail / manual runs; under --limit it targets the selected ids, not the criteria."""
+    in_flight = "s.status NOT IN (" + ", ".join(f"'{status}'" for status in IN_FLIGHT_STATUSES) + ")"
+    update = f"UPDATE snippets s\nSET status = '{target_status}', error_message = NULL\nWHERE "
+    if args.limit is not None:
+        ids = ", ".join(f"'{sid}'" for sid in selected or []) or "NULL"
+        return f"{update}s.id IN ({ids})\n  AND {in_flight};"
+
     reasons = []
     if args.fabricated_label:
         # ILIKE cannot express the exclusions in FALSITY_TERM_PATTERNS ("made up of" is not fabrication), so the
@@ -196,15 +205,10 @@ def build_sql(args, target_status: str) -> str:
         filters.append(f"(s.confidence_scores->>'overall')::INTEGER >= {args.min_confidence}")
     if args.not_hidden:
         filters.append("s.id NOT IN (SELECT snippet FROM user_hide_snippets)")
-    filters.append("s.status NOT IN (" + ", ".join(f"'{status}'" for status in IN_FLIGHT_STATUSES) + ")")
+    filters.append(in_flight)
 
-    where = "(" + " OR ".join(reasons) + ")"
-    if filters:
-        where += "\n  AND " + "\n  AND ".join(filters)
-    sql = f"UPDATE snippets s\nSET status = '{target_status}', error_message = NULL\nWHERE {where}"
-    if args.limit is not None:
-        sql += f"\n  -- limited to the first {args.limit} ids (newest recorded_at first) by the script"
-    return sql + ";"
+    where = "(" + " OR ".join(reasons) + ")\n  AND " + "\n  AND ".join(filters)
+    return f"{update}{where};"
 
 
 def chunked(items: list, size: int):
@@ -292,9 +296,18 @@ def fetch_snippets(client, ids: list) -> dict[str, dict]:
 
 
 def requeue(client, ids: list, target_status: str):
+    # A worker may have picked a snippet up since selection; the status guard keeps it out of the update.
     for batch in chunked(ids, BATCH_SIZE):
-        client.table("snippets").update({"status": target_status, "error_message": None}).in_("id", batch).execute()
-        print(f"  updated {len(batch)} snippets -> '{target_status}'")
+        rows = (
+            client.table("snippets")
+            .update({"status": target_status, "error_message": None})
+            .in_("id", batch)
+            .not_.in_("status", list(IN_FLIGHT_STATUSES))
+            .execute()
+            .data
+            or []
+        )
+        print(f"  updated {len(rows)} of {len(batch)} snippets -> '{target_status}'")
 
 
 def main(argv=None):
@@ -331,7 +344,7 @@ def main(argv=None):
     if counts["skipped_in_flight"]:
         statuses = " / ".join(IN_FLIGHT_STATUSES)
         print(f"  ({counts['skipped_in_flight']} skipped because their status is {statuses}; re-run once they finish)")
-    print("\nEquivalent SQL:\n" + build_sql(args, target_status))
+    print("\nEquivalent SQL:\n" + build_sql(args, target_status, selected))
     print(f"\n{len(selected)} snippet(s) would be set to '{target_status}'")
 
     if not args.execute:

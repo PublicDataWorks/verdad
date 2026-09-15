@@ -6,7 +6,6 @@ from unittest.mock import Mock
 import pytest
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _REPO_ROOT)  # the script imports via `src.processing_pipeline...` like import_prompts_to_db
 sys.path.insert(0, os.path.join(_REPO_ROOT, "src", "scripts"))
 
 import reprocess_snippets as rs  # noqa: E402
@@ -198,7 +197,6 @@ class TestBuildSql:
             since=rs.date(2026, 3, 23),
             min_confidence=95,
             not_hidden=True,
-            limit=5,
             stage=4,
         )
         sql = rs.build_sql(args, rs.STAGE_TARGET_STATUS[args.stage])
@@ -217,7 +215,14 @@ class TestBuildSql:
         assert "(s.confidence_scores->>'overall')::INTEGER >= 95" in sql
         assert "NOT IN (SELECT snippet FROM user_hide_snippets)" in sql
         assert "s.status NOT IN ('Processing', 'Reviewing')" in sql
-        assert "limited to the first 5" in sql
+
+    def test_limit_targets_the_selected_ids_instead_of_the_criteria(self):
+        sql = rs.build_sql(_args(disliked=True, limit=2), "New", ["a", "b"])
+        assert sql == (
+            "UPDATE snippets s\nSET status = 'New', error_message = NULL\n"
+            "WHERE s.id IN ('a', 'b')\n  AND s.status NOT IN ('Processing', 'Reviewing');"
+        )
+        assert "s.id IN (NULL)" in rs.build_sql(_args(disliked=True, limit=2), "New", [])
 
     def test_minimal_sql(self):
         sql = rs.build_sql(_args(disliked=True), "New")
@@ -240,6 +245,11 @@ class _FakeBuilder:
             return self
 
         return method
+
+    @property
+    def not_(self):
+        self._calls.append(("not_", ()))
+        return self
 
     def execute(self):
         return Mock(data=self._rows)
@@ -276,3 +286,17 @@ class TestFetchSelectors:
             ("eq", ("status", "Error")),
             ("like", ("error_message", "KeyError:%")),
         ]
+
+
+class TestRequeue:
+    def test_update_skips_snippets_a_worker_picked_up_since_selection(self, capsys):
+        client = _FakeClient([{"id": "a"}])
+        rs.requeue(client, ["a", "b"], "New")
+        assert client.calls == [
+            ("table", ("snippets",)),
+            ("update", ({"status": "New", "error_message": None},)),
+            ("in_", ("id", ["a", "b"])),
+            ("not_", ()),
+            ("in_", ("status", ["Processing", "Reviewing"])),
+        ]
+        assert "updated 1 of 2 snippets" in capsys.readouterr().out
