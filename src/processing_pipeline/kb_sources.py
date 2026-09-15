@@ -2,7 +2,7 @@
 
 import re
 from datetime import date
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 VALID_SOURCE_TYPES = frozenset(
     {"tier1_wire_service", "tier1_factchecker", "tier2_major_news", "tier3_regional_news", "official_source", "other"}
@@ -44,6 +44,24 @@ _URL_TRAILING_CHARS = ".,;:!?*_'\"`"
 
 def normalize_url(url: str) -> str:
     return url.strip().rstrip(_URL_TRAILING_CHARS).lower().rstrip("/")
+
+
+def url_key(url) -> str:
+    """A comparison key for "the same page": no scheme, fragment, leading ``www.`` or trailing slash; lowercase host.
+
+    ``https://www.Reuters.com/world/x/`` and ``http://reuters.com/world/x#top`` share a key. Returns "" for
+    anything that is not an http(s) URL, which never matches a real key.
+    """
+    if not is_http_url(url):
+        return ""
+    parts = urlsplit(url.strip())
+    host = (parts.hostname or "").lower().removeprefix("www.")
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    key = host + parts.path.rstrip("/")
+    if parts.query:
+        key += "?" + parts.query
+    return key
 
 
 def url_appears_in_text(url: str, text: str) -> bool:
