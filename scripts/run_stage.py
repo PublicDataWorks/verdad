@@ -104,6 +104,8 @@ def parse_args(argv=None):
         parser.error("--limit must be a positive integer")
     if args.audio_file_id is not None and not is_default("limit"):
         parser.error("--limit does not apply with --audio-file-id: stage 1 returns after that one file")
+    if args.audio_file_id == "":
+        parser.error("--audio-file-id must not be empty: stage 1 would treat it as absent and take the next queued file")
     if args.stage not in (3, 4) and args.snippet_ids:
         parser.error("--snippet-id only applies to --stage 3 or 4")
     if args.stage != 3 and args.skip_review:

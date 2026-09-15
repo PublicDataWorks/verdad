@@ -41,6 +41,7 @@ class TestParseArgs:
             ["--stage", "1", "--limit", "-1"],
             ["--stage", "1", "--audio-file-id", "x", "--limit", "2"],
             ["--stage", "1", "--audio-file-id", "", "--limit", "2"],
+            ["--stage", "1", "--audio-file-id", ""],
             ["--stage", "1", "--context-before-seconds", "10"],
             ["--stage", "3", "--context-after-seconds", "30"],
             ["--stage", "5", "--context-before-seconds", "10"],
@@ -58,6 +59,7 @@ class TestParseArgs:
             (["--stage", "1", "--audio-file-id", "x", "--limit", "2"], "--limit does not apply with --audio-file-id"),
             (["--stage", "1", "--audio-file-id", "", "--limit", "2"], "--limit does not apply with --audio-file-id"),
             (["--stage", "2", "--audio-file-id", ""], "--audio-file-id/--limit only apply to --stage 1"),
+            (["--stage", "1", "--audio-file-id", ""], "--audio-file-id must not be empty"),
             (["--stage", "3", "--context-before-seconds", "10"], "only apply to --stage 2"),
         ],
     )
