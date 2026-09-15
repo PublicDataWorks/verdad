@@ -448,6 +448,27 @@ def test_fail_on_regression_flag_parsing():
     assert parser.parse_args(["--fail-on-regression", "2"]).fail_on_regression == 2
 
 
+def test_exit_code_fails_when_every_call_failed_or_on_regression():
+    def agg(total, failed, lost=0):
+        return {"runs_total": total, "runs_failed": failed, "true_positives_lost": lost}
+
+    assert ep.exit_code(agg(8, 8), None) == 1
+    assert ep.exit_code(agg(8, 7), None) == 0
+    assert ep.exit_code(agg(0, 0), None) == 0
+    assert ep.exit_code(agg(8, 0, lost=1), None) == 0
+    assert ep.exit_code(agg(8, 0, lost=1), 0) == 1
+    assert ep.exit_code(agg(8, 0, lost=1), 1) == 0
+
+
+def test_cap_selection_keeps_both_sets():
+    reported, control = ["r1", "r2", "r3"], ["c1", "c2", "c3"]
+    assert ep.cap_selection(reported, control, 4) == (["r1", "r2"], ["c1", "c2"])
+    assert ep.cap_selection(reported, control, 3) == (["r1", "r2"], ["c1"])
+    assert ep.cap_selection(reported, [], 2) == (["r1", "r2"], [])
+    assert ep.cap_selection(["r1"], control, 3) == (["r1"], ["c1", "c2"])
+    assert ep.cap_selection(reported, control, 10) == (reported, control)
+
+
 # ---------------------------------------------------------------- error descriptions
 
 

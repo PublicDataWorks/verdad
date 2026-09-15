@@ -17,7 +17,10 @@ class FakeGitHub:
 
     def __call__(self, method, url, token, payload=None):
         self.calls.append((method, url, payload))
-        return self.comments if method == "GET" else {}
+        if method != "GET":
+            return {}
+        page = int(url.rsplit("page=", 1)[1])
+        return self.comments[(page - 1) * 100 : page * 100]
 
 
 def test_find_comment_id_matches_marker_only():
@@ -32,6 +35,13 @@ def test_upsert_creates_when_no_marker_comment():
     assert result == "created"
     url = f"{post_pr_comment.API}/repos/org/repo/issues/7/comments"
     assert github.calls[-1] == ("POST", url, {"body": "new report"})
+
+
+def test_upsert_finds_marker_comment_beyond_first_page():
+    comments = [{"id": i, "body": "chatter"} for i in range(100)] + [{"id": 100, "body": f"{MARKER}\nold"}]
+    github = FakeGitHub(comments)
+    assert post_pr_comment.upsert_comment("org/repo", 7, MARKER, "new report", "tok", request=github) == "updated"
+    assert [c[0] for c in github.calls] == ["GET", "GET", "PATCH"]
 
 
 def test_upsert_updates_existing_marker_comment():

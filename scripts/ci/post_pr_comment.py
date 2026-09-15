@@ -29,9 +29,18 @@ def find_comment_id(comments, marker):
     return next((c["id"] for c in comments if marker in (c.get("body") or "")), None)
 
 
+def list_comments(repo, pr, token, request=github_request):
+    comments, page = [], 1
+    while True:
+        batch = request("GET", f"{API}/repos/{repo}/issues/{pr}/comments?per_page=100&page={page}", token)
+        comments += batch
+        if len(batch) < 100:
+            return comments
+        page += 1
+
+
 def upsert_comment(repo, pr, marker, body, token, request=github_request):
-    comments = request("GET", f"{API}/repos/{repo}/issues/{pr}/comments?per_page=100", token)
-    comment_id = find_comment_id(comments, marker)
+    comment_id = find_comment_id(list_comments(repo, pr, token, request), marker)
     if comment_id is not None:
         request("PATCH", f"{API}/repos/{repo}/issues/comments/{comment_id}", token, {"body": body})
         return "updated"

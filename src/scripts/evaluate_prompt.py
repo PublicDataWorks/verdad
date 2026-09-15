@@ -403,9 +403,8 @@ def render_report(results: list[SnippetResult], agg: dict, config: dict, notes: 
         ]
         for bucket in failures:
             example = _md(bucket["example"])[:FAILURE_EXAMPLE_CHARS]
-            lines.append(
-                f"| `{_md(bucket['kind'])}` | {bucket['count']} | `{bucket['snippet_id'][:8]}` {bucket['side']}: {example} |"
-            )
+            where = f"`{bucket['snippet_id'][:8]}` {bucket['side']}"
+            lines.append(f"| `{_md(bucket['kind'])}` | {bucket['count']} | {where}: {example} |")
         lines.append("")
 
     if notes:
@@ -790,10 +789,25 @@ def build_selection(args, data_source, notes: list[str]) -> list[tuple[str, str]
     reported = dedupe(reported)
     reported_set = set(reported)
     control = [c for c in dedupe(control) if c not in reported_set]
-    selection = [(i, REPORTED) for i in reported] + [(i, CONTROL) for i in control]
     if args.max_snippets is not None:
-        selection = selection[: args.max_snippets]
-    return selection
+        reported, control = cap_selection(reported, control, args.max_snippets)
+    return [(i, REPORTED) for i in reported] + [(i, CONTROL) for i in control]
+
+
+def cap_selection(reported: list, control: list, limit: int) -> tuple[list, list]:
+    """Keep at most ``limit`` snippets, split evenly so a small run still has control snippets."""
+    keep_reported = min(len(reported), max(limit - len(control), (limit + 1) // 2))
+    return reported[:keep_reported], control[: limit - keep_reported]
+
+
+def exit_code(agg: dict, fail_on_regression: int | None) -> int:
+    if agg["runs_total"] and agg["runs_failed"] == agg["runs_total"]:
+        print("Every model call failed; the report carries no evidence")
+        return 1
+    if fail_on_regression is not None and agg["true_positives_lost"] > fail_on_regression:
+        print(f"Regression: {agg['true_positives_lost']} true positives lost (> {fail_on_regression})")
+        return 1
+    return 0
 
 
 def main(argv=None) -> int:
@@ -870,10 +884,7 @@ def main(argv=None) -> int:
         f"False positives fixed: {agg['false_positives_fixed']}/{agg['reported_total']} | "
         f"True positives lost: {agg['true_positives_lost']}/{agg['control_total']}"
     )
-    if args.fail_on_regression is not None and agg["true_positives_lost"] > args.fail_on_regression:
-        print(f"Regression: {agg['true_positives_lost']} true positives lost (> {args.fail_on_regression})")
-        return 1
-    return 0
+    return exit_code(agg, args.fail_on_regression)
 
 
 if __name__ == "__main__":
