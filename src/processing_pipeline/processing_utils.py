@@ -102,10 +102,9 @@ def remove_stale_ai_labels(supabase_client, snippet_id, disinformation_categorie
 
 
 @optional_task(log_prints=True, retries=3)
-def postprocess_snippet(supabase_client, snippet_id, disinformation_categories, prune_stale_ai_labels=False):
-    # On review, first drop AI labels that the revised analysis no longer supports
-    if prune_stale_ai_labels:
-        remove_stale_ai_labels(supabase_client, snippet_id, disinformation_categories)
+def postprocess_snippet(supabase_client, snippet_id, disinformation_categories):
+    # A re-analysed snippet (Stage 3 requeue or Stage 4 review) must not keep AI labels the new analysis dropped
+    remove_stale_ai_labels(supabase_client, snippet_id, disinformation_categories)
 
     # Create new labels based on the response and assign them to the snippet
     for category in disinformation_categories:

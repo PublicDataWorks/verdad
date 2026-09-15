@@ -46,14 +46,12 @@ class TestRemoveStaleAiLabels:
         remove_stale_ai_labels(client, "snip", NEW_CATEGORIES)
         client.delete_snippet_label.assert_called_once_with(2)
 
-    def test_postprocess_prunes_only_when_asked(self):
+    def test_postprocess_prunes_before_assigning_new_labels(self):
         client = Mock()
         client.get_snippet_labels.return_value = [_row(2, "Old")]
         client.create_new_label.return_value = {"id": "lbl"}
 
         postprocess_snippet(client, "snip", NEW_CATEGORIES)
-        client.delete_snippet_label.assert_not_called()
 
-        postprocess_snippet(client, "snip", NEW_CATEGORIES, prune_stale_ai_labels=True)
         client.delete_snippet_label.assert_called_once_with(2)
         client.assign_label_to_snippet.assert_called_with(label_id="lbl", snippet_id="snip")

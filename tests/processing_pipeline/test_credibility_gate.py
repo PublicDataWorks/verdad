@@ -44,7 +44,13 @@ def _analysis(
         },
         "verification_evidence": {
             "searches_performed": [
-                {"query": "q", "results": [{"url": u, "relevance_to_claim": "contradicts_claim"} for u in urls]}
+                {
+                    "query": "q",
+                    "results": [
+                        {"url": u, "relevance_to_claim": "contradicts_claim", "publication_date": "2026-03-01"}
+                        for u in urls
+                    ],
+                }
             ],
             "verification_summary": {},
         },
@@ -176,7 +182,8 @@ class TestGateRecord:
     def test_composes_with_evidence_gate(self, credibility):
         analysis = _analysis(urls=["https://apnews.com/a"])
         after_evidence = apply_evidence_caps(analysis)
-        assert not after_evidence.pop("evidence_gate")["applied"]  # one contradicting URL satisfies PR #80's gate
+        # one dated contradicting URL satisfies PR #80's gate
+        assert not after_evidence.pop("evidence_gate")["applied"]
         after_credibility = apply_credibility_gate(after_evidence, "SPMN", credibility=credibility)
         assert after_credibility["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
         assert after_credibility["explanation"]["english"].count("[") == 1
