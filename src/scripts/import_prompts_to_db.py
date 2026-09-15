@@ -16,9 +16,13 @@ Usage:
     python src/scripts/import_prompts_to_db.py import --version 1.0.0 --dry-run  # Preview changes without committing
 
     python src/scripts/import_prompts_to_db.py list [--active]
+    python src/scripts/import_prompts_to_db.py diff  # Compare local files with active DB versions
+    python src/scripts/import_prompts_to_db.py diff --stages stage_3 --show-diff
 """
 
 import argparse
+import difflib
+import json
 import os
 import sys
 
@@ -29,6 +33,7 @@ from src.processing_pipeline.constants import PromptStage
 from src.processing_pipeline.stage_1.constants import Stage1SubStage
 from src.processing_pipeline.stage_4.constants import Stage4SubStage
 from src.scripts.prompt_manifest import (
+    FILE_TYPES,
     format_plan,
     load_manifest,
     manifest_files,
@@ -139,6 +144,104 @@ def _require_supabase_env():
 
 def _create_client():
     return create_client(*_require_supabase_env())
+
+
+def load_local_prompt(files: dict) -> dict | None:
+    """Contents of one entry's prompt files (schema parsed as JSON), or None if any file is missing."""
+    if not all(os.path.exists(path) for path in files.values()):
+        return None
+    return read_prompt_files({"files": files})
+
+
+def _normalize_field(field: str, value):
+    """Make local and database values comparable: NULL and "" text are equal, schemas are parsed JSON."""
+    if field == "output_schema":
+        return json.loads(value) if isinstance(value, str) else value
+    return value or ""
+
+
+def compare_prompt_entry(local: dict | None, db_row: dict | None) -> tuple[str, list[str]]:
+    """
+    Compare local prompt files with the active database row for one (stage, sub_stage).
+
+    Pure function (no I/O). Returns (status, differing_fields), where status is one of
+    "in sync", "differs", "no active version in db" or "missing local file".
+    """
+    if local is None:
+        return "missing local file", []
+    if db_row is None:
+        return "no active version in db", []
+    differing = [
+        field
+        for field in FILE_TYPES
+        if _normalize_field(field, local.get(field)) != _normalize_field(field, db_row.get(field))
+    ]
+    return ("differs" if differing else "in sync"), differing
+
+
+def fetch_active_prompts(client) -> dict:
+    """Return the active prompt_versions rows keyed by (stage, sub_stage)."""
+    response = (
+        client.table("prompt_versions")
+        .select("id, stage, sub_stage, version, description, created_at, " + ", ".join(FILE_TYPES))
+        .eq("is_active", True)
+        .execute()
+    )
+    return {(row["stage"], row["sub_stage"]): row for row in response.data or []}
+
+
+def _field_text(field: str, value) -> str:
+    text = value or ""
+    if field == "output_schema":
+        text = json.dumps(_normalize_field(field, value), indent=2, sort_keys=True)
+    return text if text.endswith("\n") else text + "\n"
+
+
+def print_field_diff(label: str, field: str, local_path: str, local_value, db_value):
+    diff = difflib.unified_diff(
+        _field_text(field, db_value).splitlines(keepends=True),
+        _field_text(field, local_value).splitlines(keepends=True),
+        fromfile=f"db:{label}/{field}",
+        tofile=f"local:{local_path}",
+    )
+    sys.stdout.writelines(diff)
+    print()
+
+
+def diff_prompts(stages: list = None, show_diff: bool = False) -> int:
+    """
+    Compare local prompt files with the active database versions (read-only).
+
+    Returns the exit code: 0 when everything is in sync, 1 on any drift, 2 on connection/config error.
+    """
+    keys = stages if stages else list(PROMPT_MAPPING.keys())
+
+    try:
+        active = fetch_active_prompts(_create_client())
+    except Exception as e:
+        print(f"Error: could not load active prompt versions: {e}", file=sys.stderr)
+        return 2
+
+    all_in_sync = True
+    for key in keys:
+        stage, sub_stage = key
+        label = _stage_label(key)
+        files = PROMPT_MAPPING[key]
+        local = load_local_prompt(files)
+        db_row = active.get((stage.value, sub_stage.value if sub_stage else None))
+        status, differing = compare_prompt_entry(local, db_row)
+
+        detail = f" ({', '.join(differing)})" if differing else ""
+        created = (db_row.get("created_at") or "")[:10] if db_row else ""
+        version = f" [db v{db_row['version']}, {created}]" if db_row else ""
+        print(f"{label}: {status}{detail}{version}")
+        if status != "in sync":
+            all_in_sync = False
+        if show_diff:
+            for field in differing:
+                print_field_diff(label, field, files.get(field, "<no local file>"), local.get(field), db_row.get(field))
+
+    return 0 if all_in_sync else 1
 
 
 def _import_one(client, key, version: str, description: str, set_active: bool, dry_run: bool) -> bool:
@@ -304,6 +407,15 @@ def list_versions(active_only: bool = False):
     print("-" * 120)
 
 
+def _add_stages_argument(parser, verb: str):
+    parser.add_argument(
+        "--stages",
+        nargs="+",
+        help=f"Specific stages to {verb} (default: all). Use format: stage/sub_stage (e.g., stage_1/initial_detection)",
+        choices=[_stage_label(k) for k in PROMPT_MAPPING],
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Import prompts from files to database")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
@@ -323,12 +435,7 @@ def main():
         action="store_true",
         help="Don't set as active version (ignored with --from-manifest)",
     )
-    import_parser.add_argument(
-        "--stages",
-        nargs="+",
-        help="Specific stages to import (default: all). Use format: stage/sub_stage (e.g., stage_1/initial_detection)",
-        choices=[_stage_label(k) for k in PROMPT_MAPPING],
-    )
+    _add_stages_argument(import_parser, "import")
     import_parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -338,6 +445,15 @@ def main():
     # List command
     list_parser = subparsers.add_parser("list", help="List prompt versions")
     list_parser.add_argument("--active", action="store_true", help="Only list active versions")
+
+    # Diff command
+    diff_parser = subparsers.add_parser("diff", help="Compare local prompt files with the active database versions")
+    _add_stages_argument(diff_parser, "compare")
+    diff_parser.add_argument(
+        "--show-diff",
+        action="store_true",
+        help="Print a unified diff for each differing field",
+    )
 
     args = parser.parse_args()
 
@@ -356,6 +472,9 @@ def main():
             )
         elif args.command == "list":
             list_versions(active_only=args.active)
+        elif args.command == "diff":
+            stages = [_parse_stage_label(s) for s in args.stages] if args.stages else None
+            sys.exit(diff_prompts(stages=stages, show_diff=args.show_diff))
         else:
             parser.print_help()
     except MissingEnvError as e:
