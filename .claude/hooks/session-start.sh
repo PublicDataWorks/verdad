@@ -9,7 +9,8 @@ fi
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 BIN="$HOME/.local/bin"
-SUPABASE_CLI_VERSION="2.117.0"   # https://github.com/supabase/cli/releases
+FLYCTL_VERSION="${FLYCTL_VERSION:-0.4.103}"   # github.com/superfly/flyctl release
+SUPABASE_CLI_VERSION="2.117.0"   # npm package "supabase"
 mkdir -p "$BIN"
 export PATH="$BIN:$PATH"
 
@@ -52,15 +53,33 @@ fi
 
 # --- 3. Infra CLIs ------------------------------------------------------------
 if ! command -v flyctl >/dev/null 2>&1; then
-  log "installing flyctl to $BIN"
-  curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL="$HOME/.local" sh >/dev/null 2>&1 \
-    || warn "flyctl install failed (needs fly.io + github.com egress)"
+  log "installing flyctl v$FLYCTL_VERSION to $BIN"
+  FLY_URL="https://github.com/superfly/flyctl/releases/download/v${FLYCTL_VERSION}"
+  FLY_TGZ="flyctl_${FLYCTL_VERSION}_Linux_x86_64.tar.gz"
+  FLY_TMP="$(mktemp -d)"
+  # Pinned release + checksums.txt check instead of `curl install.sh | sh`, so a tampered download is refused.
+  if (cd "$FLY_TMP" \
+      && curl -fsSL -o "$FLY_TGZ" "$FLY_URL/$FLY_TGZ" \
+      && curl -fsSL -o SHA256SUMS "$FLY_URL/flyctl_${FLYCTL_VERSION}_checksums.txt" \
+      && grep " $FLY_TGZ\$" SHA256SUMS | sha256sum -c - \
+      && tar -xzf "$FLY_TGZ" flyctl) >/dev/null 2>&1; then
+    install -m 0755 "$FLY_TMP/flyctl" "$BIN/flyctl" && ln -sf "$BIN/flyctl" "$BIN/fly"
+  else
+    warn "flyctl install failed (needs github.com egress; download must match the release checksums.txt)"
+  fi
+  rm -rf "$FLY_TMP"
+  command -v fly >/dev/null 2>&1 \
+    || warn "fly still missing; use the Machines API curl fallback in CLAUDE.md > Cloud environment"
 fi
 if ! command -v supabase >/dev/null 2>&1; then
-  log "installing supabase CLI v$SUPABASE_CLI_VERSION to $BIN"
-  curl -fsSL "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" 2>/dev/null \
-    | tar -xz -C "$BIN" supabase 2>/dev/null \
-    || warn "supabase CLI install failed (needs github.com egress)"
+  # npm, not the GitHub tarball: the web sandbox's GitHub proxy only serves attached repos.
+  if command -v npm >/dev/null 2>&1; then
+    log "installing supabase CLI v$SUPABASE_CLI_VERSION via npm"
+    npm install -g --silent "supabase@$SUPABASE_CLI_VERSION" >/dev/null 2>&1 \
+      || warn "supabase CLI install failed (npm postinstall downloads the binary)"
+  else
+    warn "supabase CLI missing and npm not available"
+  fi
 fi
 command -v psql >/dev/null 2>&1 || warn "psql not found; SUPABASE_DB_URL checks will not work"
 

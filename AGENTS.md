@@ -17,8 +17,9 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
 - `src/utils.py`: `optional_flow`/`optional_task` decorators and `fetch_radio_stations()` (see gotchas).
 - `src/processing_pipeline/supabase_utils.py`: the only DB access layer (`SupabaseClient`).
 - `prompts/`: source of truth for LLM prompts, but the pipeline reads prompts from the `prompt_versions` table.
-  `src/scripts/import_prompts_to_db.py` pushes files to the DB; the `.claude/skills/verdad-heuristics-updater`
-  skill wraps that workflow for heuristics changes.
+  `src/scripts/import_prompts_to_db.py` pushes files to the DB (`import`), lists versions (`list`) and checks
+  files against the active rows (`diff`); see `docs/PROMPT_MANAGEMENT.md`. The
+  `.claude/skills/verdad-heuristics-updater` skill wraps that workflow for heuristics changes.
 - `supabase/`: `migrations/` is the source of truth (generated baseline of the live schema + one file per
   applied version); `supabase/database/sql/` is historical hand-applied SQL, see its README and the
   "Database schema and migrations" section of `docs/OPERATIONS.md`. `server/`: separate
@@ -37,6 +38,7 @@ pytest tests/processing_pipeline/test_stage_3.py -k executor --no-cov     # one 
 make format         # ruff format; only run on files you are already changing (repo is not yet fully formatted)
 python scripts/run_stage.py --stage 3 --snippet-id <uuid>                  # run one stage locally, no Prefect
 PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py import --version 1.2.0 --description "..." [--dry-run]
+PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff [--stages stage_1/initial_detection ...] [--show-diff]   # prompts-vs-DB drift
 ```
 
 - Tests import from `src/` via `tests/conftest.py` (`sys.path`) and set dummy `SUPABASE_*`, `R2_*`, `GOOGLE_GEMINI_KEY`
@@ -68,7 +70,8 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
 - `src/main.py` is an ad-hoc stage 4 smoke script with a hard-coded production snippet UUID. Do not run it.
 - `ENABLE_PREFECT_DECORATOR=false` (set by tests and `scripts/run_stage.py`) makes flows/tasks plain functions.
   It is read at import time, so set it before importing anything from `src/`.
-- Prompts live in the DB. Editing `prompts/*.md` changes nothing until `import_prompts_to_db.py` runs.
+- Prompts live in the DB. Editing `prompts/*.md` changes nothing until `import_prompts_to_db.py import` runs;
+  `import_prompts_to_db.py diff` shows whether files and the active DB rows agree (`docs/PROMPT_MANAGEMENT.md`).
 - The coverage gate (`fail_under`) is set to the real number and is meant to ratchet upward; do not lower it.
 - Stage flows loop with `repeat=True` (stage 1: `limit`, set to 1000/10000 in production) and sleep 60s when idle; pass `repeat=False`
   (or a specific id) when calling them yourself.
