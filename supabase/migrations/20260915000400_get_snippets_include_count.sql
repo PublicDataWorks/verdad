@@ -1,19 +1,27 @@
 -- get_snippets: optional total count + index-friendly ordering and station/state filters.
 --
 -- Changes (default behaviour is unchanged; verified equal to the live function on production
--- 2026-09-14 for 26 input combinations, see PR):
+-- 2026-09-14 for 26 input combinations and again 2026-09-15 after change 4, see PR):
 --  1. New trailing parameter p_include_count boolean DEFAULT true. When false the total
 --     count is skipped and num_of_snippets / total_pages are returned as JSON null. The count
 --     needs a scan of every matching snippet (the dominant cost of a page load, several
 --     seconds when the snippets heap is not cached); the frontend only needs it for page 0.
 --  2. One plain ORDER BY branch per p_order_by value instead of a single "ORDER BY CASE ..."
 --     (which can never use an index). The default/'latest' branch is
---     "ORDER BY recorded_at DESC, id DESC" and is served from idx_snippets_processed_recorded_at,
---     touching a few hundred pages instead of ~33k. "id DESC" is a deterministic tiebreak.
+--     "ORDER BY recorded_at DESC, id DESC" and is served from idx_snippets_visible_recorded_at
+--     (20260915000500, partial on the visibility predicates; without it the planner falls
+--     back to idx_snippets_processed_recorded_at, where 954 of the first 1,138 entries fail
+--     the confidence filter), touching a few hundred pages instead of ~33k. "id DESC" is a
+--     deterministic tiebreak.
 --  3. states / sources filters use "= ANY(text[])" instead of
 --     "IN (SELECT jsonb_array_elements_text(...))" (estimated as matching every row), so
 --     the planner can use idx_audio_files_location_state and the new
 --     idx_audio_files_radio_station_code_id index.
+--  4. Full-text search is evaluated together with the visibility predicates in ONE bitmap
+--     scan of snippets (candidate_snippets below) instead of a materialized search CTE
+--     hash-joined to a separate scan of every visible snippet. Measured on production
+--     2026-09-15 (EXPLAIN ANALYZE, read-only): p_search_term 'trump' went from 14-19 s cold
+--     (timing out at the 8 s authenticated statement_timeout) to well under a second.
 --
 -- The signature changes (new parameter), so the old overload must be dropped first:
 -- PostgREST would otherwise see two get_snippets functions and refuse to route the RPC.
@@ -132,26 +140,46 @@ BEGIN
         WHERE source_codes IS NOT NULL
         AND radio_station_code = ANY(source_codes)
     ),
-    -- MATERIALIZED: the full-text search is the expensive part and its result is small;
-    -- compute it once even though filtered_snippets (below) is inlined several times.
-    search_matched_ids AS MATERIALIZED (
-        SELECT s.id
+    -- Base set of candidate snippets, as a two-branch UNION ALL of the snippets table with a
+    -- constant discriminator (via_search) and NO WHERE clause in either branch. The branches
+    -- carry no quals on purpose: the planner only flattens UNION ALL branches into one append
+    -- relation when they have none (is_safe_append_member), and only flattened branches let
+    -- the ORDER BY ... LIMIT of the paginated_ids branches below be served by an index walk
+    -- (with quals they stay Subquery Scans that are planned for full retrieval). All
+    -- predicates live in filtered_snippets and are pushed down into each branch, where
+    -- via_search is a constant and the search guard folds away:
+    --  * no search term: only the via_search = FALSE branch survives (the other is planned
+    --    away, or gated by a One-Time Filter in a generic plan); the 'latest' ORDER BY branch
+    --    walks idx_snippets_visible_recorded_at (recorded_at DESC, id DESC) WHERE visible and
+    --    stops after page_size rows instead of counting/sorting every visible snippet.
+    --  * search term: only the via_search = TRUE branch survives and the pgroonga OR is
+    --    evaluated together with the visibility predicates in ONE bitmap scan of snippets
+    --    (BitmapAnd of BitmapOr(8 pgroonga indexes) with the visible partial index; 'trump':
+    --    9,443 heap blocks, ~200-600 ms warm). The previous shape (materialized search CTE
+    --    LEFT JOINed to a separate visible scan) heap-fetched every search hit (66k rows for
+    --    'trump') AND every visible row (43k) and hash-joined them: 14-19 s cold, over the
+    --    8 s authenticated statement_timeout.
+    -- The heavy text columns are only referenced by the pushed-down search predicate; the
+    -- flattened branches are plain scans of snippets, so nothing is copied or materialized.
+    candidate_snippets AS NOT MATERIALIZED (
+        SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
+               s.like_count, s.audio_file, s.language, s.political_leaning,
+               s.status, s.confidence_scores,
+               s.title, s.explanation, s.summary, s.transcription, s.translation,
+               FALSE AS via_search
         FROM snippets s
-        WHERE trimmed_search_term != '' AND (
-            (s.title ->> 'english') &@ trimmed_search_term
-            OR (s.title ->> 'spanish') &@ trimmed_search_term
-            OR (s.explanation ->> 'english') &@ trimmed_search_term
-            OR (s.explanation ->> 'spanish') &@ trimmed_search_term
-            OR (s.summary ->> 'english') &@ trimmed_search_term
-            OR (s.summary ->> 'spanish') &@ trimmed_search_term
-            OR s.transcription &@ trimmed_search_term
-            OR s.translation &@ trimmed_search_term
-        )
+        UNION ALL
+        SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
+               s.like_count, s.audio_file, s.language, s.political_leaning,
+               s.status, s.confidence_scores,
+               s.title, s.explanation, s.summary, s.transcription, s.translation,
+               TRUE AS via_search
+        FROM snippets s
     ),
     -- Lightweight filtered IDs (for count + pagination, no heavy columns).
     -- NOT MATERIALIZED so that each ORDER BY branch below is planned against the base
-    -- tables and can walk an index (e.g. idx_snippets_processed_recorded_at) for the
-    -- top-N instead of sorting a materialized copy of every visible snippet.
+    -- tables and can walk an index (idx_snippets_visible_recorded_at) for the top-N instead
+    -- of sorting a materialized copy of every visible snippet.
     filtered_snippets AS NOT MATERIALIZED (
         SELECT
             s.id,
@@ -160,15 +188,37 @@ BEGIN
             s.upvote_count,
             s.comment_count,
             COALESCE(s.like_count, 0) AS like_count
-        FROM snippets s
+        FROM candidate_snippets s
         LEFT JOIN user_hide_snippets uhs ON uhs.snippet = s.id
         LEFT JOIN starred_snippet_ids ssi ON ssi.snippet = s.id
         LEFT JOIN labeled_snippet_ids lsi ON lsi.snippet = s.id
         LEFT JOIN upvoted_snippet_ids usi ON usi.snippet = s.id
-        LEFT JOIN state_filtered_audio_ids sfa ON sfa.id = s.audio_file
-        LEFT JOIN source_filtered_audio_ids srfa ON srfa.id = s.audio_file
-        LEFT JOIN search_matched_ids smi ON smi.id = s.id
+        -- The "<filter> IS NOT NULL AND" guard inside the ON clause folds the whole join
+        -- condition to FALSE when the filter is not set, so s.audio_file is not needed at all
+        -- and the count / default page can run as Index Only Scans on the partial indexes
+        -- (idx_snippets_visible, idx_snippets_visible_recorded_at) instead of a 33k-block
+        -- heap scan. (Semantics are unchanged: with the filter unset the WHERE below accepts
+        -- every row anyway.) Kept as LEFT JOIN + IS NOT NULL rather than IN (SELECT ...): the
+        -- semi-join form planned as a hashed SubPlan over a seq scan of audio_files and made
+        -- state/station filters 4-30x slower on production (measured 2026-09-15).
+        LEFT JOIN state_filtered_audio_ids sfa ON state_codes IS NOT NULL AND sfa.id = s.audio_file
+        LEFT JOIN source_filtered_audio_ids srfa ON source_codes IS NOT NULL AND srfa.id = s.audio_file
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
+        -- Search guard: picks the candidate_snippets branch (see above) and, when searching,
+        -- applies the full-text match in the same scan as the visibility predicates.
+        AND (
+            (trimmed_search_term = '' AND NOT s.via_search)
+            OR (trimmed_search_term <> '' AND s.via_search AND (
+                (s.title ->> 'english') &@ trimmed_search_term
+                OR (s.title ->> 'spanish') &@ trimmed_search_term
+                OR (s.explanation ->> 'english') &@ trimmed_search_term
+                OR (s.explanation ->> 'spanish') &@ trimmed_search_term
+                OR (s.summary ->> 'english') &@ trimmed_search_term
+                OR (s.summary ->> 'spanish') &@ trimmed_search_term
+                OR s.transcription &@ trimmed_search_term
+                OR s.translation &@ trimmed_search_term
+            ))
+        )
         AND (user_is_admin OR uhs.snippet IS NULL)
         AND (NOT has_starred_filter OR ssi.snippet IS NOT NULL)
         AND (NOT has_labeled_filter OR lsi.snippet IS NOT NULL)
@@ -208,7 +258,6 @@ BEGIN
                 )
             )
         )
-        AND (trimmed_search_term = '' OR smi.id IS NOT NULL)
     ),
     -- Total count is only computed when requested (p_include_count). It requires a scan of
     -- every matching snippet, which is the dominant cost of a page load; the frontend only
