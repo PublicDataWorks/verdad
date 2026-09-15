@@ -44,7 +44,7 @@ and is destroyed when it exits; the runner only relays logs and the exit code. C
 - The per-run JSON (`eval-results-<set>.json`) and the markdown report are copied to R2 under
   `prompt-eval/<commit sha>/` before the Machine is destroyed; the PR comment names the key.
   Fetch with `aws s3 cp --endpoint-url $R2_ENDPOINT_URL s3://$R2_BUCKET_NAME/prompt-eval/<sha>/<file> .`
-- Run limits: `WAIT_TIMEOUT` (default 120m) in `fly_prompt_job.sh`, `timeout-minutes` in the
+- Run limits: `WAIT_TIMEOUT` (default 180m) in `fly_prompt_job.sh`, `timeout-minutes` in the
   workflows. A Machine that outlives the wait is destroyed and the job fails.
 
 The direct-RPC path (`import --version x.y.z --stages ...`) and the SQL recipe in the
