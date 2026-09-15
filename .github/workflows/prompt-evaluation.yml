@@ -59,7 +59,7 @@ jobs:
           # and default to every file in prompts/eval/.
           sets="$INPUT_SETS"
           if [ -z "$sets" ]; then
-            sets=$(printf '%s\n' "$PR_BODY" | sed -n 's/^[Ee]val-[Ss]et:[[:space:]]*//p' | tr '\n' ' ')
+            sets=$(printf '%s\n' "$PR_BODY" | tr -d '\r' | sed -n 's/^[Ee]val-[Ss]et:[[:space:]]*//p' | tr '\n' ' ')
           fi
           if [ -z "$(echo "$sets" | tr -d '[:space:]')" ]; then
             sets=$(ls prompts/eval/*.json 2>/dev/null | xargs -n1 basename | sed 's/\.json$//' | tr '\n' ' ')

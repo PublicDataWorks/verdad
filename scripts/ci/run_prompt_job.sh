@@ -52,7 +52,8 @@ case "${PROMPT_JOB:?evaluate|deploy}" in
     python src/scripts/import_prompts_to_db.py list --active
     # A second planning pass must report nothing left to import.
     python src/scripts/import_prompts_to_db.py import --from-manifest --dry-run | tee plan.txt
-    if grep -Eq "\((import|conflict)\b" plan.txt; then
+    # Plan rows end in "<action> (<reason>)".
+    if grep -Eq " (import|conflict) \(" plan.txt; then
       echo "Database does not match the manifest after deploy"
       exit 1
     fi

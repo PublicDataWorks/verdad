@@ -27,12 +27,21 @@ for name in PR_NUMBER GITHUB_TOKEN EVAL_SETS RUNS; do
   fi
 done
 
+job_tag="prompt-job-${GITHUB_RUN_ID:-$$}"
 # flyctl exits non-zero when the job finishes before it observes "started"; the id is still printed.
 out=$(fly machine run "$image" -a "$FLY_APP" -r "$FLY_REGION" --detach --restart no \
-  --vm-cpu-kind shared --vm-cpus 2 --vm-memory 2048 \
+  --vm-cpu-kind shared --vm-cpus 2 --vm-memory 2048 --metadata "prompt_job=$job_tag" \
   --entrypoint bash "${env_args[@]}" -- -c "$bootstrap" 2>&1) || true
 echo "$out"
 id=$(echo "$out" | sed -n 's/.*Machine ID: *\([0-9a-f]*\).*/\1/p' | head -1)
+if [ -z "$id" ]; then
+  # The machine may exist even if flyctl did not print its id; find it by tag so it is not orphaned.
+  id=$(fly machines list -a "$FLY_APP" --json | python3 -c '
+import json, sys
+tag = sys.argv[1]
+print(next((m["id"] for m in json.load(sys.stdin) if (m["config"].get("metadata") or {}).get("prompt_job") == tag), ""))
+' "$job_tag")
+fi
 if [ -z "$id" ]; then
   echo "::error::could not find the machine id in flyctl output"
   exit 1

@@ -21,7 +21,8 @@ import os
 import re
 from dataclasses import dataclass
 
-MANIFEST_PATH = os.path.join("prompts", "manifest.json")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+MANIFEST_PATH = os.path.join(REPO_ROOT, "prompts", "manifest.json")
 FILE_TYPES = ("system_instruction", "user_prompt", "output_schema")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 

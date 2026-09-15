@@ -13,7 +13,8 @@ How a Stage 3 prompt change gets measured, reviewed and deployed. Companion to
    each `stage/sub_stage` entry and which semver version the working tree represents;
    `import_prompts_to_db.py` derives its `PROMPT_MAPPING` from it.
 3. **Open a pull request.** Two workflows run:
-   - `prompts-check.yml` runs the unit tests on a GitHub runner (no credentials needed).
+   - `prompts-check.yml` runs the unit tests on a GitHub runner (no credentials needed) and fails
+     if a prompt file changed without its manifest version being bumped.
    - `prompt-evaluation.yml` runs the harness (`src/scripts/evaluate_prompt.py`) with the PR's
      Stage 3 files as the candidate and the active database version as the baseline, on every
      eval set in `prompts/eval/` (or the sets named in the PR body with `Eval-set: <name>` lines),
