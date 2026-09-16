@@ -1,9 +1,9 @@
 -- cleanup_2026_09 / step 04b: snapshot the current analysis of every quarantined snippet (WRITES, audit only).
 --
 -- Run after a batch has been logged in snippet_quarantine_log and BEFORE that
--- batch is re-queued for reprocessing (reprocess_snippets.py --quarantine-batch,
--- or 09). Reprocessing overwrites title/summary/explanation/categories/
--- confidence_scores/grounding_metadata on the snippet row; this table keeps
+-- batch is reprocessed (reprocess_snippets.py --quarantine-batch, or a Stage 3
+-- flow run with snippet_ids). Reprocessing overwrites title/summary/explanation/
+-- categories/confidence_scores/grounding_metadata on the snippet row; this table keeps
 -- the pre-cleanup analysis so before/after can be compared and a wrong
 -- reprocessing result can be reviewed against what the public saw.
 --
@@ -16,8 +16,8 @@
 -- (restored or not) gets a snapshot. Idempotent: rows already present are
 -- skipped (NOT EXISTS + ON CONFLICT DO NOTHING). 2,000 per run, newest
 -- recorded_at first; repeat until the INSERT reports 0 rows. Guard before
--- re-queueing and before 10:
---   snapshot count for the batch = log count for the batch  (query in README.md).
+-- reprocessing and before 10: every logged snippet that still exists has a
+-- snapshot (missing = 0 in the query at the end of this file).
 -- 10_unhide_after_reprocess.sql joins this table to tell a re-analysed snippet
 -- from one that was never re-queued, so a batch without a complete snapshot is
 -- never un-hidden.
@@ -105,7 +105,13 @@ ON CONFLICT (snippet, batch) DO NOTHING;
 
 COMMIT;
 
--- Guard before re-queueing (or running 10) for the batch (must return equal = true):
--- SELECT l.batch, l.n AS logged, coalesce(x.n, 0) AS snapshotted, l.n = coalesce(x.n, 0) AS equal
--- FROM (SELECT batch, count(*) n FROM public.snippet_quarantine_log GROUP BY batch) l
--- LEFT JOIN (SELECT batch, count(*) n FROM public.snippet_analysis_snapshot GROUP BY batch) x USING (batch);
+-- Guard before reprocessing (or running 10) a batch: missing must be 0. A log
+-- row whose snippet was deleted since can never be snapshotted (the INSERT
+-- joins snippets) and is reported as deleted instead:
+-- SELECT l.batch, count(*) AS logged, count(x.snippet) AS snapshotted,
+--        count(*) FILTER (WHERE x.snippet IS NULL AND s.id IS NOT NULL) AS missing,
+--        count(*) FILTER (WHERE s.id IS NULL) AS deleted
+-- FROM public.snippet_quarantine_log l
+-- LEFT JOIN public.snippet_analysis_snapshot x ON x.snippet = l.snippet AND x.batch = l.batch
+-- LEFT JOIN public.snippets s ON s.id = l.snippet
+-- GROUP BY l.batch ORDER BY 1;

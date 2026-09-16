@@ -8,13 +8,16 @@
 -- snippets.status was left untouched, so a hidden snippet is still
 -- 'Processed' with its old 95+ score until it is re-queued and re-analysed.
 --
--- Run AFTER the batch has been re-queued (src/scripts/reprocess_snippets.py
--- --quarantine-batch <batch> --stage 3 --execute) and Stage 3/4 have finished
--- with it. For every log row of the chosen batch that is still open
--- (restored_at IS NULL) whose snippet
+-- Run AFTER the batch has been reprocessed, either re-queued
+-- (src/scripts/reprocess_snippets.py --quarantine-batch <batch> --stage 3
+-- --execute, status -> 'New') or analysed in place by a Stage 3 flow run with
+-- snippet_ids (status stays 'Processed'; used for the 802 on 2026-09-16), and
+-- Stage 3/4 have finished with it. For every log row of the chosen batch that
+-- is still open (restored_at IS NULL) whose snippet
 --   * has been re-analysed since it was hidden  (see "reprocessed" below), and
 --   * now carries a real verdict above the feed threshold
---     (status = 'Processed' AND (confidence_scores->>'overall')::int >= 95)
+--     (status = 'Processed' AND (confidence_scores->>'overall')::int >= 95
+--      AND verification_status is not insufficient_evidence / uncertain)
 -- this deletes the NULL-user user_hide_snippets row and stamps restored_at.
 --
 -- Snippets that were re-analysed and now score below 95 are left alone on
@@ -35,6 +38,11 @@
 -- individual users' own hides. The ~200 pre-existing NULL-user rows written by
 -- the 2-dislike trigger are not in snippet_quarantine_log, so the join keeps
 -- them out as well.
+--
+-- A snippet hidden by two batches has two log rows and ONE hide row, so once
+-- the hide row goes every open log row of that snippet is stamped, whichever
+-- batch was named. A human Stage 4 review edit also changes the compared
+-- columns and counts as a re-analysis.
 --
 -- Idempotent: a snippet whose log row is already stamped is skipped, and the
 -- DELETE matches nothing on a second run. Chunks of 5,000 log rows per run so it
@@ -59,6 +67,8 @@ todo AS (
       AND l.restored_at IS NULL
       AND s.status = 'Processed'
       AND (s.confidence_scores->>'overall')::int >= 95
+      AND coalesce(s.confidence_scores->>'verification_status', '')
+          NOT IN ('insufficient_evidence', 'uncertain')
       AND s.updated_at > l.quarantined_at
       AND (s.explanation, s.confidence_scores, s.stage_3_prompt_version_id)
           IS DISTINCT FROM (x.explanation, x.confidence_scores, x.stage_3_prompt_version_id)
@@ -75,16 +85,17 @@ unhidden AS (
 UPDATE public.snippet_quarantine_log l
 SET    restored_at = now()
 FROM   todo t
-WHERE  l.id = t.log_id
+WHERE  l.snippet = t.snippet          -- every batch's row for the snippet, not only t.log_id
   AND  l.restored_at IS NULL;
 
 COMMIT;
 
--- Verify (read-only):
--- SELECT batch, reason,
+-- Verify (read-only). Reasons carry ';'-separated suffixes since 2026-09-15
+-- (restore / re-hide markers), so group on the first segment:
+-- SELECT batch, split_part(reason, ';', 1) AS reason,
 --        count(*) FILTER (WHERE restored_at IS NULL)     AS still_hidden,
 --        count(*) FILTER (WHERE restored_at IS NOT NULL) AS unhidden
--- FROM public.snippet_quarantine_log GROUP BY batch, reason ORDER BY 1, 2;
+-- FROM public.snippet_quarantine_log GROUP BY 1, 2 ORDER BY 1, 2;
 --
 -- -- Open log rows whose snippet was re-analysed but stays hidden, by outcome:
 -- SELECT s.status,
