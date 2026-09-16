@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from http import HTTPStatus
 import json
 import os
@@ -112,8 +112,9 @@ def __get_metadata(snippet):
                 metadata["transcription"] = flagged_snippet["transcription"]
 
     audio_file = snippet["audio_file"]
-    recorded_at = datetime.strptime(snippet["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
+    recorded_at = datetime.strptime(snippet["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00").replace(tzinfo=timezone.utc)
     audio_file["recorded_at"] = recorded_at.strftime("%B %-d, %Y %-I:%M %p")
+    audio_file["recorded_at_iso"] = recorded_at.isoformat()
     audio_file["recording_day_of_week"] = recorded_at.strftime("%A")
     audio_file["time_zone"] = "UTC"
     metadata["additional_info"] = audio_file
