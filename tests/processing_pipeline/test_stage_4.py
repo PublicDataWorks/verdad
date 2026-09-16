@@ -189,7 +189,7 @@ class TestStage4:
     def test_process_snippet(self, mock_supabase_client, sample_snippet, review_result):
         with patch(
             "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
-            new=AsyncMock(return_value=(review_result, "grounding")),
+            new=AsyncMock(return_value=(review_result, json.dumps({"kb_research": "kb findings"}))),
         ) as mock_run, patch("processing_pipeline.stage_4.tasks.postprocess_snippet") as mock_postprocess:
             self._process(mock_supabase_client, sample_snippet)
 
@@ -211,7 +211,8 @@ class TestStage4:
         kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
         assert kwargs["id"] == "test-id"
         assert kwargs["translation"] == "Reviewed translation"
-        assert kwargs["grounding_metadata"] == "grounding"
+        # no stage-3 evidence and the gate did not apply, so the reviewer's record passes through unchanged
+        assert json.loads(kwargs["grounding_metadata"]) == {"kb_research": "kb findings"}
         assert kwargs["reviewed_by"] == GeminiModel.GEMINI_2_5_PRO.value
         mock_postprocess.assert_called_once_with(
             mock_supabase_client, "test-id", review_result["disinformation_categories"]

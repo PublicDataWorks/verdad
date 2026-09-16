@@ -28,7 +28,7 @@ exclude_lines = [
 ]
 show_missing = true
 # Actual coverage at the time of setting; ratchet upward, never down.
-fail_under = 79
+fail_under = 84
 
 [tool.coverage.html]
 directory = "htmlcov"

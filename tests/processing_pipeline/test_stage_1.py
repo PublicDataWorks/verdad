@@ -152,7 +152,11 @@ class TestS3Operations:
 
 class TestMetadata:
     def test_get_audio_file_metadata(self):
-        assert get_audio_file_metadata(AUDIO_FILE) == {
+        metadata = get_audio_file_metadata(AUDIO_FILE)
+
+        # current_date_time/temporal_notice come from build_temporal_context (wall clock), covered elsewhere
+        assert {"current_date_time", "temporal_notice"} < set(metadata)
+        assert {k: v for k, v in metadata.items() if k not in ("current_date_time", "temporal_notice")} == {
             "radio_station_name": "Test Station",
             "radio_station_code": "TEST-FM",
             "location": {"state": "Test State", "city": "Test City"},
