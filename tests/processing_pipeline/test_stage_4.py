@@ -306,14 +306,16 @@ class TestStage4:
         with patch("processing_pipeline.stage_4.flows.process_snippet", new=AsyncMock()) as mock_process:
             yield mock_process
 
-    def test_analysis_review_flow(self, mock_supabase_client, sample_snippet, mock_process):
+    def test_analysis_review_flow(self, mock_supabase_client, sample_snippet, mock_process, monkeypatch):
         mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.return_value = sample_snippet
+        monkeypatch.setenv("GOOGLE_GEMINI_KEY", "gemini-key")
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
         with patch("processing_pipeline.stage_4.flows.asyncio.sleep", new=AsyncMock()) as mock_sleep:
             asyncio.run(analysis_review(snippet_ids=None, repeat=False))
 
         # The ADK agents read GOOGLE_API_KEY; the flow copies GOOGLE_GEMINI_KEY into it
-        assert os.environ["GOOGLE_API_KEY"] == os.environ["GOOGLE_GEMINI_KEY"]
+        assert os.environ["GOOGLE_API_KEY"] == "gemini-key"
         assert mock_supabase_client.get_active_prompt.call_count == 4
         mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.assert_called_once()
         mock_process.assert_awaited_once_with(mock_supabase_client, sample_snippet, PROMPT_VERSIONS)
