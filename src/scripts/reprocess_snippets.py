@@ -255,11 +255,12 @@ def fetch_all(build_query):
 
     ``build_query`` must return a fresh query builder on each call: postgrest builders accumulate params, so
     calling ``.range()`` twice on one builder sends two ``offset`` values and the same page comes back forever.
+    Pages are ordered by id: without ORDER BY, offset paging skips or repeats rows under concurrent writes.
     """
     rows = []
     start = 0
     while True:
-        page = build_query().range(start, start + PAGE_SIZE - 1).execute().data or []
+        page = build_query().order("id").range(start, start + PAGE_SIZE - 1).execute().data or []
         rows.extend(page)
         if len(page) < PAGE_SIZE:
             return rows
@@ -302,11 +303,14 @@ def fetch_quarantine_batch_snippet_ids(client, batches: list, reasons: list | No
     return {row["snippet"] for row in rows}
 
 
-def fetch_keyerror_snippet_ids(client) -> set:
-    rows = fetch_all(
-        lambda: client.table("snippets").select("id").eq("status", "Error").like("error_message", f"{KEYERROR_PREFIX}%")
-    )
-    return {row["id"] for row in rows}
+def fetch_keyerror_snippet_ids(client, since: date | None = None) -> set:
+    # --since is applied server-side here too: the KeyError set is ~70k rows and ordered paging over all of it
+    # hits the PostgREST statement timeout.
+    def build():
+        query = client.table("snippets").select("id").eq("status", "Error").like("error_message", f"{KEYERROR_PREFIX}%")
+        return query.gte("recorded_at", since.isoformat()) if since else query
+
+    return {row["id"] for row in fetch_all(build)}
 
 
 def fetch_hidden_snippet_ids(client) -> set:
@@ -358,7 +362,7 @@ def main(argv=None):
             client, args.quarantine_batch, args.quarantine_reason
         )
     if args.error_keyerror:
-        reason_ids["error_keyerror"] = fetch_keyerror_snippet_ids(client)
+        reason_ids["error_keyerror"] = fetch_keyerror_snippet_ids(client, args.since)
 
     candidate_ids = sorted(set().union(*reason_ids.values()))
     snippets_by_id = fetch_snippets(client, candidate_ids)

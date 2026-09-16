@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from datetime import date
 from unittest.mock import Mock
 
 import pytest
@@ -110,21 +111,22 @@ class TestFetchAll:
 
         def build_query():
             builder = Mock()
-            builder.range.return_value.execute.return_value = Mock(data=pages[len(builders)])
+            builder.order.return_value.range.return_value.execute.return_value = Mock(data=pages[len(builders)])
             builders.append(builder)
             return builder
 
         rows = rs.fetch_all(build_query)
 
         assert len(rows) == rs.PAGE_SIZE + 1 and rows[-1] == {"id": "last"}
-        assert [b.range.call_args.args for b in builders] == [
+        assert all(b.order.call_args.args == ("id",) for b in builders)
+        assert [b.order.return_value.range.call_args.args for b in builders] == [
             (0, rs.PAGE_SIZE - 1),
             (rs.PAGE_SIZE, 2 * rs.PAGE_SIZE - 1),
         ]
 
     def test_empty_table(self):
         builder = Mock()
-        builder.range.return_value.execute.return_value = Mock(data=None)
+        builder.order.return_value.range.return_value.execute.return_value = Mock(data=None)
         assert rs.fetch_all(lambda: builder) == []
 
 
@@ -332,7 +334,7 @@ class TestFetchSelectors:
             ("in_", ("batch", ["hide-a", "hide-b"])),
             ("is_", ("restored_at", "null")),
         ]
-        assert client.calls[4][0] == "range"
+        assert [name for name, _ in client.calls[4:]] == ["order", "range"]
 
     def test_quarantine_reason_adds_a_reason_filter_between_batch_and_unrestored(self):
         client = _FakeClient([{"snippet": "s1"}])
@@ -347,12 +349,12 @@ class TestFetchSelectors:
             ("in_", ("reason", ["no_evidence_no_dated_source", "no_evidence"])),
             ("is_", ("restored_at", "null")),
         ]
-        assert client.calls[5][0] == "range"
+        assert [name for name, _ in client.calls[5:]] == ["order", "range"]
 
     def test_quarantine_empty_reason_list_means_no_reason_filter(self):
         client = _FakeClient([{"snippet": "s1"}])
         rs.fetch_quarantine_batch_snippet_ids(client, ["hide-a"], [])
-        assert [name for name, _ in client.calls] == ["table", "select", "in_", "is_", "range"]
+        assert [name for name, _ in client.calls] == ["table", "select", "in_", "is_", "order", "range"]
 
     def test_keyerror_filters_on_error_status_and_message_prefix(self):
         client = _FakeClient([{"id": "e1"}])
@@ -363,6 +365,12 @@ class TestFetchSelectors:
             ("eq", ("status", "Error")),
             ("like", ("error_message", "KeyError:%")),
         ]
+        assert [name for name, _ in client.calls[4:]] == ["order", "range"]
+
+    def test_keyerror_applies_since_server_side(self):
+        client = _FakeClient([{"id": "e1"}])
+        rs.fetch_keyerror_snippet_ids(client, date(2026, 9, 2))
+        assert client.calls[4] == ("gte", ("recorded_at", "2026-09-02"))
 
 
 class TestRequeue:
