@@ -109,10 +109,11 @@ refuses the production project unless `--allow-production` is passed.
   5 loop runs already use most of it; `429 RESOURCE_EXHAUSTED` errors need a requeue after the reset.
 - **PostgREST statement timeout is 2 min**: big counts/updates time out through the API; use the Supabase SQL
   editor (or `psql`). Targeted reprocessing of many ids: `src/scripts/reprocess_snippets.py`.
-- **Run `src/scripts/*` against production from a one-off machine** with the current image and inherited secrets:
+- **Run `src/scripts/*` against production from a one-off machine** with the current image
+  (`fly machines list -a processing-worker --json | jq -r '.[0].config.image'`) and inherited secrets:
 
   ```bash
-  fly machine run <image from fly releases> -a processing-worker -r sjc --detach --restart no \
+  fly machine run <image> -a processing-worker -r sjc --detach --restart no \
       --vm-memory 1024 --metadata prompt_job=<tag> --entrypoint bash -- -c "cd /app && python src/scripts/<script>.py"
   fly logs -m <machine id> --no-tail; fly machine destroy <machine id> --force
   ```

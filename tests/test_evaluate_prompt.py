@@ -453,8 +453,7 @@ def test_main_exits_2_without_environment(monkeypatch, capsys):
 
 
 def test_main_requires_searxng_url(monkeypatch, capsys):
-    # Stage3Executor always exposes searxng_web_search to the model, so a missing SEARXNG_URL would
-    # fail every run after the (paid) model calls had already started.
+    # Without SEARXNG_URL every run fails after the paid model calls have started
     assert "SEARXNG_URL" in ep.REQUIRED_ENV
     for name in ep.REQUIRED_ENV:
         monkeypatch.setenv(name, "set")

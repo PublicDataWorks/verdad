@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """Run one pipeline stage locally as plain Python, without a Prefect server.
 
-Sets ENABLE_PREFECT_DECORATOR=false before importing anything from src/, so the
-@optional_flow/@optional_task decorators are no-ops and the flow functions in
-src/processing_pipeline/stage_N/flows.py run as ordinary (async) functions.
-
-Everything else is real: the stage talks to the Supabase project, R2 bucket and
-LLM providers configured in .env (loaded from the repo root if present). Point
-.env at a non-production project before running this against anything; the
-production Supabase project is refused unless --allow-production is passed.
+ENABLE_PREFECT_DECORATOR=false turns the flow/task decorators into no-ops; everything else is real
+and hits the Supabase, R2 and LLM providers in .env. The production Supabase project is refused
+unless --allow-production is passed.
 
 Examples:
     python scripts/run_stage.py --stage 1 --audio-file-id <uuid>
@@ -42,8 +37,7 @@ except ImportError:  # pragma: no cover - python-dotenv is in requirements.txt
 def run_stage_1(args):
     from processing_pipeline.stage_1 import initial_disinformation_detection
 
-    # With --audio-file-id the flow processes that file and returns; otherwise it takes
-    # the next "New" audio files until `limit` are done (sleeping 60s when the queue is empty).
+    # --audio-file-id processes that one file; otherwise the next `limit` "New" files
     initial_disinformation_detection(audio_file_id=args.audio_file_id, limit=args.limit)
 
 
