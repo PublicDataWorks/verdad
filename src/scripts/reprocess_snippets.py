@@ -275,7 +275,7 @@ def fetch_fabricated_label_snippet_ids(client) -> set:
     label_ids = [label["id"] for label in labels if label_matches_falsity(label)]
     ids = set()
     for batch in chunked(label_ids, BATCH_SIZE):
-        rows = fetch_all(lambda: client.table("snippet_labels").select("id, snippet").in_("label", batch))
+        rows = fetch_all(lambda batch=batch: client.table("snippet_labels").select("id, snippet").in_("label", batch))
         ids.update(row["snippet"] for row in rows)
     return ids
 
@@ -325,7 +325,7 @@ def fetch_snippets(client, ids: list) -> dict[str, dict]:
     snippets = {}
     columns = "id, status, recorded_at, confidence_scores"
     for batch in chunked(ids, BATCH_SIZE):
-        rows = fetch_all(lambda: client.table("snippets").select(columns).in_("id", batch))
+        rows = fetch_all(lambda batch=batch: client.table("snippets").select(columns).in_("id", batch))
         snippets.update({row["id"]: row for row in rows})
     return snippets
 

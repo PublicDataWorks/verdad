@@ -38,7 +38,7 @@ class TestProcessingUtils:
         """Test error handling in label creation and assignment"""
         mock_supabase_client.create_new_label.side_effect = Exception("Label creation failed")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="Label creation failed"):
             create_new_label_and_assign_to_snippet(
                 mock_supabase_client, "test-id", {"english": "Test Label", "spanish": "Etiqueta de Prueba"}
             )

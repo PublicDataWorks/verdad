@@ -184,7 +184,7 @@ class TestGenericRecording:
             patch('generic_recording.upload_to_r2_and_clean_up') as mock_upload, \
             patch('generic_recording.insert_recorded_audio_file_into_database') as mock_insert, \
             patch('psutil.virtual_memory') as mock_memory, \
-            patch('time.sleep') as mock_sleep:
+            patch('time.sleep'):
 
             # Setup mock Khot class code
             mock_khot_class.code = station_code
@@ -235,7 +235,7 @@ class TestGenericRecording:
             patch('generic_recording.capture_audio_stream') as mock_capture, \
             patch('generic_recording.upload_to_r2_and_clean_up') as mock_upload, \
             patch('psutil.virtual_memory') as mock_memory, \
-            patch('time.sleep') as mock_sleep:
+            patch('time.sleep'):
 
             # Setup mock Khot class code
             mock_khot_class.code = station_code
@@ -302,7 +302,7 @@ class TestGenericRecording:
             patch('generic_recording.capture_audio_stream') as mock_capture, \
             patch('generic_recording.upload_to_r2_and_clean_up') as mock_upload, \
             patch('psutil.virtual_memory') as mock_memory, \
-            patch('time.sleep') as mock_sleep:
+            patch('time.sleep'):
 
             # Setup mock Khot class code
             mock_khot_class.code = station_code

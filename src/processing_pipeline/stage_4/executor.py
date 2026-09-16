@@ -86,7 +86,7 @@ class Stage4Executor:
         session_id = f"stage4_review_session_{snippet_id}"
 
         try:
-            session = await session_service.create_session(
+            await session_service.create_session(
                 app_name=app_name,
                 user_id=user_id,
                 session_id=session_id,

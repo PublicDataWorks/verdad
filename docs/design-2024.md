@@ -1,3 +1,5 @@
+> **Historical design document (2024).** This is the original build plan, kept for reference; it describes a two-stage pipeline. The current pipeline has five stages, see `AGENTS.md`, `README.md` and `docs/OPERATIONS.md`.
+
 Multi-Pass Approach for Disinformation Detection and Analysis
 Overview
 
