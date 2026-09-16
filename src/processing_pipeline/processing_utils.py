@@ -65,8 +65,47 @@ def delete_vector_embedding_of_snippet(supabase_client, snippet_id):
     supabase_client.delete_vector_embedding_of_snippet(snippet_id)
 
 
+def stale_ai_snippet_labels(snippet_labels: list[dict], disinformation_categories: list[dict]) -> list[dict]:
+    """Pipeline-applied labels that no longer match any of the new disinformation categories.
+
+    A snippet_label is pipeline-applied when its label is AI-suggested and nobody applied it (applied_by is
+    null). Labels applied or upvoted by users are never returned.
+    """
+    keep = set()
+    for category in disinformation_categories or []:
+        for text in (category.get("english"), category.get("spanish")):
+            if text:
+                keep.add(text.strip().lower())
+
+    stale = []
+    for snippet_label in snippet_labels:
+        label = snippet_label.get("label") or {}
+        if not label.get("is_ai_suggested") or snippet_label.get("applied_by"):
+            continue
+        if (snippet_label.get("upvote_count") or 0) > 0:
+            continue
+        texts = {str(label.get(key) or "").strip().lower() for key in ("text", "text_spanish")}
+        if texts & keep:
+            continue
+        stale.append(snippet_label)
+    return stale
+
+
+@optional_task(log_prints=True, retries=3)
+def remove_stale_ai_labels(supabase_client, snippet_id, disinformation_categories):
+    """Drop pipeline-applied labels that the latest analysis no longer supports (user labels untouched)."""
+    existing = supabase_client.get_snippet_labels(snippet_id)
+    for snippet_label in stale_ai_snippet_labels(existing, disinformation_categories):
+        label_text = (snippet_label.get("label") or {}).get("text")
+        print(f"Removing stale AI label '{label_text}' from snippet {snippet_id}")
+        supabase_client.delete_snippet_label(snippet_label["id"])
+
+
 @optional_task(log_prints=True, retries=3)
 def postprocess_snippet(supabase_client, snippet_id, disinformation_categories):
+    # A re-analysed snippet (Stage 3 requeue or Stage 4 review) must not keep AI labels the new analysis dropped
+    remove_stale_ai_labels(supabase_client, snippet_id, disinformation_categories)
+
     # Create new labels based on the response and assign them to the snippet
     for category in disinformation_categories:
         create_new_label_and_assign_to_snippet(supabase_client, snippet_id, category)
