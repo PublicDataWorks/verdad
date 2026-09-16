@@ -108,3 +108,25 @@ class TestDispatch:
         with patch("processing_pipeline.stage_5.embedding") as flow:
             run_stage.main(["--stage", "5", "--env-file", "/nonexistent/.env"])
         flow.assert_called_once_with(repeat=False)
+
+
+class TestProductionGuard:
+    @pytest.fixture
+    def production_env(self, run_stage, monkeypatch):
+        monkeypatch.setenv("SUPABASE_URL", f"https://{run_stage.PRODUCTION_PROJECT_REF}.supabase.co")
+
+    def test_refuses_production_project(self, run_stage, production_env):
+        with patch("processing_pipeline.stage_5.embedding") as flow, pytest.raises(SystemExit) as excinfo:
+            run_stage.main(["--stage", "5", "--env-file", "/nonexistent/.env"])
+        assert "--allow-production" in str(excinfo.value.code)
+        flow.assert_not_called()
+
+    def test_allow_production_overrides(self, run_stage, production_env):
+        with patch("processing_pipeline.stage_5.embedding") as flow:
+            run_stage.main(["--stage", "5", "--allow-production", "--env-file", "/nonexistent/.env"])
+        flow.assert_called_once_with(repeat=False)
+
+    def test_prints_supabase_host(self, run_stage, capsys):
+        with patch("processing_pipeline.stage_5.embedding"):
+            run_stage.main(["--stage", "5", "--env-file", "/nonexistent/.env"])
+        assert "against Supabase test.supabase.co" in capsys.readouterr().out

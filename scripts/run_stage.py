@@ -7,7 +7,8 @@ src/processing_pipeline/stage_N/flows.py run as ordinary (async) functions.
 
 Everything else is real: the stage talks to the Supabase project, R2 bucket and
 LLM providers configured in .env (loaded from the repo root if present). Point
-.env at a non-production project before running this against anything.
+.env at a non-production project before running this against anything; the
+production Supabase project is refused unless --allow-production is passed.
 
 Examples:
     python scripts/run_stage.py --stage 1 --audio-file-id <uuid>
@@ -23,12 +24,14 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Must happen before any `processing_pipeline` import: the decorators read this at import time.
 os.environ["ENABLE_PREFECT_DECORATOR"] = "false"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
+PRODUCTION_PROJECT_REF = "dzujjhzgzguciwryzwlx"
 
 try:
     from dotenv import load_dotenv
@@ -88,6 +91,9 @@ def build_parser():
     parser.add_argument("--context-before-seconds", type=int, default=90, help="stage 2 (default 90)")
     parser.add_argument("--context-after-seconds", type=int, default=60, help="stage 2 (default 60)")
     parser.add_argument("--env-file", default=str(REPO_ROOT / ".env"), help="dotenv file to load (default: <repo>/.env)")
+    parser.add_argument(
+        "--allow-production", action="store_true", help="run even if SUPABASE_URL is the production project"
+    )
     return parser
 
 
@@ -119,7 +125,11 @@ def main(argv=None):
     args = parse_args(argv)
     if load_dotenv is not None and os.path.exists(args.env_file):
         load_dotenv(args.env_file)
-    print(f"Running stage {args.stage} locally (ENABLE_PREFECT_DECORATOR=false)")
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    supabase_host = urlparse(supabase_url).netloc or "<SUPABASE_URL unset>"
+    if PRODUCTION_PROJECT_REF in supabase_url and not args.allow_production:
+        sys.exit(f"Refusing to run against the production Supabase project ({supabase_host}); pass --allow-production")
+    print(f"Running stage {args.stage} locally (ENABLE_PREFECT_DECORATOR=false) against Supabase {supabase_host}")
     STAGE_RUNNERS[args.stage](args)
 
 
