@@ -250,21 +250,24 @@ def get_supabase_client():
     return create_client(url, key)
 
 
-def fetch_all(build_query):
-    """Read every row of a query, PAGE_SIZE rows at a time.
+def fetch_all(build_query, key: str = "id"):
+    """Read every row of a query, PAGE_SIZE rows at a time, as keyset pages on ``key``.
 
-    ``build_query`` must return a fresh query builder on each call: postgrest builders accumulate params, so
-    calling ``.range()`` twice on one builder sends two ``offset`` values and the same page comes back forever.
-    Pages are ordered by id: without ORDER BY, offset paging skips or repeats rows under concurrent writes.
+    ``build_query`` must return a fresh query builder on each call (postgrest builders accumulate params) and
+    must select ``key``. Offset paging skips or repeats rows when concurrent writes shift later pages and gets
+    slower with depth; ``key > last`` over an indexed column does neither. A non-unique ``key`` may lose rows
+    that share the boundary value, so only use one when callers need the distinct key values.
     """
-    rows = []
-    start = 0
+    rows, last = [], None
     while True:
-        page = build_query().order("id").range(start, start + PAGE_SIZE - 1).execute().data or []
+        query = build_query().order(key).limit(PAGE_SIZE)
+        if last is not None:
+            query = query.gt(key, last)
+        page = query.execute().data or []
         rows.extend(page)
         if len(page) < PAGE_SIZE:
             return rows
-        start += PAGE_SIZE
+        last = page[-1][key]
 
 
 def fetch_fabricated_label_snippet_ids(client) -> set:
@@ -272,13 +275,13 @@ def fetch_fabricated_label_snippet_ids(client) -> set:
     label_ids = [label["id"] for label in labels if label_matches_falsity(label)]
     ids = set()
     for batch in chunked(label_ids, BATCH_SIZE):
-        rows = fetch_all(lambda: client.table("snippet_labels").select("snippet").in_("label", batch))
+        rows = fetch_all(lambda: client.table("snippet_labels").select("id, snippet").in_("label", batch))
         ids.update(row["snippet"] for row in rows)
     return ids
 
 
 def fetch_disliked_snippet_ids(client) -> set:
-    rows = fetch_all(lambda: client.table("user_like_snippets").select("snippet").eq("value", -1))
+    rows = fetch_all(lambda: client.table("user_like_snippets").select("id, snippet").eq("value", -1))
     return {row["snippet"] for row in rows}
 
 
@@ -294,7 +297,7 @@ def fetch_quarantine_batch_snippet_ids(client, batches: list, reasons: list | No
     """
 
     def build_query():
-        query = client.table("snippet_quarantine_log").select("snippet").in_("batch", list(batches))
+        query = client.table("snippet_quarantine_log").select("id, snippet").in_("batch", list(batches))
         if reasons:
             query = query.in_("reason", list(reasons))
         return query.is_("restored_at", "null")
@@ -304,8 +307,7 @@ def fetch_quarantine_batch_snippet_ids(client, batches: list, reasons: list | No
 
 
 def fetch_keyerror_snippet_ids(client, since: date | None = None) -> set:
-    # --since is applied server-side here too: the KeyError set is ~70k rows and ordered paging over all of it
-    # hits the PostgREST statement timeout.
+    # --since goes into the query: the KeyError set is ~70k rows, too many to filter client-side.
     def build():
         query = client.table("snippets").select("id").eq("status", "Error").like("error_message", f"{KEYERROR_PREFIX}%")
         return query.gte("recorded_at", since.isoformat()) if since else query
@@ -314,7 +316,8 @@ def fetch_keyerror_snippet_ids(client, since: date | None = None) -> set:
 
 
 def fetch_hidden_snippet_ids(client) -> set:
-    rows = fetch_all(lambda: client.table("user_hide_snippets").select("snippet"))
+    # user_hide_snippets has no id column; snippet repeats per user, which the set absorbs.
+    rows = fetch_all(lambda: client.table("user_hide_snippets").select("snippet"), key="snippet")
     return {row["snippet"] for row in rows}
 
 

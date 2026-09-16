@@ -105,28 +105,37 @@ class TestPureHelpers:
 
 
 class TestFetchAll:
-    def test_builds_a_fresh_query_per_page_and_stops_on_a_short_page(self):
-        pages = [[{"id": i} for i in range(rs.PAGE_SIZE)], [{"id": "last"}]]
+    def test_keyset_pages_after_the_last_id_and_stops_on_a_short_page(self):
+        pages = [[{"id": f"id-{i:04d}"} for i in range(rs.PAGE_SIZE)], [{"id": "last"}]]
         builders = []
 
         def build_query():
             builder = Mock()
-            builder.order.return_value.range.return_value.execute.return_value = Mock(data=pages[len(builders)])
+            builder.order.return_value.limit.return_value = builder
+            builder.gt.return_value = builder
+            builder.execute.return_value = Mock(data=pages[len(builders)])
             builders.append(builder)
             return builder
 
         rows = rs.fetch_all(build_query)
 
         assert len(rows) == rs.PAGE_SIZE + 1 and rows[-1] == {"id": "last"}
-        assert all(b.order.call_args.args == ("id",) for b in builders)
-        assert [b.order.return_value.range.call_args.args for b in builders] == [
-            (0, rs.PAGE_SIZE - 1),
-            (rs.PAGE_SIZE, 2 * rs.PAGE_SIZE - 1),
-        ]
+        for builder in builders:
+            assert builder.order.call_args.args == ("id",)
+            assert builder.order.return_value.limit.call_args.args == (rs.PAGE_SIZE,)
+        assert builders[0].gt.call_count == 0
+        assert builders[1].gt.call_args.args == ("id", f"id-{rs.PAGE_SIZE - 1:04d}")
+
+    def test_pages_on_another_key(self):
+        builder = Mock()
+        builder.order.return_value.limit.return_value = builder
+        builder.execute.return_value = Mock(data=[{"snippet": "s"}])
+        assert rs.fetch_all(lambda: builder, key="snippet") == [{"snippet": "s"}]
+        assert builder.order.call_args.args == ("snippet",)
 
     def test_empty_table(self):
         builder = Mock()
-        builder.order.return_value.range.return_value.execute.return_value = Mock(data=None)
+        builder.order.return_value.limit.return_value.execute.return_value = Mock(data=None)
         assert rs.fetch_all(lambda: builder) == []
 
 
@@ -330,11 +339,11 @@ class TestFetchSelectors:
         assert ids == {"s1", "s2"}
         assert client.calls[:4] == [
             ("table", ("snippet_quarantine_log",)),
-            ("select", ("snippet",)),
+            ("select", ("id, snippet",)),
             ("in_", ("batch", ["hide-a", "hide-b"])),
             ("is_", ("restored_at", "null")),
         ]
-        assert [name for name, _ in client.calls[4:]] == ["order", "range"]
+        assert [name for name, _ in client.calls[4:]] == ["order", "limit"]
 
     def test_quarantine_reason_adds_a_reason_filter_between_batch_and_unrestored(self):
         client = _FakeClient([{"snippet": "s1"}])
@@ -344,17 +353,27 @@ class TestFetchSelectors:
         assert ids == {"s1"}
         assert client.calls[:5] == [
             ("table", ("snippet_quarantine_log",)),
-            ("select", ("snippet",)),
+            ("select", ("id, snippet",)),
             ("in_", ("batch", ["hide-2026-09-15-heuristics"])),
             ("in_", ("reason", ["no_evidence_no_dated_source", "no_evidence"])),
             ("is_", ("restored_at", "null")),
         ]
-        assert [name for name, _ in client.calls[5:]] == ["order", "range"]
+        assert [name for name, _ in client.calls[5:]] == ["order", "limit"]
 
     def test_quarantine_empty_reason_list_means_no_reason_filter(self):
         client = _FakeClient([{"snippet": "s1"}])
         rs.fetch_quarantine_batch_snippet_ids(client, ["hide-a"], [])
-        assert [name for name, _ in client.calls] == ["table", "select", "in_", "is_", "order", "range"]
+        assert [name for name, _ in client.calls] == ["table", "select", "in_", "is_", "order", "limit"]
+
+    def test_hidden_ids_page_on_snippet_because_the_table_has_no_id(self):
+        client = _FakeClient([{"snippet": "s1"}, {"snippet": "s1"}])
+        assert rs.fetch_hidden_snippet_ids(client) == {"s1"}
+        assert client.calls == [
+            ("table", ("user_hide_snippets",)),
+            ("select", ("snippet",)),
+            ("order", ("snippet",)),
+            ("limit", (rs.PAGE_SIZE,)),
+        ]
 
     def test_keyerror_filters_on_error_status_and_message_prefix(self):
         client = _FakeClient([{"id": "e1"}])
@@ -365,7 +384,7 @@ class TestFetchSelectors:
             ("eq", ("status", "Error")),
             ("like", ("error_message", "KeyError:%")),
         ]
-        assert [name for name, _ in client.calls[4:]] == ["order", "range"]
+        assert [name for name, _ in client.calls[4:]] == ["order", "limit"]
 
     def test_keyerror_applies_since_server_side(self):
         client = _FakeClient([{"id": "e1"}])
