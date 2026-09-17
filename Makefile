@@ -11,6 +11,7 @@ test:  ## full test suite with coverage gate (see [tool.coverage.report] fail_un
 
 lint:  ## static checks only
 	$(RUFF) check src tests scripts
+	python scripts/check_rules.py
 
 format:  ## rewrite files in place (only run on files you are already changing)
 	$(RUFF) format src tests scripts

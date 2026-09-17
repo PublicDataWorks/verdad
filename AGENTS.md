@@ -7,6 +7,8 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
 
 ## Layout (what is not obvious from file names)
 
+- Path-specific guidance lives in `.claude/rules/` (pipeline stages, recorders, Supabase SQL, prompts,
+  tests); each file loads only when you read files it matches.
 - `src/processing_pipeline/stage_{1..5}/{flows,tasks,executors,models}.py`: one package per stage.
   `flows.py` = Prefect flow (loop that fetches work from Supabase), `tasks.py` = steps, `executors.py` =
   the LLM call. Stage 4 is `executor.py` + `agents.py` (Google ADK agent pipeline) and stage 2 has no executor.
@@ -16,13 +18,11 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
   recorders for six web-only stations). Same `FLY_PROCESS_GROUP` dispatch.
 - `src/utils.py`: `optional_flow`/`optional_task` decorators and `fetch_radio_stations()` (see gotchas).
 - `src/processing_pipeline/supabase_utils.py`: the only DB access layer (`SupabaseClient`).
-- `prompts/`: source of truth for LLM prompts, but the pipeline reads prompts from the `prompt_versions` table.
-  `prompts/manifest.json` (loaded by `src/scripts/prompt_manifest.py`) names each `stage/sub_stage` entry's files
-  and its semver version. `src/scripts/import_prompts_to_db.py` pushes files to the DB (`import --from-manifest`
-  or `import --version`), lists versions (`list`) and checks files against the active rows (`diff`);
-  `src/scripts/evaluate_prompt.py` measures a Stage 3 prompt change on the eval sets in `prompts/eval/`. See
-  `docs/PROMPT_MANAGEMENT.md` and `docs/PROMPT_EVALUATION.md`. The `.claude/skills/verdad-heuristics-updater`
-  skill wraps that workflow for heuristics changes.
+- `prompts/`: prompt sources, but the pipeline reads prompts from the `prompt_versions` table; `prompts/manifest.json`
+  names each entry's files and semver version. `src/scripts/import_prompts_to_db.py` moves files to the DB
+  (`import --from-manifest` or `import --version`, `list`, `diff`); `src/scripts/evaluate_prompt.py` measures a
+  Stage 3 change on the eval sets in `prompts/eval/`. See `docs/PROMPT_MANAGEMENT.md`, `docs/PROMPT_EVALUATION.md`
+  and `.claude/rules/prompts.md`.
 - `supabase/`: 5 migrations plus loose SQL in `supabase/database/sql/` (not migrations). `server/`: separate
   Express/TS app (Liveblocks auth, Resend email) with its own Dockerfile and `fly.server.toml`.
 - `scripts/*.sh` + `Dockerfile.*` + `fly.*.toml`: deploy and cron. See `docs/OPERATIONS.md`. `scripts/ci/`: helpers
@@ -34,7 +34,7 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
 ```bash
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt   # needs ffmpeg on PATH
 make check          # ruff check + pytest with coverage gate; what CI runs. Run before every commit.
-make lint           # ruff check src tests scripts
+make lint           # ruff check src tests scripts + scripts/check_rules.py
 make test           # pytest (coverage gate = [tool.coverage.report] fail_under in pyproject.toml)
 pytest tests/processing_pipeline/test_stage_3.py -k executor --no-cov     # one file/test, fast
 make format         # ruff format; only run on files you are already changing (repo is not yet fully formatted)
@@ -44,9 +44,6 @@ PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py import --version 1.2
 PYTHONPATH=.:src python src/scripts/import_prompts_to_db.py diff [--stages stage_1/initial_detection ...] [--show-diff]   # prompts-vs-DB drift
 ```
 
-- Tests import from `src/` via `tests/conftest.py` (`sys.path`) and set dummy `SUPABASE_*`, `R2_*`, `GOOGLE_GEMINI_KEY`
-  and `ENABLE_PREFECT_DECORATOR=false`. `OPENAI_API_KEY` is not set there; tests that need it set it themselves.
-- Stage 2 tests decode real mp3s with pydub, so `ffmpeg` must be installed (CI and the web SessionStart hook do this).
 - `pre-commit install` enables ruff on staged files; `hooks/install-hooks.sh` installs a lint+test pre-push hook.
 
 ## Environment variables
@@ -68,9 +65,8 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
 
 ## Gotchas
 
-- Stations are hard-coded: 53 dicts in `src/utils.py::fetch_radio_stations()`, split by position in
-  `src/recording.py` (`radio_stations[:39]` -> max recorder, `[39:]` -> lite recorder), and duplicated by name in
-  `scripts/start_recording.sh`. Adding or reordering a station touches all three and shifts the split.
+- Stations are hard-coded in `src/utils.py::fetch_radio_stations()` and split by list position across the two
+  recorders; adding or reordering one touches three files. See `.claude/rules/recorders.md` first.
 - `ENABLE_PREFECT_DECORATOR=false` (set by tests and `scripts/run_stage.py`) makes flows/tasks plain functions.
   It is read at import time, so set it before importing anything from `src/`.
 - Prompts live in the DB. Editing `prompts/*.md` changes nothing until `import_prompts_to_db.py import` runs. Bump
@@ -78,9 +74,6 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
   `main`, `prompts-deploy.yml` runs `import --from-manifest`, which imports and activates only the bumped entries.
   `import_prompts_to_db.py diff` shows whether files and the active DB rows agree (`docs/PROMPT_MANAGEMENT.md`).
 - The coverage gate (`fail_under`) is set to the real number and is meant to ratchet upward; do not lower it.
-- Stage flows loop with `repeat=True` (stage 1: `limit`, set to 1000/10000 in production) and sleep 60s when idle; pass `repeat=False`
-  (or a specific id) when calling them yourself.
-- Snippets with overall confidence >= 95 (`CONFIDENCE_THRESHOLD`) go to stage 4 review; the rest are `Processed`.
 - Import sorting (`ruff` rule `I`) is intentionally off until a formatting-only commit lands; do not reformat
   files you are not otherwise changing.
 
