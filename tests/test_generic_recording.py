@@ -1,4 +1,3 @@
-import os
 from unittest.mock import Mock, call, patch
 import pytest
 from generic_recording import (
@@ -7,9 +6,11 @@ from generic_recording import (
     get_metadata,
     insert_recorded_audio_file_into_database,
     generic_audio_processing_pipeline,
-    get_url_hash
+    get_url_hash,
+    station_to_serve,
 )
 from radiostations.base import RadioStation
+from stations import station_by_code, station_by_process_group
 
 class TestGenericRecording:
     @pytest.fixture
@@ -372,57 +373,27 @@ class TestGenericRecording:
                 repeat=False
             )
 
-    def test_main_execution(self):
-        """Test main execution with process groups"""
-        mock_deployment = Mock()
-        mock_flow = Mock()
-        mock_flow.to_deployment.return_value = mock_deployment
+    def test_station_to_serve_dispatches_on_process_group(self):
+        assert station_to_serve("radio_khot").code == "KHOT - 105.9 FM"
 
-        with patch.dict('os.environ', {'FLY_PROCESS_GROUP': 'radio_khot'}), \
-            patch('generic_recording.serve') as mock_serve, \
-            patch('generic_recording.generic_audio_processing_pipeline', mock_flow):
+    def test_station_to_serve_rejects_an_unknown_process_group(self):
+        with pytest.raises(ValueError, match="Invalid process group: invalid_group"):
+            station_to_serve("invalid_group")
 
-            # Execute the main block code directly
-            process_group = os.environ.get("FLY_PROCESS_GROUP")
-            match process_group:
-                case "radio_khot":
-                    deployment = mock_flow.to_deployment(  # Use mock_flow instead of generic_audio_processing_pipeline
-                        "KHOT - 105.9 FM",
-                        tags=["Arizona", "1853b3", "Generic"],
-                        parameters=dict(
-                            station_code="KHOT - 105.9 FM",
-                            duration_seconds=1800,
-                            repeat=True,
-                            audio_birate=64000,
-                            audio_channels=1,
-                        ),
-                    )
-                    mock_serve(deployment)
-                case _:
-                    raise ValueError(f"Invalid process group: {process_group}")
+    def test_station_to_serve_rejects_a_disabled_station(self):
+        disabled = station_by_process_group("radio_khot").model_copy(update={"enabled": False})
+        with patch("generic_recording.station_by_process_group", return_value=disabled):
+            with pytest.raises(ValueError, match="Station is disabled: KHOT - 105.9 FM"):
+                station_to_serve("radio_khot")
 
-            # Verify serve was called with the mock deployment
-            mock_serve.assert_called_once_with(mock_deployment)
-            # Verify to_deployment was called with correct parameters
-            mock_flow.to_deployment.assert_called_once_with(
-                "KHOT - 105.9 FM",
-                tags=["Arizona", "1853b3", "Generic"],
-                parameters=dict(
+    def test_generic_audio_processing_pipeline_rejects_a_disabled_station(self):
+        disabled = station_by_code("KHOT - 105.9 FM").model_copy(update={"enabled": False})
+        with patch("generic_recording.station_by_code", return_value=disabled):
+            with pytest.raises(ValueError, match="Station is disabled: KHOT - 105.9 FM"):
+                generic_audio_processing_pipeline(
                     station_code="KHOT - 105.9 FM",
                     duration_seconds=1800,
-                    repeat=True,
                     audio_birate=64000,
                     audio_channels=1,
-                ),
-            )
-
-    def test_main_execution_invalid_process_group(self):
-        """Test main execution with invalid process group"""
-        with patch.dict('os.environ', {'FLY_PROCESS_GROUP': 'invalid_group'}):
-            process_group = os.environ.get("FLY_PROCESS_GROUP")
-            with pytest.raises(ValueError, match="Invalid process group: invalid_group"):
-                match process_group:
-                    case "radio_khot":
-                        pass
-                    case _:
-                        raise ValueError(f"Invalid process group: {process_group}")
+                    repeat=False
+                )

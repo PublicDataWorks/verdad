@@ -116,6 +116,8 @@ def generic_audio_processing_pipeline(station_code, duration_seconds, audio_bira
     station_config = station_by_code(station_code)
     if station_config is None or station_config.recorder != "generic":
         raise ValueError(f"Invalid station code: {station_code}")
+    if not station_config.enabled:
+        raise ValueError(f"Station is disabled: {station_code}")
 
     station = GenericStation(station_config)
 
@@ -163,16 +165,21 @@ def get_url_hash(url):
     return hashlib.sha256(url.encode()).hexdigest()[-6:]
 
 
+def station_to_serve(process_group):
+    """The enabled generic station that a FLY_PROCESS_GROUP machine records, per config/stations.yaml."""
+    station_config = station_by_process_group(process_group)
+    if station_config is None:
+        raise ValueError(f"Invalid process group: {process_group}")
+    if not station_config.enabled:
+        raise ValueError(f"Station is disabled: {station_config.code} ({process_group})")
+    return station_config
+
+
 if __name__ == "__main__":
     process_group = os.environ.get("FLY_PROCESS_GROUP")
     print(f"======== Starting {process_group} ========")
 
-    # config/stations.yaml maps each FLY_PROCESS_GROUP to the generic station it records.
-    station_config = station_by_process_group(process_group)
-    if station_config is None:
-        raise Exception("Invalid process group")
-
-    station = GenericStation(station_config)
+    station = GenericStation(station_to_serve(process_group))
 
     duration_seconds = 1800  # Default to 30 minutes
     audio_birate = 64000  # Default to 64kbps bitrate
