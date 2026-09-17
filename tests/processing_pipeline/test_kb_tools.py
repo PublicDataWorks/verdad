@@ -169,3 +169,29 @@ def test_adk_declaration_hides_tool_context_and_exposes_publication_date():
     properties = declaration.parameters.properties
     assert "tool_context" not in properties
     assert "publication_date" in properties
+
+
+class TestProvenance:
+    def test_pipeline_entries_are_context_only(self):
+        entry = tools.annotate_provenance({"id": "1", "created_by_model": "gemini-2.5-pro", "fact": "f"})
+        assert entry["provenance"] == "pipeline" and entry["evidence_role"] == "context_only"
+
+    def test_curated_entries_are_verified_facts(self):
+        for model in ("claude-opus-4-6-downvote-review", "analyst-seed-2026-09-17", None):
+            entry = tools.annotate_provenance({"id": "1", "created_by_model": model, "fact": "f"})
+            assert entry["provenance"] == "curated" and entry["evidence_role"] == "verified_fact"
+
+    def test_search_results_carry_provenance_and_the_note(self, supabase):
+        supabase.search_kb_entries.return_value = [
+            {
+                "id": "1",
+                "fact": "f",
+                "confidence_score": 95,
+                "similarity": 0.9,
+                "created_by_model": "gemini-2.5-pro",
+                "sources": [{"url": "https://apnews.com/a", "source_type": "tier1_wire_service", "publication_date": "2026-01-01"}],
+            }
+        ]
+        result = tools.search_knowledge_base("q")
+        assert result["results"][0]["provenance"] == "pipeline"
+        assert "context only" in result["message"]

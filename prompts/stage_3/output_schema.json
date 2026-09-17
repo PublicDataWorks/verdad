@@ -168,7 +168,7 @@
                             "type": "array",
                             "items": {
                                 "type": "object",
-                                "required": ["quote", "evidence", "score"],
+                                "required": ["quote", "evidence", "score", "event_date"],
                                 "properties": {
                                     "quote": {
                                         "type": "string",
@@ -181,6 +181,11 @@
                                     "score": {
                                         "type": "integer",
                                         "description": "Confidence score for this specific claim"
+                                    },
+                                    "event_date": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "description": "ISO date (YYYY-MM-DD) of the event the claim is about (when it allegedly happened), or null when the claim is not about a datable event."
                                     }
                                 }
                             }

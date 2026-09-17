@@ -17,7 +17,7 @@ from processing_pipeline.kb_sources import (
 )
 from processing_pipeline.processing_utils import normalize_embedding
 from processing_pipeline.stage_1.constants import KB_STAGE1_MIN_CONFIDENCE, STAGE_1_KB_MATCH_THRESHOLD
-from processing_pipeline.stage_1.kb_context import select_trustworthy_entries
+from processing_pipeline.stage_1.kb_context import is_pipeline_authored, select_trustworthy_entries
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -74,14 +74,35 @@ def search_knowledge_base(query: str, categories: list[str] | None = None, refer
         reference_date=reference_date,
         min_confidence=KB_STAGE1_MIN_CONFIDENCE,
     )
-    results = select_trustworthy_entries(matched)
+    results = [annotate_provenance(entry) for entry in select_trustworthy_entries(matched)]
 
     if not results:
         print(f"  [KB Search] Query: '{query}' — 0 trustworthy results ({len(matched)} matched)")
         return {"results": [], "message": "No relevant knowledge base entries found."}
 
     print(f"  [KB Search] Query: '{query}' — {len(results)} results (top similarity: {results[0].get('similarity', 'N/A')})")
-    return {"results": results, "count": len(results)}
+    return {"results": results, "count": len(results), "message": KB_PROVENANCE_NOTE}
+
+
+KB_PROVENANCE_NOTE = (
+    "Entries with provenance 'pipeline' were written by an earlier automated review of another snippet, not by an "
+    "analyst; they are context only and can never be the evidence that a claim is false. Only a source URL returned "
+    "by the web research tools in this session can contradict a claim."
+)
+
+
+def annotate_provenance(entry: dict) -> dict:
+    """Tag a KB entry with who wrote it, so the reviewer can weigh it (see ``KB_PROVENANCE_NOTE``).
+
+    ``provenance`` is 'pipeline' for entries the Stage 4 updater wrote from a previous snippet's review and
+    'curated' for analyst- or script-seeded entries; ``evidence_role`` says what the entry may be used for.
+    """
+    pipeline = is_pipeline_authored(entry)
+    return {
+        **entry,
+        "provenance": "pipeline" if pipeline else "curated",
+        "evidence_role": "context_only" if pipeline else "verified_fact",
+    }
 
 def _error(message: str) -> dict:
     return {"status": "error", "error_message": message}
