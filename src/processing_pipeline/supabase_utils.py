@@ -652,3 +652,68 @@ class SupabaseClient:
         else:
             response = self.client.table("kb_entry_snippet_usage").insert(data).execute()
         return response.data[0]
+
+    # News ledger methods (see src/news_ledger/ and supabase/migrations/20260918000000_news_index.sql)
+
+    def upsert_news_items(self, items):
+        """Insert ledger rows, refreshing title/summary/published_at for URLs already stored."""
+        if not items:
+            return []
+        response = self.client.table("news_index").upsert(items, on_conflict="url").execute()
+        return response.data if response.data else []
+
+    def get_news_items_without_embedding(self, limit=500):
+        """Ledger rows that still need an embedding, newest first."""
+        response = (
+            self.client.table("news_index")
+            .select("id, outlet, title, summary, published_at, news_index_embeddings(id)")
+            .order("published_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = response.data if response.data else []
+        pending = []
+        for row in rows:
+            if row.pop("news_index_embeddings", None):
+                continue
+            pending.append(row)
+        return pending
+
+    def upsert_news_index_embedding(self, news_index_id, embedding, model_name):
+        data = {
+            "embedding": embedding,
+            "model_name": model_name,
+            "status": "Processed",
+            "error_message": None,
+        }
+        existing = self.client.table("news_index_embeddings").select("id").eq("news_index", news_index_id).execute()
+        if existing.data:
+            response = (
+                self.client.table("news_index_embeddings").update(data).eq("news_index", news_index_id).execute()
+            )
+        else:
+            data["news_index"] = news_index_id
+            response = self.client.table("news_index_embeddings").insert(data).execute()
+        return response.data[0]
+
+    def search_news_index(
+        self,
+        query_embedding: list[float],
+        match_threshold=0.5,
+        match_count=5,
+        candidate_multiplier=8,
+        published_after: str | None = None,
+        published_before: str | None = None,
+    ):
+        params = {
+            "query_embedding": query_embedding,
+            "match_threshold": match_threshold,
+            "match_count": match_count,
+            "candidate_multiplier": candidate_multiplier,
+        }
+        if published_after:
+            params["published_after"] = published_after
+        if published_before:
+            params["published_before"] = published_before
+        response = self.client.rpc("search_news_index", params).execute()
+        return response.data if response.data else []
