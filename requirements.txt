@@ -23,6 +23,7 @@ pydub==0.25.1
 openai==1.57.1
 tiktoken==0.8.0
 pydantic==2.12.5
+pyyaml==6.0.3 # Direct dep of src/stations.py
 pytest-cov==6.0.0
 ruff==0.16.7
 # google-cloud-bigquery-storage==2.26.0

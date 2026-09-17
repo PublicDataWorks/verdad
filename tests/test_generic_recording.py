@@ -1,4 +1,3 @@
-import os
 from unittest.mock import Mock, call, patch
 import pytest
 from generic_recording import (
@@ -7,9 +6,11 @@ from generic_recording import (
     get_metadata,
     insert_recorded_audio_file_into_database,
     generic_audio_processing_pipeline,
-    get_url_hash
+    get_url_hash,
+    station_to_serve,
 )
 from radiostations.base import RadioStation
+from stations import station_by_code, station_by_process_group
 
 class TestGenericRecording:
     @pytest.fixture
@@ -174,20 +175,12 @@ class TestGenericRecording:
         """Test successful pipeline execution"""
         station_code = "KHOT - 105.9 FM"
 
-        with patch('generic_recording.Khot', return_value=mock_radio_station) as mock_khot_class, \
-            patch('generic_recording.Kisf'), \
-            patch('generic_recording.Krgt'), \
-            patch('generic_recording.Wkaq'), \
-            patch('generic_recording.Wado'), \
-            patch('generic_recording.Waqi'), \
+        with patch('generic_recording.GenericStation', return_value=mock_radio_station), \
             patch('generic_recording.capture_audio_stream') as mock_capture, \
             patch('generic_recording.upload_to_r2_and_clean_up') as mock_upload, \
             patch('generic_recording.insert_recorded_audio_file_into_database') as mock_insert, \
             patch('psutil.virtual_memory') as mock_memory, \
             patch('time.sleep'):
-
-            # Setup mock Khot class code
-            mock_khot_class.code = station_code
 
             # Setup mock returns
             mock_radio_station.is_audio_playing.side_effect = [True, False]  # Play once then stop
@@ -226,19 +219,12 @@ class TestGenericRecording:
         mock_response.data = [{"id": 1}]  # Simulate Supabase response structure
         mock_supabase_client.insert_audio_file.return_value = {"id": 1}  # Set return value for insert_audio_file
 
-        with patch('generic_recording.Khot', return_value=mock_radio_station) as mock_khot_class, \
-            patch('generic_recording.Kisf'), \
-            patch('generic_recording.Krgt'), \
-            patch('generic_recording.Wkaq'), \
-            patch('generic_recording.Wado'), \
-            patch('generic_recording.Waqi'), \
+        with patch('generic_recording.GenericStation', return_value=mock_radio_station), \
             patch('generic_recording.capture_audio_stream') as mock_capture, \
             patch('generic_recording.upload_to_r2_and_clean_up') as mock_upload, \
             patch('psutil.virtual_memory') as mock_memory, \
             patch('time.sleep'):
 
-            # Setup mock Khot class code
-            mock_khot_class.code = station_code
             mock_radio_station.url = "https://test.radio/stream"
 
             # Setup mock returns
@@ -293,19 +279,12 @@ class TestGenericRecording:
         """Test pipeline when playback stops"""
         station_code = "KHOT - 105.9 FM"
 
-        with patch('generic_recording.Khot', return_value=mock_radio_station) as mock_khot_class, \
-            patch('generic_recording.Kisf'), \
-            patch('generic_recording.Krgt'), \
-            patch('generic_recording.Wkaq'), \
-            patch('generic_recording.Wado'), \
-            patch('generic_recording.Waqi'), \
+        with patch('generic_recording.GenericStation', return_value=mock_radio_station), \
             patch('generic_recording.capture_audio_stream') as mock_capture, \
             patch('generic_recording.upload_to_r2_and_clean_up') as mock_upload, \
             patch('psutil.virtual_memory') as mock_memory, \
             patch('time.sleep'):
 
-            # Setup mock Khot class code
-            mock_khot_class.code = station_code
             mock_radio_station.url = "https://test.radio/stream"
 
             # Setup mock returns
@@ -349,19 +328,12 @@ class TestGenericRecording:
         """Test pipeline cleanup"""
         station_code = "KHOT - 105.9 FM"
 
-        with patch('generic_recording.Khot', return_value=mock_radio_station) as mock_khot_class, \
-            patch('generic_recording.Kisf'), \
-            patch('generic_recording.Krgt'), \
-            patch('generic_recording.Wkaq'), \
-            patch('generic_recording.Wado'), \
-            patch('generic_recording.Waqi'), \
+        with patch('generic_recording.GenericStation', return_value=mock_radio_station), \
             patch('generic_recording.capture_audio_stream') as mock_capture, \
             patch('generic_recording.upload_to_r2_and_clean_up') as mock_upload, \
             patch('psutil.virtual_memory') as mock_memory, \
             patch('time.sleep'):
 
-            # Setup mock Khot class code
-            mock_khot_class.code = station_code
             mock_radio_station.url = "https://test.radio/stream"
 
             # Setup mock returns
@@ -392,81 +364,36 @@ class TestGenericRecording:
 
     def test_generic_audio_processing_pipeline_invalid_station(self):
         """Test pipeline with invalid station code"""
-        with patch('generic_recording.Khot') as mock_khot, \
-            patch('generic_recording.Kisf') as mock_kisf, \
-            patch('generic_recording.Krgt') as mock_krgt, \
-            patch('generic_recording.Wkaq') as mock_wkaq, \
-            patch('generic_recording.Wado') as mock_wado, \
-            patch('generic_recording.Waqi') as mock_waqi:
+        with pytest.raises(ValueError, match="Invalid station code: INVALID-FM"):
+            generic_audio_processing_pipeline(
+                station_code="INVALID-FM",
+                duration_seconds=1800,
+                audio_birate=64000,
+                audio_channels=1,
+                repeat=False
+            )
 
-            # Set up the codes for all station classes
-            mock_khot.code = "KHOT - 105.9 FM"
-            mock_kisf.code = "KISF - 103.5 FM"
-            mock_krgt.code = "KRGT - 99.3 FM"
-            mock_wkaq.code = "WKAQ - 580 AM"
-            mock_wado.code = "WADO - 1280 AM"
-            mock_waqi.code = "WAQI - 710 AM"
+    def test_station_to_serve_dispatches_on_process_group(self):
+        assert station_to_serve("radio_khot").code == "KHOT - 105.9 FM"
 
-            with pytest.raises(ValueError, match="Invalid station code: INVALID-FM"):
+    def test_station_to_serve_rejects_an_unknown_process_group(self):
+        with pytest.raises(ValueError, match="Invalid process group: invalid_group"):
+            station_to_serve("invalid_group")
+
+    def test_station_to_serve_rejects_a_disabled_station(self):
+        disabled = station_by_process_group("radio_khot").model_copy(update={"enabled": False})
+        with patch("generic_recording.station_by_process_group", return_value=disabled):
+            with pytest.raises(ValueError, match="Station is disabled: KHOT - 105.9 FM"):
+                station_to_serve("radio_khot")
+
+    def test_generic_audio_processing_pipeline_rejects_a_disabled_station(self):
+        disabled = station_by_code("KHOT - 105.9 FM").model_copy(update={"enabled": False})
+        with patch("generic_recording.station_by_code", return_value=disabled):
+            with pytest.raises(ValueError, match="Station is disabled: KHOT - 105.9 FM"):
                 generic_audio_processing_pipeline(
-                    station_code="INVALID-FM",
+                    station_code="KHOT - 105.9 FM",
                     duration_seconds=1800,
                     audio_birate=64000,
                     audio_channels=1,
                     repeat=False
                 )
-
-    def test_main_execution(self):
-        """Test main execution with process groups"""
-        mock_deployment = Mock()
-        mock_flow = Mock()
-        mock_flow.to_deployment.return_value = mock_deployment
-
-        with patch.dict('os.environ', {'FLY_PROCESS_GROUP': 'radio_khot'}), \
-            patch('generic_recording.serve') as mock_serve, \
-            patch('generic_recording.generic_audio_processing_pipeline', mock_flow):
-
-            # Execute the main block code directly
-            process_group = os.environ.get("FLY_PROCESS_GROUP")
-            match process_group:
-                case "radio_khot":
-                    deployment = mock_flow.to_deployment(  # Use mock_flow instead of generic_audio_processing_pipeline
-                        "KHOT - 105.9 FM",
-                        tags=["Arizona", "1853b3", "Generic"],
-                        parameters=dict(
-                            station_code="KHOT - 105.9 FM",
-                            duration_seconds=1800,
-                            repeat=True,
-                            audio_birate=64000,
-                            audio_channels=1,
-                        ),
-                    )
-                    mock_serve(deployment)
-                case _:
-                    raise ValueError(f"Invalid process group: {process_group}")
-
-            # Verify serve was called with the mock deployment
-            mock_serve.assert_called_once_with(mock_deployment)
-            # Verify to_deployment was called with correct parameters
-            mock_flow.to_deployment.assert_called_once_with(
-                "KHOT - 105.9 FM",
-                tags=["Arizona", "1853b3", "Generic"],
-                parameters=dict(
-                    station_code="KHOT - 105.9 FM",
-                    duration_seconds=1800,
-                    repeat=True,
-                    audio_birate=64000,
-                    audio_channels=1,
-                ),
-            )
-
-    def test_main_execution_invalid_process_group(self):
-        """Test main execution with invalid process group"""
-        with patch.dict('os.environ', {'FLY_PROCESS_GROUP': 'invalid_group'}):
-            process_group = os.environ.get("FLY_PROCESS_GROUP")
-            with pytest.raises(ValueError, match="Invalid process group: invalid_group"):
-                match process_group:
-                    case "radio_khot":
-                        pass
-                    case _:
-                        raise ValueError(f"Invalid process group: {process_group}")

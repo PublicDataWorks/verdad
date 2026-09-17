@@ -16,6 +16,8 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
   Prefect deployment (`fly.processing_worker.toml` `[processes]` lists the 11 valid values). With no value it raises.
 - `src/recording.py` (ffmpeg stream recorders) and `src/generic_recording.py` + `src/radiostations/` (Selenium/Chrome
   recorders for six web-only stations). Same `FLY_PROCESS_GROUP` dispatch.
+- `config/stations.yaml` + `src/stations.py`: the station list and its loader/validator (`load_stations`,
+  `stations_for`, `station_dicts`, and `python -m stations prefect-runs` for `scripts/start_recording.sh`).
 - `src/utils.py`: `optional_flow`/`optional_task` decorators and `fetch_radio_stations()` (see gotchas).
 - `src/processing_pipeline/supabase_utils.py`: the only DB access layer (`SupabaseClient`).
 - `prompts/`: prompt sources, but the pipeline reads prompts from the `prompt_versions` table; `prompts/manifest.json`
@@ -67,8 +69,12 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
 
 ## Gotchas
 
-- Stations are hard-coded in `src/utils.py::fetch_radio_stations()` and split by list position across the two
-  recorders; adding or reordering one touches three files. See `.claude/rules/recorders.md` first.
+- Stations live in `config/stations.yaml`, loaded and validated by `src/stations.py`; adding or disabling one is
+  a YAML entry, the matching snapshot update in `tests/test_stations.py`, and a deploy (docs/OPERATIONS.md,
+  "Adding or disabling a station").
+- Each station's `recorder` field (`max` | `lite` | `generic`) is what assigns it to a recorder -- there is no
+  positional split any more. It is a topology fact tied to the `fly.*.toml` process groups, so it only takes
+  effect on deploy. See `.claude/rules/recorders.md` first.
 - `ENABLE_PREFECT_DECORATOR=false` (set by tests and `scripts/run_stage.py`) makes flows/tasks plain functions.
   It is read at import time, so set it before importing anything from `src/`.
 - Prompts live in the DB. Editing `prompts/*.md` changes nothing until `import_prompts_to_db.py import` runs. Bump

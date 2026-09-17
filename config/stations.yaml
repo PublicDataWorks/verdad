@@ -1,0 +1,371 @@
+# VERDAD radio stations -- the single source of truth for what gets recorded.
+#
+# Fields
+#   code      Station call sign as stored in audio_files.radio_station_code. Must be unique;
+#             it is also the Prefect deployment name, so changing it orphans the deployment.
+#   name      Human-readable station name (audio_files.radio_station_name).
+#   url       Stream URL (direct recorders) or web player page (generic recorder). Must be unique.
+#             The R2 prefix is radio_<last 6 hex of sha256(url)>/, so changing a URL moves its audio.
+#   state     US state (or "Russia"/"International" for the two non-US streams).
+#   recorder  Which recorder records this station. This is a TOPOLOGY fact tied to the fly.*.toml
+#             files, not a preference -- it selects the Fly machine, its memory sizing and its
+#             Dockerfile, and it only takes effect on deploy:
+#               max      -> recording-worker / max_recorder    (ffmpeg, fly.recording_worker.toml)
+#               lite     -> recording-worker / lite_recorder   (ffmpeg, fly.recording_worker.toml)
+#               generic  -> generic-recording-worker           (Chrome + PulseAudio,
+#                                                               fly.generic_recording_worker.toml)
+#   enabled   Set to false to stop creating a deployment and stop triggering runs for a station.
+#             Defaults to true.
+#
+# Generic stations only
+#   process_group  The FLY_PROCESS_GROUP value of the machine that records this station. Must match
+#                  a [processes] entry in fly.generic_recording_worker.toml.
+#   driver         PulseAudio sink/source names (unique per station) and the CSS selectors the
+#                  Selenium driver uses on the web player page.
+#
+# See docs/OPERATIONS.md, "Adding or disabling a station".
+
+stations:
+  - code: "WLEL - 94.3 FM"
+    name: "El Gallo"
+    url: "https://securenetg.com/radio/8090/radio.aac"
+    state: "Georgia"
+    recorder: max
+  - code: "WPHE - 690 AM"
+    name: "Radio Salvación"
+    url: "https://sp.unoredcdn.net/8124/stream"
+    state: "Pennsylvania"
+    recorder: max
+  - code: "WLCH - 91.3 FM"
+    name: "Radio Centro"
+    url: "http://streaming.live365.com/a37354"
+    state: "Pennsylvania"
+    recorder: max
+  - code: "WSDS - 1480 AM"
+    name: "La Explosiva"
+    url: "https://s2.mexside.net/6022/stream"
+    state: "Michigan"
+    recorder: max
+  - code: "WOAP - 1080 AM"
+    name: "LA Poderosa"
+    url: "http://sparktheo.com:8000/lapoderosa"
+    state: "Michigan"
+    recorder: max
+  - code: "WDTW - 1310 AM"
+    name: "La Z"
+    url: "http://sh2.radioonlinehd.com:8050/stream"
+    state: "Michigan"
+    recorder: max
+  - code: "KYAR - 98.3 FM"
+    name: "Red C apostolic (college)"
+    url: "http://red-c.miriamtech.net:8000/KYAR"
+    state: "Texas"
+    recorder: max
+  - code: "KBNL - 89.9 FM"
+    name: "Manantial FM"
+    url: "https://ais-sa15.cdnstream1.com/5061_64.aac"
+    state: "Texas"
+    recorder: max
+  - code: "KBIC - 105.7 FM"
+    name: "Radio Vida"
+    url: "http://shout2.brnstream.com:8006/;"
+    state: "Texas"
+    recorder: max
+  - code: "KABA - 90.3 FM"
+    name: "Aleluya Radio"
+    url: "https://radio.aleluya.cloud/radio/8000/stream"
+    state: "Texas"
+    recorder: max
+  - code: "WAXY - 790 AM"
+    name: "Radio Libre 790"
+    url: "http://stream.abacast.net/direct/audacy-waxyamaac-imc"
+    state: "Florida"
+    recorder: max
+  - code: "WLAZ - 89.1 FM"
+    name: "Pura Palabra Radio"
+    url: "https://sp.unoredcdn.net/8018/stream"
+    state: "Florida"
+    recorder: max
+  - code: "KENO - 1460 AM"
+    name: "Deportes Vegas"
+    url: "https://24863.live.streamtheworld.com/KENOAMAAC_SC"
+    state: "Nevada"
+    recorder: max
+  - code: "KNNR - 1400 AM"
+    name: "KNNR"
+    url: "https://ice42.securenetsystems.net/KNNR"
+    state: "Nevada"
+    recorder: max
+  - code: "KCKO - 107.9 FM"
+    name: "Mas Radio"
+    url: "https://s5.mexside.net:8000/stream?type=http&nocache=3"
+    state: "Arizona"
+    recorder: max
+  - code: "KZLZ - 105.3 FM"
+    name: "La Poderosa"
+    url: "https://ice42.securenetsystems.net/KZLZ"
+    state: "Arizona"
+    recorder: max
+  - code: "KCMT - 92.1 FM"
+    name: "LA Caliente"
+    url: "https://14933.live.streamtheworld.com/KCMTFMAAC_SC"
+    state: "Arizona"
+    recorder: max
+  - code: "KRMC - 91.7 FM"
+    name: "Radio Cadena Manantial"
+    url: "https://ais-sa15.cdnstream1.com/5064_64.aac"
+    state: "Arizona"
+    recorder: max
+  - code: "KNOG - 91.7 FM"
+    name: "KNOG"
+    url: "https://ais-sa15.cdnstream1.com/5063_64.aac"
+    state: "Arizona"
+    recorder: max
+  - code: "KWST - 1430 AM"
+    name: "KWST"
+    url: "https://s1.voscast.com:10601/xstream"
+    state: "Arizona"
+    recorder: max
+  - code: "WLMV - 1480 AM"
+    name: "La Movida"
+    url: "https://14223.live.streamtheworld.com/WLMVAMAAC_SC"
+    state: "Wisconsin"
+    recorder: max
+  - code: "WDJA - 1420 AM"
+    name: "Radio Universo 1420"
+    url: "https://radio.fiberstreams.com:2020/stream/8702"
+    state: "Florida"
+    recorder: max
+  - code: "WACC - 830 AM"
+    name: "Radio Paz"
+    url: "https://streaming6.locucionar.com:24004/stream"
+    state: "Florida"
+    recorder: max
+  - code: "WSUA - 1260 AM"
+    name: "America Radio Miami"
+    url: "https://stream-171.zeno.fm/ulo8qv9wsnntv"
+    state: "Florida"
+    recorder: max
+  - code: "WURN - 1040 AM"
+    name: "Actualidad 1040"
+    url: "http://ic.streann.com:8000/actualidadam.ogg"
+    state: "Florida"
+    recorder: max
+  - code: "WNMA - 1210 AM"
+    name: "Radio Mundo"
+    url: "https://stream4.305stream.com:9764/stream"
+    state: "Florida"
+    recorder: max
+  - code: "WSRF - 99.5 FM"
+    name: "Haitian American Radio"
+    url: "https://us2.maindigitalstream.com/ssl/WSRF"
+    state: "Florida"
+    recorder: max
+  - code: "SPMN"
+    name: "Sputnik Mundo"
+    url: "https://icecast-rian.cdnvideo.ru/voicespa"
+    state: "Russia"
+    recorder: max
+  - code: "WZHF"
+    name: "Radio Sputnik"
+    url: "https://icecast-rian.cdnvideo.ru/voicerus"
+    state: "Russia"
+    recorder: max
+  # ===============================================================
+  # iHeart Radio Stations
+  # ===============================================================
+  - code: "K229DB - 93.7 FM"
+    name: "El Patron"
+    url: "http://stream.revma.ihrhls.com/zc53/hls.m3u8"
+    state: "Arizona"
+    recorder: max
+  - code: "KFUE - 106.7 FM"
+    name: "Fuego"
+    url: "http://17793.live.streamtheworld.com:80/KFUEFMAAC_SC"
+    state: "Arizona"
+    recorder: max
+  - code: "KMMA - 97.1 FM"
+    name: "MEGA"
+    url: "http://stream.revma.ihrhls.com/zc69/hls.m3u8"
+    state: "Arizona"
+    recorder: max
+  - code: "RUMBA 4451"
+    name: "Rumba"
+    url: "http://stream.revma.ihrhls.com/zc4451/hls.m3u8"
+    state: "Arizona"
+    recorder: max
+  - code: "WBZW - 96.7 FM"
+    name: "El Patron"
+    url: "http://stream.revma.ihrhls.com/zc9205/hls.m3u8"
+    state: "Georgia"
+    recorder: max
+  - code: "WBZY - 105.7 FM"
+    name: "Z"
+    url: "http://stream.revma.ihrhls.com/zc749/hls.m3u8"
+    state: "Georgia"
+    recorder: max
+  - code: "WRUM HD2 - 97.1 FM"
+    name: "Mega"
+    url: "http://stream.revma.ihrhls.com/zc7155/hls.m3u8"
+    state: "Florida"
+    recorder: max
+  - code: "WRUM - 100.3 FM"
+    name: "Rumba"
+    url: "http://stream.revma.ihrhls.com/zc605/hls.m3u8"
+    state: "Florida"
+    recorder: max
+  - code: "WUMR - 106.1 FM"
+    name: "Rumba 106.1 PA"
+    url: "http://stream.revma.ihrhls.com/zc2001/hls.m3u8"
+    state: "Pennsylvania"
+    recorder: max
+  - code: "WZTU - 94.9 FM"
+    name: "Tu"
+    url: "http://stream.revma.ihrhls.com/zc577/hls.m3u8"
+    state: "Florida"
+    recorder: max
+  - code: "WWFE - 670 AM"
+    name: "La Poderosa"
+    url: "http://playerservices.streamtheworld.com/api/livestream-redirect/WWFEAMAAC.aac"
+    state: "Florida"
+    recorder: lite
+  # ===============================================================
+  # Arabic language radio stations
+  # ===============================================================
+  - code: "MCD"
+    name: "Monte Carlo Doualiya"
+    url: "https://montecarlodoualiya128k.ice.infomaniak.ch/mc-doualiya.mp3"
+    state: "International"
+    recorder: lite
+  - code: "WMUZ - 1200 AM"
+    name: "Radio Baladi"
+    url: "https://ais-sa8.cdnstream1.com/prhwjmv4dpl/ct8wcmajf2n"
+    state: "Michigan"
+    recorder: lite
+  - code: "WNZK - 680 AM"
+    name: "WNZK-AM"
+    url: "http://wnzk.birach.com:9000/stream"
+    state: "Michigan"
+    recorder: lite
+  - code: "ARAB"
+    name: "US Arab Radio"
+    url: "https://s3.radio.co/sc618789ff/listen"
+    state: "Michigan"
+    recorder: lite
+  # ===============================================================
+  # New radio stations
+  # ===============================================================
+  - code: "WOLS"
+    name: "La Raza"
+    url: "https://sonos.norsanmedia.com/wols"
+    state: "North Carolina"
+    recorder: lite
+  - code: "WSRP"
+    name: "La Grande"
+    url: "https://radioenhd.com:7108/;"
+    state: "North Carolina"
+    recorder: lite
+  - code: "WIST"
+    name: "La Raza Triad"
+    url: "https://stream-153.zeno.fm/wspmwfvneg8uv"
+    state: "North Carolina"
+    recorder: lite
+  - code: "KMRO"
+    name: "Radio Nueva Vida"
+    url: "https://ice10.securenetsystems.net/KMRO"
+    state: "North Carolina"
+    recorder: lite
+  - code: "WGOS"
+    name: "Radio Vida Nueva"
+    url: "https://stream10.usastreams.com/8040/stream"
+    state: "North Carolina"
+    recorder: lite
+  - code: "WGSP"
+    name: "Latina tu Musica"
+    url: "https://stream-163.zeno.fm/xaz83f7uapjtv"
+    state: "North Carolina"
+    recorder: lite
+  - code: "WYMY"
+    name: "La Ley"
+    url: "https://29263.live.streamtheworld.com/WYMYPRIVATEAAC_SC?dist=triton-web&pname=StandardPlayerV4"
+    state: "North Carolina"
+    recorder: lite
+  - code: "WSGH"
+    name: "Activa"
+    url: "https://ice7.securenetsystems.net/MOVIDITA"
+    state: "North Carolina"
+    recorder: lite
+  - code: "KVNR"
+    name: "Little Saigon Radio"
+    url: "https://stream-146.zeno.fm/2znsmu8d8zquv"
+    state: "California"
+    recorder: lite
+  # ===============================================================
+  # Generic (browser-driven) radio stations -- one Fly machine each
+  # ===============================================================
+  - code: "KHOT - 105.9 FM"
+    name: "Que Buena"
+    url: "https://www.iheart.com/live/que-buena-1059-fm-5207/"
+    state: "Arizona"
+    recorder: generic
+    process_group: "radio_khot"
+    driver:
+      sink: "virtual_speaker_khot"
+      source: "virtual_mic_khot"
+      play_button_selector: "button[aria-label='Play Button']"
+      video_element_selector: "video.jw-video"
+  - code: "KISF - 103.5 FM"
+    name: "ZonaMX"
+    url: "https://www.iheart.com/live/zona-mx-1035-fm-5209/"
+    state: "Nevada"
+    recorder: generic
+    process_group: "radio_kisf"
+    driver:
+      sink: "virtual_speaker_kisf"
+      source: "virtual_mic_kisf"
+      play_button_selector: "button[aria-label='Play Button']"
+      video_element_selector: "video.jw-video"
+  - code: "KRGT - 99.3 FM"
+    name: "Rumba Hits caliente"
+    url: "https://www.iheart.com/live/latino-mix-993-fm-5221/"
+    state: "Nevada"
+    recorder: generic
+    process_group: "radio_krgt"
+    driver:
+      sink: "virtual_speaker_krgt"
+      source: "virtual_mic_krgt"
+      play_button_selector: "button[aria-label='Play Button']"
+      video_element_selector: "video.jw-video"
+  - code: "WKAQ - 580 AM"
+    name: "Analisis y Noticias"
+    url: "https://www.iheart.com/live/wkaq-580-5176/"
+    state: "Puerto Rico"
+    recorder: generic
+    process_group: "radio_wkaq"
+    driver:
+      sink: "virtual_speaker_wkaq"
+      source: "virtual_mic_wkaq"
+      play_button_selector: "button[aria-label='Play Button']"
+      video_element_selector: "video.jw-video"
+  - code: "WADO - 1280 AM"
+    name: "La Campeona de Nueva York"
+    url: "https://www.iheart.com/live/wado-1280-am-5172/"
+    state: "New York"
+    recorder: generic
+    process_group: "radio_wado"
+    driver:
+      sink: "virtual_speaker_wado"
+      source: "virtual_mic_wado"
+      play_button_selector: "button[aria-label='Play Button']"
+      video_element_selector: "video.jw-video"
+  - code: "WAQI - 710 AM"
+    name: "Radio Mambi"
+    url: "https://www.iheart.com/live/radio-mambi-710-am-5175/"
+    state: "Florida"
+    recorder: generic
+    process_group: "radio_waqi"
+    driver:
+      sink: "virtual_speaker_waqi"
+      source: "virtual_mic_waqi"
+      play_button_selector: "button[aria-label='Play Button']"
+      video_element_selector: "video.jw-video"
