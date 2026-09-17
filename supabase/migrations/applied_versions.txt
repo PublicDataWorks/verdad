@@ -31,3 +31,4 @@
 20260130195259	optimize_state_source_filters
 20260915000000	baseline_public_schema
 20260917034500	sources_feed_items
+20260917080000	sweep_stuck_snippets

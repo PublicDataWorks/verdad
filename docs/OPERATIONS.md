@@ -158,8 +158,10 @@ refuses the production project unless `--allow-production` is passed.
 - **OOM leaves zombie runs.** When a worker machine is OOM-killed (`exit_code=137` in `fly machine status`) the
   process restarts but its Prefect runs never resume and keep showing `Running`. Check `fly logs`, not Prefect
   state. The stage 3 machine runs 4 GB for this reason (5 loop runs plus targeted by-id runs).
-- **Every restart strands in-flight rows** in `Processing`/`Reviewing`; nothing resets them. The stage 3
-  `on_crashed` hook resets only rows named in `snippet_ids`.
+- **Every restart strands in-flight rows** in `Processing`/`Reviewing`. The stage 3 `on_crashed` hook resets
+  only rows named in `snippet_ids`; the pg_cron job `sweep_stuck_snippets` (hourly at :05, migration
+  `20260917080000`) puts rows older than 2 h back to `New` / `Ready for review`. `cron.job_run_details` shows
+  the runs; `SELECT public.sweep_stuck_snippets()` by hand returns how many rows it moved.
 - **Stage 3 polls `New` newest-first**, so old rows never drain on their own; reprocess them by id.
 - **`analyze_snippet` has no retry**: one Gemini 503/429 sends the snippet to `Error` with the message stored.
   Expect a few percent per batch; rerun those ids once.
