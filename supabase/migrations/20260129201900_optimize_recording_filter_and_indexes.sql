@@ -1,1 +1,1 @@
--- Applied to production out-of-band on 2026-01-29; body in git history (e7d1cce, as supabase/migrations/20260129_optimize_recording_filter_and_indexes.sql); definition captured in 20260915000000_baseline_public_schema.sql.
+-- Applied to production out-of-band on 2026-01-29; body in git history (51463ce, as supabase/migrations/20260129_optimize_recording_filter_and_indexes.sql); definition captured in 20260915000000_baseline_public_schema.sql.

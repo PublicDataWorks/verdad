@@ -33,6 +33,7 @@ import re
 import sys
 import urllib.request
 from collections import OrderedDict, defaultdict
+from datetime import date
 
 DEFAULT_REF = "dzujjhzgzguciwryzwlx"
 DEFAULT_API = "https://api.supabase.com"
@@ -661,7 +662,8 @@ def applied_versions(client: Client) -> str:
         "select version, coalesce(name, '') as name from supabase_migrations.schema_migrations order by version"
     )
     lines = [
-        "# supabase_migrations.schema_migrations in production; regenerate with `make migrations-manifest`.",
+        f"# supabase_migrations.schema_migrations in production, fetched {date.today().isoformat()}; "
+        "regenerate with `make migrations-manifest`.",
         "# version<TAB>name",
     ]
     lines += [f"{r['version']}\t{r['name']}" for r in rows]

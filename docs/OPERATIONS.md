@@ -121,15 +121,15 @@ refuses the production project unless `--allow-production` is passed.
 
 ## Database schema and migrations
 
-`supabase/migrations/` is the only place schema changes belong. It holds 30 files: one comment-only placeholder
-per version that production has already applied (29), plus the baseline, and `applied_versions.txt`.
+`supabase/migrations/` is the only place schema changes belong. It holds the baseline, one comment-only placeholder
+per version production has already applied (29), and `applied_versions.txt`.
 
 - **`20260915000000_baseline_public_schema.sql`** is a generated snapshot of the live `public` and `profiles`
   schemas (27 tables, 1 materialized view, 3 enums, 54 functions, 22 triggers, 53 non-constraint indexes, RLS
   on 25 tables, 16 policies, grants and comments). It was produced by `scripts/dump_schema_baseline.py`, which
   only runs `SELECT`s against the catalog through the Supabase Management API. **It has never been executed
   against production** - production already has every object in it, and the file refuses to run where
-  `public.snippets` exists. It is the only pre-2026-09-15 file with SQL in it, so a fresh database
+  `public.snippets` exists. It is the only file up to its version with SQL in it, so a fresh database
   (`supabase start`, `supabase db reset`) is built from it alone, and it is the reference for what runs in
   production.
 - The 29 comment-only files are placeholders for the versions in `supabase_migrations.schema_migrations`: 24 whose

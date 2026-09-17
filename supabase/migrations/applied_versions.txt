@@ -1,4 +1,4 @@
-# supabase_migrations.schema_migrations in production, fetched 2026-09-17 (SQL editor); regenerate with `make migrations-manifest`.
+# supabase_migrations.schema_migrations in production, fetched 2026-09-17; regenerate with `make migrations-manifest`.
 # version<TAB>name
 20241029135243	remote_schema
 20241029135348	remote_schema

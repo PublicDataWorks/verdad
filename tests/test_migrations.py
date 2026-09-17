@@ -37,7 +37,7 @@ def pre_baseline_files():
 
 def manifest_versions():
     lines = MANIFEST.read_text().splitlines()
-    return {line.split("\t", 1)[0] for line in lines if line and not line.startswith("#")}
+    return {line.split("\t", 1)[0] for line in lines if line.strip() and not line.startswith("#")}
 
 
 def test_migrations_directory_is_not_empty():
@@ -75,7 +75,7 @@ def test_baseline_exists_and_defines_the_core_tables():
 @pytest.mark.parametrize("name", pre_baseline_files())
 def test_pre_baseline_files_are_comment_only(name):
     statements = [
-        line for line in (MIGRATIONS_DIR / name).read_text().splitlines() if line.strip() and not line.startswith("--")
+        line for line in (MIGRATIONS_DIR / name).read_text().splitlines() if line.strip() and not line.lstrip().startswith("--")
     ]
     assert not statements, f"{name} sorts before the baseline and must be comment-only; found: {statements[0]!r}"
 
