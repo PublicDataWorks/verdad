@@ -17,19 +17,19 @@
 --   extensions: 14
 --   enums: 3
 --   sequences: 0
---   tables: 27
---   constraints: 52
+--   tables: 33
+--   constraints: 59
 --   foreign keys: 33
 --   views: 0
 --   materialized views: 1
 --   functions: 54
 --   triggers: 22
---   indexes: 53
---   tables with RLS: 25
+--   indexes: 59
+--   tables with RLS: 29
 --   policies: 16
---   table grants: 84
+--   table grants: 102
 --   function grants: 159
---   comments: 33
+--   comments: 36
 --   cron jobs (commented): 2
 
 SET check_function_bodies = false;
@@ -180,6 +180,29 @@ CREATE TABLE IF NOT EXISTS public.email_template (
     template_name text
 );
 
+CREATE TABLE IF NOT EXISTS public.embedding_batch_candidates_2026_09_15 (
+    seed_snippet uuid,
+    candidate uuid,
+    similarity double precision
+);
+
+CREATE TABLE IF NOT EXISTS public.embedding_batch_seeds_2026_09_15 (
+    rn bigint,
+    snippet uuid,
+    embedding extensions.vector(3072),
+    sub_emb extensions.vector(512)
+);
+
+CREATE TABLE IF NOT EXISTS public.kb_deactivation_log (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    kb_entry uuid NOT NULL,
+    previous_status public.kb_entry_status NOT NULL,
+    reason text NOT NULL,
+    batch text NOT NULL,
+    deactivated_at timestamp with time zone DEFAULT now() NOT NULL,
+    restored_at timestamp with time zone
+);
+
 CREATE TABLE IF NOT EXISTS public.kb_entries (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -285,6 +308,26 @@ CREATE TABLE IF NOT EXISTS public.roles (
     name text NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS public.snippet_analysis_snapshot (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    snippet uuid NOT NULL,
+    batch text NOT NULL,
+    snapshot_at timestamp with time zone DEFAULT now() NOT NULL,
+    status public.processing_status,
+    title jsonb,
+    summary jsonb,
+    explanation jsonb,
+    disinformation_categories jsonb[],
+    confidence_scores jsonb,
+    grounding_metadata text,
+    thought_summaries text,
+    analyzed_by text,
+    reviewed_by text,
+    reviewed_at timestamp with time zone,
+    stage_3_prompt_version_id uuid,
+    labels jsonb DEFAULT '[]'::jsonb NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.snippet_embeddings (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     created_at timestamp with time zone DEFAULT (now() AT TIME ZONE 'utc'::text) NOT NULL,
@@ -318,6 +361,14 @@ CREATE TABLE IF NOT EXISTS public.snippet_feedback_validation_results (
     prompt_improvement_suggestion text
 );
 
+CREATE TABLE IF NOT EXISTS public.snippet_hide_review (
+    snippet uuid NOT NULL,
+    batch text NOT NULL,
+    verdict text NOT NULL,
+    why text,
+    reviewed_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS public.snippet_labels (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     created_at timestamp with time zone DEFAULT (now() AT TIME ZONE 'utc'::text) NOT NULL,
@@ -326,6 +377,16 @@ CREATE TABLE IF NOT EXISTS public.snippet_labels (
     label uuid NOT NULL,
     applied_by uuid,
     upvote_count integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.snippet_quarantine_log (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    snippet uuid NOT NULL,
+    previous_status public.processing_status NOT NULL,
+    reason text NOT NULL,
+    batch text NOT NULL,
+    quarantined_at timestamp with time zone DEFAULT now() NOT NULL,
+    restored_at timestamp with time zone
 );
 
 CREATE TABLE IF NOT EXISTS public.snippets (
@@ -450,6 +511,8 @@ ALTER TABLE public.downvote_review_queue ADD CONSTRAINT downvote_review_queue_st
 ALTER TABLE public.downvote_review_queue ADD CONSTRAINT downvote_review_queue_pkey PRIMARY KEY (id);
 ALTER TABLE public.downvote_review_queue ADD CONSTRAINT unique_snippet_in_queue UNIQUE (snippet_id);
 ALTER TABLE public.email_template ADD CONSTRAINT email_template_pkey PRIMARY KEY (id);
+ALTER TABLE public.kb_deactivation_log ADD CONSTRAINT kb_deactivation_log_pkey PRIMARY KEY (id);
+ALTER TABLE public.kb_deactivation_log ADD CONSTRAINT kb_deactivation_log_kb_entry_batch_key UNIQUE (kb_entry, batch);
 ALTER TABLE public.kb_entries ADD CONSTRAINT kb_entries_check CHECK (((valid_from IS NULL) OR (valid_until IS NULL) OR (valid_from <= valid_until)));
 ALTER TABLE public.kb_entries ADD CONSTRAINT kb_entries_confidence_score_check CHECK (((confidence_score >= 0) AND (confidence_score <= 100)));
 ALTER TABLE public.kb_entries ADD CONSTRAINT kb_entries_version_check CHECK ((version >= 1));
@@ -473,13 +536,18 @@ ALTER TABLE public.prompt_versions ADD CONSTRAINT prompt_versions_pkey PRIMARY K
 ALTER TABLE public.prompt_versions ADD CONSTRAINT prompt_versions_stage_sub_stage_version_key UNIQUE (stage, sub_stage, version);
 ALTER TABLE public.roles ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
 ALTER TABLE public.roles ADD CONSTRAINT roles_name_key UNIQUE (name);
+ALTER TABLE public.snippet_analysis_snapshot ADD CONSTRAINT snippet_analysis_snapshot_pkey PRIMARY KEY (id);
+ALTER TABLE public.snippet_analysis_snapshot ADD CONSTRAINT snippet_analysis_snapshot_snippet_batch_key UNIQUE (snippet, batch);
 ALTER TABLE public.snippet_embeddings ADD CONSTRAINT embedding_normalized CHECK ((abs((extensions.vector_norm(embedding) - (1.0)::double precision)) < (0.0001)::double precision));
 ALTER TABLE public.snippet_embeddings ADD CONSTRAINT snippet_embeddings_pkey PRIMARY KEY (id);
 ALTER TABLE public.snippet_embeddings ADD CONSTRAINT snippet_embeddings_snippet_key UNIQUE (snippet);
 ALTER TABLE public.snippet_feedback_validation_results ADD CONSTRAINT snippet_feedback_validation_results_pkey PRIMARY KEY (id);
 ALTER TABLE public.snippet_feedback_validation_results ADD CONSTRAINT snippet_feedback_validation_results_snippet_key UNIQUE (snippet);
+ALTER TABLE public.snippet_hide_review ADD CONSTRAINT snippet_hide_review_pkey PRIMARY KEY (snippet, batch);
 ALTER TABLE public.snippet_labels ADD CONSTRAINT snippet_labels_pkey PRIMARY KEY (id);
 ALTER TABLE public.snippet_labels ADD CONSTRAINT unique_snippet_label UNIQUE (snippet, label);
+ALTER TABLE public.snippet_quarantine_log ADD CONSTRAINT snippet_quarantine_log_pkey PRIMARY KEY (id);
+ALTER TABLE public.snippet_quarantine_log ADD CONSTRAINT snippet_quarantine_log_snippet_batch_key UNIQUE (snippet, batch);
 ALTER TABLE public.snippets ADD CONSTRAINT snippets_pkey PRIMARY KEY (id);
 ALTER TABLE public.stage_1_llm_responses ADD CONSTRAINT stage_1_llm_responses_pkey PRIMARY KEY (id);
 ALTER TABLE public.user_hide_snippets ADD CONSTRAINT user_hide_snippets_pkey PRIMARY KEY (snippet);
@@ -3583,7 +3651,7 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.search_kb_entries(query_embedding extensions.vector, match_threshold double precision DEFAULT 0.75, match_count integer DEFAULT 10, candidate_multiplier integer DEFAULT 8, filter_categories text[] DEFAULT NULL::text[], reference_date timestamp with time zone DEFAULT now())
+CREATE OR REPLACE FUNCTION public.search_kb_entries(query_embedding extensions.vector, match_threshold double precision DEFAULT 0.3, match_count integer DEFAULT 10, candidate_multiplier integer DEFAULT 8, filter_categories text[] DEFAULT NULL::text[], reference_date timestamp with time zone DEFAULT now(), min_confidence integer DEFAULT 0)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -3606,6 +3674,7 @@ BEGIN
         WHERE
             ke.status = 'active'
             AND kee.status = 'Processed'
+            AND ke.confidence_score >= min_confidence
             -- Optional category filter
             AND (filter_categories IS NULL
                  OR ke.disinformation_categories && filter_categories)
@@ -3660,6 +3729,7 @@ BEGIN
                 'keywords', ke.keywords,
                 'version', ke.version,
                 'created_at', ke.created_at,
+                'created_by_model', ke.created_by_model,
                 'similarity', r.similarity,
                 'sources', COALESCE(sa.sources, '[]'::jsonb)
             ) AS entry
@@ -4339,6 +4409,8 @@ CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment_id ON public.comment_re
 CREATE INDEX IF NOT EXISTS idx_comments_room_id ON public.comments USING btree (room_id);
 CREATE INDEX IF NOT EXISTS idx_downvote_review_queue_status ON public.downvote_review_queue USING btree (status);
 CREATE INDEX IF NOT EXISTS idx_filter_options_cache_type ON public.filter_options_cache USING btree (option_type);
+CREATE INDEX IF NOT EXISTS idx_kb_deactivation_log_batch ON public.kb_deactivation_log USING btree (batch);
+CREATE INDEX IF NOT EXISTS idx_kb_deactivation_log_kb_entry ON public.kb_deactivation_log USING btree (kb_entry);
 CREATE INDEX IF NOT EXISTS kb_entry_embeddings_sub_vector_idx ON public.kb_entry_embeddings USING hnsw (((public.sub_vector(embedding, 512))::extensions.vector(512)) extensions.vector_ip_ops) WITH (m='32', ef_construction='400');
 CREATE INDEX IF NOT EXISTS kb_entry_snippet_usage_kb_entry_idx ON public.kb_entry_snippet_usage USING btree (kb_entry);
 CREATE INDEX IF NOT EXISTS kb_entry_snippet_usage_snippet_idx ON public.kb_entry_snippet_usage USING btree (snippet);
@@ -4346,10 +4418,14 @@ CREATE INDEX IF NOT EXISTS idx_kb_entry_sources_kb_entry ON public.kb_entry_sour
 CREATE INDEX IF NOT EXISTS label_upvotes_snippet_label_idx ON public.label_upvotes USING btree (snippet_label);
 CREATE INDEX IF NOT EXISTS labels_created_by_idx ON public.labels USING btree (created_by);
 CREATE INDEX IF NOT EXISTS prompt_versions_stage_is_active_idx ON public.prompt_versions USING btree (stage, is_active) WHERE (is_active = true);
+CREATE INDEX IF NOT EXISTS idx_snippet_analysis_snapshot_batch ON public.snippet_analysis_snapshot USING btree (batch);
+CREATE INDEX IF NOT EXISTS idx_snippet_analysis_snapshot_snippet ON public.snippet_analysis_snapshot USING btree (snippet);
 CREATE INDEX IF NOT EXISTS snippet_embeddings_sub_vector_idx ON public.snippet_embeddings USING hnsw (((public.sub_vector(embedding, 512))::extensions.vector(512)) extensions.vector_ip_ops) WITH (m='32', ef_construction='400');
 CREATE INDEX IF NOT EXISTS snippet_labels_applied_by_idx ON public.snippet_labels USING btree (applied_by);
 CREATE INDEX IF NOT EXISTS snippet_labels_label_idx ON public.snippet_labels USING btree (label);
 CREATE INDEX IF NOT EXISTS snippet_labels_snippet_idx ON public.snippet_labels USING btree (snippet);
+CREATE INDEX IF NOT EXISTS idx_snippet_quarantine_log_batch ON public.snippet_quarantine_log USING btree (batch);
+CREATE INDEX IF NOT EXISTS idx_snippet_quarantine_log_snippet ON public.snippet_quarantine_log USING btree (snippet);
 CREATE INDEX IF NOT EXISTS idx_snippets_comment_count ON public.snippets USING btree (comment_count DESC);
 CREATE INDEX IF NOT EXISTS idx_snippets_confidence_score ON public.snippets USING btree ((((confidence_scores ->> 'overall'::text))::integer));
 CREATE INDEX IF NOT EXISTS idx_snippets_explanation_english ON public.snippets USING pgroonga (((explanation ->> 'english'::text)));
@@ -4395,6 +4471,7 @@ ALTER TABLE public.comment_reactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.downvote_review_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_template ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kb_deactivation_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kb_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kb_entry_embeddings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kb_entry_snippet_usage ENABLE ROW LEVEL SECURITY;
@@ -4404,9 +4481,12 @@ ALTER TABLE public.labels ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.landing_page_content ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prompt_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.snippet_analysis_snapshot ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snippet_embeddings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snippet_feedback_validation_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.snippet_hide_review ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snippet_labels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.snippet_quarantine_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snippets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stage_1_llm_responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_hide_snippets ENABLE ROW LEVEL SECURITY;
@@ -4525,6 +4605,15 @@ GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE pub
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.email_template TO anon;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.email_template TO authenticated;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.email_template TO service_role;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.embedding_batch_candidates_2026_09_15 TO anon;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.embedding_batch_candidates_2026_09_15 TO authenticated;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.embedding_batch_candidates_2026_09_15 TO service_role;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.embedding_batch_seeds_2026_09_15 TO anon;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.embedding_batch_seeds_2026_09_15 TO authenticated;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.embedding_batch_seeds_2026_09_15 TO service_role;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.kb_deactivation_log TO anon;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.kb_deactivation_log TO authenticated;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.kb_deactivation_log TO service_role;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.kb_entries TO anon;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.kb_entries TO authenticated;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.kb_entries TO service_role;
@@ -4552,15 +4641,24 @@ GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE pub
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.roles TO anon;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.roles TO authenticated;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.roles TO service_role;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_analysis_snapshot TO anon;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_analysis_snapshot TO authenticated;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_analysis_snapshot TO service_role;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_embeddings TO anon;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_embeddings TO authenticated;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_embeddings TO service_role;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_feedback_validation_results TO anon;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_feedback_validation_results TO authenticated;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_feedback_validation_results TO service_role;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_hide_review TO anon;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_hide_review TO authenticated;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_hide_review TO service_role;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_labels TO anon;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_labels TO authenticated;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_labels TO service_role;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_quarantine_log TO anon;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_quarantine_log TO authenticated;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippet_quarantine_log TO service_role;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippets TO anon;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippets TO authenticated;
 GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON TABLE public.snippets TO service_role;
@@ -4688,9 +4786,9 @@ GRANT EXECUTE ON FUNCTION public.refresh_filter_options_cache() TO service_role;
 GRANT EXECUTE ON FUNCTION public.run_tsv_backfill() TO anon;
 GRANT EXECUTE ON FUNCTION public.run_tsv_backfill() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.run_tsv_backfill() TO service_role;
-GRANT EXECUTE ON FUNCTION public.search_kb_entries(extensions.vector,double precision,integer,integer,text[],timestamp with time zone) TO anon;
-GRANT EXECUTE ON FUNCTION public.search_kb_entries(extensions.vector,double precision,integer,integer,text[],timestamp with time zone) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.search_kb_entries(extensions.vector,double precision,integer,integer,text[],timestamp with time zone) TO service_role;
+GRANT EXECUTE ON FUNCTION public.search_kb_entries(extensions.vector,double precision,integer,integer,text[],timestamp with time zone,integer) TO anon;
+GRANT EXECUTE ON FUNCTION public.search_kb_entries(extensions.vector,double precision,integer,integer,text[],timestamp with time zone,integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.search_kb_entries(extensions.vector,double precision,integer,integer,text[],timestamp with time zone,integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.search_related_snippets_public(uuid,text,double precision,integer,integer) TO anon;
 GRANT EXECUTE ON FUNCTION public.search_related_snippets_public(uuid,text,double precision,integer,integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.search_related_snippets_public(uuid,text,double precision,integer,integer) TO service_role;
@@ -4755,8 +4853,11 @@ GRANT EXECUTE ON FUNCTION public.upvote_label(uuid,text) TO service_role;
 
 COMMENT ON TABLE public.comments IS 'Comment table';
 COMMENT ON TABLE public.email_template IS 'Contain templates for email notification or other services';
+COMMENT ON TABLE public.kb_deactivation_log IS 'cleanup_2026_09: which kb_entries were set to deactivated, why, in which batch, and whether they were restored.';
 COMMENT ON TABLE public.label_upvotes IS 'This table defines which user upvoted which label in a snippet.';
+COMMENT ON TABLE public.snippet_analysis_snapshot IS 'cleanup_2026_09: pre-reprocessing copy of each quarantined snippet''s analysis and labels, per batch.';
 COMMENT ON TABLE public.snippet_labels IS 'When a label is applied to a snippet, it is called a "snippet label"';
+COMMENT ON TABLE public.snippet_quarantine_log IS 'cleanup_2026_09: which snippets were moved to status Quarantined, why, in which batch, and whether they were restored.';
 COMMENT ON COLUMN public.audio_files.file_size IS '(in bytes)';
 COMMENT ON COLUMN public.audio_files.status IS 'Possible values are: "New", "Processing", "Processed" and "Error"';
 COMMENT ON COLUMN public.label_upvotes.upvoted_by IS 'The user who upvoted the snippet_label';
