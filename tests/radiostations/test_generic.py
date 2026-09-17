@@ -55,7 +55,7 @@ EXPECTED = {
     },
 }
 
-PLAY_BUTTON_SELECTOR = "button[aria-label='Play Button']"
+PLAY_BUTTON_SELECTOR = "[data-test='live-profile-container'] button[data-test='player-play-button']"
 VIDEO_ELEMENT_SELECTOR = "video.jw-video"
 
 
