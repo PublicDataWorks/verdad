@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.processing_pipeline.constants import PromptStage
-from src.processing_pipeline.stage_1.constants import Stage1SubStage
+from processing_pipeline.constants import PromptStage
+from processing_pipeline.stage_1.constants import Stage1SubStage
 from src.scripts import import_prompts_to_db as mod
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

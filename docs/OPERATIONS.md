@@ -77,7 +77,47 @@ prefect deployment run "Stage 1: Undo Disinformation Detection/Stage 1: Undo Dis
 ```
 
 The matching worker machine must be up for the run to be picked up (`fly status -a processing-worker`).
-For local, non-Prefect runs use `scripts/run_stage.py` (see `AGENTS.md`); it uses whatever `.env` points at.
+For local, non-Prefect runs use `scripts/run_stage.py` (see `AGENTS.md`); it uses whatever `.env` points at and
+refuses the production project unless `--allow-production` is passed.
+
+## Gotchas learned in production (September 2026)
+
+- **Workers idle after any deploy or `prefect` app restart.** Flow runs are created only by the 6-hourly cron
+  (00:10/06:10/12:10/18:10 UTC); a freshly deployed `serve()` has nothing to serve until then. Either wait for the
+  tick or create the runs yourself:
+
+  ```bash
+  API=https://prefect.fly.dev/api
+  ID=$(curl -sS "$API/deployments/name/Stage%203%3A%20In-depth%20Analysis/Stage%203%3A%20In-Depth%20Analysis" | jq -r .id)
+  curl -sS -X POST "$API/deployments/$ID/create_flow_run" -H 'content-type: application/json' \
+      -d '{"parameters": {"repeat": true, "skip_review": false, "snippet_ids": []}}'
+  ```
+
+  Per tick the cron creates `STAGE_{1..5}_FLOW_RUNS` runs per stage (Fly secrets on the `prefect` app; production
+  currently 4/1/5/1/1). Dead runs stay `Running` in the UI until the next tick cancels them; harmless.
+- **`fly secrets set ... -a prefect` (or any `prefect` restart) crashes every running flow run within ~2 min**
+  ("Concurrency lease renewal failed"). Do it when nothing targeted is in flight, then recreate the runs as above.
+- **OOM leaves zombie runs.** When a worker machine is OOM-killed (`exit_code=137` in `fly machine status`) the
+  process restarts but its Prefect runs never resume and keep showing `Running`. Check `fly logs`, not Prefect
+  state. The stage 3 machine runs 4 GB for this reason (5 loop runs plus targeted by-id runs).
+- **Every restart strands in-flight rows** in `Processing`/`Reviewing`; nothing resets them. The stage 3
+  `on_crashed` hook resets only rows named in `snippet_ids`.
+- **Stage 3 polls `New` newest-first**, so old rows never drain on their own; reprocess them by id.
+- **`analyze_snippet` has no retry**: one Gemini 503/429 sends the snippet to `Error` with the message stored.
+  Expect a few percent per batch; rerun those ids once.
+- **Gemini quota**: about 2,800 stage 3 analyses per day at the current tier, reset 07:00 UTC (midnight PT).
+  5 loop runs already use most of it; `429 RESOURCE_EXHAUSTED` errors need a requeue after the reset.
+- **PostgREST statement timeout is 2 min**: big counts/updates time out through the API; use the Supabase SQL
+  editor (or `psql`). Targeted reprocessing of many ids: `src/scripts/reprocess_snippets.py`.
+- **Run `src/scripts/*` against production from a one-off machine** with the current image
+  (`fly machines list -a processing-worker --json | jq -r '.[0].config.image'`) and inherited secrets:
+
+  ```bash
+  fly machine run <image> -a processing-worker -r sjc --detach --restart no \
+      --vm-memory 1024 --metadata prompt_job=<tag> --entrypoint bash -- -c "cd /app && python src/scripts/<script>.py"
+  fly logs -m <machine id> --no-tail; fly machine destroy <machine id> --force
+  ```
+- The Prefect API and UI (`https://prefect.fly.dev`) have no authentication.
 
 ## Database schema and migrations
 
@@ -139,8 +179,7 @@ If PR #73 or #76 was applied by hand in the meantime, `migration repair --linked
 - Machine stdout/stderr: `fly logs -a processing-worker` (add `--machine <id>` for one process group; ids from
   `fly status -a <app>`). Same for `recording-worker`, `generic-recording-worker`, `prefect` (cron output lives here).
 - Prefect UI: `https://prefect.fly.dev` (the `prefect` app exposes port 4200 over HTTPS). Flows use `log_prints=True`,
-  so every `print()` in `src/` appears in the flow run logs. Whether the UI is behind any auth: **unknown**
-  (nothing in the repo configures it).
+  so every `print()` in `src/` appears in the flow run logs. The UI and API have no authentication.
 - Sentry: `sentry_sdk.init(dsn=SENTRY_DSN)` in the three entrypoints. Project/org: **unknown**.
 - Data-level health: row `status` columns (`New`, `Processing`, `Processed`, `Error`, `Ready for review`, `Reviewing`)
   on `audio_files`, `stage_1_llm_responses`, `snippets`; `error_message` holds the exception text.

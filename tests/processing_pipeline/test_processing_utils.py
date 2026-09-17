@@ -15,6 +15,7 @@ class TestProcessingUtils:
         mock_client.create_new_label.return_value = {"id": "test-label-id"}
         mock_client.assign_label_to_snippet.return_value = None
         mock_client.delete_vector_embedding_of_snippet.return_value = None
+        mock_client.get_snippet_labels.return_value = []
         return mock_client
 
     def test_create_new_label_and_assign_to_snippet(self, mock_supabase_client):

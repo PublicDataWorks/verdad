@@ -34,9 +34,7 @@ class TestRadioStation:
     @pytest.fixture
     def mock_webdriver(self):
         """Mock Selenium WebDriver"""
-        # Patch the names as bound in radiostations.base: patching the source modules leaves
-        # base.Service/base.ChromeDriverManager untouched and the real ChromeDriverManager
-        # downloads chromedriver over the network.
+        # Patch the names as bound in radiostations.base, or the real ChromeDriverManager downloads chromedriver
         with patch("selenium.webdriver.Chrome") as mock_chrome, patch("radiostations.base.Service") as mock_service, patch(
             "radiostations.base.ChromeDriverManager"
         ) as mock_manager:

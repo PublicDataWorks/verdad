@@ -73,6 +73,7 @@ REQUIRED_ENV = (
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
     "R2_BUCKET_NAME",
+    "SEARXNG_URL",
 )
 
 # USD per 1M tokens for the paid tier, prompts <= 200k tokens. Output includes thinking tokens.
@@ -103,14 +104,37 @@ class RunResult:
     usage: dict = field(default_factory=dict)
     seconds: float = 0.0
     error: str | None = None
+    cap_reasons: list[str] = field(default_factory=list)  # evidence gate reasons; empty when no cap applied
 
     @property
     def ok(self) -> bool:
         return self.error is None
 
 
-def parse_output(response: dict) -> RunResult:
-    """Reduce a validated Stage 3 output dict to a :class:`RunResult`."""
+def cap_reasons_from(response: dict, grounding_metadata=None) -> list[str]:
+    """The evidence gate's reasons for a run, or ``[]`` when no cap applied or the record lacks the field.
+
+    The executor pops ``evidence_gate`` out of the output into the ``grounding_metadata`` JSON string (only
+    when a cap applied); older records have no such key, and an output that still carries ``evidence_gate``
+    inline is read too.
+    """
+    if isinstance(grounding_metadata, str):
+        try:
+            grounding_metadata = json.loads(grounding_metadata)
+        except ValueError:
+            grounding_metadata = None
+    for container in (grounding_metadata, response):
+        gate = container.get("evidence_gate") if isinstance(container, dict) else None
+        if isinstance(gate, dict):
+            return [str(r) for r in gate.get("reasons") or [] if r]
+    return []
+
+
+def parse_output(response: dict, grounding_metadata=None) -> RunResult:
+    """Reduce a validated Stage 3 output dict to a :class:`RunResult`.
+
+    ``grounding_metadata`` is the executor's JSON string (or parsed dict) holding the evidence gate record.
+    """
     scores = response.get("confidence_scores") or {}
     categories = []
     for item in response.get("disinformation_categories") or []:
@@ -130,6 +154,7 @@ def parse_output(response: dict) -> RunResult:
         category_scores=category_scores,
         verification_status=scores.get("verification_status"),
         explanation=str(explanation),
+        cap_reasons=cap_reasons_from(response, grounding_metadata),
     )
 
 
@@ -315,6 +340,20 @@ def failure_histogram(results: list[SnippetResult]) -> list[dict]:
     return sorted(buckets.values(), key=lambda b: (-b["count"], b["kind"]))
 
 
+def cap_histogram(results: list[SnippetResult]) -> list[dict]:
+    """Successful runs capped by the evidence gate, counted per reason and arm, most frequent first."""
+    buckets: dict[str, dict] = {}
+    for r in results:
+        for side, runs in (("baseline", r.baseline_runs), ("candidate", r.candidate_runs)):
+            for run in runs:
+                if not run.ok:
+                    continue
+                for reason in run.cap_reasons:
+                    bucket = buckets.setdefault(reason, {"reason": reason, "baseline": 0, "candidate": 0})
+                    bucket[side] += 1
+    return sorted(buckets.values(), key=lambda b: (-(b["baseline"] + b["candidate"]), b["reason"]))
+
+
 def _fmt_categories(summary: RunSummary) -> str:
     if not summary.n_ok:
         return "error" if summary.errors else "-"
@@ -389,6 +428,20 @@ def render_report(results: list[SnippetResult], agg: dict, config: dict, notes: 
         for r in lost:
             quote = _md(r.candidate.explanation)[:EVIDENCE_CHARS]
             lines += [f"### `{r.snippet_id}` {_md(r.title)}".rstrip(), "", f"> {quote}", ""]
+
+    caps = cap_histogram(results)
+    if caps:
+        lines += [
+            "## Capped runs by reason",
+            "",
+            "Successful model calls whose confidence the evidence gate clamped, by the reason it recorded.",
+            "",
+            "| Reason | Baseline runs | Candidate runs |",
+            "|---|---|---|",
+        ]
+        for bucket in caps:
+            lines.append(f"| {_md(bucket['reason'])} | {bucket['baseline']} | {bucket['candidate']} |")
+        lines.append("")
 
     failures = failure_histogram(results)
     if failures:
@@ -573,7 +626,7 @@ class GeminiRunner:
                 metadata=copy.deepcopy(metadata),
                 prompt_version=prompt_version,
             )
-            result = parse_output(response["response"])
+            result = parse_output(response["response"], response.get("grounding_metadata"))
             result.usage = response.get("usage") or {}
         except Exception as e:  # keep going; the failure is reported per run
             result = RunResult(error=describe_exception(e))
@@ -704,6 +757,17 @@ def results_to_json(results: list[SnippetResult], agg: dict, config: dict, notes
 # --------------------------------------------------------------------------------------
 
 
+def non_negative_int(value: str) -> int:
+    """argparse type: an int >= 0 (a negative cap would slice the selection from the wrong end)."""
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}") from None
+    if number < 0:
+        raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {number}")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Compare a candidate Stage 3 prompt against the active one on real snippets (read-only).",
@@ -731,7 +795,9 @@ def build_parser() -> argparse.ArgumentParser:
     sel.add_argument("--control", type=int, default=0, metavar="N", help="Add N random liked/never-disliked snippets")
     sel.add_argument("--control-days", type=int, default=90, help="Recording window for --control (default 90)")
     sel.add_argument("--seed", type=int, default=2026, help="RNG seed for --control (default 2026)")
-    sel.add_argument("--max-snippets", type=int, help="Cap the number of snippets (reported first)")
+    sel.add_argument(
+        "--max-snippets", type=non_negative_int, help="Cap the number of snippets (reported first, >= 0)"
+    )
 
     run = parser.add_argument_group("run settings")
     run.add_argument(
@@ -817,8 +883,6 @@ def main(argv=None) -> int:
     if missing:
         print(f"Error: missing environment variables: {', '.join(missing)}", file=sys.stderr)
         return MISSING_ENV_EXIT_CODE
-    if not os.getenv("SEARXNG_URL"):
-        print("Warning: SEARXNG_URL is not set; the Stage 3 web search tool will fail inside the model calls.")
 
     started = time.monotonic()
     data_source = EvalDataSource.from_env()

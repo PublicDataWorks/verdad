@@ -189,7 +189,7 @@ class TestStage4:
     def test_process_snippet(self, mock_supabase_client, sample_snippet, review_result):
         with patch(
             "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
-            new=AsyncMock(return_value=(review_result, "grounding")),
+            new=AsyncMock(return_value=(review_result, json.dumps({"kb_research": "kb findings"}))),
         ) as mock_run, patch("processing_pipeline.stage_4.tasks.postprocess_snippet") as mock_postprocess:
             self._process(mock_supabase_client, sample_snippet)
 
@@ -211,7 +211,8 @@ class TestStage4:
         kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
         assert kwargs["id"] == "test-id"
         assert kwargs["translation"] == "Reviewed translation"
-        assert kwargs["grounding_metadata"] == "grounding"
+        # no stage-3 evidence and the gate did not apply, so the reviewer's record passes through unchanged
+        assert json.loads(kwargs["grounding_metadata"]) == {"kb_research": "kb findings"}
         assert kwargs["reviewed_by"] == GeminiModel.GEMINI_2_5_PRO.value
         mock_postprocess.assert_called_once_with(
             mock_supabase_client, "test-id", review_result["disinformation_categories"]
@@ -306,14 +307,16 @@ class TestStage4:
         with patch("processing_pipeline.stage_4.flows.process_snippet", new=AsyncMock()) as mock_process:
             yield mock_process
 
-    def test_analysis_review_flow(self, mock_supabase_client, sample_snippet, mock_process):
+    def test_analysis_review_flow(self, mock_supabase_client, sample_snippet, mock_process, monkeypatch):
         mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.return_value = sample_snippet
+        monkeypatch.setenv("GOOGLE_GEMINI_KEY", "gemini-key")
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
         with patch("processing_pipeline.stage_4.flows.asyncio.sleep", new=AsyncMock()) as mock_sleep:
             asyncio.run(analysis_review(snippet_ids=None, repeat=False))
 
         # The ADK agents read GOOGLE_API_KEY; the flow copies GOOGLE_GEMINI_KEY into it
-        assert os.environ["GOOGLE_API_KEY"] == os.environ["GOOGLE_GEMINI_KEY"]
+        assert os.environ["GOOGLE_API_KEY"] == "gemini-key"
         assert mock_supabase_client.get_active_prompt.call_count == 4
         mock_supabase_client.get_a_ready_for_review_snippet_and_reserve_it.assert_called_once()
         mock_process.assert_awaited_once_with(mock_supabase_client, sample_snippet, PROMPT_VERSIONS)
