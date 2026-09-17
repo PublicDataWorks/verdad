@@ -312,7 +312,7 @@ stations:
     driver:
       sink: "virtual_speaker_khot"
       source: "virtual_mic_khot"
-      play_button_selector: "button[aria-label='Play Button']"
+      play_button_selector: "[data-test='live-profile-container'] button[data-test='player-play-button']"
       video_element_selector: "video.jw-video"
   - code: "KISF - 103.5 FM"
     name: "ZonaMX"
@@ -323,7 +323,7 @@ stations:
     driver:
       sink: "virtual_speaker_kisf"
       source: "virtual_mic_kisf"
-      play_button_selector: "button[aria-label='Play Button']"
+      play_button_selector: "[data-test='live-profile-container'] button[data-test='player-play-button']"
       video_element_selector: "video.jw-video"
   - code: "KRGT - 99.3 FM"
     name: "Rumba Hits caliente"
@@ -334,7 +334,7 @@ stations:
     driver:
       sink: "virtual_speaker_krgt"
       source: "virtual_mic_krgt"
-      play_button_selector: "button[aria-label='Play Button']"
+      play_button_selector: "[data-test='live-profile-container'] button[data-test='player-play-button']"
       video_element_selector: "video.jw-video"
   - code: "WKAQ - 580 AM"
     name: "Analisis y Noticias"
@@ -345,7 +345,7 @@ stations:
     driver:
       sink: "virtual_speaker_wkaq"
       source: "virtual_mic_wkaq"
-      play_button_selector: "button[aria-label='Play Button']"
+      play_button_selector: "[data-test='live-profile-container'] button[data-test='player-play-button']"
       video_element_selector: "video.jw-video"
   - code: "WADO - 1280 AM"
     name: "La Campeona de Nueva York"
@@ -356,7 +356,7 @@ stations:
     driver:
       sink: "virtual_speaker_wado"
       source: "virtual_mic_wado"
-      play_button_selector: "button[aria-label='Play Button']"
+      play_button_selector: "[data-test='live-profile-container'] button[data-test='player-play-button']"
       video_element_selector: "video.jw-video"
   - code: "WAQI - 710 AM"
     name: "Radio Mambi"
@@ -367,5 +367,5 @@ stations:
     driver:
       sink: "virtual_speaker_waqi"
       source: "virtual_mic_waqi"
-      play_button_selector: "button[aria-label='Play Button']"
+      play_button_selector: "[data-test='live-profile-container'] button[data-test='player-play-button']"
       video_element_selector: "video.jw-video"

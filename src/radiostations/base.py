@@ -124,26 +124,24 @@ class RadioStation:
         print("Wait a bit...")
         time.sleep(30)
 
-        # Detailed audio checks
+        # Diagnostics only: iHeart may play a pre-roll through another element, so the sink decides.
         try:
             video_element = self.driver.find_element(By.CSS_SELECTOR, self.video_element_selector)
         except Exception:
-            print("Video element was not found. Skipped audio checks.")
-            return
+            print("Video element was not found.")
+        else:
+            is_playing = self.driver.execute_script(
+                "return !arguments[0].paused && !arguments[0].ended && arguments[0].currentTime > 0;", video_element
+            )
+            current_time = self.driver.execute_script("return arguments[0].currentTime;", video_element)
+            duration = self.driver.execute_script("return arguments[0].duration;", video_element)
+            is_muted = self.driver.execute_script("return arguments[0].muted;", video_element)
+            volume = self.driver.execute_script("return arguments[0].volume;", video_element)
+            print(
+                f"Video element playing: {is_playing}. Current time: {current_time}. Duration: {duration}. Volume: {volume}. Muted: {is_muted}"
+            )
 
-        is_playing = self.driver.execute_script(
-            "return !arguments[0].paused && !arguments[0].ended && arguments[0].currentTime > 0;", video_element
-        )
-        current_time = self.driver.execute_script("return arguments[0].currentTime;", video_element)
-        duration = self.driver.execute_script("return arguments[0].duration;", video_element)
-        is_muted = self.driver.execute_script("return arguments[0].muted;", video_element)
-        volume = self.driver.execute_script("return arguments[0].volume;", video_element)
-
-        print(
-            f"Is audio playing: {is_playing}. Current time: {current_time}. Duration: {duration}. Volume: {volume}. Muted: {is_muted}"
-        )
-
-        if not is_playing:
+        if not self.is_audio_playing():
             raise Exception(f"Failed to start audio for {self.url}")
 
     def execute_command(self, command):
