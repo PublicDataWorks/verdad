@@ -7,6 +7,7 @@ from processing_pipeline.processing_utils import postprocess_snippet
 from processing_pipeline.stage_3.models import apply_evidence_caps
 from processing_pipeline.stage_4.executor import Stage4Executor
 from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.temporal_context import build_temporal_context
 from utils import optional_task
 
 
@@ -174,7 +175,10 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         # Deterministic evidence gate. The reviewer output has no structured evidence of its own, so the
         # falsity check relies on the Stage 3 search record preserved in grounding_metadata.
         stage_3_evidence = extract_stage_3_verification_evidence(previous_analysis.get("grounding_metadata"))
-        response = apply_evidence_caps(response, verification_evidence=stage_3_evidence)
+        hours_since_recording = build_temporal_context(prepared["recorded_at"])["hours_since_recording"]
+        response = apply_evidence_caps(
+            response, verification_evidence=stage_3_evidence, hours_since_recording=hours_since_recording
+        )
         evidence_gate = response.pop("evidence_gate")
         if evidence_gate.get("applied"):
             print(f"Evidence gate applied: {evidence_gate['note']}")

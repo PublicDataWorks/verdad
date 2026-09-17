@@ -151,7 +151,13 @@ def test_automatic_function_calling_is_disabled_and_tools_are_declared():
 
 def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypatch):
     async def fake_search(query: str, pageno: int = 1) -> dict:
-        return {"query": query, "results": [{"url": "https://www.apnews.com/article/x/"}, {"url": ""}]}
+        return {
+            "query": query,
+            "results": [
+                {"url": "https://www.apnews.com/article/x/", "publishedDate": "2026-09-15T10:12:00+00:00"},
+                {"url": ""},
+            ],
+        }
 
     async def fake_read(url: str) -> dict:
         return {"url": url, "content": "..."}
@@ -170,9 +176,10 @@ def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypa
         model_turn(Part.from_text(text="done")),
     )
 
-    _, _, _, observed_urls = run(client)
+    _, _, _, observed = run(client)
 
-    assert observed_urls == {"apnews.com/article/x", "reuters.com/a"}
+    assert observed.urls == {"apnews.com/article/x", "reuters.com/a"}
+    assert observed.dates == {"apnews.com/article/x": "2026-09-15"}
 
     monkeypatch.setitem(executors.WEB_TOOLS, "web_url_read", failed_read)
     client = fake_client(
@@ -180,6 +187,7 @@ def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypa
         model_turn(Part.from_text(text="done")),
     )
 
-    _, _, _, observed_urls = run(client)
+    _, _, _, observed = run(client)
 
-    assert observed_urls == set()
+    assert observed.urls == set()
+    assert observed.dates == {}

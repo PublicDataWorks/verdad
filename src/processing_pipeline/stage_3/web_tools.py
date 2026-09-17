@@ -143,3 +143,22 @@ def tool_result_urls(tool_name: str, result) -> list[str]:
     if tool_name == web_url_read.__name__:
         return [result["url"]] if result.get("url") else []
     return []
+
+
+def tool_result_dates(tool_name: str, result) -> dict[str, str]:
+    """URL -> ISO publication date (YYYY-MM-DD) for the results a search tool returned with a date.
+
+    SearXNG reports ``publishedDate`` for many news engines (ISO timestamps such as ``2026-09-15T10:00:00``);
+    only the date part is kept. Results without a parseable date, failed calls and page reads contribute nothing.
+    """
+    if not isinstance(result, dict) or result.get("failed") or tool_name != searxng_web_search.__name__:
+        return {}
+    dates = {}
+    for r in result.get("results") or []:
+        if not isinstance(r, dict) or not r.get("url"):
+            continue
+        published = r.get("publishedDate")
+        if isinstance(published, str) and len(published) >= 10:
+            dates[r["url"]] = published[:10]
+    return dates
+

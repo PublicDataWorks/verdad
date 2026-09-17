@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 import pytest
 
@@ -6,12 +7,17 @@ from processing_pipeline.kb_sources import url_key
 from processing_pipeline.stage_3.models import (
     EVIDENCE_CAP_MAX_SCORE,
     EVIDENCE_GATE_NOTE_PREFIX,
+    Claim,
     SearchResult,
     apply_evidence_caps,
     asserts_falsity,
+    earliest_claim_event_date,
+    fill_publication_dates,
     has_contradicting_evidence,
+    is_article_url,
     mentions_falsity,
 )
+from processing_pipeline.stage_3.web_tools import tool_result_dates
 from processing_pipeline.stage_4.tasks import extract_stage_3_verification_evidence, merge_grounding_metadata
 
 
@@ -438,3 +444,196 @@ class TestGroundingMetadataHelpers:
     def test_merge_with_no_stage_4_metadata(self):
         merged = json.loads(merge_grounding_metadata(None, None, {"applied": False}))
         assert merged == {}
+
+
+def _with_claims(analysis, *event_dates):
+    analysis["confidence_scores"]["analysis"] = {
+        "claims": [{"quote": f"q{i}", "evidence": "e", "score": 90, "event_date": d} for i, d in enumerate(event_dates)]
+    }
+    return analysis
+
+
+class TestIsArticleUrl:
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://apnews.com/article/x",
+            "https://en.wikipedia.org/wiki/Pope",
+            "https://www.va.gov/disability/dependency-indemnity-compensation/",
+            "https://news.google.com/articles/abc",
+            "https://www.bbc.com/mundo/noticias_internacional",
+            "http://example.com/2026/09/15/story.html",
+        ],
+    )
+    def test_articles_and_section_pages_count(self, url):
+        assert is_article_url(url)
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://apnews.com/",
+            "https://defensoresdelapatria.com/",
+            "http://unonex.com",
+            "https://www.microsoft.com/en-us",
+            "https://www.microsoft.com/en-US/",
+            "https://www.google.com/search?q=Charlie+Kirk+assassinated",
+            "https://www.bing.com/search?q=x",
+            "https://duckduckgo.com/?q=x",
+            "https://www.whois.com/whois/sanmarla.com",
+            "https://who.is/whois/x.com",
+            "not-a-url",
+            None,
+        ],
+    )
+    def test_front_pages_search_pages_and_lookups_do_not(self, url):
+        assert not is_article_url(url)
+
+    def test_front_page_never_counts_as_contradicting_evidence(self):
+        assert not has_contradicting_evidence(_evidence(url="https://defensoresdelapatria.com/"))
+        assert not has_contradicting_evidence(_evidence(url="https://www.google.com/search?q=x"))
+
+    def test_cap_reason_names_the_rule(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://www.whois.com/whois/sanmarla.com")
+        result = apply_evidence_caps(analysis)
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["reasons"][-1] == (
+            "the only contradicting URLs are front pages, search pages or lookups, not articles"
+        )
+
+
+class TestDatePrecedence:
+    def test_claim_model_accepts_event_date_and_defaults_it_to_none(self):
+        assert Claim.model_validate({"quote": "q", "evidence": "e", "score": 1}).event_date is None
+        assert Claim.model_validate({"quote": "q", "evidence": "e", "score": 1, "event_date": "2026-09-14"}).event_date
+
+    def test_earliest_claim_event_date(self):
+        analysis = _with_claims(_analysis(), "2026-09-14", None, "not a date", "2026-08-07")
+        assert earliest_claim_event_date(analysis).isoformat() == "2026-08-07"
+        assert earliest_claim_event_date(_analysis()) is None
+        assert earliest_claim_event_date(None) is None
+
+    def test_source_dated_before_the_event_cannot_contradict_it(self):
+        evidence = _evidence(publication_date="2024-03-01")
+        assert not has_contradicting_evidence(evidence, earliest_event_date=date(2026, 9, 14))
+        assert has_contradicting_evidence(evidence, earliest_event_date=date(2024, 1, 1))
+        assert has_contradicting_evidence(evidence)  # no event date known: the old rule
+
+    def test_undated_source_still_counts(self):
+        evidence = _evidence(publication_date=None)
+        assert has_contradicting_evidence(evidence, earliest_event_date=date(2026, 9, 14))
+        assert not has_contradicting_evidence(evidence, earliest_event_date=date(2026, 9, 14), require_date=True)
+
+    def test_gate_uses_the_claims_event_dates(self):
+        analysis = _with_claims(_analysis(explanation_en="The ruling never happened."), "2026-09-14")
+        analysis["verification_evidence"] = _evidence(
+            url="https://www.politifact.com/factchecks/2024/mar/01/x/", publication_date="2024-03-01"
+        )
+        result = apply_evidence_caps(analysis)
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["reasons"][-1] == (
+            "every contradicting source is dated before the claimed event (2026-09-14)"
+        )
+
+    def test_source_dated_after_the_event_keeps_the_score(self):
+        analysis = _with_claims(_analysis(explanation_en="The ruling never happened."), "2026-09-14")
+        analysis["verification_evidence"] = _evidence(publication_date="2026-09-15")
+        assert apply_evidence_caps(analysis)["evidence_gate"] == {"applied": False}
+
+
+class TestToolPublicationDates:
+    def test_tool_result_dates_reads_searxng_published_dates(self):
+        result = {
+            "results": [
+                {"url": "https://apnews.com/a", "publishedDate": "2026-09-15T10:12:00+00:00"},
+                {"url": "https://apnews.com/b", "publishedDate": None},
+                {"url": "https://apnews.com/c"},
+                {"url": "", "publishedDate": "2026-09-15"},
+            ]
+        }
+        assert tool_result_dates("searxng_web_search", result) == {"https://apnews.com/a": "2026-09-15"}
+        assert tool_result_dates("searxng_web_search", {"failed": True, "results": []}) == {}
+        assert tool_result_dates("web_url_read", {"url": "https://apnews.com/a"}) == {}
+
+    def test_fill_publication_dates_fills_only_missing_or_unparseable_dates(self):
+        evidence = {
+            "searches_performed": [
+                {
+                    "results": [
+                        {"url": "https://www.apnews.com/a/", "publication_date": None},
+                        {"url": "https://apnews.com/b", "publication_date": "yesterday"},
+                        {"url": "https://apnews.com/c", "publication_date": "2026-01-01"},
+                        {"url": "https://apnews.com/d", "publication_date": None},
+                    ]
+                }
+            ]
+        }
+        dates = {url_key("http://apnews.com/a"): "2026-09-15", url_key("https://apnews.com/b"): "2026-09-14"}
+        assert fill_publication_dates(evidence, dates) == 2
+        results = evidence["searches_performed"][0]["results"]
+        assert results[0] == {"url": "https://www.apnews.com/a/", "publication_date": "2026-09-15", "publication_date_source": "tool"}
+        assert results[1]["publication_date"] == "2026-09-14" and results[1]["publication_date_source"] == "tool"
+        assert results[2]["publication_date"] == "2026-01-01" and results[2]["publication_date_source"] == "model"
+        assert results[3] == {"url": "https://apnews.com/d", "publication_date": None}
+
+    def test_fill_is_a_no_op_without_tool_dates(self):
+        evidence = _evidence(publication_date=None)
+        assert fill_publication_dates(evidence, None) == 0
+        assert fill_publication_dates(None, {}) == 0
+        assert "publication_date_source" not in evidence["searches_performed"][0]["results"][0]
+
+    def test_search_result_model_accepts_publication_date_source(self):
+        base = {
+            "url": "https://apnews.com/article/x",
+            "source_name": "AP",
+            "source_type": "tier1_wire_service",
+            "publication_date": "2026-09-15",
+            "title": "t",
+            "relevant_excerpt": "e",
+            "relevance_to_claim": "contradicts_claim",
+        }
+        assert SearchResult.model_validate(base).publication_date_source is None
+        assert SearchResult.model_validate({**base, "publication_date_source": "tool"}).publication_date_source == "tool"
+
+
+class TestBreakingNewsCap:
+    def _fresh(self, publication_date, hours):
+        analysis = _analysis(explanation_en="The event never happened.", overall=95)
+        analysis["verification_evidence"] = _evidence(publication_date=publication_date)
+        return apply_evidence_caps(analysis, hours_since_recording=hours)
+
+    def test_undated_contradicting_source_inside_24h_caps_at_20(self):
+        result = self._fresh(None, "5.5")
+        assert result["confidence_scores"]["overall"] == 20
+        assert result["confidence_scores"]["categories"][0]["score"] == 20
+        assert result["evidence_gate"]["cap"] == 20
+        assert "breaking news window" in result["evidence_gate"]["reasons"][0]
+        assert "capped at 20" in result["explanation"]["english"]
+
+    def test_undated_contradicting_source_inside_72h_caps_at_30(self):
+        assert self._fresh(None, 48)["evidence_gate"]["cap"] == 30
+
+    def test_dated_contradicting_source_lifts_the_breaking_cap(self):
+        assert self._fresh("2026-09-15", 5)["evidence_gate"] == {"applied": False}
+
+    def test_old_recording_is_not_capped(self):
+        assert self._fresh(None, 100)["evidence_gate"] == {"applied": False}
+        assert self._fresh(None, None)["evidence_gate"] == {"applied": False}
+        assert self._fresh(None, "")["evidence_gate"] == {"applied": False}
+
+    def test_low_score_inside_the_window_is_left_alone(self):
+        analysis = _analysis(explanation_en="The event never happened.", overall=15)
+        analysis["verification_evidence"] = _evidence(publication_date=None)
+        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"] == {"applied": False}
+
+    def test_non_falsity_verdict_inside_the_window_is_left_alone(self):
+        analysis = _analysis(status="uncertain", explanation_en="Misleading framing of real data.", overall=60)
+        analysis["confidence_scores"]["verification_status"] = "verified_true"
+        analysis["verification_evidence"] = _evidence(relevance="provides_context", publication_date=None)
+        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"] == {"applied": False}
+
+    def test_the_40_cap_takes_precedence_over_the_breaking_cap(self):
+        analysis = _analysis(explanation_en="The event never happened.", overall=95)
+        analysis["verification_evidence"] = _evidence(relevance="provides_context")
+        result = apply_evidence_caps(analysis, hours_since_recording=5)
+        assert result["evidence_gate"]["cap"] == EVIDENCE_CAP_MAX_SCORE

@@ -18,9 +18,9 @@ from pydantic import ValidationError
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import get_safety_settings
-from processing_pipeline.kb_sources import url_key
-from processing_pipeline.stage_3.models import Stage3Output, apply_evidence_caps
-from processing_pipeline.stage_3.web_tools import searxng_web_search, tool_result_urls, web_url_read
+from processing_pipeline.kb_sources import parse_iso_date, url_key
+from processing_pipeline.stage_3.models import Stage3Output, apply_evidence_caps, fill_publication_dates
+from processing_pipeline.stage_3.web_tools import searxng_web_search, tool_result_dates, tool_result_urls, web_url_read
 from processing_pipeline.temporal_context import build_temporal_context
 
 
@@ -43,6 +43,25 @@ USAGE_FIELDS = (
 def usage_metadata_to_dict(usage_metadata) -> dict:
     """Flatten the SDK's ``usage_metadata`` into ``{field: int}`` (missing counts become 0)."""
     return {field: getattr(usage_metadata, field, None) or 0 for field in USAGE_FIELDS}
+
+
+class ObservedToolOutput:
+    """What the search and fetch tools actually put in front of the model during one analysis.
+
+    ``urls`` holds the ``url_key`` of every URL a tool returned; ``dates`` maps those keys to the ISO publication
+    date the search tool reported, when it did. The evidence gate uses both (see ``apply_evidence_caps``).
+    """
+
+    def __init__(self):
+        self.urls: set[str] = set()
+        self.dates: dict[str, str] = {}
+
+    def record(self, tool_name: str, result) -> None:
+        self.urls.update(filter(None, map(url_key, tool_result_urls(tool_name, result))))
+        for url, published in tool_result_dates(tool_name, result).items():
+            key = url_key(url)
+            if key and parse_iso_date(published) is not None:
+                self.dates[key] = published
 
 
 class Stage3Executor:
@@ -104,7 +123,7 @@ class Stage3Executor:
                 uploaded_audio_file = gemini_client.files.get(name=uploaded_audio_file.name)
 
             # Analyze with web search tools
-            analysis_text, thought_summaries, usage, observed_urls = await cls.__analyze_with_web_search(
+            analysis_text, thought_summaries, usage, observed = await cls.__analyze_with_web_search(
                 gemini_client=gemini_client,
                 model_name=model_name,
                 uploaded_audio_file=uploaded_audio_file,
@@ -121,8 +140,14 @@ class Stage3Executor:
                 )
 
             # Deterministic evidence gate: never let an unevidenced analysis reach the analyst feed. A
-            # contradicting source only counts if a tool actually returned its URL in this session.
-            output = apply_evidence_caps(output, observed_urls=observed_urls)
+            # contradicting source only counts if a tool actually returned its URL in this session, and a result
+            # the model left undated gets the date the search tool reported for it, so the date rules can work.
+            filled = fill_publication_dates(output.get("verification_evidence"), observed.dates)
+            if filled:
+                print(f"Filled {filled} publication_date value(s) from search tool results")
+            output = apply_evidence_caps(
+                output, observed_urls=observed.urls, hours_since_recording=temporal["hours_since_recording"]
+            )
             evidence_gate = output.pop("evidence_gate")
             grounding_metadata = dict(output.get("verification_evidence") or {})
             if evidence_gate.get("applied"):
@@ -159,9 +184,10 @@ class Stage3Executor:
         with a function-response error, which lets the model correct itself.
 
         Returns:
-            tuple: (analysis_text, thought_summaries, usage, observed_urls) where usage is the token
+            tuple: (analysis_text, thought_summaries, usage, observed) where usage is the token
             accounting summed over every model turn as a plain dict (see ``usage_metadata_to_dict``) and
-            observed_urls is the set of ``url_key`` values of every URL the tools returned (see ``__call_tool``)
+            observed is an ``ObservedToolOutput`` with the ``url_key`` of every URL the tools returned and
+            the publication dates the search tool reported for them (see ``__call_tool``)
         """
         print("Analyzing with SDK + web search tools...")
 
@@ -192,7 +218,7 @@ class Stage3Executor:
         response = None
         function_calls = []
         usage = dict.fromkeys(USAGE_FIELDS, 0)  # every turn is billed, so sum them
-        observed_urls: set[str] = set()
+        observed = ObservedToolOutput()
         for _ in range(MAX_MODEL_TURNS):
             response = await gemini_client.aio.models.generate_content(
                 model=model_name,
@@ -208,7 +234,7 @@ class Stage3Executor:
             contents.append(
                 Content(
                     role="user",
-                    parts=[await cls.__call_tool(function_call, observed_urls) for function_call in function_calls],
+                    parts=[await cls.__call_tool(function_call, observed) for function_call in function_calls],
                 )
             )
 
@@ -230,7 +256,7 @@ class Stage3Executor:
             print(f"Response finish reason: {finish_reason}")
             raise ValueError("No response from Gemini.")
 
-        return response.text, thoughts, usage, observed_urls
+        return response.text, thoughts, usage, observed
 
     @staticmethod
     def __function_calls(response) -> list[FunctionCall]:
@@ -243,11 +269,12 @@ class Stage3Executor:
         return [part.function_call for part in content.parts if part.function_call]
 
     @classmethod
-    async def __call_tool(cls, function_call: FunctionCall, observed_urls: set[str]) -> Part:
+    async def __call_tool(cls, function_call: FunctionCall, observed: "ObservedToolOutput") -> Part:
         """Run one requested tool and wrap its result (or error) as a function-response part.
 
-        Every URL the tool result shows the model is added to ``observed_urls`` (as ``url_key`` values), so
-        the evidence gate can tell a source the model found from one it made up.
+        Every URL the tool result shows the model is added to ``observed`` (as ``url_key`` values, with the
+        publication date the search tool reported when it did), so the evidence gate can tell a source the
+        model found from one it made up, and can date a source the model left undated.
         """
         name = function_call.name or ""
         # JSON numbers arrive as floats; integer-valued ones are meant for int parameters (e.g. pageno=1.0).
@@ -263,7 +290,7 @@ class Stage3Executor:
         else:
             try:
                 payload = {"result": await tool(**args)}
-                observed_urls.update(filter(None, map(url_key, tool_result_urls(name, payload["result"]))))
+                observed.record(name, payload["result"])
             except Exception as e:  # the model gets the error and may retry with different arguments
                 payload = {"error": f"{type(e).__name__}: {e}"}
 
