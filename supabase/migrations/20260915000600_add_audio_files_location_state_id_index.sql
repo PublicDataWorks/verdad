@@ -10,6 +10,8 @@
 -- *** Paste alone in the Supabase SQL editor, outside a transaction (CREATE INDEX CONCURRENTLY). ***
 -- Verify: SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_audio_files_location_state_id'::regclass;
 -- Rollback: DROP INDEX CONCURRENTLY IF EXISTS public.idx_audio_files_location_state_id;
+-- Then record it as applied so a later `supabase db push` does not retry it inside a transaction:
+--   supabase migration repair --linked --status applied 20260915000600
 -- Tracking: VER-373, VER-318.
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_audio_files_location_state_id
