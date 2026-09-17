@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 import uuid
@@ -15,6 +15,7 @@ from processing_pipeline.stage_1.executors import (
 )
 from processing_pipeline.stage_1.kb_context import retrieve_kb_context
 from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.temporal_context import build_temporal_context
 from utils import optional_task
 
 
@@ -42,6 +43,7 @@ def fetch_audio_file_by_id(supabase_client, audio_file_id):
 @optional_task(log_prints=True)
 def get_audio_file_metadata(audio_file):
     recorded_at = datetime.strptime(audio_file["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
+    temporal = build_temporal_context(recorded_at.replace(tzinfo=timezone.utc))
     return {
         "radio_station_name": audio_file["radio_station_name"],
         "radio_station_code": audio_file["radio_station_code"],
@@ -52,6 +54,8 @@ def get_audio_file_metadata(audio_file):
         "recorded_at": recorded_at.strftime("%B %-d, %Y %-I:%M %p"),
         "recording_day_of_week": recorded_at.strftime("%A"),
         "time_zone": "UTC",
+        "current_date_time": temporal["current_date_time"],
+        "temporal_notice": temporal["temporal_notice"],
     }
 
 
@@ -161,7 +165,7 @@ def initial_disinformation_detection_with_gemini(
     prompt_version: dict,
     kb_context: str | None,
 ):
-    print(f"Processing initial transcription with Gemini for disinformation detection")
+    print("Processing initial transcription with Gemini for disinformation detection")
     if not gemini_client:
         raise ValueError("Gemini client is not provided")
 

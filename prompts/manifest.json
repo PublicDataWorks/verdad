@@ -1,0 +1,83 @@
+{
+  "stage_1/disinformation_detection": {
+    "version": "2.1.0",
+    "description": "Active version seeded from the database on 2026-09-14",
+    "files": {
+      "system_instruction": "prompts/stage_1/main/detection_system_instruction.md",
+      "user_prompt": "prompts/stage_1/main/detection_user_prompt.md",
+      "output_schema": "prompts/stage_1/main/detection_output_schema.json"
+    }
+  },
+  "stage_1/initial_transcription": {
+    "version": "1.0.0",
+    "description": "Active version seeded from the database on 2026-09-14",
+    "files": {
+      "system_instruction": null,
+      "user_prompt": "prompts/stage_1/preprocess/initial_transcription_user_prompt.md",
+      "output_schema": "prompts/stage_1/preprocess/initial_transcription_output_schema.json"
+    }
+  },
+  "stage_1/initial_detection": {
+    "version": "2.0.0",
+    "description": "Active version seeded from the database on 2026-09-14",
+    "files": {
+      "system_instruction": "prompts/stage_1/preprocess/initial_detection_system_instruction.md",
+      "user_prompt": "prompts/stage_1/preprocess/initial_detection_user_prompt.md",
+      "output_schema": "prompts/stage_1/preprocess/initial_detection_output_schema.json"
+    }
+  },
+  "stage_1/timestamped_transcription": {
+    "version": "2.0.0",
+    "description": "Active version seeded from the database on 2026-09-14",
+    "files": {
+      "system_instruction": "prompts/stage_1/main/timestamped_transcription_system_instruction.md",
+      "user_prompt": "prompts/stage_1/main/timestamped_transcription_user_prompt.md",
+      "output_schema": "prompts/stage_1/main/timestamped_transcription_output_schema.json"
+    }
+  },
+  "stage_3": {
+    "version": "1.4.0",
+    "description": "search_failed result status for failed web searches (VER-348)",
+    "files": {
+      "system_instruction": "prompts/stage_3/system_instruction.md",
+      "user_prompt": "prompts/stage_3/analysis_prompt.md",
+      "output_schema": "prompts/stage_3/output_schema.json"
+    }
+  },
+  "stage_4/kb_researcher": {
+    "version": "1.0.0",
+    "description": "Active version seeded from the database on 2026-09-14",
+    "files": {
+      "system_instruction": "prompts/stage_4/kb_researcher_instruction.md",
+      "user_prompt": null,
+      "output_schema": null
+    }
+  },
+  "stage_4/web_researcher": {
+    "version": "1.0.0",
+    "description": "Active version seeded from the database on 2026-09-14",
+    "files": {
+      "system_instruction": "prompts/stage_4/web_researcher_instruction.md",
+      "user_prompt": null,
+      "output_schema": null
+    }
+  },
+  "stage_4/reviewer": {
+    "version": "1.1.0",
+    "description": "Active version seeded from the database on 2026-09-14",
+    "files": {
+      "system_instruction": "prompts/stage_4/reviewer_instruction.md",
+      "user_prompt": null,
+      "output_schema": "prompts/stage_4/output_schema.json"
+    }
+  },
+  "stage_4/kb_updater": {
+    "version": "1.0.0",
+    "description": "Active version seeded from the database on 2026-09-14",
+    "files": {
+      "system_instruction": "prompts/stage_4/kb_updater_instruction.md",
+      "user_prompt": null,
+      "output_schema": null
+    }
+  }
+}

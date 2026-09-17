@@ -31,8 +31,19 @@ async def searxng_web_search(
 
     Returns:
         A dictionary with a list of search results, each containing
-        title, url, content snippet, and relevance score.
+        title, url, content snippet, and relevance score. When the search
+        could not be performed (network error, timeout, bad response) the
+        dictionary has failed=true and an error message, with an empty
+        results list: treat that as "search failed", not "no results".
     """
+    try:
+        return await _searxng_web_search(query, pageno, time_range, language, safesearch)
+    except Exception as e:
+        print(f"[web_tools] searxng_web_search failed for {query!r}: {type(e).__name__}: {e}")
+        return {"query": query, "failed": True, "error": f"{type(e).__name__}: {e}", "results": []}
+
+
+async def _searxng_web_search(query: str, pageno: int, time_range: str | None, language: str, safesearch: int) -> dict:
     if not SEARXNG_URL:
         raise ValueError("SEARXNG_URL environment variable is not set")
 
@@ -84,7 +95,17 @@ async def web_url_read(
 
     Returns:
         A dictionary with the URL and its content converted to markdown.
+        When the page could not be fetched the dictionary has failed=true,
+        an error message and empty content.
     """
+    try:
+        return await _web_url_read(url, start_char, max_length)
+    except Exception as e:
+        print(f"[web_tools] web_url_read failed for {url!r}: {type(e).__name__}: {e}")
+        return {"url": url, "failed": True, "error": f"{type(e).__name__}: {e}", "content": ""}
+
+
+async def _web_url_read(url: str, start_char: int, max_length: int | None) -> dict:
     async with aiohttp.ClientSession(
         timeout=HTTP_TIMEOUT, connector=aiohttp.TCPConnector(ssl=_ssl_context)
     ) as session:

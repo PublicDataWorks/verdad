@@ -21,7 +21,7 @@ class TestStage2:
     @pytest.fixture
     def mock_supabase_client(self):
         """Setup mock Supabase client"""
-        with patch('processing_pipeline.stage_2.SupabaseClient') as MockSupabaseClient:
+        with patch('processing_pipeline.stage_2.flows.SupabaseClient') as MockSupabaseClient:
             mock_client = Mock()
             # Set up default return values
             mock_client.get_a_new_stage_1_llm_response_and_reserve_it.return_value = None
@@ -279,7 +279,7 @@ class TestStage2:
         ]
 
         with patch('os.remove'), \
-             patch('processing_pipeline.stage_2.process_llm_response') as mock_process:
+             patch('processing_pipeline.stage_2.flows.process_llm_response') as mock_process:
 
             audio_clipping(
                 context_before_seconds=5,
@@ -308,7 +308,7 @@ class TestStage2:
 
         with patch('os.remove'), \
             patch('os.path.isfile', return_value=True), \
-            patch('processing_pipeline.stage_2.process_llm_response') as mock_process:
+            patch('processing_pipeline.stage_2.flows.process_llm_response') as mock_process:
 
             try:
                 audio_clipping(

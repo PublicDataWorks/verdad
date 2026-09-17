@@ -2,13 +2,19 @@
 -- Same pattern as search_related_snippets_public.sql.
 -- Stage 1: Approximate search using 512-dim HNSW index
 -- Stage 2: Re-rank with full 3072-dim inner product
+--
+-- Adding a parameter creates a new overload under CREATE OR REPLACE, which would make the RPC call
+-- ambiguous, so the previous signature is dropped first.
+DROP FUNCTION IF EXISTS search_kb_entries(vector(3072), FLOAT, INT, INT, TEXT[], TIMESTAMPTZ);
+
 CREATE OR REPLACE FUNCTION search_kb_entries(
     query_embedding vector(3072),
     match_threshold FLOAT DEFAULT 0.3,
     match_count INT DEFAULT 10,
     candidate_multiplier INT DEFAULT 8,
     filter_categories TEXT[] DEFAULT NULL,
-    reference_date TIMESTAMPTZ DEFAULT now()
+    reference_date TIMESTAMPTZ DEFAULT now(),
+    min_confidence INT DEFAULT 0
 )
 RETURNS jsonb
 SECURITY DEFINER AS $$
@@ -30,6 +36,7 @@ BEGIN
         WHERE
             ke.status = 'active'
             AND kee.status = 'Processed'
+            AND ke.confidence_score >= min_confidence
             -- Optional category filter
             AND (filter_categories IS NULL
                  OR ke.disinformation_categories && filter_categories)
@@ -84,6 +91,7 @@ BEGIN
                 'keywords', ke.keywords,
                 'version', ke.version,
                 'created_at', ke.created_at,
+                'created_by_model', ke.created_by_model,
                 'similarity', r.similarity,
                 'sources', COALESCE(sa.sources, '[]'::jsonb)
             ) AS entry

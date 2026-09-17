@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from http import HTTPStatus
 import json
 import os
@@ -10,6 +10,7 @@ from processing_pipeline.constants import (
     CONFIDENCE_THRESHOLD,
     ProcessingStatus,
 )
+from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
 from processing_pipeline.stage_3.constants import FALLBACK_MODEL, MAIN_MODEL
 from processing_pipeline.stage_3.executors import Stage3Executor
@@ -112,8 +113,9 @@ def __get_metadata(snippet):
                 metadata["transcription"] = flagged_snippet["transcription"]
 
     audio_file = snippet["audio_file"]
-    recorded_at = datetime.strptime(snippet["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00")
+    recorded_at = datetime.strptime(snippet["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00").replace(tzinfo=timezone.utc)
     audio_file["recorded_at"] = recorded_at.strftime("%B %-d, %Y %-I:%M %p")
+    audio_file["recorded_at_iso"] = recorded_at.isoformat()
     audio_file["recording_day_of_week"] = recorded_at.strftime("%A")
     audio_file["time_zone"] = "UTC"
     metadata["additional_info"] = audio_file
@@ -134,6 +136,10 @@ def __get_metadata(snippet):
 
 @optional_task(log_prints=True)
 async def analyze_snippet(gemini_client, audio_file, metadata, prompt_version: dict):
+    return await with_retries(lambda: analyze_with_fallback(gemini_client, audio_file, metadata, prompt_version))
+
+
+async def analyze_with_fallback(gemini_client, audio_file, metadata, prompt_version: dict):
     model = MAIN_MODEL
 
     try:
