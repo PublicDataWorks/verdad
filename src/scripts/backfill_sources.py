@@ -1,6 +1,6 @@
 """
-Seed public.sources from the hardcoded station lists; idempotent on (type, external_id).
-Usage (repo root, needs selenium): python src/scripts/backfill_sources.py [--dry-run] [--with-youtube]
+Seed public.sources from config/stations.yaml; idempotent on (type, external_id).
+Usage (repo root): python src/scripts/backfill_sources.py [--dry-run] [--with-youtube]
 """
 
 import argparse
@@ -12,7 +12,7 @@ from supabase import create_client
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from utils import fetch_radio_stations
+from stations import load_stations
 
 load_dotenv()
 
@@ -38,37 +38,18 @@ def youtube_feed_urls(channel_id):
 
 
 def radio_rows():
-    rows = [
+    return [
         {
             "type": "radio",
-            "external_id": s["code"],
-            "display_name": s["name"],
-            "location_state": s["state"],
-            "stream_url": s["url"],
-            "metadata": {"capture": "ffmpeg"},
+            "external_id": s.code,
+            "display_name": s.name,
+            "location_state": s.state,
+            "stream_url": s.url,
+            "metadata": {"capture": "browser" if s.recorder == "generic" else "ffmpeg"},
         }
-        for s in fetch_radio_stations()
+        for s in load_stations()
+        if s.enabled
     ]
-    from radiostations.khot import Khot
-    from radiostations.kisf import Kisf
-    from radiostations.krgt import Krgt
-    from radiostations.wado import Wado
-    from radiostations.waqi import Waqi
-    from radiostations.wkaq import Wkaq
-
-    for cls in (Khot, Kisf, Krgt, Wado, Waqi, Wkaq):
-        station = cls()
-        rows.append(
-            {
-                "type": "radio",
-                "external_id": cls.code,
-                "display_name": cls.name,
-                "location_state": cls.state,
-                "stream_url": station.url,
-                "metadata": {"capture": "browser"},
-            }
-        )
-    return rows
 
 
 def youtube_rows():
