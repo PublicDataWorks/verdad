@@ -70,7 +70,8 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
 ## Gotchas
 
 - Stations live in `config/stations.yaml`, loaded and validated by `src/stations.py`; adding or disabling one is
-  a single YAML entry plus a deploy (docs/OPERATIONS.md, "Adding or disabling a station").
+  a YAML entry, the matching snapshot update in `tests/test_stations.py`, and a deploy (docs/OPERATIONS.md,
+  "Adding or disabling a station").
 - Each station's `recorder` field (`max` | `lite` | `generic`) is what assigns it to a recorder -- there is no
   positional split any more. It is a topology fact tied to the `fly.*.toml` process groups, so it only takes
   effect on deploy. See `.claude/rules/recorders.md` first.

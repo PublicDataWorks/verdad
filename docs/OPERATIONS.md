@@ -65,9 +65,11 @@ re-creates flow runs after a worker machine dies. Treat it as load-bearing until
 The station list is `config/stations.yaml` (loaded and validated by `src/stations.py`). Nothing else holds
 station data: both recorders, `scripts/start_recording.sh` and the generic recorder all read that file.
 
-1. **Edit `config/stations.yaml`.** Add an entry with `code`, `name`, `url`, `state` and `recorder`
-   (`max` | `lite` | `generic`), or set `enabled: false` on an existing one to stop recording it. `code` and
-   `url` must be unique. Check your edit locally:
+1. **Edit `config/stations.yaml` and the snapshots in `tests/test_stations.py` together.** Add an entry with
+   `code`, `name`, `url`, `state` and `recorder` (`max` | `lite` | `generic`), or set `enabled: false` on an
+   existing one to stop recording it. `code` and `url` must be unique. The tests pin the per-recorder code
+   lists, the station count, the Prefect run strings and that every station is enabled, so `make check` fails
+   until the snapshots match the YAML; update them in the same commit. Check your edit locally:
 
    ```bash
    PYTHONPATH=src python -m stations codes --recorder max     # what the max machine will serve

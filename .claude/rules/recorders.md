@@ -35,7 +35,7 @@ Each station's `recorder` field assigns it to a machine; there is no positional 
 `lite` are the two `fly.recording_worker.toml` process groups (8 GB / 4 GB, one ffmpeg process per station),
 `generic` is `fly.generic_recording_worker.toml` (one Chrome + PulseAudio machine per station). Changing the
 field only takes effect on `fly deploy`, so treat it as part of the deploy topology. Adding a station is one
-YAML entry; see docs/OPERATIONS.md, "Adding or disabling a station".
+YAML entry plus its snapshot in `tests/test_stations.py`; see docs/OPERATIONS.md, "Adding or disabling a station".
 
 `code` is the Prefect deployment name and `get_url_hash(url)` (last 6 hex of sha256) is the R2 prefix
 `radio_<hash>/`, so renaming a code orphans a deployment and editing a url moves that station's audio.
