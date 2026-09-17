@@ -163,8 +163,9 @@ refuses the production project unless `--allow-production` is passed.
   `20260917080000`) puts rows older than 2 h back to `New` / `Ready for review`. `cron.job_run_details` shows
   the runs; `SELECT public.sweep_stuck_snippets()` by hand returns how many rows it moved.
 - **Stage 3 polls `New` newest-first**, so old rows never drain on their own; reprocess them by id.
-- **`analyze_snippet` has no retry**: one Gemini 503/429 sends the snippet to `Error` with the message stored.
-  Expect a few percent per batch; rerun those ids once.
+- **Transient Gemini errors are retried** (`src/processing_pipeline/gemini_retry.py`: 429/5xx and empty or
+  unparseable output, waits of 30 s, 2 min, 5 min) in Stage 3 and Stage 4; the snippet only reaches `Error`
+  after the fourth failure, with that message stored. Rerun those ids once the outage is over.
 - **Gemini quota**: about 2,800 stage 3 analyses per day at the current tier, reset 07:00 UTC (midnight PT).
   5 loop runs already use most of it; `429 RESOURCE_EXHAUSTED` errors need a requeue after the reset.
 - **PostgREST statement timeout is 2 min**: big counts/updates time out through the API; use the Supabase SQL

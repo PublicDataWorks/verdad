@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 
 from processing_pipeline.constants import GeminiModel
+from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
 from processing_pipeline.stage_3.models import apply_evidence_caps
 from processing_pipeline.stage_4.executor import Stage4Executor
@@ -156,16 +157,18 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
 
         print("Reviewing the snippet with agentic pipeline...")
         reviewer_model = GeminiModel.GEMINI_2_5_PRO
-        response, grounding_metadata = await Stage4Executor.run_async(
-            snippet_id=snippet["id"],
-            transcription=prepared["transcription"],
-            disinformation_snippet=prepared["disinformation_snippet"],
-            metadata=prepared["metadata"],
-            analysis_json=prepared["analysis_json"],
-            recorded_at=prepared["recorded_at"],
-            current_time=datetime.now(timezone.utc).isoformat(),
-            prompt_versions=prompt_versions,
-            reviewer_model=reviewer_model,
+        response, grounding_metadata = await with_retries(
+            lambda: Stage4Executor.run_async(
+                snippet_id=snippet["id"],
+                transcription=prepared["transcription"],
+                disinformation_snippet=prepared["disinformation_snippet"],
+                metadata=prepared["metadata"],
+                analysis_json=prepared["analysis_json"],
+                recorded_at=prepared["recorded_at"],
+                current_time=datetime.now(timezone.utc).isoformat(),
+                prompt_versions=prompt_versions,
+                reviewer_model=reviewer_model,
+            )
         )
 
         # Deterministic evidence gate. The reviewer output has no structured evidence of its own, so the
