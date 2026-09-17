@@ -88,7 +88,7 @@ station data: both recorders, `scripts/start_recording.sh` and the generic recor
 3. **A `recorder: generic` station needs more.** It also needs `process_group: radio_<slug>`, a `driver` block
    (unique PulseAudio `sink`/`source`, plus the play-button and video-element CSS selectors of its web player),
    a matching `[processes]` entry and `[[vm]]`/`[scale]` sizing in `fly.generic_recording_worker.toml`, and one
-   Fly machine of its own (Chrome + PulseAudio, ~1 GB each).
+   Fly machine of its own (Chrome + PulseAudio, 2 GB each).
 
 4. **Deploy.** Both apps that read the file:
 
