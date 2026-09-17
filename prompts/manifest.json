@@ -36,8 +36,8 @@
     }
   },
   "stage_3": {
-    "version": "1.4.0",
-    "description": "search_failed result status for failed web searches (VER-348)",
+    "version": "1.5.1",
+    "description": "Subsection C.3: source credibility tiers, station provenance and independent corroboration before a falsity verdict; unlisted official government domains count as tier 1 (VER-360)",
     "files": {
       "system_instruction": "prompts/stage_3/system_instruction.md",
       "user_prompt": "prompts/stage_3/analysis_prompt.md",

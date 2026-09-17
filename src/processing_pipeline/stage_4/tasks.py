@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
+from processing_pipeline.source_credibility import apply_credibility_gate, get_source_credibility
 from processing_pipeline.stage_3.models import apply_evidence_caps
 from processing_pipeline.stage_4.executor import Stage4Executor
 from processing_pipeline.supabase_utils import SupabaseClient
@@ -61,6 +62,7 @@ def prepare_snippet_for_review(supabase_client, snippet_json):
         "location_state": audio_file.get("location_state"),
         "radio_station_code": audio_file.get("radio_station_code"),
         "radio_station_name": audio_file.get("radio_station_name"),
+        "source_provenance": get_source_credibility().provenance_for(audio_file.get("radio_station_code")).as_dict(),
         "time_zone": "UTC",
     }
 
@@ -124,14 +126,16 @@ def extract_stage_3_verification_evidence(grounding_metadata) -> dict | None:
 
 
 def merge_grounding_metadata(
-    stage_4_grounding_metadata: str | None, stage_3_verification_evidence, evidence_gate
+    stage_4_grounding_metadata: str | None, stage_3_verification_evidence, evidence_gate, credibility_gate=None
 ) -> str:
-    """Combine the Stage 4 research record (JSON string or None) with the Stage 3 search record and the gate."""
+    """Combine the Stage 4 research record (JSON string or None) with the Stage 3 search record and the gates."""
     merged = json.loads(stage_4_grounding_metadata) if stage_4_grounding_metadata else {}
     if stage_3_verification_evidence:
         merged["stage_3_verification_evidence"] = stage_3_verification_evidence
     if evidence_gate and evidence_gate.get("applied"):
         merged["evidence_gate"] = evidence_gate
+    if credibility_gate:
+        merged["credibility_gate"] = credibility_gate
     return json.dumps(merged)
 
 
@@ -178,7 +182,15 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         evidence_gate = response.pop("evidence_gate")
         if evidence_gate.get("applied"):
             print(f"Evidence gate applied: {evidence_gate['note']}")
-        grounding_metadata = merge_grounding_metadata(grounding_metadata, stage_3_evidence, evidence_gate)
+        response = apply_credibility_gate(
+            response, prepared["metadata"].get("radio_station_code"), verification_evidence=stage_3_evidence
+        )
+        credibility_gate = response.pop("credibility_gate")
+        if credibility_gate["capped"]:
+            print(f"Credibility gate applied: {credibility_gate['note']}")
+        grounding_metadata = merge_grounding_metadata(
+            grounding_metadata, stage_3_evidence, evidence_gate, credibility_gate
+        )
 
         print("Review completed. Updating the snippet in Supabase")
         submit_snippet_review_result(supabase_client, snippet["id"], response, grounding_metadata, reviewer_model.value)

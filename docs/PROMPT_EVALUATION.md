@@ -44,8 +44,11 @@ and is destroyed when it exits; the runner only relays logs and the exit code. C
 - The per-run JSON (`eval-results-<set>.json`) and the markdown report are copied to R2 under
   `prompt-eval/<commit sha>/` before the Machine is destroyed; the PR comment names the key.
   Fetch with `aws s3 cp --endpoint-url $R2_ENDPOINT_URL s3://$R2_BUCKET_NAME/prompt-eval/<sha>/<file> .`
-- Run limits: `WAIT_TIMEOUT` (default 180m) in `fly_prompt_job.sh`, `timeout-minutes` in the
-  workflows. A Machine that outlives the wait is destroyed and the job fails.
+- Run limits: `WAIT_TIMEOUT` (default 300m) in `fly_prompt_job.sh`, `timeout-minutes` in the
+  workflows. A Machine that outlives the wait is destroyed and the job fails. Eval sets run one
+  after another and a 24-snippet set takes about two hours at `--runs 2`, so a PR that does not
+  name its sets with `Eval-set:` lines pays for every set under `prompts/eval/`; name the set the
+  change targets to keep the check under two hours.
 
 The direct-RPC path (`import --version x.y.z --stages ...`) and the SQL recipe in the
 `verdad-heuristics-updater` skill remain available for emergencies; anything deployed that way

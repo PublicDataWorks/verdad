@@ -8,7 +8,7 @@ JOB="${1:?usage: fly_prompt_job.sh evaluate|deploy}"
 : "${FLY_API_TOKEN:?}" "${VERDAD_SHA:?}" "${GITHUB_REPOSITORY:?}"
 FLY_APP="${FLY_APP:-processing-worker}"
 FLY_REGION="${FLY_REGION:-sjc}"
-WAIT_TIMEOUT="${WAIT_TIMEOUT:-180m}"
+WAIT_TIMEOUT="${WAIT_TIMEOUT:-300m}"
 
 image=$(fly machines list -a "$FLY_APP" --json | python3 -c 'import json, sys; print(json.load(sys.stdin)[0]["config"]["image"])')
 echo "Using image $image"

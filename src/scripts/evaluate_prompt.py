@@ -104,30 +104,49 @@ class RunResult:
     usage: dict = field(default_factory=dict)
     seconds: float = 0.0
     error: str | None = None
-    cap_reasons: list[str] = field(default_factory=list)  # evidence gate reasons; empty when no cap applied
+    cap_reasons: list[str] = field(default_factory=list)  # evidence/credibility gate reasons; empty when uncapped
 
     @property
     def ok(self) -> bool:
         return self.error is None
 
 
-def cap_reasons_from(response: dict, grounding_metadata=None) -> list[str]:
-    """The evidence gate's reasons for a run, or ``[]`` when no cap applied or the record lacks the field.
+CREDIBILITY_CAP_PREFIX = "credibility gate: "
 
-    The executor pops ``evidence_gate`` out of the output into the ``grounding_metadata`` JSON string (only
-    when a cap applied); older records have no such key, and an output that still carries ``evidence_gate``
-    inline is read too.
+
+def _gate_record(name: str, containers) -> dict | None:
+    for container in containers:
+        gate = container.get(name) if isinstance(container, dict) else None
+        if isinstance(gate, dict):
+            return gate
+    return None
+
+
+def cap_reasons_from(response: dict, grounding_metadata=None) -> list[str]:
+    """The pipeline gates' reasons for a run, or ``[]`` when no cap applied or the record lacks the fields.
+
+    The executor pops ``evidence_gate`` (only when a cap applied) and ``credibility_gate`` (always, with a
+    ``capped`` flag) out of the output into the ``grounding_metadata`` JSON string; older records have no
+    such keys, and an output that still carries either record inline is read too. A credibility cap is
+    reported as one ``credibility gate: <corroboration reason>`` entry so it stays distinct from the
+    evidence gate's reasons in the report.
     """
     if isinstance(grounding_metadata, str):
         try:
             grounding_metadata = json.loads(grounding_metadata)
         except ValueError:
             grounding_metadata = None
-    for container in (grounding_metadata, response):
-        gate = container.get("evidence_gate") if isinstance(container, dict) else None
-        if isinstance(gate, dict):
-            return [str(r) for r in gate.get("reasons") or [] if r]
-    return []
+    containers = (grounding_metadata, response)
+    reasons: list[str] = []
+    evidence_gate = _gate_record("evidence_gate", containers)
+    if evidence_gate is not None:
+        reasons.extend(str(r) for r in evidence_gate.get("reasons") or [] if r)
+    credibility_gate = _gate_record("credibility_gate", containers)
+    if credibility_gate is not None and credibility_gate.get("capped"):
+        corroboration = credibility_gate.get("corroboration")
+        reason = corroboration.get("reason") if isinstance(corroboration, dict) else None
+        reasons.append(CREDIBILITY_CAP_PREFIX + (str(reason) if reason else "no independent corroboration"))
+    return reasons
 
 
 def parse_output(response: dict, grounding_metadata=None) -> RunResult:
@@ -434,7 +453,7 @@ def render_report(results: list[SnippetResult], agg: dict, config: dict, notes: 
         lines += [
             "## Capped runs by reason",
             "",
-            "Successful model calls whose confidence the evidence gate clamped, by the reason it recorded.",
+            "Successful model calls whose confidence the evidence or credibility gate clamped, by the reason recorded.",
             "",
             "| Reason | Baseline runs | Candidate runs |",
             "|---|---|---|",
