@@ -1,46 +1,65 @@
--- The signature changed on 2026-09-14 (p_include_count added); drop the old overload so
--- PostgREST does not see two get_snippets functions.
-DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text, text);
-
--- Optimized get_snippets function
--- Key optimizations:
--- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
--- 2. Uses JOINs with pre-filtered CTEs for state/source filters (avoids IN subquery on audio_files)
--- 3. Single query with CTE chain — filter CTEs defined once, count + data in one pass
+-- get_snippets: pin the function to custom plans so the states/sources filter keeps its index.
 --
--- Performance improvements:
--- - starredBy filter: timeout (>30s) -> <1s
--- - labeledBy filter: timeout (>30s) -> <1s
--- - upvotedBy filter: 6.7s -> <1s
--- - state filter: ~134ms -> <50ms
--- - source filter: similar improvement
+-- Problem (Tamoa, 2026-09-17): the feed RPC times out at the authenticated statement_timeout of
+-- 8 s whenever a `states` filter is set. `{"states":["Georgia"]}` page 0 took 10.7 s and
+-- `{"states":["Arizona","California","Georgia"]}` 11.0 s, while the same page with no filter took
+-- 155 ms and the equivalent standalone count ran in 1.3 s. pg_stat_statements has the PostgREST
+-- entry at 5,306 calls / 881 ms mean / 7,998 ms max, i.e. real users are hitting the timeout.
 --
--- 2026-09-14 (see supabase/migrations/20260915000400_get_snippets_include_count.sql):
--- - p_include_count boolean DEFAULT true: when false, skips the total count and returns
---   num_of_snippets / total_pages as null (the frontend only needs them on page 0)
--- - one plain ORDER BY branch per p_order_by value so 'latest' is served from
---   idx_snippets_visible_recorded_at (20260915000500) instead of sorting every visible
---   snippet by a CASE
--- - states/sources filters use "= ANY(text[])" so audio_files indexes are usable
--- 2026-09-15:
--- - full-text search evaluated in the same bitmap scan as the visibility predicates
---   (candidate_snippets UNION ALL with a via_search discriminator) instead of a materialized
---   search CTE hash-joined to a second scan of every visible snippet ('trump': 14-19 s -> <1 s)
-
--- 2026-09-17 (see supabase/migrations/20260917210000_get_snippets_state_filter_plan.sql):
--- - SET plan_cache_mode TO 'force_custom_plan': a `states`/`sources` filter timed out at the
---   authenticated 8 s statement_timeout (Georgia page 0: 10.7 s) because the cached generic plan
---   lost idx_audio_files_location_state_id
+-- Root cause A (what this migration fixes): the generic plan loses the state index.
+--   `state_codes` is a plpgsql variable, so every statement in the function sees it as a query
+--   parameter ($n). plpgsql custom-plans the first five executions of a statement and may then
+--   switch the cached plan to a generic one; PostgREST holds long-lived pooled backends, so a
+--   warmed connection keeps serving the generic plan for the rest of its life.
+--   With an *unknown* text[] parameter, `location_state = ANY($n)` cannot be used as an index
+--   condition, so the nested loop over audio_files degrades from
+--       Index Only Scan using idx_audio_files_location_state_id
+--         Index Cond: ((location_state = ANY ('{Georgia}'::text[])) AND (id = s.audio_file))
+--         Heap Fetches: 473
+--   to
+--       Index Scan using audio_files_pkey
+--         Index Cond: (id = s.audio_file)
+--         Filter: (location_state = ANY ($1))
+--   which fetches the audio_files heap (573 MB, last autovacuum 2026-07-26) on all 22,052 probes.
+--   Measured on production 2026-09-17 with PREPARE + SET LOCAL plan_cache_mode, same statement,
+--   same cache state, read-only (EXPLAIN (ANALYZE, BUFFERS)):
+--       force_generic_plan : 18,759 ms, 42,269 blocks read   <- audio_files_pkey + heap Filter
+--       force_custom_plan  :  3,825 ms, 11,572 blocks read   <- idx_audio_files_location_state_id
+--       force_custom_plan, fully warm: 163 ms
+--   `SET plan_cache_mode TO 'force_custom_plan'` on the function makes every statement in the body
+--   plan against the actual parameter values, permanently. It costs one planning cycle per call
+--   (measured Planning Time for the big statement: 14-21 ms) and removes a 100x outlier, so it is
+--   a good trade for an RPC with an 8 s budget.
+--
+-- Root cause B (NOT fixed here - needs an index, see the note at the bottom of this file): with a
+--   states/sources filter the count has to read `audio_file` out of the snippets heap for every
+--   visible snippet, which defeats the index-only scan:
+--       with a state filter : Index Scan using idx_snippets_visible_recorded_at
+--                             42,864 rows, 41,836 buffers  (~1 random heap page per row)
+--       without one         : Index Only Scan using idx_snippets_visible_recorded_at
+--                             42,865 rows, 11,630 buffers, 6,944 heap fetches, 56 ms
+--   The visible rows are 8.5% of 505k rows scattered over a 581 MB heap and shared_buffers is
+--   512 MB, so those ~42k page visits are real reads whenever the feed has been idle.
+--
+-- The count is essentially the whole cost: `{"states":["Georgia"]}` page 0 is 176,120 buffers /
+-- 395 ms with p_include_count = true and 4,163 buffers / 177 ms with it false. Only page 0 asks
+-- for the count, so only page 0 is affected.
+--
+-- Body is byte-identical to 20260915000400_get_snippets_include_count.sql (verified: md5 of
+-- prosrc = cd9d00c24d9894f697c788c0401ef983, 19,030 bytes, matches production before this change).
+-- Only the function attribute changes, so the JSON output is unchanged by construction.
+--
+-- Signature is unchanged, so no DROP is needed and PostgREST keeps routing the RPC.
+-- Rollback: re-run supabase/migrations/20260915000400_get_snippets_include_count.sql, or just
+--   ALTER FUNCTION public.get_snippets(text, jsonb, integer, integer, text, text, boolean)
+--       RESET plan_cache_mode;
 
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- -- 2026-09-17: pin every statement in this body to a custom plan. With an unknown text[]
- -- parameter the generic plan cannot use idx_audio_files_location_state_id as an index
- -- condition and falls back to audio_files_pkey + a heap Filter (18.8 s vs 3.8 s for the
- -- same count in the same cache state). See
- -- supabase/migrations/20260917210000_get_snippets_state_filter_plan.sql.
+ -- See "Root cause A" above. plan_cache_mode is a USERSET GUC, so a per-function SET applies to
+ -- every statement plpgsql plans inside this body and is reverted when the function returns.
  SET plan_cache_mode TO 'force_custom_plan'
 AS $function$
 DECLARE
@@ -445,6 +464,31 @@ BEGIN
 END;
 $function$;
 
+-- Same grants as the live function (proacl: PUBLIC, postgres, anon, authenticated, service_role)
 GRANT EXECUTE ON FUNCTION public.get_snippets(text, jsonb, integer, integer, text, text, boolean) TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';
+
+-- Follow-up for root cause B, deliberately NOT part of this migration.
+--
+-- `supabase db push` runs each migration inside a transaction, and CREATE INDEX CONCURRENTLY is not
+-- allowed there; a plain CREATE INDEX instead takes a SHARE lock that stalls the recording
+-- pipeline's writes to snippets for the length of a 505k-row heap scan. So this is a separate,
+-- additive, by-hand step to run outside a transaction once this migration is applied:
+--
+--   CREATE INDEX CONCURRENTLY idx_snippets_visible_recorded_at_audio
+--       ON public.snippets (recorded_at DESC, id DESC) INCLUDE (audio_file)
+--       WHERE (status = 'Processed'::processing_status
+--              AND ((confidence_scores ->> 'overall'::text))::integer >= 95);
+--
+-- It is today's idx_snippets_visible_recorded_at (1,712 kB, 42,864 entries) with `audio_file`
+-- carried as a payload column, so the states/sources count can serve `audio_file` from the index
+-- instead of the heap. Expected size ~2.4 MB. Adding it is safe on its own: it only gives the
+-- planner a cheaper option, and every existing plan keeps working. Once it is in place and the
+-- state-filter timings are confirmed, the older idx_snippets_visible_recorded_at becomes redundant
+-- and can be retired separately.
+--
+-- Projected, not measured - building an index on production was out of scope for this
+-- investigation - from the two measured variants of the same count above: the snippets leg should
+-- go from 41,836 buffers (~42k random heap pages) to ~11,900 buffers / ~6,944 heap fetches, the
+-- number the identical count already achieves when it does not need `audio_file`.
