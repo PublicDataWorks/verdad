@@ -216,6 +216,8 @@ class TestSupabaseClient:
                 "timestamped_transcription": {"test": "transcription"},
                 "detection_result": {"test": "result"},
                 "status": "New",
+                "detection_prompt_version_id": None,
+                "transcription_prompt_version_id": None,
             }
         )
         assert response == expected_response[0]
@@ -271,6 +273,9 @@ class TestSupabaseClient:
             emotional_tone="neutral",
             context="Test context",
             political_leaning="neutral",
+            grounding_metadata=None,
+            thought_summaries=None,
+            analyzed_by="gemini-2.5-flash",
             status="Processed",
             error_message=None,
         )
@@ -352,7 +357,8 @@ class TestSupabaseClient:
         response = supabase_client.reset_stage_1_llm_response_status(1)
 
         mock_supabase.table.assert_called_once_with("stage_1_llm_responses")
-        mock_supabase.table.return_value.update.assert_called_once
+        mock_supabase.table.return_value.update.assert_called_once_with({"status": "New", "error_message": None})
+        assert response == expected_response
 
     def test_get_snippet_by_id_not_found(self, supabase_client, mock_supabase):
         """Test getting snippet by ID when not found"""
@@ -469,6 +475,9 @@ class TestSupabaseClient:
             emotional_tone=None,
             context=None,
             political_leaning=None,
+            grounding_metadata=None,
+            thought_summaries=None,
+            analyzed_by=None,
             status="New",
             error_message=None,
         )
@@ -515,7 +524,7 @@ class TestSupabaseClient:
 
     def test_get_snippets_by_ids_empty_list(self, supabase_client, mock_supabase):
         """Test getting snippets with empty ID list"""
-        response = supabase_client.get_snippets_by_ids([])
+        supabase_client.get_snippets_by_ids([])
 
         mock_supabase.table.assert_called_once_with("snippets")
         mock_supabase.table.return_value.select.assert_called_once_with("*")
@@ -523,7 +532,7 @@ class TestSupabaseClient:
 
     def test_reset_audio_file_status_empty_list(self, supabase_client, mock_supabase):
         """Test resetting audio file status with empty ID list"""
-        response = supabase_client.reset_audio_file_status([])
+        supabase_client.reset_audio_file_status([])
 
         mock_supabase.table.assert_called_once_with("audio_files")
         mock_supabase.table.return_value.update.assert_called_once_with({"status": "New", "error_message": None})
@@ -678,6 +687,7 @@ class TestSupabaseClient:
             confidence_scores={"score": 0.9},
             political_leaning="neutral",
             grounding_metadata={"source": "test"},
+            reviewed_by=GeminiModel.GEMINI_2_5_PRO.value,
         )
 
         mock_supabase.table.assert_called_once_with("snippets")
@@ -693,6 +703,7 @@ class TestSupabaseClient:
                 "confidence_scores": {"score": 0.9},
                 "political_leaning": "neutral",
                 "grounding_metadata": {"source": "test"},
+                "thought_summaries": None,
                 "status": "Processed",
                 "error_message": None,
                 "reviewed_at": ANY,

@@ -34,9 +34,10 @@ class TestRadioStation:
     @pytest.fixture
     def mock_webdriver(self):
         """Mock Selenium WebDriver"""
-        with patch("selenium.webdriver.Chrome") as mock_chrome, patch(
-            "selenium.webdriver.chrome.service.Service"
-        ) as mock_service, patch("webdriver_manager.chrome.ChromeDriverManager") as mock_manager:
+        # Patch the names as bound in radiostations.base, or the real ChromeDriverManager downloads chromedriver
+        with patch("selenium.webdriver.Chrome") as mock_chrome, patch("radiostations.base.Service") as mock_service, patch(
+            "radiostations.base.ChromeDriverManager"
+        ) as mock_manager:
             mock_driver = Mock()
             mock_chrome.return_value = mock_driver
             yield {"chrome": mock_chrome, "service": mock_service, "manager": mock_manager, "driver": mock_driver}
@@ -128,6 +129,9 @@ class TestRadioStation:
 
         # Verify driver setup
         assert radio_station.driver == mock_webdriver["driver"]
+        mock_webdriver["manager"].return_value.install.assert_called_once_with()
+        mock_webdriver["service"].assert_called_once_with(mock_webdriver["manager"].return_value.install.return_value)
+        assert mock_webdriver["chrome"].call_args[1]["service"] is mock_webdriver["service"].return_value
 
         # Verify Chrome options
         chrome_options_calls = mock_webdriver["chrome"].call_args[1]["options"]
@@ -174,12 +178,6 @@ class TestRadioStation:
 
         with pytest.raises(Exception, match=f"Failed to start audio for {radio_station.url}"):
             radio_station.start_playing()
-
-    def test_is_audio_playing_success(self, radio_station, mock_subprocess):
-        """Test audio playing check success"""
-        mock_subprocess["run"].return_value.stdout = f"State: RUNNING\nName: {radio_station.sink_name}"
-
-        assert radio_station.is_audio_playing() is True
 
     def test_is_audio_playing_failure(self, radio_station, mock_subprocess):
         """Test audio playing check failure"""
@@ -263,21 +261,6 @@ class TestRadioStation:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-
-    def test_execute_command_success(self, radio_station, mock_subprocess):
-        """Test command execution success"""
-        mock_subprocess["run"].return_value.stdout = "test output"
-
-        radio_station.execute_command(["test", "command"])
-
-        assert mock_subprocess["run"].called
-
-    def test_execute_command_failure(self, radio_station, mock_subprocess):
-        """Test command execution failure"""
-        mock_subprocess["run"].side_effect = Exception("Command failed")
-
-        radio_station.execute_command(["test", "command"])
-        # Should not raise exception, just print error message
 
     def test_is_audio_playing_success(self, radio_station, mock_subprocess):
         """Test audio playing check success"""

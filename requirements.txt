@@ -24,5 +24,6 @@ openai==1.57.1
 tiktoken==0.8.0
 pydantic==2.12.5
 pytest-cov==6.0.0
+ruff==0.16.7
 # google-cloud-bigquery-storage==2.26.0
 # fastavro==1.9.7

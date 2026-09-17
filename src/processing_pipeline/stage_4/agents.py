@@ -35,7 +35,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
         connection_params=StdioConnectionParams(
             server_params=StdioServerParameters(
                 command="npx",
-                args=["-y", "mcp-searxng"],
+                args=["-y", "mcp-searxng@2.2.0"],  # pinned: an unpinned npx pulls whatever is latest at boot
                 env={"SEARXNG_URL": os.environ.get("SEARXNG_URL", "")},
             ),
             timeout=60,

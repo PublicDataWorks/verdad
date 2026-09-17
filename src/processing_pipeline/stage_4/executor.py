@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 from typing import Optional
 
 from google.adk.apps.app import App
@@ -12,6 +11,7 @@ from google.genai import types
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_4.agents import build_review_pipeline
+from processing_pipeline.temporal_context import build_temporal_context, parse_recorded_at
 
 
 class ToolErrorHandlerPlugin(BasePlugin):
@@ -70,13 +70,13 @@ class Stage4Executor:
             print("Warning: Disinformation Snippet was not provided for Review")
 
         # Pre-compute hours since recording for breaking news protocol
-        hours_since_recording = ""
-        try:
-            rec_dt = datetime.fromisoformat(recorded_at)
-            cur_dt = datetime.fromisoformat(current_time)
-            hours_since_recording = str(round((cur_dt - rec_dt).total_seconds() / 3600, 1))
-        except (ValueError, TypeError):
-            pass
+        temporal = build_temporal_context(recorded_at, now=parse_recorded_at(current_time))
+        hours_since_recording = temporal["hours_since_recording"]
+        metadata = {
+            **metadata,
+            "current_date_time": temporal["current_date_time"],
+            "temporal_notice": temporal["temporal_notice"],
+        }
 
         # Build the agent pipeline
         review_pipeline, searxng_toolset = build_review_pipeline(prompt_versions, reviewer_model)
@@ -86,7 +86,7 @@ class Stage4Executor:
         session_id = f"stage4_review_session_{snippet_id}"
 
         try:
-            session = await session_service.create_session(
+            await session_service.create_session(
                 app_name=app_name,
                 user_id=user_id,
                 session_id=session_id,
