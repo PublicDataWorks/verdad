@@ -1,54 +1,87 @@
--- The signature changed on 2026-09-14 (p_include_count added); drop the old overload so
--- PostgREST does not see two get_snippets functions.
-DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text, text);
-
--- Optimized get_snippets function
--- Key optimizations:
--- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
--- 2. Uses JOINs with pre-filtered CTEs for state/source filters (avoids IN subquery on audio_files)
--- 3. Single query with CTE chain — filter CTEs defined once, count + data in one pass
+-- Accent-insensitive search, part 2 of 2: point get_snippets at the unaccent-folded expressions.
+-- Part 1 is 20260917220000_unaccent_search_function_and_indexes.sql. APPLY PART 1 FIRST.
 --
--- Performance improvements:
--- - starredBy filter: timeout (>30s) -> <1s
--- - labeledBy filter: timeout (>30s) -> <1s
--- - upvotedBy filter: 6.7s -> <1s
--- - state filter: ~134ms -> <50ms
--- - source filter: similar improvement
+-- Applying this file before the eight idx_snippets_ua_* indexes exist is not wrong, it is slow:
+-- every search would call verdad_unaccent per row over a 505k-row table with no index to use.
+-- With an 8 s authenticated statement_timeout that means search returns errors instead of
+-- results. Order matters.
 --
--- 2026-09-14 (see supabase/migrations/20260915000400_get_snippets_include_count.sql):
--- - p_include_count boolean DEFAULT true: when false, skips the total count and returns
---   num_of_snippets / total_pages as null (the frontend only needs them on page 0)
--- - one plain ORDER BY branch per p_order_by value so 'latest' is served from
---   idx_snippets_visible_recorded_at (20260915000500) instead of sorting every visible
---   snippet by a CASE
--- - states/sources filters use "= ANY(text[])" so audio_files indexes are usable
--- 2026-09-15:
--- - full-text search evaluated in the same bitmap scan as the visibility predicates
---   (candidate_snippets UNION ALL with a via_search discriminator) instead of a materialized
---   search CTE hash-joined to a second scan of every visible snippet ('trump': 14-19 s -> <1 s)
-
--- 2026-09-17 (see supabase/migrations/20260917210000_get_snippets_state_filter_plan.sql):
--- - SET plan_cache_mode TO 'force_custom_plan': a `states`/`sources` filter timed out at the
---   authenticated 8 s statement_timeout (Georgia page 0: 10.7 s) because the cached generic plan
---   lost idx_audio_files_location_state_id
--- 2026-09-17 (see supabase/migrations/20260917220000_unaccent_search_function_and_indexes.sql
---   and 20260917220100_get_snippets_accent_insensitive.sql):
--- - accent-insensitive search: pgroonga's NormalizerAuto does not fold Latin diacritics, so
---   `campana politica` returned 0 while `campaña política` returned 432
---   (VER-339 / VER-373, Tamoa Feedback #8). Both sides of the match now go through
---   public.verdad_unaccent(), an IMMUTABLE unaccent() wrapper, backed by eight
---   idx_snippets_ua_* pgroonga expression indexes. The older accent-sensitive pgroonga
---   indexes stay in place for other callers but are no longer used by this function.
+-- ============================================================================================
+-- What changes
+-- ============================================================================================
+-- Only the search predicate. pgroonga's NormalizerAuto does not fold Latin diacritics (see the
+-- header of 20260917220000 for the full measurements and for why the normalizer route was
+-- rejected), so `campaña política` returned 432 results on page 0 and `campana politica`
+-- returned 0. Both sides of the match now go through public.verdad_unaccent():
+--
+--   * the eight searched expressions become public.verdad_unaccent(<expr>) &@~ search_query,
+--     which matches the eight idx_snippets_ua_* expression indexes built in part 1;
+--   * search_query becomes pgroonga_query_escape(public.verdad_unaccent(TRIM(p_search_term))).
+--
+-- An ACCENTED query still works, and this is the part worth being explicit about: unaccenting an
+-- already-accented query yields exactly the folded tokens the index stores, so `campaña política`
+-- and `campana politica` become the same search rather than one of them being sacrificed for the
+-- other. Verified read-only on production 2026-09-17 over a 3,000-row sample of snippets.transcription:
+--
+--     transcription &@~ 'campaña política'                                       ->  24 rows
+--     transcription &@~ 'campana politica'                                       ->   0 rows
+--     verdad_unaccent(transcription) &@~ escape(verdad_unaccent('campana politica'))  ->  25 rows
+--     verdad_unaccent(transcription) &@~ escape(verdad_unaccent('campaña política'))  ->  25 rows
+--
+-- Same 25 rows for either spelling, and a superset of the 24 the accent-sensitive index found
+-- (the extra row is one where the source text itself is written without accents -- previously
+-- unreachable from either spelling).
+--
+-- Consequence to be aware of: the accent-sensitive pgroonga indexes
+-- (idx_snippets_title_english, idx_snippets_title_spanish,
+-- idx_snippets_explanation_{english,spanish}, idx_snippets_summary_{english,spanish},
+-- pgroonga_transcription_index, pgroonga_translation_index) are NO LONGER CONSULTED BY THIS
+-- FUNCTION. They are deliberately left in place -- other RPCs still search those expressions
+-- directly -- but if you are reading an EXPLAIN of get_snippets and expecting to see them, you
+-- will not. Retiring them is a separate decision that needs an audit of the other callers first.
+--
+-- There is a small recall widening beyond accents: unaccent() also folds things like "ü" -> "u"
+-- and "ç" -> "c". For a Spanish/Arabic-language monitoring product that is the desired behaviour;
+-- it is noted here so a future reader does not mistake it for a bug.
+--
+-- ============================================================================================
+-- What does NOT change
+-- ============================================================================================
+-- Same signature (text, jsonb, integer, integer, text, text, boolean), so no DROP is needed and
+-- PostgREST keeps routing the RPC. Same SECURITY DEFINER. Same
+-- `SET plan_cache_mode TO 'force_custom_plan'` attribute added by 20260917210000 -- dropping that
+-- would reintroduce the states-filter timeout, so it is carried forward verbatim.
+--
+-- The body below is 20260917210000_get_snippets_state_filter_plan.sql with ONLY the nine lines
+-- above changed (the search_query assignment plus the eight `&@~` operands). Mechanically
+-- derived and diffed; see the PR description for the diff.
+--
+-- ============================================================================================
+-- Apply / verify / rollback
+-- ============================================================================================
+-- This file is a single CREATE OR REPLACE plus a GRANT plus a NOTIFY, so unlike part 1 it is
+-- transaction-safe and can be pasted in as one block.
+--
+-- VERIFY (as an authenticated user, via the RPC):
+--     select (public.get_snippets('spanish','{}'::jsonb,0,10,'latest','campana politica',true)->>'num_of_snippets');
+--     select (public.get_snippets('spanish','{}'::jsonb,0,10,'latest','campaña política',true)->>'num_of_snippets');
+--   Both should return a non-zero count, and the same count. Before this change the first was 0.
+--   Also confirm the plan uses the new indexes:
+--     EXPLAIN (ANALYZE, BUFFERS) ... -- expect Bitmap Index Scan on idx_snippets_ua_*
+--
+-- ROLLBACK: re-run supabase/migrations/20260917210000_get_snippets_state_filter_plan.sql. It is
+--   a CREATE OR REPLACE of the same signature with the same plan_cache_mode attribute, so it
+--   restores the accent-sensitive behaviour exactly. Do that BEFORE dropping the
+--   idx_snippets_ua_* indexes or the function will sequential-scan.
+-- ============================================================================================
 
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- -- 2026-09-17: pin every statement in this body to a custom plan. With an unknown text[]
- -- parameter the generic plan cannot use idx_audio_files_location_state_id as an index
- -- condition and falls back to audio_files_pkey + a heap Filter (18.8 s vs 3.8 s for the
- -- same count in the same cache state). See
- -- supabase/migrations/20260917210000_get_snippets_state_filter_plan.sql.
+ -- See "Root cause A" in 20260917210000_get_snippets_state_filter_plan.sql. plan_cache_mode is a
+ -- USERSET GUC, so a per-function SET applies to every statement plpgsql plans inside this body
+ -- and is reverted when the function returns. Carried forward unchanged from that migration.
  SET plan_cache_mode TO 'force_custom_plan'
 AS $function$
 DECLARE
@@ -458,6 +491,7 @@ BEGIN
 END;
 $function$;
 
+-- Same grants as the live function (proacl: PUBLIC, postgres, anon, authenticated, service_role)
 GRANT EXECUTE ON FUNCTION public.get_snippets(text, jsonb, integer, integer, text, text, boolean) TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';
