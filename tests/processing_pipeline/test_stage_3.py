@@ -308,6 +308,54 @@ class TestStage3:
         assert (snippet_id, status) == ("test-id", ProcessingStatus.ERROR)
         assert error_message.startswith("ClientError:")
 
+    def test_process_snippet_retries_transient_errors_then_succeeds(
+        self, mock_supabase_client, sample_snippet, analysis_result
+    ):
+        overloaded = errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async",
+            new=AsyncMock(side_effect=[overloaded, overloaded, ValueError("No response from Gemini."), analysis_result]),
+        ) as mock_run, patch("processing_pipeline.gemini_retry.asyncio.sleep", new=AsyncMock()) as mock_sleep, patch(
+            "processing_pipeline.stage_3.tasks.postprocess_snippet"
+        ):
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        # attempt 1: pro 503 -> flash 503; attempt 2: pro empty; attempt 3: pro ok
+        assert [c.kwargs["model_name"] for c in mock_run.await_args_list] == [
+            GeminiModel.GEMINI_2_5_PRO,
+            GeminiModel.GEMINI_2_5_FLASH,
+            GeminiModel.GEMINI_2_5_PRO,
+            GeminiModel.GEMINI_2_5_PRO,
+        ]
+        assert mock_sleep.await_args_list == [call(30), call(120)]
+        mock_supabase_client.set_snippet_status.assert_not_called()
+        assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == ProcessingStatus.PROCESSED
+
+    def test_process_snippet_gives_up_after_the_last_retry(self, mock_supabase_client, sample_snippet):
+        quota = errors.ClientError(429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}})
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(side_effect=quota)
+        ) as mock_run, patch("processing_pipeline.gemini_retry.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        assert mock_run.await_count == 8  # 4 attempts x (pro, flash)
+        assert mock_sleep.await_args_list == [call(30), call(120), call(300)]
+        mock_supabase_client.update_snippet.assert_not_called()
+        snippet_id, status, error_message = mock_supabase_client.set_snippet_status.call_args.args
+        assert (snippet_id, status) == ("test-id", ProcessingStatus.ERROR)
+        assert error_message.startswith("ClientError: 429")
+
+    def test_process_snippet_does_not_retry_other_client_errors(self, mock_supabase_client, sample_snippet):
+        bad_request = errors.ClientError(400, {"error": {"message": "bad audio", "status": "INVALID_ARGUMENT"}})
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(side_effect=bad_request)
+        ) as mock_run, patch("processing_pipeline.gemini_retry.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        assert mock_run.await_count == 2  # pro, then the flash fallback; no retry round
+        mock_sleep.assert_not_awaited()
+        assert mock_supabase_client.set_snippet_status.call_args.args[1] == ProcessingStatus.ERROR
+
     def test_process_snippet_error(self, mock_supabase_client, sample_snippet):
         with patch(
             "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(side_effect=RuntimeError("Test error"))
@@ -322,10 +370,12 @@ class TestStage3:
         """Unparseable analysis + failed schema restructuring is recorded as an error on the snippet"""
         analysis_response = model_response("not json at all")
         restructure_response = Mock(parsed=None, candidates=[Mock(finish_reason=FinishReason.STOP)])
-        mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
+        mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response] * 4
 
-        self._process(mock_supabase_client, sample_snippet, skip_review=False, gemini_client=mock_gemini_client)
+        with patch("processing_pipeline.gemini_retry.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+            self._process(mock_supabase_client, sample_snippet, skip_review=False, gemini_client=mock_gemini_client)
 
+        assert mock_sleep.await_count == 3
         snippet_id, status, error_message = mock_supabase_client.set_snippet_status.call_args.args
         assert (snippet_id, status) == ("test-id", ProcessingStatus.ERROR)
         assert "step 2" in error_message

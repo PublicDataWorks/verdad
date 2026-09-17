@@ -5,6 +5,7 @@ from unittest import mock
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
+from google.genai import errors
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_4 import (
@@ -255,6 +256,21 @@ class TestStage4:
 
         mock_supabase_client.submit_snippet_review.assert_not_called()
         mock_supabase_client.set_snippet_status.assert_called_once_with("test-id", "Error", "[Stage 4] Test error")
+
+    def test_process_snippet_retries_transient_errors(self, mock_supabase_client, sample_snippet, review_result):
+        overloaded = errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(side_effect=[ExceptionGroup("agents failed", [overloaded]), (review_result, None)]),
+        ) as mock_run, patch("processing_pipeline.gemini_retry.asyncio.sleep", new=AsyncMock()) as mock_sleep, patch(
+            "processing_pipeline.stage_4.tasks.postprocess_snippet"
+        ):
+            self._process(mock_supabase_client, sample_snippet)
+
+        assert mock_run.await_count == 2
+        assert mock_sleep.await_args_list == [call(30)]
+        mock_supabase_client.submit_snippet_review.assert_called_once()
+        mock_supabase_client.set_snippet_status.assert_not_called()
 
     def test_process_snippet_exception_group(self, mock_supabase_client, sample_snippet):
         """Errors raised by the ADK agent pipeline arrive as ExceptionGroups; each is listed"""

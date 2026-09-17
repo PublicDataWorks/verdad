@@ -60,8 +60,9 @@ breaks once `processed_audio_files >= limit` or when a specific `audio_file_id` 
   `processing_pipeline.stage_3.tasks.postprocess_snippet`,
   `processing_pipeline.stage_4.tasks.Stage4Executor.run_async`. Patching `google.genai` or `supabase` itself
   leaves the already-imported name untouched and the test hits the network.
-- Patch the sleep too (`time.sleep`, or `...flows.asyncio.sleep` in stages 3 and 4) or a `repeat` loop test
-  takes a minute. No test may call real Gemini, OpenAI, R2 or Supabase.
+- Patch the sleep too (`time.sleep`, or `...flows.asyncio.sleep` in stages 3 and 4, and
+  `processing_pipeline.gemini_retry.asyncio.sleep` when an executor mock raises) or a test takes minutes.
+  No test may call real Gemini, OpenAI, R2 or Supabase.
 
 ## Before changing flow topology
 
