@@ -125,7 +125,8 @@ class TestRadioStation:
         mock_wait.return_value = mock_wait_instance
         mock_wait_instance.until.return_value = mock_element
 
-        radio_station.start_browser()
+        with patch.object(radio_station, "is_audio_playing", return_value=True):
+            radio_station.start_browser()
 
         # Verify driver setup
         assert radio_station.driver == mock_webdriver["driver"]
@@ -166,18 +167,28 @@ class TestRadioStation:
         mock_webdriver["driver"].find_element.return_value = mock_element
         mock_webdriver["driver"].execute_script.return_value = True
 
-        radio_station.start_playing()
+        with patch.object(radio_station, "is_audio_playing", return_value=True):
+            radio_station.start_playing()
 
         assert mock_element.click.called
+
+    @patch("time.sleep")
+    def test_start_playing_trusts_the_sink_over_the_video_element(self, mock_sleep, radio_station, mock_webdriver):
+        radio_station.driver = mock_webdriver["driver"]
+        mock_webdriver["driver"].execute_script.return_value = False
+
+        with patch.object(radio_station, "is_audio_playing", return_value=True):
+            radio_station.start_playing()
 
     @patch("time.sleep")
     def test_start_playing_failure(self, mock_sleep, radio_station, mock_webdriver):
         """Test playback start failure"""
         radio_station.driver = mock_webdriver["driver"]
-        mock_webdriver["driver"].execute_script.return_value = False
+        mock_webdriver["driver"].execute_script.return_value = True
 
-        with pytest.raises(Exception, match=f"Failed to start audio for {radio_station.url}"):
-            radio_station.start_playing()
+        with patch.object(radio_station, "is_audio_playing", return_value=False):
+            with pytest.raises(Exception, match=f"Failed to start audio for {radio_station.url}"):
+                radio_station.start_playing()
 
     def test_is_audio_playing_failure(self, radio_station, mock_subprocess):
         """Test audio playing check failure"""
