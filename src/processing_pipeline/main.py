@@ -7,6 +7,7 @@ from processing_pipeline.stage_2 import audio_clipping, undo_audio_clipping
 from processing_pipeline.stage_3 import in_depth_analysis
 from processing_pipeline.stage_5 import embedding
 from processing_pipeline.stage_4 import analysis_review
+from news_ledger import news_ledger_poller
 load_dotenv()
 
 # Setup Sentry
@@ -86,5 +87,11 @@ if __name__ == "__main__":
                 parameters=dict(repeat=True),
             )
             serve(deployment, limit=100)
+        case "news_ledger_poller":
+            deployment = news_ledger_poller.to_deployment(
+                name="News Ledger: Poller",
+                parameters=dict(repeat=True),
+            )
+            serve(deployment)
         case _:
             raise ValueError(f"Invalid process group: {process_group}")

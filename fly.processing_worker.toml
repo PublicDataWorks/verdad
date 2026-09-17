@@ -19,6 +19,7 @@ primary_region = 'sea'
   analysis_review = ''
   analysis_review_2 = ''
   embedding = ''
+  news_ledger_poller = ''
 
 [[vm]]
   processes = ["initial_disinformation_detection", "initial_disinformation_detection_2"]
@@ -47,7 +48,7 @@ primary_region = 'sea'
   cpus = 8
 
 [[vm]]
-  processes = ["regenerate_timestamped_transcript", "embedding"]
+  processes = ["regenerate_timestamped_transcript", "embedding", "news_ledger_poller"]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 4
