@@ -86,8 +86,9 @@ def search_knowledge_base(query: str, categories: list[str] | None = None, refer
 
 KB_PROVENANCE_NOTE = (
     "Entries with provenance 'pipeline' were written by an earlier automated review of another snippet, not by an "
-    "analyst; they are context only and can never be the evidence that a claim is false. Only a source URL returned "
-    "by the web research tools in this session can contradict a claim."
+    "analyst; they are context only and can never be the evidence that a claim is false. Entries with provenance "
+    "'curated' may support an assessment under the reviewer's scoring rules, alongside source URLs returned by this "
+    "session's web research."
 )
 
 

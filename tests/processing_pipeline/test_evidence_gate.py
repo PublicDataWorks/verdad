@@ -11,7 +11,7 @@ from processing_pipeline.stage_3.models import (
     SearchResult,
     apply_evidence_caps,
     asserts_falsity,
-    earliest_claim_event_date,
+    latest_claim_event_date,
     fill_publication_dates,
     has_contradicting_evidence,
     is_article_url,
@@ -376,6 +376,19 @@ class TestApplyEvidenceCaps:
         assert SearchResult.model_validate(base).url_observed_in_tools is None
         assert SearchResult.model_validate({**base, "url_observed_in_tools": False}).url_observed_in_tools is False
 
+    def test_stage_4_honours_the_stored_tool_echo_verdict(self):
+        analysis = _analysis(explanation_en="This is fictional.")
+        evidence = _evidence(url="https://www.reuters.com/world/americas/never-happened/")
+        evidence["searches_performed"][0]["results"][0]["url_observed_in_tools"] = False
+        result = apply_evidence_caps(analysis, verification_evidence=evidence)
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        evidence["searches_performed"][0]["results"][0]["url_observed_in_tools"] = True
+        assert apply_evidence_caps(analysis, verification_evidence=evidence)["evidence_gate"] == {"applied": False}
+
+    def test_url_key_rejects_a_malformed_port(self):
+        assert url_key("https://example.com:notaport/article") == ""
+        assert not has_contradicting_evidence(_evidence(url="https://example.com:notaport/article"), observed_urls=set())
+
     def test_stage_4_uses_explicit_stage_3_evidence(self):
         analysis = _analysis(explanation_en="This is fictional.")
         result = apply_evidence_caps(analysis, verification_evidence=_evidence())
@@ -507,11 +520,18 @@ class TestDatePrecedence:
         assert Claim.model_validate({"quote": "q", "evidence": "e", "score": 1}).event_date is None
         assert Claim.model_validate({"quote": "q", "evidence": "e", "score": 1, "event_date": "2026-09-14"}).event_date
 
-    def test_earliest_claim_event_date(self):
-        analysis = _with_claims(_analysis(), "2026-09-14", None, "not a date", "2026-08-07")
-        assert earliest_claim_event_date(analysis).isoformat() == "2026-08-07"
-        assert earliest_claim_event_date(_analysis()) is None
-        assert earliest_claim_event_date(None) is None
+    def test_latest_claim_event_date(self):
+        analysis = _with_claims(_analysis(), "2026-08-07", None, "not a date", "2026-09-14")
+        assert latest_claim_event_date(analysis).isoformat() == "2026-09-14"
+        assert latest_claim_event_date(_analysis()) is None
+        assert latest_claim_event_date(None) is None
+
+    def test_source_between_two_claimed_events_does_not_clear_the_later_one(self):
+        analysis = _with_claims(_analysis(explanation_en="Both events are fabricated."), "2026-08-07", "2026-09-14")
+        analysis["verification_evidence"] = _evidence(publication_date="2026-08-08")
+        result = apply_evidence_caps(analysis)
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert "latest claimed event (2026-09-14)" in result["evidence_gate"]["reasons"][-1]
 
     def test_source_dated_before_the_event_cannot_contradict_it(self):
         evidence = _evidence(publication_date="2024-03-01")
@@ -532,7 +552,7 @@ class TestDatePrecedence:
         result = apply_evidence_caps(analysis)
         assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
         assert result["evidence_gate"]["reasons"][-1] == (
-            "every contradicting source is dated before the claimed event (2026-09-14)"
+            "every contradicting source is dated before the latest claimed event (2026-09-14)"
         )
 
     def test_source_dated_after_the_event_keeps_the_score(self):

@@ -373,15 +373,20 @@ def is_article_url(url) -> bool:
     return True
 
 
-def earliest_claim_event_date(analysis: dict | None) -> date | None:
-    """The earliest ``claims[].event_date`` the model recorded (None when no claim carries a parseable date)."""
+def latest_claim_event_date(analysis: dict | None) -> date | None:
+    """The latest ``claims[].event_date`` the model recorded (None when no claim carries a parseable date).
+
+    Search results are not linked to individual claims, so the gate cannot tell which claim a contradicting
+    source refutes. The latest event date is the conservative boundary: a source older than the most recent
+    claimed event could only refute an earlier claim, and the verdict rests on all of them.
+    """
     if not isinstance(analysis, dict):
         return None
     scores = analysis.get("confidence_scores")
     claims = (((scores or {}).get("analysis") or {}).get("claims") or []) if isinstance(scores, dict) else []
     dates = [parse_iso_date(c.get("event_date")) for c in claims if isinstance(c, dict)]
     dates = [d for d in dates if d is not None]
-    return min(dates) if dates else None
+    return max(dates) if dates else None
 
 
 def fill_publication_dates(verification_evidence: dict | None, observed_url_dates: dict[str, str] | None) -> int:
@@ -441,6 +446,10 @@ def _result_counts(
         return False
     if observed_urls is not None and not url_was_observed(result.get("url"), observed_urls):
         return False
+    if observed_urls is None and result.get("url_observed_in_tools") is False:
+        # Stage 4 has no tool record of its own, but Stage 3 stored its verdict on this URL: a URL no tool
+        # returned stays inadmissible when the reviewer re-runs the gate on the stored evidence.
+        return False
     published = parse_iso_date(result.get("publication_date"))
     if earliest_event_date is not None and published is not None and published < earliest_event_date:
         return False
@@ -467,9 +476,13 @@ def has_contradicting_evidence(
     no Stage 3 tool record; the evaluation harness reading stored records; offline callers) any http(s) URL
     counts, as before.
 
-    ``earliest_event_date`` is the earliest ``claims[].event_date``. A source published before the event it is
-    supposed to refute cannot refute it (a 2024 fact-check cannot contradict a 2026 ruling). Undated sources
-    still count, so the URL-only decision stands; the publication date is not required unless ``require_date``.
+    ``earliest_event_date`` is the boundary date (callers pass ``latest_claim_event_date``: results are not linked
+    to claims, so the most recent claimed event is the conservative choice). A source published before it
+    cannot refute it (a 2024 fact-check cannot contradict a 2026 ruling). Undated sources still count, so the
+    URL-only decision stands; the publication date is not required unless ``require_date``.
+
+    A result Stage 3 already marked ``url_observed_in_tools = False`` never counts, even when ``observed_urls``
+    is ``None``, so Stage 4 cannot restore a score Stage 3 capped for an invented URL.
     """
     for result in _contradicting_results(verification_evidence):
         if _result_counts(result, observed_urls, earliest_event_date, require_date):
@@ -556,7 +569,7 @@ def apply_evidence_caps(
             if language in explanation:
                 explanation[language] = _without_gate_note(explanation[language])
 
-    event_date = earliest_claim_event_date(result)
+    event_date = latest_claim_event_date(result)
     status = confidence_scores.get("verification_status")
     falsity_verdict = status == "verified_false" or asserts_falsity(result)
 
@@ -585,7 +598,7 @@ def apply_evidence_caps(
             reasons.append("contradicting URL not returned by any search or fetch tool in this session")
         elif recorded and event_date is not None:
             reasons.append(
-                f"every contradicting source is dated before the claimed event ({event_date.isoformat()})"
+                f"every contradicting source is dated before the latest claimed event ({event_date.isoformat()})"
             )
 
     cap = EVIDENCE_CAP_MAX_SCORE

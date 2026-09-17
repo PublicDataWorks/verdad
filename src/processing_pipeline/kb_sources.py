@@ -56,8 +56,12 @@ def url_key(url) -> str:
         return ""
     parts = urlsplit(url.strip())
     host = (parts.hostname or "").lower().removeprefix("www.")
-    if parts.port:
-        host = f"{host}:{parts.port}"
+    try:
+        port = parts.port
+    except ValueError:  # "example.com:notaport": not a page anything could have returned
+        return ""
+    if port:
+        host = f"{host}:{port}"
     key = host + parts.path.rstrip("/")
     if parts.query:
         key += "?" + parts.query
