@@ -119,6 +119,70 @@ refuses the production project unless `--allow-production` is passed.
   ```
 - The Prefect API and UI (`https://prefect.fly.dev`) have no authentication.
 
+## Database schema and migrations
+
+`supabase/migrations/` is the only place schema changes belong. It holds the baseline, one comment-only placeholder
+per version production has already applied (29), and `applied_versions.txt`.
+
+- **`20260915000000_baseline_public_schema.sql`** is a generated snapshot of the live `public` and `profiles`
+  schemas (27 tables, 1 materialized view, 3 enums, 54 functions, 22 triggers, 53 non-constraint indexes, RLS
+  on 25 tables, 16 policies, grants and comments). It was produced by `scripts/dump_schema_baseline.py`, which
+  only runs `SELECT`s against the catalog through the Supabase Management API. **It has never been executed
+  against production** - production already has every object in it, and the file refuses to run where
+  `public.snippets` exists. It is the only file up to its version with SQL in it, so a fresh database
+  (`supabase start`, `supabase db reset`) is built from it alone, and it is the reference for what runs in
+  production.
+- The 29 comment-only files are placeholders for the versions in `supabase_migrations.schema_migrations`: 24 whose
+  SQL never landed in git, plus the 2024 `remote_schema` dump and the four bare-date `20260129_*` files (renamed to
+  the 14-digit versions the database recorded) whose bodies the baseline supersedes; git history keeps them. They
+  exist so `supabase migration list` lines up, and `tests/test_migrations.py` asserts they stay comment-only.
+- `applied_versions.txt` is `supabase_migrations.schema_migrations` as of the date in its header; the tests check
+  that files and manifest agree. `make migrations-manifest` refreshes it and `make baseline-check` regenerates the
+  baseline and diffs it against the committed file (both need `SUPABASE_ACCESS_TOKEN`).
+- What the baseline does not carry: object ownership, `ALTER DEFAULT PRIVILEGES`, `REVOKE`s, column-level grants,
+  and grants to roles other than `anon`, `authenticated` and `service_role`. On a rebuilt database the 31
+  `SECURITY DEFINER` functions therefore run as whoever applied the migration, not necessarily production's owner.
+- `supabase/database/sql/` is historical hand-applied SQL, not migrations - see the README in that directory.
+
+### Rules for new migrations
+
+- One file per change in `supabase/migrations/`, named `YYYYMMDDHHMMSS_short_name.sql` with a **full 14-digit
+  timestamp**. Never a bare date: `supabase` parses the leading digits as the version, so `20260914_a.sql` and
+  `20260914_b.sql` are both version `20260914` and `supabase db push` fails on the `schema_migrations` primary
+  key after the first one. Two open PRs (#73, #76) collide this way today.
+- Date the file after the baseline (`20260915000000`), so it sorts after it.
+- If you apply SQL by hand (SQL editor, dashboard, MCP), still commit the file, and then tell the database it
+  is done: `supabase migration repair --linked --status applied <version>`. Skipping that is how the repo ended
+  up with 28 remote-only versions.
+- `CREATE INDEX CONCURRENTLY` cannot run inside a transaction, so it cannot run under `supabase db push`. Keep
+  such statements in their own file, apply them by hand, and `migration repair --status applied` afterwards.
+- Never edit a migration that has been applied; write a new one.
+
+### Human steps after a migration PR merges
+
+Needs `SUPABASE_ACCESS_TOKEN` and the database password.
+
+```bash
+supabase link --project-ref dzujjhzgzguciwryzwlx
+supabase migration list --linked                    # expect: 29 versions local = remote, baseline local-only
+supabase migration repair --linked --status applied 20260915000000
+supabase migration list --linked                    # expect: everything aligned, nothing local-only
+supabase db diff --linked --schema public,profiles   # expect: no schema changes found (needs Docker)
+```
+
+Without Docker, `db diff` cannot build its shadow database; dump and compare instead:
+
+```bash
+supabase db dump --linked --schema public,profiles -f /tmp/live.sql
+# then diff /tmp/live.sql against the baseline by object (ordering and formatting differ):
+grep -E '^(CREATE|ALTER) ' /tmp/live.sql | sort > /tmp/live.objects
+grep -E '^(CREATE|ALTER) ' supabase/migrations/20260915000000_baseline_public_schema.sql | sort > /tmp/base.objects
+diff /tmp/live.objects /tmp/base.objects
+```
+
+If PR #73 or #76 was applied by hand in the meantime, `migration repair --linked --status applied` their
+(renamed, 14-digit) versions too.
+
 ## Logs and monitoring
 
 - Machine stdout/stderr: `fly logs -a processing-worker` (add `--machine <id>` for one process group; ids from
