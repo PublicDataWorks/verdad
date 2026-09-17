@@ -1,31 +1,35 @@
--- The signature changed on 2026-09-14 (p_include_count added); drop the old overload so
--- PostgREST does not see two get_snippets functions.
-DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text, text);
+-- get_snippets: optional total count + index-friendly ordering and station/state filters.
+--
+-- Changes (default behaviour is unchanged; verified equal to the live function on production
+-- 2026-09-14 for 26 input combinations and again 2026-09-15 after change 4, see PR):
+--  1. New trailing parameter p_include_count boolean DEFAULT true. When false the total
+--     count is skipped and num_of_snippets / total_pages are returned as JSON null. The count
+--     needs a scan of every matching snippet (the dominant cost of a page load, several
+--     seconds when the snippets heap is not cached); the frontend only needs it for page 0.
+--  2. One plain ORDER BY branch per p_order_by value instead of a single "ORDER BY CASE ..."
+--     (which can never use an index). The default/'latest' branch is
+--     "ORDER BY recorded_at DESC, id DESC" and is served from idx_snippets_visible_recorded_at
+--     (20260915000500, partial on the visibility predicates; without it the planner falls
+--     back to idx_snippets_processed_recorded_at, where 954 of the first 1,138 entries fail
+--     the confidence filter), touching a few hundred pages instead of ~33k. "id DESC" is a
+--     deterministic tiebreak.
+--  3. states / sources filters use "= ANY(text[])" instead of
+--     "IN (SELECT jsonb_array_elements_text(...))" (estimated as matching every row), so
+--     the planner can use idx_audio_files_location_state and the new
+--     idx_audio_files_radio_station_code_id index.
+--  4. Full-text search is evaluated together with the visibility predicates in ONE bitmap
+--     scan of snippets (candidate_snippets below) instead of a materialized search CTE
+--     hash-joined to a separate scan of every visible snippet. Measured on production
+--     2026-09-15 (EXPLAIN ANALYZE, read-only): p_search_term 'trump' went from 14-19 s cold
+--     (timing out at the 8 s authenticated statement_timeout) to well under a second.
+--
+-- The signature changes (new parameter), so the old overload must be dropped first:
+-- PostgREST would otherwise see two get_snippets functions and refuse to route the RPC.
+-- Frontend: only send p_include_count AFTER this migration is applied (PostgREST rejects
+-- unknown RPC parameters); without it the default (true) keeps the current behaviour.
+-- Rollback: supabase/database/sql/rollback/2026-09-14_get_snippets_before.sql
 
--- Optimized get_snippets function
--- Key optimizations:
--- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
--- 2. Uses JOINs with pre-filtered CTEs for state/source filters (avoids IN subquery on audio_files)
--- 3. Single query with CTE chain — filter CTEs defined once, count + data in one pass
---
--- Performance improvements:
--- - starredBy filter: timeout (>30s) -> <1s
--- - labeledBy filter: timeout (>30s) -> <1s
--- - upvotedBy filter: 6.7s -> <1s
--- - state filter: ~134ms -> <50ms
--- - source filter: similar improvement
---
--- 2026-09-14 (see supabase/migrations/20260915000400_get_snippets_include_count.sql):
--- - p_include_count boolean DEFAULT true: when false, skips the total count and returns
---   num_of_snippets / total_pages as null (the frontend only needs them on page 0)
--- - one plain ORDER BY branch per p_order_by value so 'latest' is served from
---   idx_snippets_visible_recorded_at (20260915000500) instead of sorting every visible
---   snippet by a CASE
--- - states/sources filters use "= ANY(text[])" so audio_files indexes are usable
--- 2026-09-15:
--- - full-text search evaluated in the same bitmap scan as the visibility predicates
---   (candidate_snippets UNION ALL with a via_search discriminator) instead of a materialized
---   search CTE hash-joined to a second scan of every visible snippet ('trump': 14-19 s -> <1 s)
+DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text, text);
 
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
@@ -434,6 +438,7 @@ BEGIN
 END;
 $function$;
 
+-- Same grants as the live function (proacl: PUBLIC, postgres, anon, authenticated, service_role)
 GRANT EXECUTE ON FUNCTION public.get_snippets(text, jsonb, integer, integer, text, text, boolean) TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';
