@@ -1,6 +1,5 @@
 #!/bin/bash
-# Fast pre-push gate: lint + tests without the coverage gate.
-# The coverage-gated run (`pytest` with fail_under) is CI's job: .github/workflows/ci.yml
+# Fast pre-push gate: lint + tests without the coverage gate (CI runs the gated one).
 set -e
 
 BRANCH_NAME=$(git symbolic-ref --short HEAD)

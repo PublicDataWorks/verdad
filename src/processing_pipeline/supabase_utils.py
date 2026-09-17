@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+from postgrest.exceptions import APIError
 from supabase import create_client
 from datetime import datetime, timezone
 from processing_pipeline.constants import PromptStage
@@ -413,6 +414,20 @@ class SupabaseClient:
             )
             return response.data[0]
 
+    def get_snippet_labels(self, snippet_id):
+        """All snippet_labels rows for a snippet with their label text and who applied them."""
+        response = (
+            self.client.table("snippet_labels")
+            .select("id, applied_by, upvote_count, label(id, text, text_spanish, is_ai_suggested)")
+            .eq("snippet", snippet_id)
+            .execute()
+        )
+        return response.data if response.data else []
+
+    def delete_snippet_label(self, snippet_label_id):
+        response = self.client.table("snippet_labels").delete().eq("id", snippet_label_id).execute()
+        return response.data
+
     def reset_audio_file_status(self, ids):
         response = self.client.table("audio_files").update({"status": "New", "error_message": None}).in_("id", ids).execute()
         return response.data
@@ -466,6 +481,7 @@ class SupabaseClient:
         candidate_multiplier=8,
         filter_categories: list[str] | None = None,
         reference_date: str | None = None,
+        min_confidence: int = 0,
     ):
         params = {
             "query_embedding": query_embedding,
@@ -473,11 +489,22 @@ class SupabaseClient:
             "match_count": match_count,
             "candidate_multiplier": candidate_multiplier,
         }
+        if min_confidence:
+            params["min_confidence"] = min_confidence
         if filter_categories:
             params["filter_categories"] = filter_categories
         if reference_date:
             params["reference_date"] = reference_date
-        response = self.client.rpc("search_kb_entries", params).execute()
+        try:
+            response = self.client.rpc("search_kb_entries", params).execute()
+        except APIError as e:
+            # min_confidence only exists once the updated search_kb_entries.sql is deployed; until then PostgREST
+            # cannot resolve the function (PGRST202). Retry without it: callers re-check confidence client-side.
+            if getattr(e, "code", None) != "PGRST202" or "min_confidence" not in params:
+                raise
+            print("[KB Search] search_kb_entries has no min_confidence parameter yet; retrying without it")
+            legacy_params = {key: value for key, value in params.items() if key != "min_confidence"}
+            response = self.client.rpc("search_kb_entries", legacy_params).execute()
         return response.data if response.data else []
 
     def find_duplicate_kb_entries(self, query_embedding, similarity_threshold=0.92, max_results=5):

@@ -67,7 +67,6 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
 
 - Stations are hard-coded in `src/utils.py::fetch_radio_stations()` and split by list position across the two
   recorders; adding or reordering one touches three files. See `.claude/rules/recorders.md` first.
-- `src/main.py` is an ad-hoc stage 4 smoke script with a hard-coded production snippet UUID. Do not run it.
 - `ENABLE_PREFECT_DECORATOR=false` (set by tests and `scripts/run_stage.py`) makes flows/tasks plain functions.
   It is read at import time, so set it before importing anything from `src/`.
 - Prompts live in the DB. Editing `prompts/*.md` changes nothing until `import_prompts_to_db.py import` runs. Bump
@@ -83,6 +82,7 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
 - Run `make check` before committing. Fix what you broke; do not skip, delete or weaken a failing test to go green.
   If a test exposes a real bug, leave the test failing, mark it `xfail(strict=True)` with the reason, and report it.
 - Never deploy (`fly deploy`, `fly machine ...`, `fly secrets set`), run migrations, import prompts, or write to
-  production data unless explicitly asked. `scripts/run_stage.py` and `src/scripts/*` hit whatever `.env` points at.
+  production data unless explicitly asked. `scripts/run_stage.py` and `src/scripts/*` hit whatever `.env` points at
+  (`run_stage.py` refuses the production Supabase project unless `--allow-production` is passed).
 - Do not commit `.env`, credentials, or the Supabase project URL/keys anywhere new.
 - Keep commits focused; separate mechanical formatting from behavior changes.
