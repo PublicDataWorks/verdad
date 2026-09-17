@@ -195,7 +195,8 @@ per version production has already applied (29), and `applied_versions.txt`.
   the 14-digit versions the database recorded) whose bodies the baseline supersedes; git history keeps them. They
   exist so `supabase migration list` lines up, and `tests/test_migrations.py` asserts they stay comment-only.
 - `applied_versions.txt` is `supabase_migrations.schema_migrations` as of the date in its header; the tests check
-  that files and manifest agree. `make migrations-manifest` refreshes it and `make baseline-check` regenerates the
+  that every manifest version has a file and that files up to the baseline are in the manifest (newer files are
+  pending until applied and repaired). `make migrations-manifest` refreshes it and `make baseline-check` regenerates the
   baseline and diffs it against the committed file (both need `SUPABASE_ACCESS_TOKEN`).
 - What the baseline does not carry: object ownership, `ALTER DEFAULT PRIVILEGES`, `REVOKE`s, column-level grants,
   and grants to roles other than `anon`, `authenticated` and `service_role`. On a rebuilt database the 31
@@ -207,7 +208,7 @@ per version production has already applied (29), and `applied_versions.txt`.
 - One file per change in `supabase/migrations/`, named `YYYYMMDDHHMMSS_short_name.sql` with a **full 14-digit
   timestamp**. Never a bare date: `supabase` parses the leading digits as the version, so `20260914_a.sql` and
   `20260914_b.sql` are both version `20260914` and `supabase db push` fails on the `schema_migrations` primary
-  key after the first one. Two open PRs (#73, #76) collide this way today.
+  key after the first one. Open PR #73 still uses bare dates.
 - Date the file after the baseline (`20260915000000`), so it sorts after it.
 - If you apply SQL by hand (SQL editor, dashboard, MCP), still commit the file, and then tell the database it
   is done: `supabase migration repair --linked --status applied <version>`. Skipping that is how the repo ended
@@ -238,8 +239,8 @@ grep -E '^(CREATE|ALTER) ' supabase/migrations/20260915000000_baseline_public_sc
 diff /tmp/live.objects /tmp/base.objects
 ```
 
-If PR #73 or #76 was applied by hand in the meantime, `migration repair --linked --status applied` their
-(renamed, 14-digit) versions too.
+If a later migration (e.g. PR #73 or `20260917034500_sources_feed_items.sql`) was applied by hand in the
+meantime, `migration repair --linked --status applied` its 14-digit version too.
 
 ## Logs and monitoring
 

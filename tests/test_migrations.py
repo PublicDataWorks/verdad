@@ -89,6 +89,7 @@ def test_manifest_and_files_agree():
     versions = {version_of(name) for name in migration_files()}
     manifest = manifest_versions()
     assert manifest, f"{MANIFEST.name} is empty"
-    # The baseline joins the manifest once `migration repair --status applied` has run for it.
-    assert versions - manifest <= {version_of(BASELINE)}, f"files without a manifest entry: {sorted(versions - manifest)}"
+    # Files newer than the baseline may be pending (not yet applied to production); older ones must be recorded.
+    pending = {v for v in versions - manifest if v > version_of(BASELINE)}
+    assert versions - manifest - pending == set(), f"pre-baseline files missing from the manifest: {sorted(versions - manifest - pending)}"
     assert manifest - versions == set(), f"manifest versions without a file: {sorted(manifest - versions)}"
