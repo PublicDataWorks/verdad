@@ -29,3 +29,4 @@
 20260129201900	optimize_recording_filter_and_indexes
 20260129202429	cleanup_unused_indexes
 20260130195259	optimize_state_source_filters
+20260915000000	baseline_public_schema
