@@ -25,6 +25,7 @@ $function$;
 
 -- Not an RPC: only the cron job (runs as postgres) and service_role may call it.
 REVOKE EXECUTE ON FUNCTION public.sweep_stuck_snippets() FROM public, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.sweep_stuck_snippets() TO service_role;
 
 -- pg_cron is platform-managed (see the baseline); skip the job where it is absent, e.g. a local reset.
 DO $$
