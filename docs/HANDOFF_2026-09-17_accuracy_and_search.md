@@ -6,6 +6,16 @@ East Agile) owns deploys and reviews, on VERDAD until 2026-10-02. Coordination l
 project "Continuous Refinement System"), Slack `#verdad` (channel `C07JYU3729G`), and GitHub
 `PublicDataWorks/verdad`. Keep all three updated; Linear is the source of truth for other coding agents.
 
+## 0. Update 20:30 UTC (after the playbook was run by the team)
+
+Applied to production: #73 steps 1 to 4 with #100's operator (PR #100 merged into #73), `13_hide` (73 rows),
+`12_kb_deactivate` (10 rows), `11_seed` (14 rows, no embeddings yet), and the 36 Fulton/Georgia snippets
+were re-queued. Verified: "georgia elections" 0 to 39 results, "stolen election" 0 to 87, "candidate campaign"
+0 to 63. Still open: a state filter with no search term and the count takes 11 to 27 s (PR #101 adds the
+`audio_files(location_state, id)` index); #73 step 5 index not applied; merge #73 to main and record
+`applied_versions.txt`; verdad-frontend #262; `10_unhide_after_reprocess.sql` for the 36; VER-375 (seed
+embeddings, gate new pipeline KB writes); VER-374 (Georgia stations).
+
 ## 1. The problem in one paragraph
 
 Stage 3 (gemini-2.5-pro, knowledge cutoff January 2025) labels true post-cutoff events "fabricated" at
