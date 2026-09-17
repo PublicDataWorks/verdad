@@ -40,3 +40,5 @@
 20260917080000	sweep_stuck_snippets
 20260917210000	get_snippets_state_filter_plan
 20260917213000	snippets_visible_cover_index
+20260917220000	unaccent_search_function_and_indexes
+20260917220100	get_snippets_accent_insensitive
