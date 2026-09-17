@@ -36,6 +36,16 @@ This folder was prepared to park the affected snippets in a new `Quarantined` st
 * **200 pre-existing `user_hide_snippets` rows also have `"user" IS NULL`** (written by the 2-dislike trigger). They are not in `snippet_quarantine_log` and must never be touched; every statement in this folder that deletes hide rows joins through the log for that reason.
 * Rollback per batch is a `DELETE` of the hide rows plus `restored_at`; see [Rollback](#rollback). The status-based `05_quarantine_rollback.sql` was removed.
 
+### Status 2026-09-17
+
+Three new files, none executed yet (each needs Rajiv's go in Slack; all reversible):
+
+| File | What | Tracking |
+|------|------|----------|
+| `11_seed_dated_facts.sql` | 14 analyst-verified, dated, curated KB facts (Colombia, Peru, Venezuela, Nicaragua, Brazil, SCOTUS, Trump dividend, Rubio tour, Colombia earthquake, Pope Leo XIV France trip, Charlie Kirk, al-Sharaa, Orbán); `created_by_model = 'analyst-seed-2026-09-17'`; needs `backfill_kb_embeddings.py` afterwards | VER-326 |
+| `12_kb_deactivate_postcutoff_wrong_facts.sql` | 10 active pipeline-authored entries that deny those same events (Petro still president, Boluarte, "Fujimori was not the winner", "Tomás Uribe inaugurated", Maduro "hoax", Orbán in office); batch `cleanup-2026-09-17-postcutoff`, rollback via `08` | VER-341 |
+| `13_hide_postcutoff_clusters.sql` | 73 still-visible 95+ snippets whose verdict denies one of those events; batch `hide-2026-09-17-postcutoff`, same hide mechanism, rollback statement inside the file; run `04b` for the batch before reprocessing | VER-349 |
+
 ### Status 2026-09-16
 
 * **Restore and re-hide (2026-09-15, Rajiv's thread).** 4,116 hidden snippets of the conspiracy / culture-war slice were restored on request (hide rows deleted, `restored_at` stamped, `;restored_conspiracy_slice_2026-09-15` appended to `reason`). 802 of them, confirmed event denials, were then re-hidden: new hide rows, `restored_at` back to NULL, `;rehide_event_negation_2026-09-15` appended (414 log rows in `-heuristics`, 388 in `-noevidence-premarch`). The 802 are also listed in a separate review table `snippet_hide_review` (batch `rehide_event_negation_2026-09-15`, not in this repo). Net about 20,400 hidden. **`reason` is now `<original>;<suffix>...`**, so group on `split_part(reason, ';', 1)` in every count.
