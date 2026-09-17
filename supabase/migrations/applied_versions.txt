@@ -39,3 +39,4 @@
 20260917034500	sources_feed_items
 20260917080000	sweep_stuck_snippets
 20260917210000	get_snippets_state_filter_plan
+20260917213000	snippets_visible_cover_index
