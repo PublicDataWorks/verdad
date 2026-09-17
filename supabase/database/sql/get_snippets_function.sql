@@ -40,6 +40,11 @@ DECLARE
     user_roles TEXT[];
     user_is_admin BOOLEAN;
     trimmed_search_term TEXT := TRIM(p_search_term);
+    -- Multi-word searches: `&@` (pgroonga "match") treats the whole string as one term, so "georgia elecciones"
+    -- matched nothing while "georgia" alone matched hundreds (Tamoa's Feedback #7/#8). `&@~` is pgroonga's query
+    -- operator: words are AND-ed, "OR" and quoted phrases work; pgroonga_query_escape neutralises the other
+    -- query-syntax characters a user may type ("-", "(", quotes) so a stray one cannot raise an error.
+    search_query TEXT := pgroonga_query_escape(TRIM(p_search_term));
     -- Filter detection flags for optimization
     has_starred_filter BOOLEAN;
     starred_by_me BOOLEAN;
@@ -205,14 +210,14 @@ BEGIN
         AND (
             (trimmed_search_term = '' AND NOT s.via_search)
             OR (trimmed_search_term <> '' AND s.via_search AND (
-                (s.title ->> 'english') &@ trimmed_search_term
-                OR (s.title ->> 'spanish') &@ trimmed_search_term
-                OR (s.explanation ->> 'english') &@ trimmed_search_term
-                OR (s.explanation ->> 'spanish') &@ trimmed_search_term
-                OR (s.summary ->> 'english') &@ trimmed_search_term
-                OR (s.summary ->> 'spanish') &@ trimmed_search_term
-                OR s.transcription &@ trimmed_search_term
-                OR s.translation &@ trimmed_search_term
+                (s.title ->> 'english') &@~ search_query
+                OR (s.title ->> 'spanish') &@~ search_query
+                OR (s.explanation ->> 'english') &@~ search_query
+                OR (s.explanation ->> 'spanish') &@~ search_query
+                OR (s.summary ->> 'english') &@~ search_query
+                OR (s.summary ->> 'spanish') &@~ search_query
+                OR s.transcription &@~ search_query
+                OR s.translation &@~ search_query
             ))
         )
         AND (user_is_admin OR uhs.snippet IS NULL)
