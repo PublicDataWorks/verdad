@@ -20,12 +20,15 @@ from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import get_safety_settings
 from processing_pipeline.kb_sources import parse_iso_date, url_key
 from processing_pipeline.stage_3.models import Stage3Output, apply_evidence_caps, fill_publication_dates
+from processing_pipeline.stage_3.news_tools import news_ledger_search
 from processing_pipeline.stage_3.web_tools import searxng_web_search, tool_result_dates, tool_result_urls, web_url_read
 from processing_pipeline.temporal_context import build_temporal_context
 
 
 # The web tools the model may call during the analysis, keyed by the name Gemini must use.
-WEB_TOOLS = {tool.__name__: tool for tool in (searxng_web_search, web_url_read)}
+# news_ledger_search is declared first on purpose: the order is what the model sees, and the ledger is
+# the dated, non-self-poisoning evidence source it should try before open web search.
+WEB_TOOLS = {tool.__name__: tool for tool in (news_ledger_search, searxng_web_search, web_url_read)}
 
 # Upper bound on model turns per analysis (one final answer plus up to 19 rounds of tool calls).
 MAX_MODEL_TURNS = 20
