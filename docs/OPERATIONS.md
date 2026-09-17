@@ -121,18 +121,27 @@ refuses the production project unless `--allow-production` is passed.
 
 ## Database schema and migrations
 
-`supabase/migrations/` is the only place schema changes belong. It holds 30 files: one per version that
-production has already applied, plus the baseline.
+`supabase/migrations/` is the only place schema changes belong. It holds 30 files: one comment-only placeholder
+per version that production has already applied (29), plus the baseline, and `applied_versions.txt`.
 
 - **`20260915000000_baseline_public_schema.sql`** is a generated snapshot of the live `public` and `profiles`
   schemas (27 tables, 1 materialized view, 3 enums, 54 functions, 22 triggers, 53 non-constraint indexes, RLS
   on 25 tables, 16 policies, grants and comments). It was produced by `scripts/dump_schema_baseline.py`, which
   only runs `SELECT`s against the catalog through the Supabase Management API. **It has never been executed
-  against production** - production already has every object in it. It is what a fresh database (or
-  `supabase start`) should be built from, and it is the reference for what runs in production.
-- The 24 comment-only files are placeholders for versions in `supabase_migrations.schema_migrations` whose SQL
-  never landed in git; they exist so `supabase migration list` lines up. The four bare-date `20260129_*` files
-  were renamed to the 14-digit versions the database recorded.
+  against production** - production already has every object in it, and the file refuses to run where
+  `public.snippets` exists. It is the only pre-2026-09-15 file with SQL in it, so a fresh database
+  (`supabase start`, `supabase db reset`) is built from it alone, and it is the reference for what runs in
+  production.
+- The 29 comment-only files are placeholders for the versions in `supabase_migrations.schema_migrations`: 24 whose
+  SQL never landed in git, plus the 2024 `remote_schema` dump and the four bare-date `20260129_*` files (renamed to
+  the 14-digit versions the database recorded) whose bodies the baseline supersedes; git history keeps them. They
+  exist so `supabase migration list` lines up, and `tests/test_migrations.py` asserts they stay comment-only.
+- `applied_versions.txt` is `supabase_migrations.schema_migrations` as of the date in its header; the tests check
+  that files and manifest agree. `make migrations-manifest` refreshes it and `make baseline-check` regenerates the
+  baseline and diffs it against the committed file (both need `SUPABASE_ACCESS_TOKEN`).
+- What the baseline does not carry: object ownership, `ALTER DEFAULT PRIVILEGES`, `REVOKE`s, column-level grants,
+  and grants to roles other than `anon`, `authenticated` and `service_role`. On a rebuilt database the 31
+  `SECURITY DEFINER` functions therefore run as whoever applied the migration, not necessarily production's owner.
 - `supabase/database/sql/` is historical hand-applied SQL, not migrations - see the README in that directory.
 
 ### Rules for new migrations
