@@ -489,9 +489,9 @@ class TestCli:
             tmp_path,
             [minimal_row(code="OFF - 101.0 FM", url="https://off.example/stream", enabled=False)],
         )
-        assert main(["--config", str(path), "codes"]) == 0
+        assert main(["codes", "--config", str(path)]) == 0
         assert capsys.readouterr().out == ""
-        assert main(["--config", str(path), "codes", "--all"]) == 0
+        assert main(["codes", "--config", str(path), "--all"]) == 0
         assert capsys.readouterr().out.splitlines() == ["OFF - 101.0 FM"]
 
     def test_prefect_runs(self, capsys):

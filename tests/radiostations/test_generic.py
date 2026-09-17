@@ -105,10 +105,8 @@ def test_all_stations_have_same_selectors():
         assert station.video_element_selector == VIDEO_ELEMENT_SELECTOR
 
 
-def test_generic_station_keeps_a_reference_to_its_config_row():
+def test_generic_station_repr_names_the_code():
     station = generic_stations()[0]
-    assert station.station.code == station.code
-    assert station.station.recorder == "generic"
     assert repr(station) == f"GenericStation(code={station.code!r})"
 
 

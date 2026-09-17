@@ -13,6 +13,7 @@ deploy. See the header of ``config/stations.yaml`` and docs/OPERATIONS.md.
 import argparse
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -123,8 +124,7 @@ def _check_uniqueness(stations: list[Station], resolved: Path) -> None:
 
 
 def _reject_duplicates(values: list, label: str, resolved: Path) -> None:
-    seen = set()
-    duplicates = sorted({v for v in values if v in seen or seen.add(v)})
+    duplicates = sorted(v for v, n in Counter(values).items() if n > 1)
     if duplicates:
         raise ValueError(f"{resolved}: duplicate {label}(s): {', '.join(map(str, duplicates))}")
 
@@ -170,14 +170,15 @@ def prefect_run_targets(path=None) -> list[str]:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="stations", description="Query config/stations.yaml")
-    parser.add_argument("--config", default=None, help="Path to stations.yaml (default: config/stations.yaml)")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--config", default=None, help="Path to stations.yaml (default: config/stations.yaml)")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    codes = subparsers.add_parser("codes", help="Print station codes, one per line")
+    codes = subparsers.add_parser("codes", parents=[common], help="Print station codes, one per line")
     codes.add_argument("--recorder", choices=sorted(FLOW_NAMES), default=None)
     codes.add_argument("--all", action="store_true", help="Include stations with enabled: false")
 
-    subparsers.add_parser("prefect-runs", help='Print "<flow name>/<code>" for every enabled station')
+    subparsers.add_parser("prefect-runs", parents=[common], help='Print "<flow name>/<code>" for every enabled station')
 
     args = parser.parse_args(argv)
 

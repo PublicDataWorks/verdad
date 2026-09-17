@@ -27,7 +27,6 @@ class GenericStation(RadioStation):
             driver.video_element_selector,
         )
 
-        self.station = station
         self.code = station.code
         self.state = station.state
         self.name = station.name
