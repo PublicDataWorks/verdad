@@ -100,7 +100,7 @@ WITH e AS (
 INSERT INTO public.kb_entry_sources (kb_entry, url, source_name, source_type, title, publication_date, relevance_to_claim)
     SELECT e.id, 'https://abc7news.com/post/2026-election-california-mail-voting-unchanged-supreme-court-blocks-president-donald-trump-restrictions/19837294/', 'ABC7 San Francisco', 'tier3_regional_news', '2026 Election: California mail-in voting unchanged after Supreme Court blocks Trump restrictions', '2026-09-14'::date, 'contradicts_claim' FROM e
 UNION ALL
-    SELECT e.id, 'https://www.supremecourt.gov/opinions/25pdf/26a305_4g15.pdf', 'Supreme Court of the United States (official)', 'other', '26A305 Postal Service v. California', '2026-09-14'::date, 'contradicts_claim' FROM e
+    SELECT e.id, 'https://www.supremecourt.gov/opinions/25pdf/26a305_4g15.pdf', 'Supreme Court of the United States (official)', 'official_source', '26A305 Postal Service v. California', '2026-09-14'::date, 'contradicts_claim' FROM e
 UNION ALL
     SELECT e.id, 'https://www.jurist.org/news/2026/09/us-supreme-court-rejects-doj-bid-to-stay-injunction-blocking-usps-mail-in-ballot-rule/', 'JURIST', 'other', 'US Supreme Court rejects DOJ bid to stay injunction blocking USPS mail-in ballot rule', '2026-09-14'::date, 'contradicts_claim' FROM e;
 
@@ -163,14 +163,14 @@ UNION ALL
 -- fact 11 (confirmed; event 2026-09-25)
 WITH e AS (
     INSERT INTO public.kb_entries (fact, related_claim, confidence_score, disinformation_categories, keywords, is_time_sensitive, valid_from, status, created_by_model)
-    SELECT 'Pope Leo XIV (Robert Prevost, elected 2025-05-08) is scheduled to make an apostolic journey to France, including UNESCO headquarters in Paris, from 2026-09-25 to 2026-09-28, as announced by the Holy See.', 'Pope Leo XIV''s 2026 trip to France is fabricated', 95, ARRAY['Political Figures and Movements'], ARRAY['Pope Leo XIV','France','apostolic journey','UNESCO','September 2026'], false, '2026-09-25'::timestamptz, 'active', 'analyst-seed-2026-09-17'
+    SELECT 'Pope Leo XIV (Robert Prevost, elected 2025-05-08) is scheduled to make an apostolic journey to France, including UNESCO headquarters in Paris, from 2026-09-25 to 2026-09-28, as announced by the Holy See.', 'Pope Leo XIV''s 2026 trip to France is fabricated', 95, ARRAY['Political Figures and Movements'], ARRAY['Pope Leo XIV','France','apostolic journey','UNESCO','September 2026'], false, '2026-05-16'::timestamptz, 'active', 'analyst-seed-2026-09-17'
     WHERE NOT EXISTS (SELECT 1 FROM public.kb_entries WHERE created_by_model = 'analyst-seed-2026-09-17' AND fact = 'Pope Leo XIV (Robert Prevost, elected 2025-05-08) is scheduled to make an apostolic journey to France, including UNESCO headquarters in Paris, from 2026-09-25 to 2026-09-28, as announced by the Holy See.')
     RETURNING id
 )
 INSERT INTO public.kb_entry_sources (kb_entry, url, source_name, source_type, title, publication_date, relevance_to_claim)
-    SELECT e.id, 'https://www.vatican.va/content/leo-xiv/en/travels/2026/documents/francia-25-28settembre2026.html', 'Vatican (official)', 'other', 'Apostolic Journey of the Holy Father to France and Visit to UNESCO (25-28 September 2026)', '2026-01-01'::date, 'contradicts_claim' FROM e
+    SELECT e.id, 'https://www.vatican.va/content/leo-xiv/en/travels/2026/documents/francia-25-28settembre2026.html', 'Vatican (official)', 'official_source', 'Apostolic Journey of the Holy Father to France and Visit to UNESCO (25-28 September 2026)', '2026-05-16'::date, 'contradicts_claim' FROM e
 UNION ALL
-    SELECT e.id, 'https://www.vaticannews.va/en/pope/news/2026-08/pope-leos-packed-schedule-4-day-apostolic-journey-to-france.html', 'Vatican News', 'other', 'Pope Leo''s schedule for his four-day Apostolic Journey to France', '2026-08-01'::date, 'contradicts_claim' FROM e;
+    SELECT e.id, 'https://www.vaticannews.va/en/pope/news/2026-08/pope-leos-packed-schedule-4-day-apostolic-journey-to-france.html', 'Vatican News', 'official_source', 'Pope Leo''s schedule for his four-day Apostolic Journey to France', '2026-08-01'::date, 'contradicts_claim' FROM e;
 
 -- fact 12 (confirmed; event 2025-09-10)
 WITH e AS (
@@ -182,7 +182,7 @@ WITH e AS (
 INSERT INTO public.kb_entry_sources (kb_entry, url, source_name, source_type, title, publication_date, relevance_to_claim)
     SELECT e.id, 'https://utahnewsdispatch.com/2025/09/10/charlie-kirk-shot-during-event-at-utah-valley-university/', 'Utah News Dispatch', 'tier3_regional_news', 'Charlie Kirk killed at Utah Valley University, search for shooter continues', '2025-09-10'::date, 'contradicts_claim' FROM e
 UNION ALL
-    SELECT e.id, 'https://www.fbi.gov/news/press-releases/utah-valley-shooting-updates', 'FBI (official)', 'other', 'Utah Valley Shooting Updates', '2025-09-10'::date, 'contradicts_claim' FROM e
+    SELECT e.id, 'https://www.fbi.gov/news/press-releases/utah-valley-shooting-updates', 'FBI (official)', 'official_source', 'Utah Valley Shooting Updates', '2025-09-10'::date, 'contradicts_claim' FROM e
 UNION ALL
     SELECT e.id, 'https://en.wikipedia.org/wiki/Assassination_of_Charlie_Kirk', 'Wikipedia', 'other', 'Assassination of Charlie Kirk', '2025-01-01'::date, 'contradicts_claim' FROM e;
 

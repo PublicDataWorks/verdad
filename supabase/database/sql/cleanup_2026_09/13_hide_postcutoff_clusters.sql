@@ -92,7 +92,7 @@ todo AS (
     SELECT p.snippet, p.reason
     FROM picked p
     JOIN public.snippets s ON s.id = p.snippet AND s.status = 'Processed'
-    WHERE NOT EXISTS (SELECT 1 FROM public.user_hide_snippets h WHERE h.snippet = p.snippet)
+    WHERE NOT EXISTS (SELECT 1 FROM public.user_hide_snippets h WHERE h.snippet = p.snippet AND h."user" IS NULL)
       AND NOT EXISTS (SELECT 1 FROM public.snippet_quarantine_log l WHERE l.snippet = p.snippet AND l.batch = 'hide-2026-09-17-postcutoff')
 ),
 logged AS (
