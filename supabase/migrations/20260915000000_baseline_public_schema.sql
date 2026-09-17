@@ -25,7 +25,7 @@
 --   functions: 54
 --   triggers: 22
 --   indexes: 59
---   tables with RLS: 29
+--   tables with RLS: 33
 --   policies: 16
 --   table grants: 102
 --   function grants: 159
@@ -4467,10 +4467,13 @@ CREATE INDEX IF NOT EXISTS user_star_snippets_user_idx ON public.user_star_snipp
 
 ALTER TABLE profiles.user_signups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audio_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.backfill_control ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.comment_reactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.downvote_review_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_template ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.embedding_batch_candidates_2026_09_15 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.embedding_batch_seeds_2026_09_15 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kb_deactivation_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kb_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.kb_entry_embeddings ENABLE ROW LEVEL SECURITY;
@@ -4489,6 +4492,7 @@ ALTER TABLE public.snippet_labels ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snippet_quarantine_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snippets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stage_1_llm_responses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.total_labels ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_hide_snippets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_like_snippets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;

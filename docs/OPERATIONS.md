@@ -126,7 +126,7 @@ per version production has already applied (29), and `applied_versions.txt`.
 
 - **`20260915000000_baseline_public_schema.sql`** is a generated snapshot of the live `public` and `profiles`
   schemas (33 tables, 1 materialized view, 3 enums, 54 functions, 22 triggers, 59 non-constraint indexes, RLS
-  on 29 tables, 16 policies, grants and comments; regenerated 2026-09-17 before it was marked applied). It was produced by `scripts/dump_schema_baseline.py`, which
+  on all 33 tables, 16 policies, grants and comments; regenerated 2026-09-17 before it was marked applied). It was produced by `scripts/dump_schema_baseline.py`, which
   only runs `SELECT`s against the catalog through the Supabase Management API. **It has never been executed
   against production** - production already has every object in it, and the file refuses to run where
   `public.snippets` exists. It is the only file up to its version with SQL in it, so a fresh database
