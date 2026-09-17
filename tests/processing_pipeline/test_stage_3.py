@@ -352,7 +352,7 @@ class TestStage3:
         result = self._run_executor(mock_gemini_client)
 
         assert result["response"] == {"test": "response", "is_convertible": True}
-        assert result["grounding_metadata"] == "null"  # no verification_evidence in the output
+        assert result["grounding_metadata"] == "{}"  # no verification_evidence in the output
         assert result["thought_summaries"] is None
         assert result["usage"] == dict.fromkeys(USAGE_FIELDS, 0)  # the response double reports no usage
         assert mock_gemini_client.aio.models.generate_content.await_count == 2

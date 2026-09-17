@@ -1,0 +1,1 @@
+-- Applied to production out-of-band on 2024-10-29; definition captured in 20260915000000_baseline_public_schema.sql.

@@ -36,8 +36,8 @@
     }
   },
   "stage_3": {
-    "version": "1.3.0",
-    "description": "Active version seeded from the database on 2026-09-14",
+    "version": "1.4.0",
+    "description": "search_failed result status for failed web searches (VER-348)",
     "files": {
       "system_instruction": "prompts/stage_3/system_instruction.md",
       "user_prompt": "prompts/stage_3/analysis_prompt.md",

@@ -41,6 +41,7 @@ class TestParseArgs:
             ["--stage", "1", "--limit", "-1"],
             ["--stage", "1", "--audio-file-id", "x", "--limit", "2"],
             ["--stage", "1", "--audio-file-id", "", "--limit", "2"],
+            ["--stage", "1", "--audio-file-id", ""],
             ["--stage", "1", "--context-before-seconds", "10"],
             ["--stage", "3", "--context-after-seconds", "30"],
             ["--stage", "5", "--context-before-seconds", "10"],
@@ -58,6 +59,7 @@ class TestParseArgs:
             (["--stage", "1", "--audio-file-id", "x", "--limit", "2"], "--limit does not apply with --audio-file-id"),
             (["--stage", "1", "--audio-file-id", "", "--limit", "2"], "--limit does not apply with --audio-file-id"),
             (["--stage", "2", "--audio-file-id", ""], "--audio-file-id/--limit only apply to --stage 1"),
+            (["--stage", "1", "--audio-file-id", ""], "--audio-file-id must not be empty"),
             (["--stage", "3", "--context-before-seconds", "10"], "only apply to --stage 2"),
         ],
     )
@@ -106,3 +108,25 @@ class TestDispatch:
         with patch("processing_pipeline.stage_5.embedding") as flow:
             run_stage.main(["--stage", "5", "--env-file", "/nonexistent/.env"])
         flow.assert_called_once_with(repeat=False)
+
+
+class TestProductionGuard:
+    @pytest.fixture
+    def production_env(self, run_stage, monkeypatch):
+        monkeypatch.setenv("SUPABASE_URL", f"https://{run_stage.PRODUCTION_PROJECT_REF}.supabase.co")
+
+    def test_refuses_production_project(self, run_stage, production_env):
+        with patch("processing_pipeline.stage_5.embedding") as flow, pytest.raises(SystemExit) as excinfo:
+            run_stage.main(["--stage", "5", "--env-file", "/nonexistent/.env"])
+        assert "--allow-production" in str(excinfo.value.code)
+        flow.assert_not_called()
+
+    def test_allow_production_overrides(self, run_stage, production_env):
+        with patch("processing_pipeline.stage_5.embedding") as flow:
+            run_stage.main(["--stage", "5", "--allow-production", "--env-file", "/nonexistent/.env"])
+        flow.assert_called_once_with(repeat=False)
+
+    def test_prints_supabase_host(self, run_stage, capsys):
+        with patch("processing_pipeline.stage_5.embedding"):
+            run_stage.main(["--stage", "5", "--env-file", "/nonexistent/.env"])
+        assert "against Supabase test.supabase.co" in capsys.readouterr().out

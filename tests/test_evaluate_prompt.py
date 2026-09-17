@@ -51,6 +51,31 @@ def test_parse_output_extracts_compare_fields():
 def test_parse_output_tolerates_missing_fields():
     result = ep.parse_output({})
     assert result.categories == [] and result.overall is None and result.explanation == ""
+    assert result.cap_reasons == []
+
+
+CAP_REASON = "verification_status is 'insufficient_evidence'"
+
+
+def test_parse_output_reads_cap_reasons_from_grounding_metadata_json():
+    grounding = json.dumps({"searches_performed": [], "evidence_gate": {"applied": True, "reasons": [CAP_REASON]}})
+    result = ep.parse_output(stage3_output(40), grounding)
+    assert result.cap_reasons == [CAP_REASON]
+
+
+def test_parse_output_reads_cap_reasons_from_inline_gate_or_dict():
+    inline = {**stage3_output(40), "evidence_gate": {"applied": True, "reasons": [CAP_REASON, "second"]}}
+    assert ep.parse_output(inline).cap_reasons == [CAP_REASON, "second"]
+    as_dict = {"evidence_gate": {"applied": True, "reasons": ["r"]}}
+    assert ep.parse_output(stage3_output(40), as_dict).cap_reasons == ["r"]
+
+
+@pytest.mark.parametrize(
+    "grounding",
+    [None, "", "not json", json.dumps({"searches_performed": []}), json.dumps({"evidence_gate": {"applied": False}})],
+)
+def test_parse_output_cap_reasons_empty_when_gate_absent_or_unreadable(grounding):
+    assert ep.parse_output(stage3_output(85), grounding).cap_reasons == []
 
 
 def test_is_flagged_uses_threshold_and_flag_on():
@@ -183,6 +208,39 @@ def test_render_report_contains_tables_and_evidence():
     assert "## Evidence" in report and "> Candidate says the claim is true." in report
     assert "`22222222-bbbb`" not in report.split("## Evidence")[1]  # control snippet is not evidence
     assert "- one note" in report
+
+
+def test_cap_histogram_counts_runs_per_reason_and_arm():
+    r = make_result("11111111-aaaa", ep.REPORTED, [90, 85], [30, 20])
+    r.baseline_runs[0].cap_reasons = [CAP_REASON]
+    r.candidate_runs[0].cap_reasons = [CAP_REASON, "other reason"]
+    r.candidate_runs[1].cap_reasons = ["other reason"]
+    failed = ep.RunResult(error="boom", cap_reasons=[CAP_REASON])  # failed runs are not counted
+    r.candidate_runs.append(failed)
+
+    assert ep.cap_histogram([r]) == [
+        {"reason": "other reason", "baseline": 0, "candidate": 2},
+        {"reason": CAP_REASON, "baseline": 1, "candidate": 1},
+    ]
+    assert ep.cap_histogram([make_result("22222222-bbbb", ep.CONTROL, [95], [95])]) == []
+
+
+def test_render_report_capped_runs_table_and_results_json_carry_cap_reasons():
+    results = [make_result("11111111-aaaa", ep.REPORTED, [90, 85], [30, 20])]
+    results[0].candidate_runs[0].cap_reasons = ["reason | with pipe"]
+    agg = ep.aggregate(results, "gemini-2.5-pro")
+    config = {"baseline": "b", "candidate": "c", "model": "m", "runs": 2, "threshold": 70, "flag_on": "overall"}
+
+    report = ep.render_report(results, agg, config)
+    assert "## Capped runs by reason" in report
+    assert "| reason \\| with pipe | 0 | 1 |" in report
+
+    payload = json.loads(json.dumps(ep.results_to_json(results, agg, config, notes=[])))
+    assert payload["snippets"][0]["candidate_runs"][0]["cap_reasons"] == ["reason | with pipe"]
+    assert payload["snippets"][0]["baseline_runs"][0]["cap_reasons"] == []
+
+    uncapped = [make_result("22222222-bbbb", ep.CONTROL, [95], [95])]
+    assert "## Capped runs by reason" not in ep.render_report(uncapped, ep.aggregate(uncapped, "m"), config)
 
 
 def test_failure_histogram_groups_by_exception_class():
@@ -450,6 +508,27 @@ def test_main_exits_2_without_environment(monkeypatch, capsys):
         monkeypatch.delenv(name, raising=False)
     assert ep.main(["--snippet-ids", "x"]) == ep.MISSING_ENV_EXIT_CODE
     assert "missing environment variables" in capsys.readouterr().err
+
+
+def test_main_requires_searxng_url(monkeypatch, capsys):
+    # Without SEARXNG_URL every run fails after the paid model calls have started
+    assert "SEARXNG_URL" in ep.REQUIRED_ENV
+    for name in ep.REQUIRED_ENV:
+        monkeypatch.setenv(name, "set")
+    monkeypatch.delenv("SEARXNG_URL")
+    assert ep.main(["--snippet-ids", "x"]) == ep.MISSING_ENV_EXIT_CODE
+    assert "SEARXNG_URL" in capsys.readouterr().err
+
+
+def test_max_snippets_rejects_negative_values(capsys):
+    parser = ep.build_parser()
+    assert parser.parse_args(["--max-snippets", "0"]).max_snippets == 0
+    assert parser.parse_args(["--max-snippets", "3"]).max_snippets == 3
+    for bad in ("-1", "x"):
+        with pytest.raises(SystemExit) as excinfo:
+            parser.parse_args(["--max-snippets", bad])
+        assert excinfo.value.code == 2
+    assert "non-negative" in capsys.readouterr().err
 
 
 def test_fail_on_regression_flag_parsing():

@@ -176,8 +176,7 @@ class TestStage5:
                 error_message="Embedding error"
             )
 
-    def test_stage_5_executor(self, mock_openai):
-        """Test Stage5Executor normalizes the embedding returned by OpenAI"""
+    def test_stage_5_executor_normalizes_embedding(self, mock_openai):
         result = Stage5Executor.run(mock_openai, "Test text", "test-model")
 
         norm = (0.1**2 + 0.2**2 + 0.3**2) ** 0.5

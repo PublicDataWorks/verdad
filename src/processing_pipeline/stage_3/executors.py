@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime, timezone
 import json
 
 from google import genai
@@ -19,8 +18,9 @@ from pydantic import ValidationError
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import get_safety_settings
-from processing_pipeline.stage_3.models import Stage3Output
+from processing_pipeline.stage_3.models import Stage3Output, apply_evidence_caps
 from processing_pipeline.stage_3.web_tools import searxng_web_search, web_url_read
+from processing_pipeline.temporal_context import build_temporal_context
 
 
 # The web tools the model may call during the analysis, keyed by the name Gemini must use.
@@ -73,41 +73,21 @@ class Stage3Executor:
             dict: Structured and validated analysis output
         """
 
-        # Pre-compute temporal context for breaking news protocol
-        now = datetime.now(timezone.utc)
-        current_date_time = now.strftime("%B %-d, %Y %-I:%M %p UTC")
-
-        recorded_at_str = metadata.get("additional_info", {}).get("recorded_at", "")
-        hours_since_recording = ""
-        breaking_news_notice = ""
-        if recorded_at_str:
-            try:
-                recorded_at_dt = datetime.strptime(recorded_at_str, "%B %-d, %Y %-I:%M %p")
-                recorded_at_dt = recorded_at_dt.replace(tzinfo=timezone.utc)
-                delta_hours = round((now - recorded_at_dt).total_seconds() / 3600, 1)
-                hours_since_recording = str(delta_hours)
-                if delta_hours <= 24:
-                    breaking_news_notice = (
-                        f"**BREAKING NEWS PROTOCOL APPLIES**: This recording is {delta_hours} hours old (< 24 hours). "
-                        f"Maximum confidence score is 20 unless contradictory evidence from tier-1/tier-2 sources is found. "
-                        f"Use verification_status: insufficient_evidence."
-                    )
-                elif delta_hours <= 72:
-                    breaking_news_notice = (
-                        f"**BREAKING NEWS PROTOCOL APPLIES**: This recording is {delta_hours} hours old (< 72 hours). "
-                        f"Maximum confidence score is 30 unless contradictory evidence from tier-1/tier-2 sources is found. "
-                        f"Use verification_status: insufficient_evidence."
-                    )
-            except ValueError:
-                pass
+        # Temporal context for the breaking news protocol. Prefer the ISO timestamp; fall back to the
+        # human-readable string that older stage_1 metadata carries.
+        additional_info = metadata.get("additional_info", {})
+        temporal = build_temporal_context(additional_info.get("recorded_at_iso") or additional_info.get("recorded_at"))
+        if not temporal["hours_since_recording"]:
+            print("Warning: could not determine recording age; breaking news protocol notice not rendered")
 
         # Prepare the user prompt
         user_prompt = (
             f"{prompt_version['user_prompt']}\n\n"
             f"## Snippet Data\n\n"
-            f"- **Current date and time**: {current_date_time}\n"
-            f"- **Hours since recording**: {hours_since_recording}\n"
-            f"- {breaking_news_notice}\n"
+            f"- **Current date and time**: {temporal['current_date_time']}\n"
+            f"- {temporal['temporal_notice']}\n"
+            f"- **Hours since recording**: {temporal['hours_since_recording']}\n"
+            f"- {temporal['breaking_news_notice']}\n"
             f"- **Metadata of the attached audio clip**: \n{json.dumps(metadata, indent=2)}\n\n"
             f"**WARNING:** Do NOT treat today's date as a 'future date'. "
             f"Your training data may predate this date — that does NOT make the date wrong.\n\n"
@@ -139,9 +119,17 @@ class Stage3Executor:
                     gemini_client, analysis_text, prompt_version["output_schema"]
                 )
 
+            # Deterministic evidence gate: never let an unevidenced analysis reach the analyst feed
+            output = apply_evidence_caps(output)
+            evidence_gate = output.pop("evidence_gate")
+            grounding_metadata = dict(output.get("verification_evidence") or {})
+            if evidence_gate.get("applied"):
+                print(f"Evidence gate applied: {evidence_gate['note']}")
+                grounding_metadata["evidence_gate"] = evidence_gate
+
             return {
                 "response": output,
-                "grounding_metadata": json.dumps(output.get("verification_evidence"), indent=2),
+                "grounding_metadata": json.dumps(grounding_metadata, indent=2),
                 "thought_summaries": thought_summaries or output.get("thought_summaries"),
                 "usage": usage,
             }

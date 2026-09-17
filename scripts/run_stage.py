@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """Run one pipeline stage locally as plain Python, without a Prefect server.
 
-Sets ENABLE_PREFECT_DECORATOR=false before importing anything from src/, so the
-@optional_flow/@optional_task decorators are no-ops and the flow functions in
-src/processing_pipeline/stage_N/flows.py run as ordinary (async) functions.
-
-Everything else is real: the stage talks to the Supabase project, R2 bucket and
-LLM providers configured in .env (loaded from the repo root if present). Point
-.env at a non-production project before running this against anything.
+ENABLE_PREFECT_DECORATOR=false turns the flow/task decorators into no-ops; everything else is real
+and hits the Supabase, R2 and LLM providers in .env. The production Supabase project is refused
+unless --allow-production is passed.
 
 Examples:
     python scripts/run_stage.py --stage 1 --audio-file-id <uuid>
@@ -23,12 +19,14 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Must happen before any `processing_pipeline` import: the decorators read this at import time.
 os.environ["ENABLE_PREFECT_DECORATOR"] = "false"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
+PRODUCTION_PROJECT_REF = "dzujjhzgzguciwryzwlx"
 
 try:
     from dotenv import load_dotenv
@@ -39,8 +37,7 @@ except ImportError:  # pragma: no cover - python-dotenv is in requirements.txt
 def run_stage_1(args):
     from processing_pipeline.stage_1 import initial_disinformation_detection
 
-    # With --audio-file-id the flow processes that file and returns; otherwise it takes
-    # the next "New" audio files until `limit` are done (sleeping 60s when the queue is empty).
+    # --audio-file-id processes that one file; otherwise the next `limit` "New" files
     initial_disinformation_detection(audio_file_id=args.audio_file_id, limit=args.limit)
 
 
@@ -88,6 +85,9 @@ def build_parser():
     parser.add_argument("--context-before-seconds", type=int, default=90, help="stage 2 (default 90)")
     parser.add_argument("--context-after-seconds", type=int, default=60, help="stage 2 (default 60)")
     parser.add_argument("--env-file", default=str(REPO_ROOT / ".env"), help="dotenv file to load (default: <repo>/.env)")
+    parser.add_argument(
+        "--allow-production", action="store_true", help="run even if SUPABASE_URL is the production project"
+    )
     return parser
 
 
@@ -104,6 +104,8 @@ def parse_args(argv=None):
         parser.error("--limit must be a positive integer")
     if args.audio_file_id is not None and not is_default("limit"):
         parser.error("--limit does not apply with --audio-file-id: stage 1 returns after that one file")
+    if args.audio_file_id == "":
+        parser.error("--audio-file-id must not be empty: stage 1 would treat it as absent and take the next queued file")
     if args.stage not in (3, 4) and args.snippet_ids:
         parser.error("--snippet-id only applies to --stage 3 or 4")
     if args.stage != 3 and args.skip_review:
@@ -117,7 +119,11 @@ def main(argv=None):
     args = parse_args(argv)
     if load_dotenv is not None and os.path.exists(args.env_file):
         load_dotenv(args.env_file)
-    print(f"Running stage {args.stage} locally (ENABLE_PREFECT_DECORATOR=false)")
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    supabase_host = urlparse(supabase_url).netloc or "<SUPABASE_URL unset>"
+    if PRODUCTION_PROJECT_REF in supabase_url and not args.allow_production:
+        sys.exit(f"Refusing to run against the production Supabase project ({supabase_host}); pass --allow-production")
+    print(f"Running stage {args.stage} locally (ENABLE_PREFECT_DECORATOR=false) against Supabase {supabase_host}")
     STAGE_RUNNERS[args.stage](args)
 
 
