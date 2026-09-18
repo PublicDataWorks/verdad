@@ -1,3 +1,10 @@
+-- Rollback capture (2026-09-21, VER-387): the definition of public.get_snippets that was live on
+-- production before 20260921000400_get_snippets_denormalized_location.sql (states/sources filters
+-- still join audio_files). Safe to run as is: CREATE OR REPLACE, same signature, same GRANT.
+-- Note: production also carries `SET search_path = public, extensions, pg_temp` on this function
+-- (added by ALTER in 20260918053000). The captured CREATE predates that ALTER, so the SET line is
+-- written into the definition below; this is the only edit to the captured text.
+
 -- The signature changed on 2026-09-14 (p_include_count added); drop the old overload so
 -- PostgREST does not see two get_snippets functions.
 DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text, text);
@@ -40,23 +47,10 @@ DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text,
 --   idx_snippets_ua_* pgroonga expression indexes. The older accent-sensitive pgroonga
 --   indexes stay in place for other callers but are no longer used by this function.
 
--- 2026-09-21 (VER-387, see supabase/migrations/20260921000400_get_snippets_denormalized_location.sql):
--- - states / sources filters no longer probe audio_files. audio_files.location_state and
---   audio_files.radio_station_code are denormalized onto snippets.location_state /
---   snippets.radio_station_code (columns + triggers: 20260921000100, backfill: 20260921000200)
---   and the filter is now `s.location_state = ANY(state_codes)` served by the partial indexes
---   idx_snippets_visible_state / idx_snippets_visible_station (20260921000300). The old shape
---   walked every visible snippet (~43k of 505k rows) and probed the 573 MB audio_files heap
---   through the state_filtered_audio_ids / source_filtered_audio_ids CTEs: 0.12-0.22 s warm,
---   ~4 s cold. The audio_files join in the final projection is unchanged -- the returned
---   audio_file object still reads a.location_state and a.radio_station_code.
--- - Rollback: supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql
-
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- -- 2026-09-18 (VER-372): every SECURITY DEFINER function pins its search_path.
  SET search_path = public, extensions, pg_temp
  -- 2026-09-17: pin every statement in this body to a custom plan. With an unknown text[]
  -- parameter the generic plan cannot use idx_audio_files_location_state_id as an index
@@ -169,6 +163,16 @@ BEGIN
             (filter_upvoted_by_others AND NOT filter_upvoted_by_me AND lu.upvoted_by != current_user_id)
         )
     ),
+    state_filtered_audio_ids AS (
+        SELECT id FROM audio_files
+        WHERE state_codes IS NOT NULL
+        AND location_state = ANY(state_codes)
+    ),
+    source_filtered_audio_ids AS (
+        SELECT id FROM audio_files
+        WHERE source_codes IS NOT NULL
+        AND radio_station_code = ANY(source_codes)
+    ),
     -- Base set of candidate snippets, as a two-branch UNION ALL of the snippets table with a
     -- constant discriminator (via_search) and NO WHERE clause in either branch. The branches
     -- carry no quals on purpose: the planner only flattens UNION ALL branches into one append
@@ -194,7 +198,6 @@ BEGIN
         SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
                s.like_count, s.audio_file, s.language, s.political_leaning,
                s.status, s.confidence_scores,
-               s.location_state, s.radio_station_code,
                s.title, s.explanation, s.summary, s.transcription, s.translation,
                FALSE AS via_search
         FROM snippets s
@@ -202,7 +205,6 @@ BEGIN
         SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
                s.like_count, s.audio_file, s.language, s.political_leaning,
                s.status, s.confidence_scores,
-               s.location_state, s.radio_station_code,
                s.title, s.explanation, s.summary, s.transcription, s.translation,
                TRUE AS via_search
         FROM snippets s
@@ -224,10 +226,16 @@ BEGIN
         LEFT JOIN starred_snippet_ids ssi ON ssi.snippet = s.id
         LEFT JOIN labeled_snippet_ids lsi ON lsi.snippet = s.id
         LEFT JOIN upvoted_snippet_ids usi ON usi.snippet = s.id
-        -- 2026-09-21 (VER-387): the states / sources filters no longer join audio_files at all.
-        -- location_state and radio_station_code are denormalized onto snippets and kept in sync by
-        -- triggers (20260921000100), so the predicates below are served by the partial indexes
-        -- idx_snippets_visible_state / idx_snippets_visible_station (20260921000300).
+        -- The "<filter> IS NOT NULL AND" guard inside the ON clause folds the whole join
+        -- condition to FALSE when the filter is not set, so s.audio_file is not needed at all
+        -- and the count / default page can run as Index Only Scans on the partial indexes
+        -- (idx_snippets_visible, idx_snippets_visible_recorded_at) instead of a 33k-block
+        -- heap scan. (Semantics are unchanged: with the filter unset the WHERE below accepts
+        -- every row anyway.) Kept as LEFT JOIN + IS NOT NULL rather than IN (SELECT ...): the
+        -- semi-join form planned as a hashed SubPlan over a seq scan of audio_files and made
+        -- state/station filters 4-30x slower on production (measured 2026-09-15).
+        LEFT JOIN state_filtered_audio_ids sfa ON state_codes IS NOT NULL AND sfa.id = s.audio_file
+        LEFT JOIN source_filtered_audio_ids srfa ON source_codes IS NOT NULL AND srfa.id = s.audio_file
         WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
         -- Search guard: picks the candidate_snippets branch (see above) and, when searching,
         -- applies the full-text match in the same scan as the visibility predicates.
@@ -248,8 +256,8 @@ BEGIN
         AND (NOT has_starred_filter OR ssi.snippet IS NOT NULL)
         AND (NOT has_labeled_filter OR lsi.snippet IS NOT NULL)
         AND (NOT has_upvoted_filter OR usi.snippet IS NOT NULL)
-        AND (state_codes IS NULL OR s.location_state = ANY(state_codes))
-        AND (source_codes IS NULL OR s.radio_station_code = ANY(source_codes))
+        AND (state_codes IS NULL OR sfa.id IS NOT NULL)
+        AND (source_codes IS NULL OR srfa.id IS NOT NULL)
         AND (
             p_filter IS NULL OR
             NOT p_filter ? 'languages' OR
