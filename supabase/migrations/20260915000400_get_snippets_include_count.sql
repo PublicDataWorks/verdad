@@ -1,55 +1,40 @@
--- The signature changed on 2026-09-14 (p_include_count added); drop the old overload so
--- PostgREST does not see two get_snippets functions.
+-- get_snippets: optional total count + index-friendly ordering and station/state filters.
+--
+-- Changes (default behaviour is unchanged; verified equal to the live function on production
+-- 2026-09-14 for 26 input combinations and again 2026-09-15 after change 4, see PR):
+--  1. New trailing parameter p_include_count boolean DEFAULT true. When false the total
+--     count is skipped and num_of_snippets / total_pages are returned as JSON null. The count
+--     needs a scan of every matching snippet (the dominant cost of a page load, several
+--     seconds when the snippets heap is not cached); the frontend only needs it for page 0.
+--  2. One plain ORDER BY branch per p_order_by value instead of a single "ORDER BY CASE ..."
+--     (which can never use an index). The default/'latest' branch is
+--     "ORDER BY recorded_at DESC, id DESC" and is served from idx_snippets_visible_recorded_at
+--     (20260915000500, partial on the visibility predicates; without it the planner falls
+--     back to idx_snippets_processed_recorded_at, where 954 of the first 1,138 entries fail
+--     the confidence filter), touching a few hundred pages instead of ~33k. "id DESC" is a
+--     deterministic tiebreak.
+--  3. states / sources filters use "= ANY(text[])" instead of
+--     "IN (SELECT jsonb_array_elements_text(...))" (estimated as matching every row), so
+--     the planner can use idx_audio_files_location_state and the new
+--     idx_audio_files_radio_station_code_id index.
+--  4. Full-text search is evaluated together with the visibility predicates in ONE bitmap
+--     scan of snippets (candidate_snippets below) instead of a materialized search CTE
+--     hash-joined to a separate scan of every visible snippet. Measured on production
+--     2026-09-15 (EXPLAIN ANALYZE, read-only): p_search_term 'trump' went from 14-19 s cold
+--     (timing out at the 8 s authenticated statement_timeout) to well under a second.
+--
+-- The signature changes (new parameter), so the old overload must be dropped first:
+-- PostgREST would otherwise see two get_snippets functions and refuse to route the RPC.
+-- Frontend: only send p_include_count AFTER this migration is applied (PostgREST rejects
+-- unknown RPC parameters); without it the default (true) keeps the current behaviour.
+-- Rollback: supabase/database/sql/rollback/2026-09-14_get_snippets_before.sql
+
 DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text, text);
-
--- Optimized get_snippets function
--- Key optimizations:
--- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
--- 2. Uses JOINs with pre-filtered CTEs for state/source filters (avoids IN subquery on audio_files)
--- 3. Single query with CTE chain — filter CTEs defined once, count + data in one pass
---
--- Performance improvements:
--- - starredBy filter: timeout (>30s) -> <1s
--- - labeledBy filter: timeout (>30s) -> <1s
--- - upvotedBy filter: 6.7s -> <1s
--- - state filter: ~134ms -> <50ms
--- - source filter: similar improvement
---
--- 2026-09-14 (see supabase/migrations/20260915000400_get_snippets_include_count.sql):
--- - p_include_count boolean DEFAULT true: when false, skips the total count and returns
---   num_of_snippets / total_pages as null (the frontend only needs them on page 0)
--- - one plain ORDER BY branch per p_order_by value so 'latest' is served from
---   idx_snippets_visible_recorded_at (20260915000500) instead of sorting every visible
---   snippet by a CASE
--- - states/sources filters use "= ANY(text[])" so audio_files indexes are usable
--- 2026-09-15:
--- - full-text search evaluated in the same bitmap scan as the visibility predicates
---   (candidate_snippets UNION ALL with a via_search discriminator) instead of a materialized
---   search CTE hash-joined to a second scan of every visible snippet ('trump': 14-19 s -> <1 s)
-
--- 2026-09-17 (see supabase/migrations/20260917210000_get_snippets_state_filter_plan.sql):
--- - SET plan_cache_mode TO 'force_custom_plan': a `states`/`sources` filter timed out at the
---   authenticated 8 s statement_timeout (Georgia page 0: 10.7 s) because the cached generic plan
---   lost idx_audio_files_location_state_id
--- 2026-09-17 (see supabase/migrations/20260917220000_unaccent_search_function_and_indexes.sql
---   and 20260917220100_get_snippets_accent_insensitive.sql):
--- - accent-insensitive search: pgroonga's NormalizerAuto does not fold Latin diacritics, so
---   `campana politica` returned 0 while `campaña política` returned 432
---   (VER-339 / VER-373, Tamoa Feedback #8). Both sides of the match now go through
---   public.verdad_unaccent(), an IMMUTABLE unaccent() wrapper, backed by eight
---   idx_snippets_ua_* pgroonga expression indexes. The older accent-sensitive pgroonga
---   indexes stay in place for other callers but are no longer used by this function.
 
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- -- 2026-09-17: pin every statement in this body to a custom plan. With an unknown text[]
- -- parameter the generic plan cannot use idx_audio_files_location_state_id as an index
- -- condition and falls back to audio_files_pkey + a heap Filter (18.8 s vs 3.8 s for the
- -- same count in the same cache state). See
- -- supabase/migrations/20260917210000_get_snippets_state_filter_plan.sql.
- SET plan_cache_mode TO 'force_custom_plan'
 AS $function$
 DECLARE
     current_user_id UUID;
@@ -63,12 +48,7 @@ DECLARE
     -- matched nothing while "georgia" alone matched hundreds (Tamoa's Feedback #7/#8). `&@~` is pgroonga's query
     -- operator: words are AND-ed, "OR" and quoted phrases work; pgroonga_query_escape neutralises the other
     -- query-syntax characters a user may type ("-", "(", quotes) so a stray one cannot raise an error.
-    -- 2026-09-17 (VER-339/VER-373): unaccent FIRST, then escape. Folding the query the same way
-    -- the index folds the column is what makes "campaña política" and "campana politica" the
-    -- same search. Escape last, so pgroonga_query_escape sees the final literal that is sent to
-    -- pgroonga (unaccent never introduces query-syntax characters, but order still matters for
-    -- reasoning about it).
-    search_query TEXT := pgroonga_query_escape(public.verdad_unaccent(TRIM(p_search_term)));
+    search_query TEXT := pgroonga_query_escape(TRIM(p_search_term));
     -- Filter detection flags for optimization
     has_starred_filter BOOLEAN;
     starred_by_me BOOLEAN;
@@ -234,14 +214,14 @@ BEGIN
         AND (
             (trimmed_search_term = '' AND NOT s.via_search)
             OR (trimmed_search_term <> '' AND s.via_search AND (
-                public.verdad_unaccent(s.title ->> 'english') &@~ search_query
-                OR public.verdad_unaccent(s.title ->> 'spanish') &@~ search_query
-                OR public.verdad_unaccent(s.explanation ->> 'english') &@~ search_query
-                OR public.verdad_unaccent(s.explanation ->> 'spanish') &@~ search_query
-                OR public.verdad_unaccent(s.summary ->> 'english') &@~ search_query
-                OR public.verdad_unaccent(s.summary ->> 'spanish') &@~ search_query
-                OR public.verdad_unaccent(s.transcription) &@~ search_query
-                OR public.verdad_unaccent(s.translation) &@~ search_query
+                (s.title ->> 'english') &@~ search_query
+                OR (s.title ->> 'spanish') &@~ search_query
+                OR (s.explanation ->> 'english') &@~ search_query
+                OR (s.explanation ->> 'spanish') &@~ search_query
+                OR (s.summary ->> 'english') &@~ search_query
+                OR (s.summary ->> 'spanish') &@~ search_query
+                OR s.transcription &@~ search_query
+                OR s.translation &@~ search_query
             ))
         )
         AND (user_is_admin OR uhs.snippet IS NULL)
@@ -458,6 +438,7 @@ BEGIN
 END;
 $function$;
 
+-- Same grants as the live function (proacl: PUBLIC, postgres, anon, authenticated, service_role)
 GRANT EXECUTE ON FUNCTION public.get_snippets(text, jsonb, integer, integer, text, text, boolean) TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';
