@@ -177,7 +177,9 @@ refuses the production project unless `--allow-production` is passed.
   unparseable output, waits of 30 s, 2 min, 5 min) in Stage 3 and Stage 4; the snippet only reaches `Error`
   after the fourth failure, with that message stored. Rerun those ids once the outage is over.
 - **A transient DB error on the fetch-work RPC no longer kills the stage loop** (VER-378): statement timeout
-  (`57014`), lock/deadlock, dropped connection or gateway 502/503/504/520/522/524 reads as "no work" and the loop
+  (`57014`), lock/deadlock, server restart (`57P01`-`57P03`), any class-08 connection error, PostgREST's own
+  `PGRST000`-`PGRST002` (cannot reach Postgres / schema cache reloading after DDL) or gateway 502/503/504/520/522/524
+  reads as "no work" and the loop
   retries after its 60 s sleep; before, the run failed and the stage sat idle until the next cron tick. Any other
   error (a 500 included) still fails the run. Production DDL still pushes the pipeline's queries past their
   timeout, so expect a dip while it runs.
