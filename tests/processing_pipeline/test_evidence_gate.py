@@ -477,6 +477,7 @@ class TestIsArticleUrl:
             "https://www.bbc.com/mundo/noticias_internacional",
             "http://example.com/2026/09/15/story.html",
             "https://eltiempo.com/?p=12345",
+            "https://eltiempo.com/?p=12345&utm_source=rss",
             "https://example.com/who.is-this-story",
         ],
     )
@@ -498,6 +499,13 @@ class TestIsArticleUrl:
             "https://who.is/whois/x.com",
             "https://web.archive.org/search?query=x",
             "https://example.com/?utm_source=rss",
+            # A publisher's own search box is still a search page, not an article.
+            "https://apnews.com/?s=fulton",
+            "https://eltiempo.com/?search=fraude+electoral",
+            "https://www.bbc.com/mundo?q=x",
+            # Search engines nest their result pages under sections too.
+            "https://www.bing.com/news/search?q=x",
+            "https://yandex.ru/news/search?text=x",
             "not-a-url",
             None,
         ],
@@ -684,6 +692,20 @@ class TestBreakingNewsCap:
 
     def test_recording_dated_in_the_future_is_not_capped(self):
         assert self._fresh(None, -5)["evidence_gate"] == {"applied": False}
+
+    def test_recent_tool_date_does_not_lift_the_breaking_cap(self):
+        # SearXNG's publishedDate is usually the crawl date, i.e. "today"; a feed date proves nothing about when the
+        # page was published, so it must not count as the dated source that releases the cap.
+        analysis = _analysis(explanation_en="The event never happened.", overall=95)
+        analysis["verification_evidence"] = _evidence(publication_date="2026-09-15")
+        analysis["verification_evidence"]["searches_performed"][0]["results"][0]["publication_date_source"] = "tool"
+        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"]["cap"] == 20
+
+    def test_recent_tool_date_still_counts_outside_the_window(self):
+        analysis = _analysis(explanation_en="The event never happened.", overall=95)
+        analysis["verification_evidence"] = _evidence(publication_date="2026-09-15")
+        analysis["verification_evidence"]["searches_performed"][0]["results"][0]["publication_date_source"] = "tool"
+        assert apply_evidence_caps(analysis, hours_since_recording=100)["evidence_gate"] == {"applied": False}
 
     def test_tool_date_before_the_event_counts_as_undated(self):
         analysis = _with_claims(_analysis(explanation_en="The event never happened.", overall=95), "2026-09-14")

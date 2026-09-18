@@ -3,7 +3,7 @@ import re
 import unicodedata
 from datetime import date
 from typing import Literal
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from pydantic import BaseModel, Field
 
@@ -369,17 +369,28 @@ def is_article_url(url) -> bool:
     parts = urlsplit(url.strip())
     host = (parts.hostname or "").lower().removeprefix("www.")
     path = parts.path or ""
+    segments = [seg for seg in path.split("/") if seg]
     if any(_host_matches(host, h) for h in _SEARCH_PAGE_HOSTS):
-        if path.rstrip("/") in ("", "/search", "/s", "/html") or path.startswith("/search"):
+        if path.rstrip("/") in ("", "/search", "/s", "/html") or "search" in segments:
             return False
     if any(_host_matches(host, h) for h in _LOOKUP_HOSTS):
         return False
     if _host_matches(host, "archive.org") and path.startswith("/search"):
         return False
-    segments = [seg for seg in path.split("/") if seg]
     if not segments or all(_LOCALE_SEGMENT_RE.match(seg) for seg in segments):
-        return bool(strip_tracking_params(parts.query))
+        return _is_permalink_query(parts.query)
     return True
+
+
+# Query keys that address one page on a front-page URL (``eltiempo.com/?p=12345``). Anything else on a bare
+# host (``apnews.com/?s=fulton``, ``?q=``, ``?search=``) is the site's own search box, which shows whatever
+# matches today and can never be the source that contradicts a claim.
+_PERMALINK_QUERY_KEYS = frozenset({"p", "id", "page_id", "post", "post_id", "article", "article_id", "story_id", "nid"})
+
+
+def _is_permalink_query(query: str) -> bool:
+    keys = {k.lower() for k, _ in parse_qsl(strip_tracking_params(query), keep_blank_values=True)}
+    return bool(keys) and keys <= _PERMALINK_QUERY_KEYS
 
 
 def latest_claim_event_date(analysis: dict | None, not_after: date | None = None) -> date | None:
@@ -466,13 +477,12 @@ def _result_counts(
         # Stage 4 has no tool record of its own, but Stage 3 stored its verdict on this URL: a URL no tool
         # returned stays inadmissible when the reviewer re-runs the gate on the stored evidence.
         return False
-    published = parse_iso_date(result.get("publication_date"))
+    # A feed date is unvalidated (engines report 1970 or the crawl date): it never disqualifies a source and
+    # it never lifts anything either; only a date the model read off the page counts as a publication date.
+    # Before, a crawl date of "today" satisfied require_date and released the breaking-news cap on its own.
+    published = None if result.get("publication_date_source") == "tool" else parse_iso_date(result.get("publication_date"))
     if not_published_before is not None and published is not None and published < not_published_before:
-        if result.get("publication_date_source") != "tool":
-            return False
-        # A feed date is unvalidated (engines report 1970 or a crawl date): it never disqualifies a source,
-        # it just proves nothing about when the page was published.
-        published = None
+        return False
     if require_date and published is None:
         return False
     return True
