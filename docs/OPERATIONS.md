@@ -35,6 +35,14 @@ cd server && fly deploy -c fly.server.toml    # the server app builds from serve
 - Secrets (`SUPABASE_*`, `R2_*`, `GOOGLE_GEMINI_KEY`, `OPENAI_API_KEY`, `SEARXNG_URL`, `SENTRY_DSN`, ...) are Fly
   secrets per app (`fly secrets list -a <app>`); their values are not in the repo. `PREFECT_API_URL` is set in each
   `fly.*.toml` `[env]` (and hard-coded as `https://prefect.fly.dev/api` in `scripts/*.sh` and `Dockerfile.prefect`).
+- The Prefect API requires basic auth (VER-384, since 2026-09-18): `PREFECT_SERVER_API_AUTH_STRING` on the `prefect`
+  app, and the same `user:password` as `PREFECT_API_AUTH_STRING` on `prefect` (cron scripts), `processing-worker`,
+  `recording-worker` and `generic-recording-worker`. The Prefect client and CLI read it from the env; raw `curl`
+  needs `-u "$PREFECT_API_AUTH_STRING"`. `GET /api/health` and `/api/ready` stay open (Fly health check). The UI
+  loads and asks for the same credential. Rotating it is not zero-downtime: Prefect accepts one value, so clients
+  and server disagree until all four apps carry the new one. Set it on the four apps back to back (each
+  `fly secrets set` restarts that app, which orphans its runs anyway), then recreate the runs as in the restart
+  gotchas below. Only the first enablement could go clients first, because a server without auth ignores the header.
 - Who has deploy rights and the Fly org/billing owner: **unknown** (org name `verdad` per CLAUDE.md).
 
 ## The 6-hourly restart cycle (`prefect` app, `cron` process)
@@ -124,6 +132,7 @@ Deployment names are `"<flow name>/<deployment name>"` (from `main.py`; note sta
 
 ```bash
 export PREFECT_API_URL=https://prefect.fly.dev/api
+export PREFECT_API_AUTH_STRING=user:password   # the Fly secret value; see "Secrets" above
 prefect deployment run "Stage 1: Initial Disinformation Detection/Stage 1: Initial Disinformation Detection" \
     --params '{"audio_file_id": "<uuid>", "limit": 1}'
 prefect deployment run "Stage 3: In-depth Analysis/Stage 3: In-Depth Analysis" \
@@ -145,9 +154,9 @@ refuses the production project unless `--allow-production` is passed.
   tick or create the runs yourself:
 
   ```bash
-  API=https://prefect.fly.dev/api
-  ID=$(curl -sS "$API/deployments/name/Stage%203%3A%20In-depth%20Analysis/Stage%203%3A%20In-Depth%20Analysis" | jq -r .id)
-  curl -sS -X POST "$API/deployments/$ID/create_flow_run" -H 'content-type: application/json' \
+  API=https://prefect.fly.dev/api   # every call needs -u "$PREFECT_API_AUTH_STRING" (basic auth, VER-384)
+  ID=$(curl -sS -u "$PREFECT_API_AUTH_STRING" "$API/deployments/name/Stage%203%3A%20In-depth%20Analysis/Stage%203%3A%20In-Depth%20Analysis" | jq -r .id)
+  curl -sS -u "$PREFECT_API_AUTH_STRING" -X POST "$API/deployments/$ID/create_flow_run" -H 'content-type: application/json' \
       -d '{"parameters": {"repeat": true, "skip_review": false, "snippet_ids": []}}'
   ```
 
@@ -195,7 +204,8 @@ refuses the production project unless `--allow-production` is passed.
       --vm-memory 1024 --metadata prompt_job=<tag> --entrypoint bash -- -c "cd /app && python src/scripts/<script>.py"
   fly logs -m <machine id> --no-tail; fly machine destroy <machine id> --force
   ```
-- The Prefect API and UI (`https://prefect.fly.dev`) have no authentication.
+- The Prefect API and UI (`https://prefect.fly.dev`) sit behind basic auth (`PREFECT_API_AUTH_STRING`, VER-384);
+  the only anonymous endpoints are `GET /api/health` and `/api/ready`.
 
 ## Database schema and migrations
 
@@ -267,7 +277,7 @@ meantime, `migration repair --linked --status applied` its 14-digit version too.
 - Machine stdout/stderr: `fly logs -a processing-worker` (add `--machine <id>` for one process group; ids from
   `fly status -a <app>`). Same for `recording-worker`, `generic-recording-worker`, `prefect` (cron output lives here).
 - Prefect UI: `https://prefect.fly.dev` (the `prefect` app exposes port 4200 over HTTPS). Flows use `log_prints=True`,
-  so every `print()` in `src/` appears in the flow run logs. The UI and API have no authentication.
+  so every `print()` in `src/` appears in the flow run logs. The UI asks for the `PREFECT_API_AUTH_STRING` credential.
 - Sentry: `sentry_sdk.init(dsn=SENTRY_DSN)` in the three entrypoints. Project/org: **unknown**.
 - Data-level health: row `status` columns (`New`, `Processing`, `Processed`, `Error`, `Ready for review`, `Reviewing`)
   on `audio_files`, `stage_1_llm_responses`, `snippets`; `error_message` holds the exception text.
