@@ -1,0 +1,38 @@
+-- VER-372: SECURITY DEFINER functions in public ran under the caller's search_path. Pin the current default
+-- ("$user" dropped: no such schema) so behaviour is unchanged and the path is no longer caller-controlled.
+-- Bodies untouched; SET adds to proconfig, so get_snippets keeps its plan_cache_mode.
+
+ALTER FUNCTION public.create_apply_and_upvote_label(snippet_id uuid, label_text text, p_language text) SET search_path = public, extensions;
+ALTER FUNCTION public.dismiss_welcome_card() SET search_path = public, extensions;
+ALTER FUNCTION public.fetch_a_snippet_that_has_no_embedding() SET search_path = public, extensions;
+ALTER FUNCTION public.find_duplicate_kb_entries(query_embedding extensions.vector, similarity_threshold double precision, max_results integer) SET search_path = public, extensions;
+ALTER FUNCTION public.get_filtering_options(p_language text, p_label_page integer, p_label_page_size integer) SET search_path = public, extensions;
+ALTER FUNCTION public.get_landing_page_content() SET search_path = public, extensions;
+ALTER FUNCTION public.get_public_snippet(snippet_id uuid) SET search_path = public, extensions;
+ALTER FUNCTION public.get_recording_details(p_recording_id uuid, p_language text) SET search_path = public, extensions;
+ALTER FUNCTION public.get_recordings_preview(p_cursor timestamp with time zone, p_limit integer, p_filter jsonb, p_search_term text) SET search_path = public, extensions;
+ALTER FUNCTION public.get_roles() SET search_path = public, extensions;
+ALTER FUNCTION public.get_snippet(snippet_id uuid, p_language text) SET search_path = public, extensions;
+ALTER FUNCTION public.get_snippet_details(snippet_id uuid, p_language text) SET search_path = public, extensions;
+ALTER FUNCTION public.get_snippet_labels(snippet_id uuid, p_language text) SET search_path = public, extensions;
+ALTER FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text, p_include_count boolean) SET search_path = public, extensions;
+ALTER FUNCTION public.get_statistics(from_time timestamp with time zone) SET search_path = public, extensions;
+ALTER FUNCTION public.get_topic_details(p_topic_id uuid, p_timespan text, p_filter jsonb, p_language text) SET search_path = public, extensions;
+ALTER FUNCTION public.get_trending_topics(p_timespan text, p_filter jsonb, p_language text, p_limit integer) SET search_path = public, extensions;
+ALTER FUNCTION public.get_users() SET search_path = public, extensions;
+ALTER FUNCTION public.get_users_by_emails(emails text[]) SET search_path = public, extensions;
+ALTER FUNCTION public.get_welcome_card(p_language text) SET search_path = public, extensions;
+ALTER FUNCTION public.hide_snippet(snippet_id uuid) SET search_path = public, extensions;
+ALTER FUNCTION public.like_snippet(snippet_id uuid, value integer) SET search_path = public, extensions;
+ALTER FUNCTION public.search_kb_entries(query_embedding extensions.vector, match_threshold double precision, match_count integer, candidate_multiplier integer, filter_categories text[], reference_date timestamp with time zone, min_confidence integer) SET search_path = public, extensions;
+ALTER FUNCTION public.search_related_snippets(p_snippet_id uuid, p_language text, match_threshold double precision, match_count integer, candidate_multiplier integer) SET search_path = public, extensions;
+ALTER FUNCTION public.search_related_snippets_public(snippet_id uuid, p_language text, match_threshold double precision, match_count integer, candidate_multiplier integer) SET search_path = public, extensions;
+ALTER FUNCTION public.setup_profile(first_name text, last_name text, avatar_url text) SET search_path = public, extensions;
+ALTER FUNCTION public.toggle_recording_star(p_recording_id uuid) SET search_path = public, extensions;
+ALTER FUNCTION public.toggle_star_snippet(snippet_id uuid) SET search_path = public, extensions;
+ALTER FUNCTION public.toggle_upvote_label(snippet_id uuid, label_text text) SET search_path = public, extensions;
+ALTER FUNCTION public.toggle_welcome_card(p_status boolean) SET search_path = public, extensions;
+ALTER FUNCTION public.track_user_signups(origin text) SET search_path = public, extensions;
+ALTER FUNCTION public.undo_upvote_label(snippet_id uuid, label_text text) SET search_path = public, extensions;
+ALTER FUNCTION public.unhide_snippet(snippet_id uuid) SET search_path = public, extensions;
+ALTER FUNCTION public.upvote_label(snippet_id uuid, label_text text) SET search_path = public, extensions;
