@@ -643,8 +643,17 @@ class TestBreakingNewsCap:
 
     def test_low_score_inside_the_window_is_left_alone(self):
         analysis = _analysis(explanation_en="The event never happened.", overall=15)
+        analysis["confidence_scores"]["categories"] = [{"category": "Election Fraud", "score": 15}]
         analysis["verification_evidence"] = _evidence(publication_date=None)
         assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"] == {"applied": False}
+
+    def test_high_category_with_low_overall_inside_the_window_is_capped(self):
+        analysis = _analysis(explanation_en="The event never happened.", overall=15)
+        analysis["verification_evidence"] = _evidence(publication_date=None)
+        result = apply_evidence_caps(analysis, hours_since_recording=5)
+        assert result["evidence_gate"]["cap"] == 20
+        assert result["confidence_scores"]["overall"] == 15
+        assert [c["score"] for c in result["confidence_scores"]["categories"]] == [20, 20]
 
     def test_non_falsity_verdict_inside_the_window_is_left_alone(self):
         analysis = _analysis(status="uncertain", explanation_en="Misleading framing of real data.", overall=60)

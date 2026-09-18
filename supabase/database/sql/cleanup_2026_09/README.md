@@ -36,9 +36,17 @@ This folder was prepared to park the affected snippets in a new `Quarantined` st
 * **200 pre-existing `user_hide_snippets` rows also have `"user" IS NULL`** (written by the 2-dislike trigger). They are not in `snippet_quarantine_log` and must never be touched; every statement in this folder that deletes hide rows joins through the log for that reason.
 * Rollback per batch is a `DELETE` of the hide rows plus `restored_at`; see [Rollback](#rollback). The status-based `05_quarantine_rollback.sql` was removed.
 
-### Status 2026-09-17
+### Status 2026-09-17 (updated 2026-09-18)
 
-Three new files, none executed yet (each needs Rajiv's go in Slack; all reversible):
+**Executed 2026-09-17 20:35 UTC (Claude Code, on Rajiv's go, via the Supabase connector):** `13` hid 73 snippets
+(batch `hide-2026-09-17-postcutoff`, `04b` snapshot taken), `12` deactivated 10 KB entries (batch
+`cleanup-2026-09-17-postcutoff`), `11` seeded 14 facts and they were embedded with a paged one-off (the
+`backfill_kb_embeddings.py` 1,000-row-cap bug is VER-377). The 36 Fulton/Georgia snippets were re-queued in Prefect run
+`fulton-georgia-36-2026-09-17` (7/36 done at 20:50 UTC); `10_unhide_after_reprocess.sql` is still to run for them.
+**Do not re-run 11/12/13.** `14_seed_corrections.sql` (2026-09-18, not yet run) fixes the Vatican News publication
+date and splits seed fact 8 as found by the PR #98 review.
+
+The three files as prepared (historical, pre-execution description):
 
 | File | What | Tracking |
 |------|------|----------|

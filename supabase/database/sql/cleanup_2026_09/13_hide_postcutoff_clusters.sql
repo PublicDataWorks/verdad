@@ -93,11 +93,20 @@ todo AS (
     FROM picked p
     JOIN public.snippets s ON s.id = p.snippet AND s.status = 'Processed'
     WHERE NOT EXISTS (SELECT 1 FROM public.user_hide_snippets h WHERE h.snippet = p.snippet AND h."user" IS NULL)
-      AND NOT EXISTS (SELECT 1 FROM public.snippet_quarantine_log l WHERE l.snippet = p.snippet AND l.batch = 'hide-2026-09-17-postcutoff')
+      -- Only an active log row blocks a re-hide; a rolled-back row (restored_at set) is reactivated below.
+      AND NOT EXISTS (
+          SELECT 1 FROM public.snippet_quarantine_log l
+          WHERE l.snippet = p.snippet AND l.batch = 'hide-2026-09-17-postcutoff' AND l.restored_at IS NULL
+      )
 ),
 logged AS (
     INSERT INTO public.snippet_quarantine_log (snippet, previous_status, reason, batch)
     SELECT snippet, 'Processed', reason, 'hide-2026-09-17-postcutoff' FROM todo
+    ON CONFLICT (snippet, batch) DO UPDATE
+        SET previous_status = EXCLUDED.previous_status,
+            reason = EXCLUDED.reason,
+            quarantined_at = now(),
+            restored_at = NULL
     RETURNING snippet
 )
 INSERT INTO public.user_hide_snippets (snippet, "user")

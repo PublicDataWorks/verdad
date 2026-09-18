@@ -118,19 +118,30 @@ UNION ALL
 UNION ALL
     SELECT e.id, 'https://www.abc.com.py/internacionales/2026/09/01/nicaragua-avanza-hacia-una-reforma-constitucional-que-excluye-de-elecciones-a-traidores/', 'ABC Color', 'tier3_regional_news', 'Nicaragua avanza hacia una reforma constitucional que excluye de elecciones a ''traidores''', '2026-09-01'::date, 'contradicts_claim' FROM e;
 
--- fact 8 (partially_confirmed; event 2026-08-05)
+-- fact 8a (partially_confirmed; event 2026-08-05). Split from the Lula-Trump meeting (8b) on 2026-09-18 so the
+-- trustworthy-source check in select_trustworthy_entries judges each assertion on its own sources: both sources
+-- here are typed 'other', so this entry is context only until a tier1/tier2 source is attached (VER-375).
+-- Production received the combined entry on 2026-09-17; 14_seed_corrections.sql splits it in place.
 WITH e AS (
     INSERT INTO public.kb_entries (fact, related_claim, confidence_score, disinformation_categories, keywords, is_time_sensitive, valid_from, status, created_by_model)
-    SELECT 'Flávio Bolsonaro is a candidate in Brazil''s 2026-10-04 presidential election and on 2026-08-05 named federal deputy Alfredo Gaspar as his running mate; Luiz Inácio Lula da Silva is the incumbent president. Lula met President Trump at the White House in the week of 2026-05-07.', 'Flávio Bolsonaro is not a presidential candidate / Trump never met Lula', 95, ARRAY['Political Figures and Movements','Election Integrity and Voting Processes'], ARRAY['Flávio Bolsonaro','Brazil','2026 election','Lula','Alfredo Gaspar','Trump'], false, '2026-08-05'::timestamptz, 'active', 'analyst-seed-2026-09-17'
-    WHERE NOT EXISTS (SELECT 1 FROM public.kb_entries WHERE created_by_model = 'analyst-seed-2026-09-17' AND fact = 'Flávio Bolsonaro is a candidate in Brazil''s 2026-10-04 presidential election and on 2026-08-05 named federal deputy Alfredo Gaspar as his running mate; Luiz Inácio Lula da Silva is the incumbent president. Lula met President Trump at the White House in the week of 2026-05-07.')
+    SELECT 'Flávio Bolsonaro is a candidate in Brazil''s 2026-10-04 presidential election and on 2026-08-05 named federal deputy Alfredo Gaspar as his running mate; Luiz Inácio Lula da Silva is the incumbent president.', 'Flávio Bolsonaro is not a presidential candidate', 85, ARRAY['Political Figures and Movements','Election Integrity and Voting Processes'], ARRAY['Flávio Bolsonaro','Brazil','2026 election','Lula','Alfredo Gaspar'], false, '2026-08-05'::timestamptz, 'active', 'analyst-seed-2026-09-17'
+    WHERE NOT EXISTS (SELECT 1 FROM public.kb_entries WHERE created_by_model = 'analyst-seed-2026-09-17' AND fact = 'Flávio Bolsonaro is a candidate in Brazil''s 2026-10-04 presidential election and on 2026-08-05 named federal deputy Alfredo Gaspar as his running mate; Luiz Inácio Lula da Silva is the incumbent president.')
     RETURNING id
 )
 INSERT INTO public.kb_entry_sources (kb_entry, url, source_name, source_type, title, publication_date, relevance_to_claim)
-    SELECT e.id, 'https://www.pbs.org/newshour/politics/watch-live-trump-meets-with-brazils-lula-at-the-white-house', 'PBS News', 'tier2_major_news', 'Trump meets with Brazil''s Lula at the White House', '2026-05-07'::date, 'contradicts_claim' FROM e
-UNION ALL
     SELECT e.id, 'https://es-us.noticias.yahoo.com/fl%C3%A1vio-bolsonaro-anuncia-compa%C3%B1ero-f%C3%B3rmula-174848696.html', 'Yahoo Noticias (citing wire reporting)', 'other', 'Flávio Bolsonaro anuncia su compañero de fórmula', '2026-08-05'::date, 'contradicts_claim' FROM e
 UNION ALL
     SELECT e.id, 'https://en.wikipedia.org/wiki/Fl%C3%A1vio_Bolsonaro_2026_presidential_campaign', 'Wikipedia', 'other', 'Flávio Bolsonaro 2026 presidential campaign', '2026-01-01'::date, 'contradicts_claim' FROM e;
+
+-- fact 8b (confirmed; event 2026-05-07)
+WITH e AS (
+    INSERT INTO public.kb_entries (fact, related_claim, confidence_score, disinformation_categories, keywords, is_time_sensitive, valid_from, status, created_by_model)
+    SELECT 'Brazilian President Luiz Inácio Lula da Silva met President Trump at the White House in the week of 2026-05-07.', 'Trump never met Lula', 95, ARRAY['Political Figures and Movements'], ARRAY['Lula','Trump','White House','Brazil'], false, '2026-05-07'::timestamptz, 'active', 'analyst-seed-2026-09-17'
+    WHERE NOT EXISTS (SELECT 1 FROM public.kb_entries WHERE created_by_model = 'analyst-seed-2026-09-17' AND fact = 'Brazilian President Luiz Inácio Lula da Silva met President Trump at the White House in the week of 2026-05-07.')
+    RETURNING id
+)
+INSERT INTO public.kb_entry_sources (kb_entry, url, source_name, source_type, title, publication_date, relevance_to_claim)
+    SELECT e.id, 'https://www.pbs.org/newshour/politics/watch-live-trump-meets-with-brazils-lula-at-the-white-house', 'PBS News', 'tier2_major_news', 'Trump meets with Brazil''s Lula at the White House', '2026-05-07'::date, 'contradicts_claim' FROM e;
 
 -- fact 9 (confirmed; event 2026-09-08)
 WITH e AS (
@@ -170,7 +181,7 @@ WITH e AS (
 INSERT INTO public.kb_entry_sources (kb_entry, url, source_name, source_type, title, publication_date, relevance_to_claim)
     SELECT e.id, 'https://www.vatican.va/content/leo-xiv/en/travels/2026/documents/francia-25-28settembre2026.html', 'Vatican (official)', 'official_source', 'Apostolic Journey of the Holy Father to France and Visit to UNESCO (25-28 September 2026)', '2026-05-16'::date, 'contradicts_claim' FROM e
 UNION ALL
-    SELECT e.id, 'https://www.vaticannews.va/en/pope/news/2026-08/pope-leos-packed-schedule-4-day-apostolic-journey-to-france.html', 'Vatican News', 'official_source', 'Pope Leo''s schedule for his four-day Apostolic Journey to France', '2026-08-01'::date, 'contradicts_claim' FROM e;
+    SELECT e.id, 'https://www.vaticannews.va/en/pope/news/2026-08/pope-leos-packed-schedule-4-day-apostolic-journey-to-france.html', 'Vatican News', 'official_source', 'Pope Leo''s schedule for his four-day Apostolic Journey to France', '2026-08-07'::date, 'contradicts_claim' FROM e;
 
 -- fact 12 (confirmed; event 2025-09-10)
 WITH e AS (

@@ -606,8 +606,12 @@ def apply_evidence_caps(
         breaking_cap = breaking_news_cap(hours_since_recording)
         dated = has_contradicting_evidence(verification_evidence, observed_urls, event_date, require_date=True)
         if breaking_cap is not None and falsity_verdict and not dated:
-            overall = confidence_scores.get("overall")
-            if isinstance(overall, (int, float)) and overall > breaking_cap:
+            # Any score above the cap triggers it: a low overall with a 96 category would otherwise
+            # keep the category visible in the UI's per-category view.
+            scores = [confidence_scores.get("overall")] + [
+                c.get("score") for c in confidence_scores.get("categories") or [] if isinstance(c, dict)
+            ]
+            if any(isinstance(s, (int, float)) and s > breaking_cap for s in scores):
                 cap = breaking_cap
                 reasons.append(
                     f"recording is {hours_since_recording} hours old (breaking news window) and no contradicting "
