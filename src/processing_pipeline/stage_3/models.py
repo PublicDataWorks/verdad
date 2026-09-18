@@ -8,7 +8,7 @@ from urllib.parse import parse_qsl, urlsplit
 from pydantic import BaseModel, Field
 
 from processing_pipeline.kb_sources import is_http_url, parse_iso_date, strip_tracking_params, url_key
-from processing_pipeline.temporal_context import BREAKING_NEWS_TIERS
+from processing_pipeline.temporal_context import BREAKING_NEWS_WINDOW_HOURS
 
 
 class Title(BaseModel):
@@ -241,6 +241,8 @@ class Stage3Output(BaseModel):
 # (or asserts that something is fabricated without a single contradicting source) can never reach it.
 
 EVIDENCE_CAP_MAX_SCORE = 40
+# Model-labelled tiers that lift the breaking-news cap (prompt rule H.1); not host-validated until VER-360
+BREAKING_NEWS_LIFT_TIERS = frozenset({"tier1_wire_service", "tier1_factchecker", "tier2_major_news"})
 UNVERIFIED_STATUSES = frozenset({"insufficient_evidence", "uncertain"})
 FALSITY_TERMS = (
     "fabricat",
@@ -466,7 +468,7 @@ def _result_counts(
     result: dict,
     observed_urls: set[str] | None,
     not_published_before: date | None,
-    require_date: bool,
+    require_date_or_tier: bool,
 ) -> bool:
     """Whether one contradicts_claim result is admissible as contradicting evidence under every active rule."""
     if not is_article_url(result.get("url")):
@@ -479,11 +481,11 @@ def _result_counts(
         return False
     # A feed date is unvalidated (engines report 1970 or the crawl date): it never disqualifies a source and
     # it never lifts anything either; only a date the model read off the page counts as a publication date.
-    # Before, a crawl date of "today" satisfied require_date and released the breaking-news cap on its own.
+    # Before, a crawl date of "today" satisfied the breaking-news rule and released the cap on its own.
     published = None if result.get("publication_date_source") == "tool" else parse_iso_date(result.get("publication_date"))
     if not_published_before is not None and published is not None and published < not_published_before:
         return False
-    if require_date and published is None:
+    if require_date_or_tier and published is None and result.get("source_type") not in BREAKING_NEWS_LIFT_TIERS:
         return False
     return True
 
@@ -492,7 +494,7 @@ def has_contradicting_evidence(
     verification_evidence: dict | None,
     observed_urls: set[str] | None = None,
     not_published_before: date | None = None,
-    require_date: bool = False,
+    require_date_or_tier: bool = False,
 ) -> bool:
     """True when at least one recorded search result contradicts the claim and is admissible as evidence.
 
@@ -509,14 +511,15 @@ def has_contradicting_evidence(
     ``not_published_before`` is the boundary date (callers pass ``latest_claim_event_date``: results are not
     linked to claims, so the most recent claimed event is the conservative choice). A source the model dated
     before it cannot refute it (a 2024 fact-check cannot contradict a 2026 ruling); a tool-supplied date before
-    it is treated as no date. Undated sources still count, so the URL-only decision stands; the publication date
-    is not required unless ``require_date``.
+    it is treated as no date. Undated sources still count, so the URL-only decision stands, unless
+    ``require_date_or_tier`` (the breaking-news rule): then a result needs a model-read date or a
+    ``source_type`` in ``BREAKING_NEWS_LIFT_TIERS``.
 
     A result Stage 3 already marked ``url_observed_in_tools = False`` never counts, even when ``observed_urls``
     is ``None``, so Stage 4 cannot restore a score Stage 3 capped for an invented URL.
     """
     for result in _contradicting_results(verification_evidence):
-        if _result_counts(result, observed_urls, not_published_before, require_date):
+        if _result_counts(result, observed_urls, not_published_before, require_date_or_tier):
             return True
     return False
 
@@ -539,18 +542,14 @@ def _cap_scores(confidence_scores: dict, cap: int) -> tuple[int | float | None, 
     return original_overall, original_categories
 
 
-def breaking_news_cap(hours_since_recording) -> int | None:
-    """The H.1 cap for a recording of this age (20 within 24 h, 30 within 72 h), or None when none applies."""
+def in_breaking_news_window(hours_since_recording) -> bool:
+    """Whether prompt rule H.1 applies to a recording of this age (unknown or negative age: no)."""
     try:
         hours = float(hours_since_recording)
     except (TypeError, ValueError):
-        return None
-    if hours < 0:  # a recording "from the future" is bad station metadata, not breaking news
-        return None
-    for max_hours, max_score in BREAKING_NEWS_TIERS:
-        if hours <= max_hours:
-            return max_score
-    return None
+        return False
+    # a recording "from the future" is bad station metadata, not breaking news
+    return 0 <= hours <= BREAKING_NEWS_WINDOW_HOURS
 
 
 def apply_evidence_caps(
@@ -569,14 +568,15 @@ def apply_evidence_caps(
     callers store in ``grounding_metadata``. When nothing applies, the copy carries
     ``evidence_gate = {"applied": False}``.
 
-    Two caps, in order:
+    The cap is always ``EVIDENCE_CAP_MAX_SCORE`` (40), applied when:
 
-    1. ``EVIDENCE_CAP_MAX_SCORE`` (40) when the analysis admits it has no evidence, or asserts falsity /
-       ``verified_false`` without an admissible contradicting source (see ``has_contradicting_evidence``).
-    2. The breaking-news cap (prompt rule H.1, ``BREAKING_NEWS_TIERS``: 20 within 24 h of recording, 30 within
-       72 h) when ``hours_since_recording`` is given and inside the window, the verdict rests on falsity, and no
-       admissible contradicting source carries a publication date. Within the window an undated page cannot show
-       that it post-dates the event, and "no coverage yet" is the failure mode this rule exists for.
+    1. the analysis admits it has no evidence, or asserts falsity / ``verified_false`` without an admissible
+       contradicting source (see ``has_contradicting_evidence``);
+    2. (prompt rule H.1) ``hours_since_recording`` is inside ``BREAKING_NEWS_WINDOW_HOURS``, the verdict rests on
+       falsity, and no admissible contradicting source carries a model-read publication date or a tier-1/tier-2
+       ``source_type``. Within the window an undated page from an unknown outlet cannot show that it post-dates
+       the event, and "no coverage yet" is the failure mode this rule exists for. The cap stays at 40 so a
+       snippet with a contradicting source never scores below the same snippet with none.
 
     ``verification_evidence`` defaults to ``analysis["verification_evidence"]`` (Stage 3 output shape).
     Stage 4 passes the Stage 3 record explicitly because the reviewer output has no structured evidence.
@@ -642,21 +642,22 @@ def apply_evidence_caps(
             )
 
     cap = EVIDENCE_CAP_MAX_SCORE
-    if not reasons:
-        breaking_cap = breaking_news_cap(hours_since_recording)
-        dated = has_contradicting_evidence(verification_evidence, observed_urls, event_date, require_date=True)
-        if breaking_cap is not None and falsity_verdict and not dated:
-            # Any score above the cap triggers it: a low overall with a 96 category would otherwise
-            # keep the category visible in the UI's per-category view.
-            scores = [confidence_scores.get("overall")] + [
-                c.get("score") for c in confidence_scores.get("categories") or [] if isinstance(c, dict)
-            ]
-            if any(isinstance(s, (int, float)) and s > breaking_cap for s in scores):
-                cap = breaking_cap
-                reasons.append(
-                    f"recording is {hours_since_recording} hours old (breaking news window) and no contradicting "
-                    "source carries a publication date"
-                )
+    if (
+        not reasons
+        and falsity_verdict
+        and in_breaking_news_window(hours_since_recording)
+        and not has_contradicting_evidence(verification_evidence, observed_urls, event_date, require_date_or_tier=True)
+    ):
+        # Any score above the cap triggers it: a low overall with a 96 category would otherwise
+        # keep the category visible in the UI's per-category view.
+        scores = [confidence_scores.get("overall")] + [
+            c.get("score") for c in confidence_scores.get("categories") or [] if isinstance(c, dict)
+        ]
+        if any(isinstance(s, (int, float)) and s > cap for s in scores):
+            reasons.append(
+                f"recording is {hours_since_recording} hours old (breaking news window) and no contradicting "
+                "source is dated or from a tier-1/tier-2 outlet"
+            )
 
     if not reasons:
         result["evidence_gate"] = {"applied": False}

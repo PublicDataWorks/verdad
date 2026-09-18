@@ -553,7 +553,9 @@ class TestDatePrecedence:
     def test_undated_source_still_counts(self):
         evidence = _evidence(publication_date=None)
         assert has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14))
-        assert not has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14), require_date=True)
+        assert not has_contradicting_evidence(
+            evidence, not_published_before=date(2026, 9, 14), require_date_or_tier=True
+        )
 
     def test_gate_uses_the_claims_event_dates(self):
         analysis = _with_claims(_analysis(explanation_en="The ruling never happened."), "2026-09-14")
@@ -582,7 +584,9 @@ class TestDatePrecedence:
         evidence = _evidence(publication_date="1970-01-01")
         evidence["searches_performed"][0]["results"][0]["publication_date_source"] = "tool"
         assert has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14))
-        assert not has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14), require_date=True)
+        assert not has_contradicting_evidence(
+            evidence, not_published_before=date(2026, 9, 14), require_date_or_tier=True
+        )
 
     def test_stage_4_uses_the_stage_3_claim_dates(self):
         reviewer_output = _analysis(explanation_en="The ruling never happened.")
@@ -665,23 +669,32 @@ class TestToolPublicationDates:
 
 
 class TestBreakingNewsCap:
-    def _fresh(self, publication_date, hours):
+    def _fresh(self, publication_date, hours, source_type=None):
         analysis = _analysis(explanation_en="The event never happened.", overall=95)
         analysis["verification_evidence"] = _evidence(publication_date=publication_date)
+        if source_type:
+            analysis["verification_evidence"]["searches_performed"][0]["results"][0]["source_type"] = source_type
         return apply_evidence_caps(analysis, hours_since_recording=hours)
 
-    def test_undated_contradicting_source_inside_24h_caps_at_20(self):
+    def test_undated_untiered_source_inside_the_window_caps_at_40(self):
         result = self._fresh(None, "5.5")
-        assert result["confidence_scores"]["overall"] == 20
-        assert result["confidence_scores"]["categories"][0]["score"] == 20
-        assert result["evidence_gate"]["cap"] == 20
+        assert result["confidence_scores"]["overall"] == 40
+        assert result["confidence_scores"]["categories"][0]["score"] == 40
+        assert result["evidence_gate"]["cap"] == 40
         assert "breaking news window" in result["evidence_gate"]["reasons"][0]
-        assert "capped at 20" in result["explanation"]["english"]
+        assert "capped at 40" in result["explanation"]["english"]
+        assert self._fresh(None, 48)["evidence_gate"]["cap"] == 40
 
-    def test_undated_contradicting_source_inside_72h_caps_at_30(self):
-        assert self._fresh(None, 48)["evidence_gate"]["cap"] == 30
+    @pytest.mark.parametrize("source_type", ["tier3_regional_news", "official_source", "other"])
+    def test_undated_lower_tier_source_inside_the_window_caps_at_40(self, source_type):
+        assert self._fresh(None, 5, source_type)["evidence_gate"]["cap"] == 40
 
-    def test_dated_contradicting_source_lifts_the_breaking_cap(self):
+    @pytest.mark.parametrize("source_type", ["tier1_wire_service", "tier1_factchecker", "tier2_major_news"])
+    def test_undated_tier1_or_tier2_source_lifts_the_breaking_cap(self, source_type):
+        assert self._fresh(None, 5, source_type)["evidence_gate"] == {"applied": False}
+
+    def test_dated_lower_tier_source_lifts_the_breaking_cap(self):
+        assert self._fresh("2026-09-15", 5, "tier3_regional_news")["evidence_gate"] == {"applied": False}
         assert self._fresh("2026-09-15", 5)["evidence_gate"] == {"applied": False}
 
     def test_old_recording_is_not_capped(self):
@@ -698,7 +711,7 @@ class TestBreakingNewsCap:
         analysis = _analysis(explanation_en="The event never happened.", overall=95)
         analysis["verification_evidence"] = _evidence(publication_date="2026-09-15")
         analysis["verification_evidence"]["searches_performed"][0]["results"][0]["publication_date_source"] = "tool"
-        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"]["cap"] == 20
+        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"]["cap"] == 40
 
     def test_recent_tool_date_still_counts_outside_the_window(self):
         analysis = _analysis(explanation_en="The event never happened.", overall=95)
@@ -710,7 +723,7 @@ class TestBreakingNewsCap:
         analysis = _with_claims(_analysis(explanation_en="The event never happened.", overall=95), "2026-09-14")
         analysis["verification_evidence"] = _evidence(publication_date="1970-01-01")
         analysis["verification_evidence"]["searches_performed"][0]["results"][0]["publication_date_source"] = "tool"
-        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"]["cap"] == 20
+        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"]["cap"] == 40
 
     def test_low_score_inside_the_window_is_left_alone(self):
         analysis = _analysis(explanation_en="The event never happened.", overall=15)
@@ -722,9 +735,9 @@ class TestBreakingNewsCap:
         analysis = _analysis(explanation_en="The event never happened.", overall=15)
         analysis["verification_evidence"] = _evidence(publication_date=None)
         result = apply_evidence_caps(analysis, hours_since_recording=5)
-        assert result["evidence_gate"]["cap"] == 20
+        assert result["evidence_gate"]["cap"] == 40
         assert result["confidence_scores"]["overall"] == 15
-        assert [c["score"] for c in result["confidence_scores"]["categories"]] == [20, 20]
+        assert [c["score"] for c in result["confidence_scores"]["categories"]] == [40, 20]
 
     def test_non_falsity_verdict_inside_the_window_is_left_alone(self):
         analysis = _analysis(status="uncertain", explanation_en="Misleading framing of real data.", overall=60)
@@ -732,8 +745,9 @@ class TestBreakingNewsCap:
         analysis["verification_evidence"] = _evidence(relevance="provides_context", publication_date=None)
         assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"] == {"applied": False}
 
-    def test_the_40_cap_takes_precedence_over_the_breaking_cap(self):
+    def test_no_evidence_inside_the_window_reports_the_no_evidence_reason(self):
         analysis = _analysis(explanation_en="The event never happened.", overall=95)
         analysis["verification_evidence"] = _evidence(relevance="provides_context")
         result = apply_evidence_caps(analysis, hours_since_recording=5)
         assert result["evidence_gate"]["cap"] == EVIDENCE_CAP_MAX_SCORE
+        assert not any("breaking news window" in r for r in result["evidence_gate"]["reasons"])

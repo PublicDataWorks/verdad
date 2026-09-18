@@ -157,7 +157,7 @@ House visit 2025-11-10; Viktor Orbán lost 2026-04-12 to Péter Magyar. Sources 
 ## 8. Code map for the next agent
 
 - Gate: `src/processing_pipeline/stage_3/models.py` (`apply_evidence_caps`, `is_article_url`,
-  `latest_claim_event_date`, `fill_publication_dates`, `breaking_news_cap`), tests in
+  `latest_claim_event_date`, `fill_publication_dates`, `in_breaking_news_window`), tests in
   `tests/processing_pipeline/test_evidence_gate.py`.
 - Tool loop and observed URLs/dates: `stage_3/executors.py` (`ObservedToolOutput`), `stage_3/web_tools.py`
   (`tool_result_urls`, `tool_result_dates`), tests `test_stage_3_tool_loop.py`.
