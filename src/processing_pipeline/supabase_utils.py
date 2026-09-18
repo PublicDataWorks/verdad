@@ -1,9 +1,36 @@
 from enum import StrEnum
 
+import httpx
 from postgrest.exceptions import APIError
 from supabase import create_client
 from datetime import datetime, timezone
 from processing_pipeline.constants import PromptStage
+
+# SQLSTATEs that clear on their own (statement/lock timeouts, deadlocks, serialization, dropped connections)
+# plus the gateway statuses PostgREST reports as `code` when the body is not JSON.
+TRANSIENT_CODES = {
+    "57014",
+    "55P03",
+    "40001",
+    "40P01",
+    "53300",
+    "08000",
+    "08003",
+    "08006",
+    "502",
+    "503",
+    "504",
+    "520",
+    "522",
+    "524",
+}
+TRANSIENT_HTTP_ERRORS = (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)
+
+
+def is_transient_db_error(e: Exception) -> bool:
+    if isinstance(e, APIError):
+        return str(e.code) in TRANSIENT_CODES
+    return isinstance(e, TRANSIENT_HTTP_ERRORS)
 
 
 class SupabaseClient:
@@ -13,21 +40,29 @@ class SupabaseClient:
             supabase_key,
         )
 
+    def _reserve_work(self, rpc_name):
+        # VER-378: a transient DB error here used to fail the whole stage loop until the next 6-hourly
+        # restart. Report "no work" instead; the loop sleeps 60 s and asks again.
+        try:
+            response = self.client.rpc(rpc_name).execute()
+        except (APIError, httpx.TransportError) as e:
+            if not is_transient_db_error(e):
+                raise
+            print(f"{rpc_name} failed with {type(e).__name__}: {e}. Treating as no work")
+            return None
+        return response.data or None
+
     def get_a_new_audio_file_and_reserve_it(self):
-        response = self.client.rpc("fetch_a_new_audio_file_and_reserve_it").execute()
-        return response.data if response else None
+        return self._reserve_work("fetch_a_new_audio_file_and_reserve_it")
 
     def get_a_new_stage_1_llm_response_and_reserve_it(self):
-        response = self.client.rpc("fetch_a_new_stage_1_llm_response_and_reserve_it").execute()
-        return response.data if response else None
+        return self._reserve_work("fetch_a_new_stage_1_llm_response_and_reserve_it")
 
     def get_a_new_snippet_and_reserve_it(self):
-        response = self.client.rpc("fetch_a_new_snippet_and_reserve_it").execute()
-        return response.data if response else None
+        return self._reserve_work("fetch_a_new_snippet_and_reserve_it")
 
     def get_a_ready_for_review_snippet_and_reserve_it(self):
-        response = self.client.rpc("fetch_a_ready_for_review_snippet_and_reserve_it").execute()
-        return response.data if response.data else None
+        return self._reserve_work("fetch_a_ready_for_review_snippet_and_reserve_it")
 
     def get_snippet_by_id(self, id, select="*"):
         response = self.client.table("snippets").select(select).eq("id", id).execute()
@@ -437,8 +472,7 @@ class SupabaseClient:
         return response.data
 
     def get_a_snippet_that_has_no_embedding(self):
-        response = self.client.rpc("fetch_a_snippet_that_has_no_embedding").execute()
-        return response.data if response.data else None
+        return self._reserve_work("fetch_a_snippet_that_has_no_embedding")
 
     def upsert_snippet_embedding(self, snippet_id, snippet_document, document_token_count, embedding, model_name, status, error_message):
         # Check if the embedding of the snippet already exists
