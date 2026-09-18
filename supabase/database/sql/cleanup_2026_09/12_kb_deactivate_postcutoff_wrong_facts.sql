@@ -1,4 +1,5 @@
--- cleanup_2026_09 / step 12: deactivate active knowledge-base "facts" that deny post-cutoff events (WRITES; needs Rajiv's go).
+-- cleanup_2026_09 / step 12: deactivate active knowledge-base "facts" that deny post-cutoff events (WRITES).
+-- EXECUTED 2026-09-17 ~20:25 UTC on Rajiv's go: 10 rows in kb_deactivation_log.
 --
 -- Found 2026-09-17 (VER-341, Feedback #6/#7). All pipeline-authored (created_by_model gemini-2.5-pro), all wrong as
 -- of today, all still 'active' and therefore fed to Stage 1 as "Verified Facts" and to the Stage 4 KB researcher.

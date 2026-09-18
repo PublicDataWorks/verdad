@@ -57,10 +57,11 @@ work. Confidence carries no information about correctness: about 95 percent of c
 
 Older open PRs: #79 (ASR-name sweep, VER-337), #68 (downvote review automation, VER-312), #54, #49.
 
-## 4. Production changes prepared but NOT run (need a human in the Supabase SQL editor)
+## 4. Production changes (ALL APPLIED 2026-09-17 ~20:25 UTC; see section 0. Kept for the record, do not re-run)
 
-The sandbox permission layer blocks production DDL/DML from Claude Code sessions, and the Supabase MCP
-connector is not attached to the verdad project (`dzujjhzgzguciwryzwlx`). Read-only SQL works through the
+At writing time the sandbox permission layer blocked production DDL/DML from Claude Code sessions and the
+Supabase MCP connector was not attached to the verdad project (`dzujjhzgzguciwryzwlx`); it was attached the
+same evening and the files below were applied through it. Read-only SQL works through the
 Management API (`POST https://api.supabase.com/v1/projects/dzujjhzgzguciwryzwlx/database/query`; the
 gateway returns 502 after about 30 s while Postgres keeps running, so keep queries small). Attaching the
 verdad project to the Supabase connector would remove this blocker for future sessions.

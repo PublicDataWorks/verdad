@@ -38,7 +38,9 @@ This folder was prepared to park the affected snippets in a new `Quarantined` st
 
 ### Status 2026-09-17
 
-Three new files, none executed yet (each needs Rajiv's go in Slack; all reversible):
+Three new files, **all executed in production 2026-09-17 ~20:25 UTC on Rajiv's go** (13: 73 snippets hidden and
+snapshotted with `04b`; 12: 10 KB entries deactivated; 11: 14 facts seeded, embedded the same evening with a paged
+one-off because `backfill_kb_embeddings.py` re-embeds everything, VER-377). Kept as the record; all reversible:
 
 | File | What | Tracking |
 |------|------|----------|

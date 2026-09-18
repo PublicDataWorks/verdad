@@ -1,4 +1,5 @@
--- cleanup_2026_09 / step 13: hide the still-visible post-cutoff false positives (WRITES; needs Rajiv's go).
+-- cleanup_2026_09 / step 13: hide the still-visible post-cutoff false positives (WRITES).
+-- EXECUTED 2026-09-17 ~20:25 UTC on Rajiv's go: 73 rows in batch hide-2026-09-17-postcutoff, snapshotted with 04b.
 --
 -- Prepared 2026-09-17 from a read-only probe (VER-338, Tamoa's Feedback #6/#7). 73 snippets scored 95+,
 -- verified_false, publicly visible, whose verdict denies an event that did happen: de la Espriella and Fujimori
