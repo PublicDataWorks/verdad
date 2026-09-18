@@ -6,17 +6,22 @@ from supabase import create_client
 from datetime import datetime, timezone
 from processing_pipeline.constants import PromptStage
 
-# SQLSTATEs that clear on their own (statement/lock timeouts, deadlocks, serialization, dropped connections)
-# plus the gateway statuses PostgREST reports as `code` when the body is not JSON.
+# SQLSTATEs that clear on their own (statement/lock timeouts, deadlocks, serialization, server shutdown or
+# restart, dropped connections), the PostgREST codes for "cannot reach Postgres" / "schema cache reloading"
+# (returned with a JSON body, so `code` is the string, not the HTTP status), plus the gateway statuses
+# PostgREST reports as `code` when the body is not JSON. Class 08 (connection exceptions) is matched by prefix.
 TRANSIENT_CODES = {
     "57014",
+    "57P01",
+    "57P02",
+    "57P03",
     "55P03",
     "40001",
     "40P01",
     "53300",
-    "08000",
-    "08003",
-    "08006",
+    "PGRST000",
+    "PGRST001",
+    "PGRST002",
     "502",
     "503",
     "504",
@@ -24,12 +29,14 @@ TRANSIENT_CODES = {
     "522",
     "524",
 }
+TRANSIENT_CODE_PREFIXES = ("08",)
 TRANSIENT_HTTP_ERRORS = (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)
 
 
 def is_transient_db_error(e: Exception) -> bool:
     if isinstance(e, APIError):
-        return str(e.code) in TRANSIENT_CODES
+        code = str(e.code)
+        return code in TRANSIENT_CODES or code.startswith(TRANSIENT_CODE_PREFIXES)
     return isinstance(e, TRANSIENT_HTTP_ERRORS)
 
 

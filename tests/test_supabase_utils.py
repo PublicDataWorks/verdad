@@ -862,6 +862,15 @@ class TestReserveWorkTransientErrors:
         [
             # PostgREST reports a non-JSON gateway body with the int status as the code.
             APIError({"code": 502, "message": "JSON could not be generated"}),
+            # Postgres restarting under us (what a Supabase compute change or crash looks like).
+            APIError({"code": "57P01", "message": "terminating connection due to administrator command"}),
+            APIError({"code": "57P03", "message": "the database system is starting up"}),
+            # PostgREST reloading its schema cache after DDL: JSON body, string code, HTTP 503.
+            APIError({"code": "PGRST002", "message": "Could not query the database for the schema cache. Retrying."}),
+            APIError({"code": "PGRST001", "message": "Could not open a connection to the database"}),
+            # Any class-08 connection exception, not only the three listed by hand before.
+            APIError({"code": "08001", "message": "could not connect to server"}),
+            APIError({"code": "08P01", "message": "protocol violation"}),
             httpx.ConnectError("Connection reset by peer"),
             httpx.ReadTimeout("timed out"),
         ],
