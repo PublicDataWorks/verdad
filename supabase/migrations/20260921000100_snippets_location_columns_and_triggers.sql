@@ -14,7 +14,7 @@
 -- ============================================================================================
 -- 1. snippets gains two nullable text columns: location_state, radio_station_code. Adding a
 --    nullable column with no default is a catalog-only change in PostgreSQL (no table rewrite).
--- 2. A BEFORE INSERT OR UPDATE OF audio_file trigger on snippets fills them from audio_files, so
+-- 2. A BEFORE INSERT OR UPDATE OF audio_file, status trigger on snippets fills them from audio_files, so
 --    every row the Python pipeline inserts through PostgREST (.insert(...) in
 --    src/processing_pipeline/supabase_utils.py) is correct without any change on the Python side.
 -- 3. An AFTER UPDATE OF location_state, radio_station_code trigger on audio_files propagates
@@ -60,9 +60,14 @@ COMMENT ON COLUMN public.snippets.location_state IS
 COMMENT ON COLUMN public.snippets.radio_station_code IS
     'Denormalized copy of audio_files.radio_station_code for the get_snippets sources filter (VER-387). Maintained by the snippets_copy_audio_file_location / audio_files_propagate_location triggers; do not write it directly.';
 
--- Fill the denormalized columns from the parent audio_files row on insert, and whenever a
--- snippet is repointed at a different audio file. Any value the caller supplied for these two
--- columns is overwritten on purpose: audio_files is the single source of truth.
+-- Fill the denormalized columns from the parent audio_files row on insert, whenever a snippet is
+-- repointed at a different audio file, and on every status change. The status case exists for
+-- rows that were in flight (Processing / Reviewing) while the backfill (20260921000200) or the
+-- propagate trigger below deliberately skipped them: the first status transition afterwards
+-- brings their columns up to date, so nothing is left behind and nobody has to re-run anything.
+-- It costs one primary-key lookup on audio_files per status change, which the pipeline does a
+-- handful of times per snippet. Any value the caller supplied for these two columns is
+-- overwritten on purpose: audio_files is the single source of truth.
 CREATE OR REPLACE FUNCTION public.snippets_copy_audio_file_location()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -86,7 +91,7 @@ $function$;
 
 DROP TRIGGER IF EXISTS snippets_copy_audio_file_location ON public.snippets;
 CREATE TRIGGER snippets_copy_audio_file_location
-    BEFORE INSERT OR UPDATE OF audio_file ON public.snippets
+    BEFORE INSERT OR UPDATE OF audio_file, status ON public.snippets
     FOR EACH ROW
     EXECUTE FUNCTION public.snippets_copy_audio_file_location();
 
@@ -94,7 +99,10 @@ CREATE TRIGGER snippets_copy_audio_file_location
 -- (station metadata corrections only -- config/stations.yaml changes, a mislabelled state) and
 -- touches the handful of snippets cut from that one audio file, so a row-level AFTER trigger is
 -- cheap. The WHEN clause keeps it from firing on unrelated audio_files updates and on updates
--- that rewrite the same values.
+-- that rewrite the same values. Rows in flight through the pipeline are skipped: the UPDATE
+-- fires snippets_handle_updated_at, and sweep_stuck_snippets (20260917080000) keys on
+-- updated_at < now() - 2 h, so touching a Processing / Reviewing row would hide a stuck snippet
+-- from the sweep. The copy trigger above catches them on their next status change.
 CREATE OR REPLACE FUNCTION public.audio_files_propagate_location()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -104,7 +112,8 @@ BEGIN
     UPDATE public.snippets s
     SET location_state = NEW.location_state,
         radio_station_code = NEW.radio_station_code
-    WHERE s.audio_file = NEW.id;
+    WHERE s.audio_file = NEW.id
+      AND s.status NOT IN ('Processing', 'Reviewing');
     RETURN NULL;
 END;
 $function$;

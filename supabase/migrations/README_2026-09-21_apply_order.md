@@ -20,7 +20,7 @@ the `audio_file` object in the result still comes from the `audio_files` join.
 | 1 | `20260921000100_snippets_location_columns_and_triggers.sql` | Safe in one transaction (nullable `ADD COLUMN` = catalog only, no rewrite; brief ACCESS EXCLUSIVE lock) | < 1 s | `SELECT column_name FROM information_schema.columns WHERE table_name='snippets' AND column_name IN ('location_state','radio_station_code');` → 2 rows. `SELECT tgname, tgenabled FROM pg_trigger WHERE tgname IN ('snippets_copy_audio_file_location','audio_files_propagate_location');` → 2 rows, `tgenabled = 'O'`. Then insert nothing by hand — just confirm a freshly produced snippet has the columns filled: `SELECT id, location_state, radio_station_code FROM public.snippets ORDER BY created_at DESC LIMIT 5;` |
 | 2 | `20260921000200_snippets_location_backfill.sql` | Creating the function is transactional; **running** it is a series of one-transaction batches. First create the throwaway `idx_snippets_location_backfill` partial index named in the file header (CONCURRENTLY, outside a transaction) and drop it when done | ~505k rows, ~100 batches of 5000. A few minutes by hand; ~100 min on the per-minute cron job | `SELECT count(*) FILTER (WHERE radio_station_code IS NULL AND audio_file IS NOT NULL) AS remaining, count(*) FILTER (WHERE status IN ('Processing','Reviewing')) AS in_flight, count(*) FROM public.snippets;` → `remaining` must reach 0 (see below; it plateaus near the in-flight count while the pipeline is busy). Then `SELECT relname, n_live_tup, n_dead_tup, last_autovacuum FROM pg_stat_user_tables WHERE relname='snippets';` |
 | 3 | `20260921000300_snippets_visible_location_indexes.sql` | **MUST run outside a transaction** (`CREATE INDEX CONCURRENTLY`). Paste each statement alone; do not wrap in `BEGIN`/`COMMIT` or use a migration runner that does | ~1-3 min per index on 505k rows | `SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_snippets_visible_state'::regclass;` and the same for `idx_snippets_visible_station` — both must be `true` |
-| 4 | `20260921000400_get_snippets_denormalized_location.sql` | Safe in one transaction (`CREATE OR REPLACE`, same signature, re-`GRANT`, `NOTIFY pgrst`) | < 1 s | The EXPLAIN and result-equivalence checks below |
+| 4 | `20260921000400_get_snippets_denormalized_location.sql` | Safe in one transaction (`CREATE OR REPLACE`, same signature, re-`GRANT`, `NOTIFY pgrst`). Starts with a `DO` guard that raises if any snippet still has `radio_station_code IS NULL`, so running it early fails loudly instead of returning empty pages | < 1 s | The EXPLAIN and result-equivalence checks below |
 
 ## Sequencing
 
@@ -43,8 +43,9 @@ the index is built once over final values.
 busy the count plateaus at roughly the number of `Processing` / `Reviewing` rows, because the
 backfill skips those on purpose: updating them would bump `updated_at` (via the existing
 `snippets_handle_updated_at` trigger) and hide a genuinely stuck row from `sweep_stuck_snippets`
-for up to two hours. Keep calling the function, or leave the cron job running, until a batch returns
-0 with `remaining` = 0.
+for up to two hours. Those rows fill themselves in on their next status change (the copy trigger
+also fires on `UPDATE OF status`), so `remaining` reaches 0 within the pipeline's normal cycle; keep
+calling the function or leave the cron job running until it does.
 
 `location_state` may legitimately stay NULL where `audio_files.location_state` is NULL; on production
 on 2026-09-18 that was 0 snippets (`SELECT count(*) FROM public.snippets s JOIN public.audio_files a
@@ -97,9 +98,9 @@ A difference in cases 1-4 with an identical case 5 means the backfill is incompl
 
 | Step | Rollback |
 |---|---|
-| 4 | Run `supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql` as is (`CREATE OR REPLACE`, same signature; the file ends by re-applying the search_path pin the capture predates) |
+| 4 | Run `supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql` as is (`CREATE OR REPLACE`, same signature; the search_path pin is written into the definition) |
 | 3 | `DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_visible_state;` and `DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_visible_station;` — outside a transaction |
-| 2 | No rollback needed (data only). To undo: `UPDATE public.snippets SET location_state = NULL, radio_station_code = NULL;`. `DROP FUNCTION IF EXISTS public.backfill_snippets_location(integer);` if the function is not wanted |
+| 2 | No rollback needed (data only). To undo: `UPDATE public.snippets SET location_state = NULL, radio_station_code = NULL WHERE status NOT IN ('Processing', 'Reviewing');` (in-flight rows are excluded for the same `updated_at` reason as the backfill; repeat once they have left flight, or drop the columns via step 1's rollback instead). `DROP FUNCTION IF EXISTS public.backfill_snippets_location(integer);` if the function is not wanted |
 | 1 | `DROP TRIGGER IF EXISTS audio_files_propagate_location ON public.audio_files; DROP TRIGGER IF EXISTS snippets_copy_audio_file_location ON public.snippets; DROP FUNCTION IF EXISTS public.audio_files_propagate_location(); DROP FUNCTION IF EXISTS public.snippets_copy_audio_file_location(); ALTER TABLE public.snippets DROP COLUMN IF EXISTS location_state, DROP COLUMN IF EXISTS radio_station_code;` — **roll back step 4 first**, or the feed breaks |
 
 ## Files changed in the repo

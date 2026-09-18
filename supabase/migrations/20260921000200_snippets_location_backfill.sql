@@ -56,8 +56,9 @@
 --
 -- Done means `remaining` = 0. The batches skip rows that are Processing / Reviewing (see the note
 -- inside the function), so `remaining` plateaus at roughly `in_flight` (single digits on
--- production, 2026-09-18) while the pipeline is busy; keep calling the function (or leave the
--- cron job running) until a batch returns 0 with `remaining` = 0. audio_files.radio_station_code
+-- production, 2026-09-18) while the pipeline is busy. Those rows fill themselves in on their
+-- next status change (the copy trigger fires on UPDATE OF status), so `remaining` reaches 0
+-- within the pipeline's normal cycle even if no further batch runs. audio_files.radio_station_code
 -- is NOT NULL, so there is no permanent floor on this count.
 --
 -- location_state is allowed to stay NULL where audio_files.location_state is NULL. On production
@@ -90,6 +91,12 @@ AS $function$
 DECLARE
     updated integer;
 BEGIN
+    -- LIMIT NULL means "no limit" in PostgreSQL, and a non-positive batch is a mistake either way;
+    -- refuse both rather than silently rewriting the whole table in one transaction.
+    IF p_batch IS NULL OR p_batch <= 0 THEN
+        RAISE EXCEPTION 'backfill_snippets_location: p_batch must be a positive integer, got %', p_batch;
+    END IF;
+
     UPDATE public.snippets s
     SET location_state = a.location_state,
         radio_station_code = a.radio_station_code
@@ -105,7 +112,8 @@ BEGIN
           -- fires snippets_handle_updated_at, which bumps updated_at, and sweep_stuck_snippets
           -- (20260917080000) uses updated_at < now() - 2 h to requeue stuck rows, so touching an
           -- in-flight row here would hide it from the sweep for up to two hours. They are picked
-          -- up by a later batch once their status changes.
+          -- up by a later batch, or by snippets_copy_audio_file_location (20260921000100), which
+          -- also fires on their next status change.
           SELECT s2.id
           FROM public.snippets s2
           WHERE s2.audio_file IS NOT NULL

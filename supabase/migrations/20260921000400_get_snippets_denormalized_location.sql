@@ -37,6 +37,22 @@
 -- and PostgREST keeps working; NOTIFY pgrst reloads the schema cache.
 -- Rollback: supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql (run as is).
 
+-- Prerequisite guard: refuse to swap the function while any snippet still lacks its denormalized
+-- station code (audio_files.radio_station_code is NOT NULL, so NULL here means "not backfilled").
+-- Rows in flight are deliberately NOT excluded: the backfill skips them, and this file must wait
+-- until they have left flight and been filled in by the copy trigger or a later batch.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM public.snippets
+        WHERE audio_file IS NOT NULL AND radio_station_code IS NULL
+    ) THEN
+        RAISE EXCEPTION
+            'VER-387: snippets still have radio_station_code IS NULL; run public.backfill_snippets_location() until it returns 0 and remaining = 0 before replacing get_snippets';
+    END IF;
+END
+$$;
+
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
  LANGUAGE plpgsql

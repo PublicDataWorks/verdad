@@ -2,8 +2,8 @@
 -- production before 20260921000400_get_snippets_denormalized_location.sql (states/sources filters
 -- still join audio_files). Safe to run as is: CREATE OR REPLACE, same signature, same GRANT.
 -- Note: production also carries `SET search_path = public, extensions, pg_temp` on this function
--- (added by ALTER in 20260918053000). The captured CREATE below predates that ALTER, so the ALTER
--- is re-applied at the end of this file; run the whole file.
+-- (added by ALTER in 20260918053000). The captured CREATE predates that ALTER, so the SET line is
+-- written into the definition below; this is the only edit to the captured text.
 
 -- The signature changed on 2026-09-14 (p_include_count added); drop the old overload so
 -- PostgREST does not see two get_snippets functions.
@@ -51,6 +51,7 @@ CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, 
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
+ SET search_path = public, extensions, pg_temp
  -- 2026-09-17: pin every statement in this body to a custom plan. With an unknown text[]
  -- parameter the generic plan cannot use idx_audio_files_location_state_id as an index
  -- condition and falls back to audio_files_pkey + a heap Filter (18.8 s vs 3.8 s for the
@@ -468,7 +469,3 @@ $function$;
 GRANT EXECUTE ON FUNCTION public.get_snippets(text, jsonb, integer, integer, text, text, boolean) TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';
-
--- Re-apply the VER-372 search_path pin that the captured CREATE OR REPLACE above does not carry.
-ALTER FUNCTION public.get_snippets(text, jsonb, integer, integer, text, text, boolean)
-    SET search_path = public, extensions, pg_temp;
