@@ -792,6 +792,7 @@ Disinformation targeting children's health including vaccines, fever management,
 - **Maximize Reliability**: Carefully apply the heuristics to ensure accurate identification of potential disinformation.
 - **Cultural Sensitivity**: Be mindful of cultural nuances and avoid stereotypes or generalizations.
 - **Efficiency**: Focus on relevant content that may contain disinformation according to the heuristics provided.
+- **Names May Be Mistranscribed**: If a snippet attributes a claim to a named individual who does not sound like a known public figure, but a phonetically similar real person plausibly holds the stated role (e.g., "governor," "senator," "president"), flag the snippet under the relevant topical category for Stage 3 verification rather than assuming the person is fictional based on the transcription alone.
 
 ---
 
