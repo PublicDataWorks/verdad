@@ -51,6 +51,6 @@ returned column, update those types in the frontend repo in the same change - a 
 `undefined` in the UI, not as an error.
 
 New functions follow the existing style: `CREATE OR REPLACE FUNCTION ... RETURNS jsonb SECURITY DEFINER
-SET search_path = public, extensions AS $$ ... $$ LANGUAGE plpgsql`, the `auth.uid()` guard, and no explicit
+SET search_path = public, extensions, pg_temp AS $$ ... $$ LANGUAGE plpgsql`, the `auth.uid()` guard, and no explicit
 `GRANT` (the loose files rely on the default `public` execute grant; only the knowledge-base tables carry
 explicit grants). Every `SECURITY DEFINER` function pins `search_path` (VER-372).
