@@ -45,3 +45,4 @@
 20260918020000	drop_dead_search_rpcs
 20260918020100	autovacuum_thresholds_large_tables
 20260918030000	sweep_retryable_errors
+20260918040000	unschedule_retry_failed_jobs
