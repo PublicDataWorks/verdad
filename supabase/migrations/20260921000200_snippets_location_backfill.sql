@@ -30,7 +30,7 @@
 -- dropped at the end. Both statements MUST run outside a transaction (CONCURRENTLY):
 --       CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_snippets_location_backfill
 --           ON public.snippets (id)
---           WHERE location_state IS NULL AND radio_station_code IS NULL;
+--           WHERE radio_station_code IS NULL;
 --     ... run the batches ...
 --       DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_location_backfill;
 --
@@ -49,18 +49,26 @@
 -- ============================================================================================
 -- Verification
 -- ============================================================================================
---   SELECT count(*) FILTER (WHERE location_state IS NULL AND audio_file IS NOT NULL) AS remaining,
+--   SELECT count(*) FILTER (WHERE radio_station_code IS NULL AND audio_file IS NOT NULL) AS remaining,
+--          count(*) FILTER (WHERE status IN ('Processing', 'Reviewing'))              AS in_flight,
 --          count(*)
 --   FROM public.snippets;
 --
--- `remaining` does NOT go to 0 if any audio_files row has BOTH location_state and
--- radio_station_code NULL -- see the note on the inner SELECT below. Count those first so the
--- expected floor is known before the backfill starts:
+-- Done means `remaining` = 0. The batches skip rows that are Processing / Reviewing (see the note
+-- inside the function), so `remaining` plateaus at roughly `in_flight` (single digits on
+-- production, 2026-09-18) while the pipeline is busy; keep calling the function (or leave the
+-- cron job running) until a batch returns 0 with `remaining` = 0. audio_files.radio_station_code
+-- is NOT NULL, so there is no permanent floor on this count.
+--
+-- location_state is allowed to stay NULL where audio_files.location_state is NULL. On production
+-- on 2026-09-18 that was 0 snippets:
 --   SELECT count(*) FROM public.snippets s JOIN public.audio_files a ON a.id = s.audio_file
---   WHERE a.location_state IS NULL AND a.radio_station_code IS NULL;
--- Treat that number (and not 0) as "done" for those rows; they are snippets whose audio file has
--- no station metadata at all, and they were invisible to a states/sources filter before this
--- change too (the old CTEs matched on the same NULL columns).
+--   WHERE a.location_state IS NULL;
+-- Those rows (if any) match no states filter, exactly as before this change.
+--
+-- Side effect to know about: every backfilled row gets updated_at = now() from the existing
+-- snippets_handle_updated_at trigger. That is harmless for Processed / Error / New rows (nothing
+-- reads their updated_at for scheduling) and is why in-flight rows are excluded.
 --
 -- ============================================================================================
 -- Transactionality and rollback
@@ -88,20 +96,24 @@ BEGIN
     FROM public.audio_files a
     WHERE s.audio_file = a.id
       AND s.id IN (
-          -- Only rows that still have nothing AND whose audio file has something to copy. The
-          -- second condition is what makes the loop terminate: a snippet whose audio_files row
-          -- has both columns NULL would be "updated" to NULL every batch and selected again
-          -- forever. Those rows stay NULL; see the Verification block for the expected leftover.
+          -- "Still to do" is radio_station_code IS NULL: audio_files.radio_station_code is NOT NULL
+          -- (baseline schema), so every updated row leaves this set and the loop terminates.
+          -- location_state is deliberately not part of the predicate: audio_files.location_state
+          -- is nullable, and a snippet whose audio file has no state must be allowed to stay NULL
+          -- without being re-selected forever.
+          -- Rows in flight through the pipeline (Processing / Reviewing) are skipped: this UPDATE
+          -- fires snippets_handle_updated_at, which bumps updated_at, and sweep_stuck_snippets
+          -- (20260917080000) uses updated_at < now() - 2 h to requeue stuck rows, so touching an
+          -- in-flight row here would hide it from the sweep for up to two hours. They are picked
+          -- up by a later batch once their status changes.
           SELECT s2.id
           FROM public.snippets s2
-          JOIN public.audio_files a2 ON a2.id = s2.audio_file
           WHERE s2.audio_file IS NOT NULL
-            AND s2.location_state IS NULL
             AND s2.radio_station_code IS NULL
-            AND (a2.location_state IS NOT NULL OR a2.radio_station_code IS NOT NULL)
+            AND s2.status NOT IN ('Processing', 'Reviewing')
           ORDER BY s2.id
           LIMIT p_batch
-          FOR UPDATE OF s2 SKIP LOCKED
+          FOR UPDATE SKIP LOCKED
       );
 
     GET DIAGNOSTICS updated = ROW_COUNT;

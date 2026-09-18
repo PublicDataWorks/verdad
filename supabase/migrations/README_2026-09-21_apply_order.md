@@ -18,7 +18,7 @@ the `audio_file` object in the result still comes from the `audio_files` join.
 | # | File | Transaction | Duration | Verify after |
 |---|------|-------------|----------|--------------|
 | 1 | `20260921000100_snippets_location_columns_and_triggers.sql` | Safe in one transaction (nullable `ADD COLUMN` = catalog only, no rewrite; brief ACCESS EXCLUSIVE lock) | < 1 s | `SELECT column_name FROM information_schema.columns WHERE table_name='snippets' AND column_name IN ('location_state','radio_station_code');` → 2 rows. `SELECT tgname, tgenabled FROM pg_trigger WHERE tgname IN ('snippets_copy_audio_file_location','audio_files_propagate_location');` → 2 rows, `tgenabled = 'O'`. Then insert nothing by hand — just confirm a freshly produced snippet has the columns filled: `SELECT id, location_state, radio_station_code FROM public.snippets ORDER BY created_at DESC LIMIT 5;` |
-| 2 | `20260921000200_snippets_location_backfill.sql` | Creating the function is transactional; **running** it is a series of one-transaction batches. First create the throwaway `idx_snippets_location_backfill` partial index named in the file header (CONCURRENTLY, outside a transaction) and drop it when done | ~505k rows, ~100 batches of 5000. A few minutes by hand; ~100 min on the per-minute cron job | `SELECT count(*) FILTER (WHERE location_state IS NULL AND audio_file IS NOT NULL) AS remaining, count(*) FROM public.snippets;` → `remaining` down to the expected floor (see below). Then `SELECT relname, n_live_tup, n_dead_tup, last_autovacuum FROM pg_stat_user_tables WHERE relname='snippets';` |
+| 2 | `20260921000200_snippets_location_backfill.sql` | Creating the function is transactional; **running** it is a series of one-transaction batches. First create the throwaway `idx_snippets_location_backfill` partial index named in the file header (CONCURRENTLY, outside a transaction) and drop it when done | ~505k rows, ~100 batches of 5000. A few minutes by hand; ~100 min on the per-minute cron job | `SELECT count(*) FILTER (WHERE radio_station_code IS NULL AND audio_file IS NOT NULL) AS remaining, count(*) FILTER (WHERE status IN ('Processing','Reviewing')) AS in_flight, count(*) FROM public.snippets;` → `remaining` must reach 0 (see below; it plateaus near the in-flight count while the pipeline is busy). Then `SELECT relname, n_live_tup, n_dead_tup, last_autovacuum FROM pg_stat_user_tables WHERE relname='snippets';` |
 | 3 | `20260921000300_snippets_visible_location_indexes.sql` | **MUST run outside a transaction** (`CREATE INDEX CONCURRENTLY`). Paste each statement alone; do not wrap in `BEGIN`/`COMMIT` or use a migration runner that does | ~1-3 min per index on 505k rows | `SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_snippets_visible_state'::regclass;` and the same for `idx_snippets_visible_station` — both must be `true` |
 | 4 | `20260921000400_get_snippets_denormalized_location.sql` | Safe in one transaction (`CREATE OR REPLACE`, same signature, re-`GRANT`, `NOTIFY pgrst`) | < 1 s | The EXPLAIN and result-equivalence checks below |
 
@@ -27,7 +27,7 @@ the `audio_file` object in the result still comes from the `audio_files` join.
 Steps 1-3 can be run at any off-peak time and in that order; they are invisible to the frontend
 (nothing reads the new columns yet).
 
-**Step 4 only after** the step-2 backfill reports 0 remaining (beyond the documented floor) **and**
+**Step 4 only after** the step-2 backfill reports 0 remaining **and**
 both step-3 indexes are `indisvalid`. Until then the new function returns *wrong* results — a
 filtered page is empty for every snippet whose `location_state` / `radio_station_code` is still
 NULL, because the filter no longer consults `audio_files`. Being slow is recoverable; being
@@ -36,21 +36,20 @@ silently empty during Tamoa's reporting is not.
 Step 3 before step 2 also works (the indexes cover NULLs too); step 3 after step 2 is preferred so
 the index is built once over final values.
 
-### Expected leftover after the backfill
+### When is the backfill done?
 
-The backfill skips snippets whose `audio_files` row has **both** `location_state` and
-`radio_station_code` NULL — otherwise those rows would be re-selected forever (updating NULL to
-NULL never clears the "still NULL" condition). Count the floor before starting:
+`remaining` (snippets with `radio_station_code IS NULL` and an `audio_file`) must be **0**.
+`audio_files.radio_station_code` is `NOT NULL`, so there is no permanent floor. While the pipeline is
+busy the count plateaus at roughly the number of `Processing` / `Reviewing` rows, because the
+backfill skips those on purpose: updating them would bump `updated_at` (via the existing
+`snippets_handle_updated_at` trigger) and hide a genuinely stuck row from `sweep_stuck_snippets`
+for up to two hours. Keep calling the function, or leave the cron job running, until a batch returns
+0 with `remaining` = 0.
 
-```sql
-SELECT count(*) FROM public.snippets s
-JOIN public.audio_files a ON a.id = s.audio_file
-WHERE a.location_state IS NULL AND a.radio_station_code IS NULL;
-```
-
-That number is the expected value of `remaining`, not 0. Those snippets were already invisible to a
-states/sources filter before this change (the old CTEs matched on the same NULL columns), so
-behaviour is unchanged for them.
+`location_state` may legitimately stay NULL where `audio_files.location_state` is NULL; on production
+on 2026-09-18 that was 0 snippets (`SELECT count(*) FROM public.snippets s JOIN public.audio_files a
+ON a.id = s.audio_file WHERE a.location_state IS NULL;`). Such rows match no states filter, exactly
+as before this change.
 
 ## Before / after measurements to capture
 
