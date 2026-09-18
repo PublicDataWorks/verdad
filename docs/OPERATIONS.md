@@ -39,8 +39,10 @@ cd server && fly deploy -c fly.server.toml    # the server app builds from serve
   app, and the same `user:password` as `PREFECT_API_AUTH_STRING` on `prefect` (cron scripts), `processing-worker`,
   `recording-worker` and `generic-recording-worker`. The Prefect client and CLI read it from the env; raw `curl`
   needs `-u "$PREFECT_API_AUTH_STRING"`. `GET /api/health` and `/api/ready` stay open (Fly health check). The UI
-  loads and asks for the same credential. Rotating it: set the new value on the four apps (each `fly secrets set`
-  restarts that app; see the restart gotchas below), clients before the server.
+  loads and asks for the same credential. Rotating it is not zero-downtime: Prefect accepts one value, so clients
+  and server disagree until all four apps carry the new one. Set it on the four apps back to back (each
+  `fly secrets set` restarts that app, which orphans its runs anyway), then recreate the runs as in the restart
+  gotchas below. Only the first enablement could go clients first, because a server without auth ignores the header.
 - Who has deploy rights and the Fly org/billing owner: **unknown** (org name `verdad` per CLAUDE.md).
 
 ## The 6-hourly restart cycle (`prefect` app, `cron` process)
@@ -203,7 +205,7 @@ refuses the production project unless `--allow-production` is passed.
   fly logs -m <machine id> --no-tail; fly machine destroy <machine id> --force
   ```
 - The Prefect API and UI (`https://prefect.fly.dev`) sit behind basic auth (`PREFECT_API_AUTH_STRING`, VER-384);
-  the Fly health check path is the only anonymous endpoint.
+  the only anonymous endpoints are `GET /api/health` and `/api/ready`.
 
 ## Database schema and migrations
 
