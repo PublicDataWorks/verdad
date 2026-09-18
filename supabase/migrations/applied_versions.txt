@@ -42,3 +42,5 @@
 20260917213000	snippets_visible_cover_index
 20260917220000	unaccent_search_function_and_indexes
 20260917220100	get_snippets_accent_insensitive
+20260918020000	drop_dead_search_rpcs
+20260918020100	autovacuum_thresholds_large_tables
