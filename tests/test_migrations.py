@@ -93,3 +93,32 @@ def test_manifest_and_files_agree():
     pending = {v for v in versions - manifest if v > version_of(BASELINE)}
     assert versions - manifest - pending == set(), f"pre-baseline files missing from the manifest: {sorted(versions - manifest - pending)}"
     assert manifest - versions == set(), f"manifest versions without a file: {sorted(manifest - versions)}"
+
+
+# --- News ledger (VER-367) ---------------------------------------------------------------------
+# The migration ships unapplied on purpose: a human applies it in the Supabase SQL editor and only then
+# records its version in applied_versions.txt.
+
+NEWS_INDEX = "20260918000000_news_index.sql"
+LOOSE_SQL = MIGRATIONS_DIR.parent / "database" / "sql" / "search_news_index.sql"
+
+
+def test_news_index_migration_creates_the_ledger_and_its_search_function():
+    sql = (MIGRATIONS_DIR / NEWS_INDEX).read_text()
+    for table in ("news_index", "news_index_embeddings"):
+        assert re.search(rf"CREATE TABLE (IF NOT EXISTS )?public\.{table}\b", sql), f"no CREATE TABLE for {table}"
+    assert "CREATE OR REPLACE FUNCTION search_news_index(" in sql
+    assert "sub_vector(embedding, 512)" in sql, "the HNSW index must be built on the 512-dim sub-vector"
+    assert "ENABLE ROW LEVEL SECURITY" in sql
+
+
+def test_news_index_migration_is_not_recorded_as_applied():
+    assert version_of(NEWS_INDEX) not in manifest_versions(), (
+        f"{NEWS_INDEX} has not been applied to production; do not add it to {MANIFEST.name} until it has"
+    )
+
+
+def test_search_news_index_is_also_kept_as_a_loose_sql_file():
+    sql = LOOSE_SQL.read_text()
+    assert "CREATE OR REPLACE FUNCTION search_news_index(" in sql
+    assert NEWS_INDEX in sql, "the loose copy must point at the migration it mirrors"
