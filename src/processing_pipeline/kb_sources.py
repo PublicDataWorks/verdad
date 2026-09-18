@@ -2,7 +2,7 @@
 
 import re
 from datetime import date
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit
 
 VALID_SOURCE_TYPES = frozenset(
     {"tier1_wire_service", "tier1_factchecker", "tier2_major_news", "tier3_regional_news", "official_source", "other"}
@@ -44,6 +44,40 @@ _URL_TRAILING_CHARS = ".,;:!?*_'\"`"
 
 def normalize_url(url: str) -> str:
     return url.strip().rstrip(_URL_TRAILING_CHARS).lower().rstrip("/")
+
+
+_TRACKING_PARAM_RE = re.compile(r"^(utm_|fbclid$|gclid$)", re.IGNORECASE)
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def strip_tracking_params(query: str) -> str:
+    """The query string without ``utm_*``, ``fbclid`` and ``gclid``; a feed adds those, the model drops them."""
+    kept = [(k, v) for k, v in parse_qsl(query, keep_blank_values=True) if not _TRACKING_PARAM_RE.match(k)]
+    return urlencode(kept)
+
+
+def url_key(url) -> str:
+    """A comparison key for "the same page": no scheme, fragment, leading ``www.``, trailing slash, default port
+    or tracking parameters; lowercase host.
+
+    ``https://www.Reuters.com/world/x/?utm_source=rss`` and ``http://reuters.com/world/x#top`` share a key.
+    Returns "" for anything that is not an http(s) URL, which never matches a real key.
+    """
+    if not is_http_url(url):
+        return ""
+    parts = urlsplit(url.strip())
+    host = (parts.hostname or "").lower().removeprefix("www.")
+    try:
+        port = parts.port
+    except ValueError:  # "example.com:notaport": not a page anything could have returned
+        return ""
+    if port and port != _DEFAULT_PORTS.get(parts.scheme.lower()):
+        host = f"{host}:{port}"
+    key = host + parts.path.rstrip("/")
+    query = strip_tracking_params(parts.query)
+    if query:
+        key += "?" + query
+    return key
 
 
 def url_appears_in_text(url: str, text: str) -> bool:

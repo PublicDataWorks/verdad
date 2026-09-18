@@ -334,6 +334,8 @@ Based on your verification results, apply the appropriate maximum confidence sco
 
 **THE GOLDEN RULE: For claims less than 72 hours old where no contradictory evidence is found, the MAXIMUM confidence score is 30 (out of 100), regardless of how extraordinary the claim appears.**
 
+**Enforced by the pipeline, not only by you:** after your analysis, deterministic code applies these caps. A `verified_false` or "fabricated" verdict is capped at 40 unless at least one `contradicts_claim` result carries the URL of a specific article that the search tool actually returned (front pages, search-result pages and WHOIS lookups never count, and neither does a URL you did not get from a tool). Inside the 72-hour window the verdict is further capped at 30 (20 inside 24 hours) unless that contradicting article carries a `publication_date`. A contradicting source dated before the claim's `event_date` is ignored. Write the evidence so that these checks can pass when the claim really is false: cite the article URL exactly as returned, fill `publication_date` and `event_date`.
+
 ##### **I. Required Self-Review Process**
 
 After completing your initial analysis, perform this structured review:
@@ -344,6 +346,7 @@ After completing your initial analysis, perform this structured review:
    - Identify what makes it false or misleading
    - Cite specific evidence disproving the claim
    - Assign and justify a sub-score
+   - Record `event_date`: the ISO date (`YYYY-MM-DD`) of the event the claim is about, i.e. when it allegedly happened ("yesterday" relative to the recording date, "on September 14", "last week"), or `null` when the claim is not about a datable event. Use the recording date from the Snippet Data to resolve relative expressions. The pipeline uses this date deterministically: a source published **before** `event_date` cannot count as evidence that the event did not happen.
 
 2. **Validation Checklist**
    Answer each question before proceeding:
@@ -795,7 +798,7 @@ Ensure your output strictly adheres to this schema.
                             "type": "array",
                             "items": {
                                 "type": "object",
-                                "required": ["quote", "evidence", "score"],
+                                "required": ["quote", "evidence", "score", "event_date"],
                                 "properties": {
                                     "quote": {
                                         "type": "string",
@@ -808,6 +811,11 @@ Ensure your output strictly adheres to this schema.
                                     "score": {
                                         "type": "integer",
                                         "description": "Confidence score for this specific claim"
+                                    },
+                                    "event_date": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "description": "ISO date (YYYY-MM-DD) of the event the claim is about (when it allegedly happened), or null when the claim is not about a datable event."
                                     }
                                 }
                             }
@@ -2478,12 +2486,14 @@ Below is a complete example showing all required fields:
         {
           "quote": "Dicen que el gobierno quiere controlar nuestras mentes con las vacunas.",
           "evidence": "There is no scientific evidence supporting the claim that vaccines can control minds. Vaccines are designed to elicit an immune response to prevent disease.",
-          "score": 95
+          "score": 95,
+          "event_date": null
         },
         {
           "quote": "Es por eso que están empujando tanto la vacunación obligatoria.",
           "evidence": "Mandatory vaccinations are implemented to achieve herd immunity and protect public health, not for mind control purposes.",
-          "score": 90
+          "score": 90,
+          "event_date": null
         }
       ],
       "validation_checklist": {

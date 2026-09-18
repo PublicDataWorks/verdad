@@ -66,7 +66,7 @@ def test_unknown_tool_name_is_reported_to_the_model_instead_of_raising():
         model_turn(Part.from_text(text='{"final": true}')),
     )
 
-    text, thoughts, usage = run(client)
+    text, thoughts, usage, _ = run(client)
 
     assert text == '{"final": true}'
     assert client.aio.models.generate_content.await_count == 2
@@ -92,7 +92,7 @@ def test_known_tool_is_invoked_with_integer_coerced_args(monkeypatch):
         model_turn(Part.from_text(text="done")),
     )
 
-    text, _, _ = run(client)
+    text, _, _, _ = run(client)
 
     assert text == "done"
     assert seen == {"query": "q", "pageno": 2}
@@ -131,7 +131,7 @@ def test_usage_is_summed_over_every_turn():
     second = model_turn(Part.from_text(text="done"))
     second.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=150, total_token_count=200)
 
-    _, _, usage = run(fake_client(first, second))
+    _, _, usage, _ = run(fake_client(first, second))
 
     assert usage["prompt_token_count"] == 250
     assert usage["total_token_count"] == 320
@@ -147,3 +147,47 @@ def test_automatic_function_calling_is_disabled_and_tools_are_declared():
     assert config.automatic_function_calling.disable is True
     declared = [d.name for tool in config.tools for d in tool.function_declarations]
     assert declared == ["searxng_web_search", "web_url_read"]
+
+
+def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypatch):
+    async def fake_search(query: str, pageno: int = 1) -> dict:
+        return {
+            "query": query,
+            "results": [
+                {"url": "https://www.apnews.com/article/x/", "publishedDate": "2026-09-15T10:12:00+00:00"},
+                {"url": ""},
+            ],
+        }
+
+    async def fake_read(url: str) -> dict:
+        return {"url": url, "content": "..."}
+
+    async def failed_read(url: str) -> dict:
+        return {"url": url, "failed": True, "error": "404", "content": ""}
+
+    monkeypatch.setitem(executors.WEB_TOOLS, "searxng_web_search", fake_search)
+    monkeypatch.setitem(executors.WEB_TOOLS, "web_url_read", fake_read)
+    client = fake_client(
+        model_turn(
+            tool_call("searxng_web_search", query="q"),
+            tool_call("web_url_read", url="http://Reuters.com/a#top"),
+        ),
+        model_turn(tool_call("search", query="hallucinated tool")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    _, _, _, observed = run(client)
+
+    assert observed.urls == {"apnews.com/article/x", "reuters.com/a"}
+    assert observed.dates == {"apnews.com/article/x": "2026-09-15"}
+
+    monkeypatch.setitem(executors.WEB_TOOLS, "web_url_read", failed_read)
+    client = fake_client(
+        model_turn(tool_call("web_url_read", url="https://reuters.com/never-existed")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    _, _, _, observed = run(client)
+
+    assert observed.urls == set()
+    assert observed.dates == {}

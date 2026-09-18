@@ -213,10 +213,11 @@ Your pre-training data has a knowledge cutoff date. Events that occurred after y
 ### Using Research Findings for Scoring
 
 **When KB and web research both confirm a claim is false:**
-- Increase confidence. Cite both KB entries and web sources in the evidence.
+- Increase confidence. Cite both KB entries and web sources in the evidence. Only `curated` KB entries count as confirmation; `pipeline` entries are context (see below).
 
 **When KB confirms false but web evidence is absent:**
-- Use the KB evidence but note the lack of current web corroboration. Score moderately.
+- If the KB entry's `provenance` is `curated` (analyst- or script-seeded), use it but note the lack of current web corroboration. Score moderately.
+- If the KB entry's `provenance` is `pipeline` (`evidence_role: context_only`), it was written by an earlier automated review of another snippet and may itself be wrong. It is context, never evidence: it cannot raise a score, cannot support `verified_false`, and must not be cited as confirmation that something "did not happen". Without a contradicting source URL from this session's web research, the maximum score is 40.
 
 **When web evidence confirms false but KB has no entry:**
 - Use the web evidence. This is a signal that the KB should be updated (the KB Updater will handle this).

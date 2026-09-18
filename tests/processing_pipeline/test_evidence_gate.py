@@ -1,15 +1,23 @@
 import json
+from datetime import date
 
 import pytest
 
+from processing_pipeline.kb_sources import url_key
 from processing_pipeline.stage_3.models import (
     EVIDENCE_CAP_MAX_SCORE,
     EVIDENCE_GATE_NOTE_PREFIX,
+    Claim,
+    SearchResult,
     apply_evidence_caps,
     asserts_falsity,
+    latest_claim_event_date,
+    fill_publication_dates,
     has_contradicting_evidence,
+    is_article_url,
     mentions_falsity,
 )
+from processing_pipeline.stage_3.web_tools import tool_result_dates
 from processing_pipeline.stage_4.tasks import extract_stage_3_verification_evidence, merge_grounding_metadata
 
 
@@ -159,6 +167,47 @@ class TestContradictingEvidence:
     def test_none(self):
         assert not has_contradicting_evidence(None)
 
+    def test_observed_url_counts(self):
+        assert has_contradicting_evidence(_evidence(), observed_urls={url_key("https://apnews.com/article/x")})
+
+    def test_unobserved_url_does_not_count(self):
+        assert not has_contradicting_evidence(_evidence(), observed_urls={url_key("https://apnews.com/article/y")})
+        assert not has_contradicting_evidence(_evidence(), observed_urls=set())
+
+    def test_observed_urls_none_keeps_the_old_behaviour(self):
+        assert has_contradicting_evidence(_evidence(), observed_urls=None)
+        assert has_contradicting_evidence(_evidence())
+
+    @pytest.mark.parametrize(
+        "recorded, observed",
+        [
+            ("http://apnews.com/article/x", "https://apnews.com/article/x"),
+            ("https://www.apnews.com/article/x", "https://apnews.com/article/x"),
+            ("https://apnews.com/article/x/", "https://apnews.com/article/x"),
+            ("https://apnews.com/article/x#section", "https://apnews.com/article/x"),
+            ("https://APNews.com/article/x", "https://apnews.com/article/x"),
+            ("https://apnews.com/article/x", "http://www.apnews.com/article/x/#top"),
+        ],
+    )
+    def test_normalisation_treats_the_same_page_as_observed(self, recorded, observed):
+        assert has_contradicting_evidence(_evidence(url=recorded), observed_urls={url_key(observed)})
+
+    @pytest.mark.parametrize(
+        "recorded, observed",
+        [
+            ("https://apnews.com/article/x", "https://apnews.com/article/X"),
+            ("https://apnews.com/article/x?id=1", "https://apnews.com/article/x"),
+            ("https://apnews.com/article/x", "https://news.apnews.com/article/x"),
+        ],
+    )
+    def test_normalisation_does_not_conflate_different_pages(self, recorded, observed):
+        assert not has_contradicting_evidence(_evidence(url=recorded), observed_urls={url_key(observed)})
+
+    def test_url_key_of_a_non_url_never_matches(self):
+        assert url_key("not-a-url") == ""
+        assert url_key(None) == ""
+        assert not has_contradicting_evidence(_evidence(url="not-a-url"), observed_urls={""})
+
 
 class TestApplyEvidenceCaps:
     def test_insufficient_evidence_is_capped(self):
@@ -254,6 +303,92 @@ class TestApplyEvidenceCaps:
         assert result["confidence_scores"]["overall"] == 15
         assert result["evidence_gate"]["applied"] is True
 
+    def test_contradicting_url_returned_by_a_tool_is_not_capped(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://www.apnews.com/article/x/")
+
+        result = apply_evidence_caps(analysis, observed_urls={url_key("http://apnews.com/article/x")})
+
+        assert result["confidence_scores"]["overall"] == 98
+        assert result["evidence_gate"] == {"applied": False}
+        assert result["verification_evidence"]["searches_performed"][0]["results"][0]["url_observed_in_tools"] is True
+
+    def test_contradicting_url_not_returned_by_any_tool_is_capped_with_its_own_reason(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://www.reuters.com/world/americas/never-happened/")
+
+        result = apply_evidence_caps(analysis, observed_urls={url_key("https://apnews.com/article/x")})
+
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["reasons"] == [
+            "verification_status is 'verified_false' but no search result with a URL is marked contradicts_claim",
+            "the analysis asserts the content is fabricated/false but no search result with a URL is "
+            "marked contradicts_claim",
+            "contradicting URL not returned by any search or fetch tool in this session",
+        ]
+        assert "not returned by any search or fetch tool" in result["explanation"]["english"]
+        recorded = result["verification_evidence"]["searches_performed"][0]["results"][0]
+        assert recorded["url_observed_in_tools"] is False
+        # the input is not annotated
+        assert "url_observed_in_tools" not in analysis["verification_evidence"]["searches_performed"][0]["results"][0]
+
+    def test_session_without_any_tool_urls_caps_every_contradicting_url(self):
+        analysis = _analysis(explanation_en="The claim does not hold up.")
+        analysis["verification_evidence"] = _evidence()
+
+        result = apply_evidence_caps(analysis, observed_urls=set())
+
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["reasons"][-1] == (
+            "contradicting URL not returned by any search or fetch tool in this session"
+        )
+
+    def test_echo_reason_is_not_added_when_there_is_no_contradicting_url_at_all(self):
+        analysis = _analysis(explanation_en="The claim does not hold up.")
+        analysis["verification_evidence"] = _evidence(relevance="provides_context")
+
+        result = apply_evidence_caps(analysis, observed_urls=set())
+
+        assert result["evidence_gate"]["reasons"] == [
+            "verification_status is 'verified_false' but no search result with a URL is marked contradicts_claim"
+        ]
+        assert "url_observed_in_tools" not in result["verification_evidence"]["searches_performed"][0]["results"][0]
+
+    def test_observed_urls_none_does_not_annotate_or_cap(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://www.reuters.com/world/americas/never-happened/")
+
+        result = apply_evidence_caps(analysis)
+
+        assert result["evidence_gate"] == {"applied": False}
+        assert "url_observed_in_tools" not in result["verification_evidence"]["searches_performed"][0]["results"][0]
+
+    def test_search_result_model_accepts_the_audit_field_and_defaults_it_to_none(self):
+        base = {
+            "url": "https://apnews.com/article/x",
+            "source_name": "AP",
+            "source_type": "tier1_wire_service",
+            "publication_date": None,
+            "title": "t",
+            "relevant_excerpt": "e",
+            "relevance_to_claim": "contradicts_claim",
+        }
+        assert SearchResult.model_validate(base).url_observed_in_tools is None
+        assert SearchResult.model_validate({**base, "url_observed_in_tools": False}).url_observed_in_tools is False
+
+    def test_stage_4_honours_the_stored_tool_echo_verdict(self):
+        analysis = _analysis(explanation_en="This is fictional.")
+        evidence = _evidence(url="https://www.reuters.com/world/americas/never-happened/")
+        evidence["searches_performed"][0]["results"][0]["url_observed_in_tools"] = False
+        result = apply_evidence_caps(analysis, verification_evidence=evidence)
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        evidence["searches_performed"][0]["results"][0]["url_observed_in_tools"] = True
+        assert apply_evidence_caps(analysis, verification_evidence=evidence)["evidence_gate"] == {"applied": False}
+
+    def test_url_key_rejects_a_malformed_port(self):
+        assert url_key("https://example.com:notaport/article") == ""
+        assert not has_contradicting_evidence(_evidence(url="https://example.com:notaport/article"), observed_urls=set())
+
     def test_stage_4_uses_explicit_stage_3_evidence(self):
         analysis = _analysis(explanation_en="This is fictional.")
         result = apply_evidence_caps(analysis, verification_evidence=_evidence())
@@ -322,3 +457,253 @@ class TestGroundingMetadataHelpers:
     def test_merge_with_no_stage_4_metadata(self):
         merged = json.loads(merge_grounding_metadata(None, None, {"applied": False}))
         assert merged == {}
+
+
+def _with_claims(analysis, *event_dates):
+    analysis["confidence_scores"]["analysis"] = {
+        "claims": [{"quote": f"q{i}", "evidence": "e", "score": 90, "event_date": d} for i, d in enumerate(event_dates)]
+    }
+    return analysis
+
+
+class TestIsArticleUrl:
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://apnews.com/article/x",
+            "https://en.wikipedia.org/wiki/Pope",
+            "https://www.va.gov/disability/dependency-indemnity-compensation/",
+            "https://news.google.com/articles/abc",
+            "https://www.bbc.com/mundo/noticias_internacional",
+            "http://example.com/2026/09/15/story.html",
+            "https://eltiempo.com/?p=12345",
+            "https://example.com/who.is-this-story",
+        ],
+    )
+    def test_articles_and_section_pages_count(self, url):
+        assert is_article_url(url)
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://apnews.com/",
+            "https://defensoresdelapatria.com/",
+            "http://unonex.com",
+            "https://www.microsoft.com/en-us",
+            "https://www.microsoft.com/en-US/",
+            "https://www.google.com/search?q=Charlie+Kirk+assassinated",
+            "https://www.bing.com/search?q=x",
+            "https://duckduckgo.com/?q=x",
+            "https://www.whois.com/whois/sanmarla.com",
+            "https://who.is/whois/x.com",
+            "https://web.archive.org/search?query=x",
+            "https://example.com/?utm_source=rss",
+            "not-a-url",
+            None,
+        ],
+    )
+    def test_front_pages_search_pages_and_lookups_do_not(self, url):
+        assert not is_article_url(url)
+
+    def test_front_page_never_counts_as_contradicting_evidence(self):
+        assert not has_contradicting_evidence(_evidence(url="https://defensoresdelapatria.com/"))
+        assert not has_contradicting_evidence(_evidence(url="https://www.google.com/search?q=x"))
+
+    def test_cap_reason_names_the_rule(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://www.whois.com/whois/sanmarla.com")
+        result = apply_evidence_caps(analysis)
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["reasons"][-1] == (
+            "the only contradicting URLs are front pages, search pages or lookups, not articles"
+        )
+
+
+class TestDatePrecedence:
+    def test_claim_model_accepts_event_date_and_defaults_it_to_none(self):
+        assert Claim.model_validate({"quote": "q", "evidence": "e", "score": 1}).event_date is None
+        assert Claim.model_validate({"quote": "q", "evidence": "e", "score": 1, "event_date": "2026-09-14"}).event_date
+
+    def test_latest_claim_event_date(self):
+        analysis = _with_claims(_analysis(), "2026-08-07", None, "not a date", "2026-09-14")
+        assert latest_claim_event_date(analysis).isoformat() == "2026-09-14"
+        assert latest_claim_event_date(_analysis()) is None
+        assert latest_claim_event_date(None) is None
+
+    def test_source_between_two_claimed_events_does_not_clear_the_later_one(self):
+        analysis = _with_claims(_analysis(explanation_en="Both events are fabricated."), "2026-08-07", "2026-09-14")
+        analysis["verification_evidence"] = _evidence(publication_date="2026-08-08")
+        result = apply_evidence_caps(analysis)
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert "latest claimed event (2026-09-14)" in result["evidence_gate"]["reasons"][-1]
+
+    def test_source_dated_before_the_event_cannot_contradict_it(self):
+        evidence = _evidence(publication_date="2024-03-01")
+        assert not has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14))
+        assert has_contradicting_evidence(evidence, not_published_before=date(2024, 1, 1))
+        assert has_contradicting_evidence(evidence)  # no event date known: the old rule
+
+    def test_undated_source_still_counts(self):
+        evidence = _evidence(publication_date=None)
+        assert has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14))
+        assert not has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14), require_date=True)
+
+    def test_gate_uses_the_claims_event_dates(self):
+        analysis = _with_claims(_analysis(explanation_en="The ruling never happened."), "2026-09-14")
+        analysis["verification_evidence"] = _evidence(
+            url="https://www.politifact.com/factchecks/2024/mar/01/x/", publication_date="2024-03-01"
+        )
+        result = apply_evidence_caps(analysis)
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert result["evidence_gate"]["reasons"][-1] == (
+            "every contradicting source is dated before the latest claimed event (2026-09-14)"
+        )
+
+    def test_source_dated_after_the_event_keeps_the_score(self):
+        analysis = _with_claims(_analysis(explanation_en="The ruling never happened."), "2026-09-14")
+        analysis["verification_evidence"] = _evidence(publication_date="2026-09-15")
+        assert apply_evidence_caps(analysis)["evidence_gate"] == {"applied": False}
+
+    def test_event_date_after_the_recording_is_ignored(self):
+        analysis = _with_claims(_analysis(explanation_en="The ruling never happened."), "2030-01-01", "2026-09-14")
+        assert latest_claim_event_date(analysis, not_after=date(2026, 9, 16)).isoformat() == "2026-09-14"
+        analysis["verification_evidence"] = _evidence(publication_date="2026-09-15")
+        assert apply_evidence_caps(analysis, recorded_on=date(2026, 9, 16))["evidence_gate"] == {"applied": False}
+        assert apply_evidence_caps(analysis)["evidence_gate"]["cap"] == EVIDENCE_CAP_MAX_SCORE
+
+    def test_tool_supplied_date_never_disqualifies_a_source(self):
+        evidence = _evidence(publication_date="1970-01-01")
+        evidence["searches_performed"][0]["results"][0]["publication_date_source"] = "tool"
+        assert has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14))
+        assert not has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14), require_date=True)
+
+    def test_stage_4_uses_the_stage_3_claim_dates(self):
+        reviewer_output = _analysis(explanation_en="The ruling never happened.")
+        result = apply_evidence_caps(
+            reviewer_output, verification_evidence=_evidence(publication_date="2024-03-01"), event_date=date(2026, 9, 14)
+        )
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert "latest claimed event (2026-09-14)" in result["evidence_gate"]["reasons"][-1]
+
+    def test_every_disqualifying_rule_is_reported(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://apnews.com/")
+        reasons = apply_evidence_caps(analysis, observed_urls=set())["evidence_gate"]["reasons"]
+        assert reasons[-2:] == [
+            "the only contradicting URLs are front pages, search pages or lookups, not articles",
+            "contradicting URL not returned by any search or fetch tool in this session",
+        ]
+
+    def test_stored_tool_echo_verdict_is_reported_as_a_reason(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        evidence = _evidence()
+        evidence["searches_performed"][0]["results"][0]["url_observed_in_tools"] = False
+        reasons = apply_evidence_caps(analysis, verification_evidence=evidence)["evidence_gate"]["reasons"]
+        assert reasons[-1] == "contradicting URL was not returned by any search or fetch tool when the analysis ran"
+
+
+class TestToolPublicationDates:
+    def test_tool_result_dates_reads_searxng_published_dates(self):
+        result = {
+            "results": [
+                {"url": "https://apnews.com/a", "publishedDate": "2026-09-15T10:12:00+00:00"},
+                {"url": "https://apnews.com/b", "publishedDate": None},
+                {"url": "https://apnews.com/c"},
+                {"url": "", "publishedDate": "2026-09-15"},
+            ]
+        }
+        assert tool_result_dates("searxng_web_search", result) == {"https://apnews.com/a": "2026-09-15"}
+        assert tool_result_dates("searxng_web_search", {"failed": True, "results": []}) == {}
+        assert tool_result_dates("web_url_read", {"url": "https://apnews.com/a"}) == {}
+
+    def test_fill_publication_dates_fills_only_missing_or_unparseable_dates(self):
+        evidence = {
+            "searches_performed": [
+                {
+                    "results": [
+                        {"url": "https://www.apnews.com/a/", "publication_date": None},
+                        {"url": "https://apnews.com/b", "publication_date": "yesterday"},
+                        {"url": "https://apnews.com/c", "publication_date": "2026-01-01"},
+                        {"url": "https://apnews.com/d", "publication_date": None},
+                    ]
+                }
+            ]
+        }
+        dates = {url_key("http://apnews.com/a"): "2026-09-15", url_key("https://apnews.com/b"): "2026-09-14"}
+        assert fill_publication_dates(evidence, dates) == 2
+        results = evidence["searches_performed"][0]["results"]
+        assert results[0] == {"url": "https://www.apnews.com/a/", "publication_date": "2026-09-15", "publication_date_source": "tool"}
+        assert results[1]["publication_date"] == "2026-09-14" and results[1]["publication_date_source"] == "tool"
+        assert results[2]["publication_date"] == "2026-01-01" and results[2]["publication_date_source"] == "model"
+        assert results[3] == {"url": "https://apnews.com/d", "publication_date": None}
+
+    def test_fill_is_a_no_op_without_tool_dates(self):
+        evidence = _evidence(publication_date=None)
+        assert fill_publication_dates(evidence, None) == 0
+        assert fill_publication_dates(None, {}) == 0
+        assert "publication_date_source" not in evidence["searches_performed"][0]["results"][0]
+
+    def test_search_result_model_accepts_publication_date_source(self):
+        base = {
+            "url": "https://apnews.com/article/x",
+            "source_name": "AP",
+            "source_type": "tier1_wire_service",
+            "publication_date": "2026-09-15",
+            "title": "t",
+            "relevant_excerpt": "e",
+            "relevance_to_claim": "contradicts_claim",
+        }
+        assert SearchResult.model_validate(base).publication_date_source is None
+        assert SearchResult.model_validate({**base, "publication_date_source": "tool"}).publication_date_source == "tool"
+
+
+class TestBreakingNewsCap:
+    def _fresh(self, publication_date, hours):
+        analysis = _analysis(explanation_en="The event never happened.", overall=95)
+        analysis["verification_evidence"] = _evidence(publication_date=publication_date)
+        return apply_evidence_caps(analysis, hours_since_recording=hours)
+
+    def test_undated_contradicting_source_inside_24h_caps_at_20(self):
+        result = self._fresh(None, "5.5")
+        assert result["confidence_scores"]["overall"] == 20
+        assert result["confidence_scores"]["categories"][0]["score"] == 20
+        assert result["evidence_gate"]["cap"] == 20
+        assert "breaking news window" in result["evidence_gate"]["reasons"][0]
+        assert "capped at 20" in result["explanation"]["english"]
+
+    def test_undated_contradicting_source_inside_72h_caps_at_30(self):
+        assert self._fresh(None, 48)["evidence_gate"]["cap"] == 30
+
+    def test_dated_contradicting_source_lifts_the_breaking_cap(self):
+        assert self._fresh("2026-09-15", 5)["evidence_gate"] == {"applied": False}
+
+    def test_old_recording_is_not_capped(self):
+        assert self._fresh(None, 100)["evidence_gate"] == {"applied": False}
+        assert self._fresh(None, None)["evidence_gate"] == {"applied": False}
+        assert self._fresh(None, "")["evidence_gate"] == {"applied": False}
+
+    def test_recording_dated_in_the_future_is_not_capped(self):
+        assert self._fresh(None, -5)["evidence_gate"] == {"applied": False}
+
+    def test_tool_date_before_the_event_counts_as_undated(self):
+        analysis = _with_claims(_analysis(explanation_en="The event never happened.", overall=95), "2026-09-14")
+        analysis["verification_evidence"] = _evidence(publication_date="1970-01-01")
+        analysis["verification_evidence"]["searches_performed"][0]["results"][0]["publication_date_source"] = "tool"
+        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"]["cap"] == 20
+
+    def test_low_score_inside_the_window_is_left_alone(self):
+        analysis = _analysis(explanation_en="The event never happened.", overall=15)
+        analysis["verification_evidence"] = _evidence(publication_date=None)
+        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"] == {"applied": False}
+
+    def test_non_falsity_verdict_inside_the_window_is_left_alone(self):
+        analysis = _analysis(status="uncertain", explanation_en="Misleading framing of real data.", overall=60)
+        analysis["confidence_scores"]["verification_status"] = "verified_true"
+        analysis["verification_evidence"] = _evidence(relevance="provides_context", publication_date=None)
+        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"] == {"applied": False}
+
+    def test_the_40_cap_takes_precedence_over_the_breaking_cap(self):
+        analysis = _analysis(explanation_en="The event never happened.", overall=95)
+        analysis["verification_evidence"] = _evidence(relevance="provides_context")
+        result = apply_evidence_caps(analysis, hours_since_recording=5)
+        assert result["evidence_gate"]["cap"] == EVIDENCE_CAP_MAX_SCORE

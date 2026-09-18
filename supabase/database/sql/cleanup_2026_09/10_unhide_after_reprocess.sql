@@ -54,7 +54,7 @@
 BEGIN;
 
 WITH params AS (
-    SELECT 'hide-2026-09-15-heuristics'::text AS batch,   -- <- edit: -heuristics, -embeddings or -noevidence-premarch
+    SELECT 'hide-2026-09-15-heuristics'::text AS batch,   -- <- edit: -heuristics, -embeddings, -noevidence-premarch or hide-2026-09-17-postcutoff
            5000                               AS chunk_size
 ),
 todo AS (

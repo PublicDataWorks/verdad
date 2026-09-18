@@ -36,8 +36,8 @@
     }
   },
   "stage_3": {
-    "version": "1.4.0",
-    "description": "search_failed result status for failed web searches (VER-348)",
+    "version": "1.5.0",
+    "description": "claims[].event_date for date precedence and the code-enforced breaking-news cap; document the deterministic evidence gate (VER-369)",
     "files": {
       "system_instruction": "prompts/stage_3/system_instruction.md",
       "user_prompt": "prompts/stage_3/analysis_prompt.md",
@@ -45,8 +45,8 @@
     }
   },
   "stage_4/kb_researcher": {
-    "version": "1.0.0",
-    "description": "Active version seeded from the database on 2026-09-14",
+    "version": "1.1.0",
+    "description": "Report each entry's provenance (curated vs pipeline-authored) so the reviewer can weigh it (VER-341)",
     "files": {
       "system_instruction": "prompts/stage_4/kb_researcher_instruction.md",
       "user_prompt": null,
@@ -63,8 +63,8 @@
     }
   },
   "stage_4/reviewer": {
-    "version": "1.1.0",
-    "description": "Active version seeded from the database on 2026-09-14",
+    "version": "1.2.0",
+    "description": "Pipeline-authored knowledge-base entries are context only, never contradicting evidence (VER-341)",
     "files": {
       "system_instruction": "prompts/stage_4/reviewer_instruction.md",
       "user_prompt": null,

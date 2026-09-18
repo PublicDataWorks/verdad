@@ -65,7 +65,7 @@ GRANT ALL ON TABLE public.snippet_analysis_snapshot TO service_role;
 BEGIN;
 
 WITH params AS (
-    SELECT 'hide-2026-09-15-heuristics'::text AS batch,   -- <- edit: -heuristics, -embeddings or -noevidence-premarch
+    SELECT 'hide-2026-09-15-heuristics'::text AS batch,   -- <- edit: -heuristics, -embeddings, -noevidence-premarch or hide-2026-09-17-postcutoff
            2000                               AS batch_size
 ),
 todo AS (
