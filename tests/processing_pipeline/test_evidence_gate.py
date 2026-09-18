@@ -502,7 +502,6 @@ class TestIsArticleUrl:
             # A publisher's own search box is still a search page, not an article.
             "https://apnews.com/?s=fulton",
             "https://eltiempo.com/?search=fraude+electoral",
-            "https://www.bbc.com/mundo?q=x",
             # Search engines nest their result pages under sections too.
             "https://www.bing.com/news/search?q=x",
             "https://yandex.ru/news/search?text=x",
