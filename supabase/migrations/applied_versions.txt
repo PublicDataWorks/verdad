@@ -47,3 +47,4 @@
 20260918030000	sweep_retryable_errors
 20260918040000	unschedule_retry_failed_jobs
 20260918050000	pin_search_path_security_definer
+20260918053000	search_path_pg_temp_last
