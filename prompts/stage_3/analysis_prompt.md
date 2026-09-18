@@ -811,6 +811,11 @@ Ensure your output strictly adheres to this schema.
                                     "score": {
                                         "type": "integer",
                                         "description": "Confidence score for this specific claim"
+                                    },
+                                    "event_date": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "description": "ISO date (YYYY-MM-DD) of the event the claim is about (when it allegedly happened), or null when the claim is not about a datable event."
                                     }
                                 }
                             }
@@ -2481,12 +2486,14 @@ Below is a complete example showing all required fields:
         {
           "quote": "Dicen que el gobierno quiere controlar nuestras mentes con las vacunas.",
           "evidence": "There is no scientific evidence supporting the claim that vaccines can control minds. Vaccines are designed to elicit an immune response to prevent disease.",
-          "score": 95
+          "score": 95,
+          "event_date": null
         },
         {
           "quote": "Es por eso que están empujando tanto la vacunación obligatoria.",
           "evidence": "Mandatory vaccinations are implemented to achieve herd immunity and protect public health, not for mind control purposes.",
-          "score": 90
+          "score": 90,
+          "event_date": null
         }
       ],
       "validation_checklist": {

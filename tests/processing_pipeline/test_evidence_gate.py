@@ -476,6 +476,8 @@ class TestIsArticleUrl:
             "https://news.google.com/articles/abc",
             "https://www.bbc.com/mundo/noticias_internacional",
             "http://example.com/2026/09/15/story.html",
+            "https://eltiempo.com/?p=12345",
+            "https://example.com/who.is-this-story",
         ],
     )
     def test_articles_and_section_pages_count(self, url):
@@ -494,6 +496,8 @@ class TestIsArticleUrl:
             "https://duckduckgo.com/?q=x",
             "https://www.whois.com/whois/sanmarla.com",
             "https://who.is/whois/x.com",
+            "https://web.archive.org/search?query=x",
+            "https://example.com/?utm_source=rss",
             "not-a-url",
             None,
         ],
@@ -535,14 +539,14 @@ class TestDatePrecedence:
 
     def test_source_dated_before_the_event_cannot_contradict_it(self):
         evidence = _evidence(publication_date="2024-03-01")
-        assert not has_contradicting_evidence(evidence, earliest_event_date=date(2026, 9, 14))
-        assert has_contradicting_evidence(evidence, earliest_event_date=date(2024, 1, 1))
+        assert not has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14))
+        assert has_contradicting_evidence(evidence, not_published_before=date(2024, 1, 1))
         assert has_contradicting_evidence(evidence)  # no event date known: the old rule
 
     def test_undated_source_still_counts(self):
         evidence = _evidence(publication_date=None)
-        assert has_contradicting_evidence(evidence, earliest_event_date=date(2026, 9, 14))
-        assert not has_contradicting_evidence(evidence, earliest_event_date=date(2026, 9, 14), require_date=True)
+        assert has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14))
+        assert not has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14), require_date=True)
 
     def test_gate_uses_the_claims_event_dates(self):
         analysis = _with_claims(_analysis(explanation_en="The ruling never happened."), "2026-09-14")
@@ -559,6 +563,43 @@ class TestDatePrecedence:
         analysis = _with_claims(_analysis(explanation_en="The ruling never happened."), "2026-09-14")
         analysis["verification_evidence"] = _evidence(publication_date="2026-09-15")
         assert apply_evidence_caps(analysis)["evidence_gate"] == {"applied": False}
+
+    def test_event_date_after_the_recording_is_ignored(self):
+        analysis = _with_claims(_analysis(explanation_en="The ruling never happened."), "2030-01-01", "2026-09-14")
+        assert latest_claim_event_date(analysis, not_after=date(2026, 9, 16)).isoformat() == "2026-09-14"
+        analysis["verification_evidence"] = _evidence(publication_date="2026-09-15")
+        assert apply_evidence_caps(analysis, recorded_on=date(2026, 9, 16))["evidence_gate"] == {"applied": False}
+        assert apply_evidence_caps(analysis)["evidence_gate"]["cap"] == EVIDENCE_CAP_MAX_SCORE
+
+    def test_tool_supplied_date_never_disqualifies_a_source(self):
+        evidence = _evidence(publication_date="1970-01-01")
+        evidence["searches_performed"][0]["results"][0]["publication_date_source"] = "tool"
+        assert has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14))
+        assert not has_contradicting_evidence(evidence, not_published_before=date(2026, 9, 14), require_date=True)
+
+    def test_stage_4_uses_the_stage_3_claim_dates(self):
+        reviewer_output = _analysis(explanation_en="The ruling never happened.")
+        result = apply_evidence_caps(
+            reviewer_output, verification_evidence=_evidence(publication_date="2024-03-01"), event_date=date(2026, 9, 14)
+        )
+        assert result["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
+        assert "latest claimed event (2026-09-14)" in result["evidence_gate"]["reasons"][-1]
+
+    def test_every_disqualifying_rule_is_reported(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        analysis["verification_evidence"] = _evidence(url="https://apnews.com/")
+        reasons = apply_evidence_caps(analysis, observed_urls=set())["evidence_gate"]["reasons"]
+        assert reasons[-2:] == [
+            "the only contradicting URLs are front pages, search pages or lookups, not articles",
+            "contradicting URL not returned by any search or fetch tool in this session",
+        ]
+
+    def test_stored_tool_echo_verdict_is_reported_as_a_reason(self):
+        analysis = _analysis(explanation_en="The rally was fabricated.")
+        evidence = _evidence()
+        evidence["searches_performed"][0]["results"][0]["url_observed_in_tools"] = False
+        reasons = apply_evidence_caps(analysis, verification_evidence=evidence)["evidence_gate"]["reasons"]
+        assert reasons[-1] == "contradicting URL was not returned by any search or fetch tool when the analysis ran"
 
 
 class TestToolPublicationDates:
@@ -640,6 +681,15 @@ class TestBreakingNewsCap:
         assert self._fresh(None, 100)["evidence_gate"] == {"applied": False}
         assert self._fresh(None, None)["evidence_gate"] == {"applied": False}
         assert self._fresh(None, "")["evidence_gate"] == {"applied": False}
+
+    def test_recording_dated_in_the_future_is_not_capped(self):
+        assert self._fresh(None, -5)["evidence_gate"] == {"applied": False}
+
+    def test_tool_date_before_the_event_counts_as_undated(self):
+        analysis = _with_claims(_analysis(explanation_en="The event never happened.", overall=95), "2026-09-14")
+        analysis["verification_evidence"] = _evidence(publication_date="1970-01-01")
+        analysis["verification_evidence"]["searches_performed"][0]["results"][0]["publication_date_source"] = "tool"
+        assert apply_evidence_caps(analysis, hours_since_recording=5)["evidence_gate"]["cap"] == 20
 
     def test_low_score_inside_the_window_is_left_alone(self):
         analysis = _analysis(explanation_en="The event never happened.", overall=15)
