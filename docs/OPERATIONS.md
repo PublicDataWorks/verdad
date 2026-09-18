@@ -163,6 +163,16 @@ refuses the production project unless `--allow-production` is passed.
   `20260917080000`) puts rows older than 2 h back to `New` / `Ready for review`. `cron.job_run_details` shows
   the runs; `SELECT public.sweep_stuck_snippets()` by hand returns how many rows it moved.
 - **Stage 3 polls `New` newest-first**, so old rows never drain on their own; reprocess them by id.
+- **`Error` is otherwise terminal.** Nothing in the pipeline re-selects an `Error` row, and because transcription
+  is a Stage 3 output a snippet that fails Stage 3 has no text and cannot be found by search. The function
+  `public.sweep_retryable_errors(p_batch, p_max_attempts)` (migration `20260918030000`, VER-382) moves a bounded
+  batch of retryable rows (fixed VER-363 `KeyError`s, Gemini 503/429/500/empty response, Stage 4 MCP session
+  failures; never the deliberate `skipped_backlog_*` or `Intentionally Hidden` parks) back to `New`, or to
+  `Ready for review` for `[Stage 4]` failures, incrementing `snippets.analysis_attempts` each time and giving up
+  after `p_max_attempts` (default 3). **It is not scheduled by default**: `p_batch` is the Gemini-quota dial
+  (VER-379). Enable with `SELECT cron.schedule('sweep_retryable_errors', '*/10 * * * *',
+  $$SELECT public.sweep_retryable_errors(200)$$)`, pause with `cron.unschedule`, and run one batch by hand with
+  `SELECT public.sweep_retryable_errors(50)`, which returns counts by destination.
 - **Transient Gemini errors are retried** (`src/processing_pipeline/gemini_retry.py`: 429/5xx and empty or
   unparseable output, waits of 30 s, 2 min, 5 min) in Stage 3 and Stage 4; the snippet only reaches `Error`
   after the fourth failure, with that message stored. Rerun those ids once the outage is over.
