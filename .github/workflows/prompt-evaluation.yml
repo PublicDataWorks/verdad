@@ -20,6 +20,10 @@ on:
         description: "Runs per prompt per snippet"
         required: false
         default: "2"
+      wait_timeout:
+        description: "How long to wait for the Fly machine (e.g. 330m, 5h). Must stay under the job's timeout-minutes."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -32,7 +36,14 @@ concurrency:
 jobs:
   evaluate:
     runs-on: ubuntu-latest
-    timeout-minutes: 200
+    # The harness runs 2 x (baseline + candidate) Gemini analyses per snippet on a one-off Fly
+    # machine. Measured 2026-09-17: 24 snippets took over 180 minutes because gemini-2.5-pro was
+    # returning 503 UNAVAILABLE and MALFORMED_FUNCTION_CALL and every one of those costs a retry,
+    # and because the harness shares the production Gemini quota with the live pipeline. Two runs
+    # that day were killed by the old 180m WAIT_TIMEOUT at snippet 22 of 24 and posted no report at
+    # all, which is the worst outcome: hours of quota spent and no evidence. Budget generously; the
+    # job costs nothing while it waits.
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -86,7 +97,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVAL_SETS: ${{ steps.sets.outputs.sets }}
           RUNS: ${{ github.event.inputs.runs || '2' }}
-          WAIT_TIMEOUT: 180m
+          WAIT_TIMEOUT: ${{ github.event.inputs.wait_timeout || '330m' }}
         run: scripts/ci/fly_prompt_job.sh evaluate
 
       - name: Destroy the machine if the job was cancelled
