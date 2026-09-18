@@ -12,21 +12,41 @@
 --    here so the backfill (backfill_kb_embeddings.py, paged per VER-377) re-embeds the new text; the backfill
 --    only ever embeds entries with no embedding row, so without this delete the stale vector would stay forever.
 --
--- If the combined row was already split by a run of the updated 11_seed_dated_facts.sql (which inserts 8a and
--- 8b separately), `candidacy` resolves to the existing 8a row instead of inserting, so the sources still move
--- and the combined row is still rewritten rather than left half-applied.
+-- If the updated 11_seed_dated_facts.sql already ran (it inserts 8a and 8b separately), the combined row is
+-- simply deleted with its sources and embedding: 8a and 8b already carry the same sources, and kb_entries has no
+-- unique constraint on fact or (kb_entry, url), so moving or rewriting would create duplicates. The split path
+-- below runs only when the meeting-only 8b entry does not exist yet.
 
 BEGIN;
+
+-- Branch A: 8b already exists (updated 11 ran first). Remove the combined row outright.
+WITH combined AS (
+    SELECT id FROM public.kb_entries
+    WHERE created_by_model = 'analyst-seed-2026-09-17'
+      AND fact = 'Flávio Bolsonaro is a candidate in Brazil''s 2026-10-04 presidential election and on 2026-08-05 named federal deputy Alfredo Gaspar as his running mate; Luiz Inácio Lula da Silva is the incumbent president. Lula met President Trump at the White House in the week of 2026-05-07.'
+      AND EXISTS (SELECT 1 FROM public.kb_entries m WHERE m.created_by_model = 'analyst-seed-2026-09-17'
+                  AND m.fact = 'Brazilian President Luiz Inácio Lula da Silva met President Trump at the White House in the week of 2026-05-07.')
+),
+del_sources AS (
+    DELETE FROM public.kb_entry_sources s USING combined c WHERE s.kb_entry = c.id RETURNING s.id
+),
+del_embeddings AS (
+    DELETE FROM public.kb_entry_embeddings x USING combined c WHERE x.kb_entry = c.id RETURNING x.kb_entry
+)
+DELETE FROM public.kb_entries e USING combined c WHERE e.id = c.id;
 
 UPDATE public.kb_entry_sources
 SET publication_date = '2026-08-07'::date
 WHERE url = 'https://www.vaticannews.va/en/pope/news/2026-08/pope-leos-packed-schedule-4-day-apostolic-journey-to-france.html'
   AND publication_date = '2026-08-01'::date;
 
+-- Branch B: 8b does not exist yet (production as of 2026-09-18). Split the combined row in place.
 WITH combined AS (
     SELECT id FROM public.kb_entries
     WHERE created_by_model = 'analyst-seed-2026-09-17'
       AND fact = 'Flávio Bolsonaro is a candidate in Brazil''s 2026-10-04 presidential election and on 2026-08-05 named federal deputy Alfredo Gaspar as his running mate; Luiz Inácio Lula da Silva is the incumbent president. Lula met President Trump at the White House in the week of 2026-05-07.'
+      AND NOT EXISTS (SELECT 1 FROM public.kb_entries m WHERE m.created_by_model = 'analyst-seed-2026-09-17'
+                      AND m.fact = 'Brazilian President Luiz Inácio Lula da Silva met President Trump at the White House in the week of 2026-05-07.')
 ),
 candidacy_new AS (
     INSERT INTO public.kb_entries (fact, related_claim, confidence_score, disinformation_categories, keywords, is_time_sensitive, valid_from, status, created_by_model)
