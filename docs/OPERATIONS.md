@@ -167,9 +167,10 @@ refuses the production project unless `--allow-production` is passed.
   unparseable output, waits of 30 s, 2 min, 5 min) in Stage 3 and Stage 4; the snippet only reaches `Error`
   after the fourth failure, with that message stored. Rerun those ids once the outage is over.
 - **A transient DB error on the fetch-work RPC no longer kills the stage loop** (VER-378): statement timeout
-  (`57014`), lock/deadlock, dropped connection or gateway 5xx reads as "no work" and the loop retries after its
-  60 s sleep; before, the run failed and the stage sat idle until the next cron tick. Other DB errors still fail
-  the run. Production DDL still pushes the pipeline's queries past their timeout, so expect a dip while it runs.
+  (`57014`), lock/deadlock, dropped connection or gateway 502/503/504/520/522/524 reads as "no work" and the loop
+  retries after its 60 s sleep; before, the run failed and the stage sat idle until the next cron tick. Any other
+  error (a 500 included) still fails the run. Production DDL still pushes the pipeline's queries past their
+  timeout, so expect a dip while it runs.
 - **Gemini quota**: about 2,800 stage 3 analyses per day at the current tier, reset 07:00 UTC (midnight PT).
   5 loop runs already use most of it; `429 RESOURCE_EXHAUSTED` errors need a requeue after the reset.
 - **PostgREST statement timeout is 2 min**: big counts/updates time out through the API; use the Supabase SQL
