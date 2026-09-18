@@ -1,5 +1,8 @@
 from unittest.mock import ANY, Mock, patch
+
+import httpx
 import pytest
+from postgrest.exceptions import APIError
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import GeminiModel
 
@@ -825,3 +828,58 @@ class TestSupabaseClient:
             )
             mock_supabase.table.return_value.update.return_value.eq.assert_called_once_with("id", case["snippet_id"])
             assert response == case["expected_response"]
+
+
+RESERVE_METHODS = [
+    ("get_a_new_audio_file_and_reserve_it", "fetch_a_new_audio_file_and_reserve_it"),
+    ("get_a_new_stage_1_llm_response_and_reserve_it", "fetch_a_new_stage_1_llm_response_and_reserve_it"),
+    ("get_a_new_snippet_and_reserve_it", "fetch_a_new_snippet_and_reserve_it"),
+    ("get_a_ready_for_review_snippet_and_reserve_it", "fetch_a_ready_for_review_snippet_and_reserve_it"),
+    ("get_a_snippet_that_has_no_embedding", "fetch_a_snippet_that_has_no_embedding"),
+]
+
+
+class TestReserveWorkTransientErrors:
+    @pytest.fixture
+    def supabase_client(self):
+        with patch("processing_pipeline.supabase_utils.create_client") as mock_create:
+            mock_create.return_value = Mock()
+            yield SupabaseClient("https://test.supabase.co", "test-key")
+
+    @pytest.mark.parametrize("method, rpc", RESERVE_METHODS)
+    def test_statement_timeout_reads_as_no_work(self, supabase_client, method, rpc, capsys):
+        supabase_client.client.rpc.return_value.execute.side_effect = APIError(
+            {"code": "57014", "message": "canceling statement due to statement timeout"}
+        )
+
+        assert getattr(supabase_client, method)() is None
+
+        supabase_client.client.rpc.assert_called_once_with(rpc)
+        assert f"{rpc} failed with APIError" in capsys.readouterr().out
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            # PostgREST reports a non-JSON gateway body with the int status as the code.
+            APIError({"code": 502, "message": "JSON could not be generated"}),
+            httpx.ConnectError("Connection reset by peer"),
+            httpx.ReadTimeout("timed out"),
+        ],
+    )
+    def test_gateway_and_network_errors_read_as_no_work(self, supabase_client, error):
+        supabase_client.client.rpc.return_value.execute.side_effect = error
+
+        assert supabase_client.get_a_new_snippet_and_reserve_it() is None
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            APIError({"code": "42883", "message": "function fetch_a_new_snippet_and_reserve_it() does not exist"}),
+            httpx.UnsupportedProtocol("Request URL is missing an 'http://' or 'https://' protocol."),
+        ],
+    )
+    def test_other_errors_still_raise(self, supabase_client, error):
+        supabase_client.client.rpc.return_value.execute.side_effect = error
+
+        with pytest.raises(type(error)):
+            supabase_client.get_a_new_snippet_and_reserve_it()

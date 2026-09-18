@@ -33,7 +33,9 @@ Status is written with `set_audio_file_status`, `set_stage_1_llm_response_status
 Stages 2-5 take a `repeat` flag: the flow loops, sleeps 2s after doing work and 60s when idle, and breaks
 immediately when `repeat=False`. Stage 1 has no `repeat`; it takes `limit` (1000/10000 in production) and
 breaks once `processed_audio_files >= limit` or when a specific `audio_file_id` was passed. Always pass
-`repeat=False` or a specific id when invoking a flow yourself.
+`repeat=False` or a specific id when invoking a flow yourself. The fetch-work RPCs go through
+`SupabaseClient._reserve_work`, which turns a transient DB error (statement timeout, deadlock, dropped
+connection) into "no work" so the loop sleeps and retries instead of failing the run (VER-378).
 
 ## Prompts, thresholds, async
 
