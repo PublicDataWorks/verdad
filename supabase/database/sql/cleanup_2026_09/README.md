@@ -38,7 +38,7 @@ This folder was prepared to park the affected snippets in a new `Quarantined` st
 
 ### Status 2026-09-17 (updated 2026-09-18)
 
-**Executed 2026-09-17 20:35 UTC (Claude Code, on Rajiv's go, via the Supabase connector):** `13` hid 73 snippets
+**Executed 2026-09-17 ~20:25 UTC (Claude Code, on Rajiv's go, via the Supabase connector):** `13` hid 73 snippets
 (batch `hide-2026-09-17-postcutoff`, `04b` snapshot taken), `12` deactivated 10 KB entries (batch
 `cleanup-2026-09-17-postcutoff`), `11` seeded 14 facts and they were embedded with a paged one-off (the
 `backfill_kb_embeddings.py` 1,000-row-cap bug is VER-377). The 36 Fulton/Georgia snippets were re-queued in Prefect run

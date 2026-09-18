@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
-from processing_pipeline.stage_3.models import apply_evidence_caps
+from processing_pipeline.kb_sources import parse_iso_date
+from processing_pipeline.stage_3.models import apply_evidence_caps, latest_claim_event_date
 from processing_pipeline.stage_4.executor import Stage4Executor
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.temporal_context import build_temporal_context
@@ -172,12 +173,17 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
             )
         )
 
-        # Deterministic evidence gate. The reviewer output has no structured evidence of its own, so the
-        # falsity check relies on the Stage 3 search record preserved in grounding_metadata.
+        # Deterministic evidence gate. The reviewer output has no structured evidence or claim dates of its
+        # own, so both come from the Stage 3 record.
         stage_3_evidence = extract_stage_3_verification_evidence(previous_analysis.get("grounding_metadata"))
         hours_since_recording = build_temporal_context(prepared["recorded_at"])["hours_since_recording"]
+        recorded_on = parse_iso_date(prepared["recorded_at"])
         response = apply_evidence_caps(
-            response, verification_evidence=stage_3_evidence, hours_since_recording=hours_since_recording
+            response,
+            verification_evidence=stage_3_evidence,
+            hours_since_recording=hours_since_recording,
+            recorded_on=recorded_on,
+            event_date=latest_claim_event_date(previous_analysis, not_after=recorded_on),
         )
         evidence_gate = response.pop("evidence_gate")
         if evidence_gate.get("applied"):

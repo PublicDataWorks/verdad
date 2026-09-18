@@ -6,6 +6,7 @@ from processing_pipeline.kb_sources import (
     parse_iso_date,
     source_is_usable,
     url_appears_in_text,
+    url_key,
 )
 
 
@@ -42,6 +43,18 @@ class TestParseIsoDate:
     @pytest.mark.parametrize("value", ["March 5, 2026", "", None, "2026-13-01"])
     def test_invalid(self, value):
         assert parse_iso_date(value) is None
+
+
+class TestUrlKey:
+    def test_ignores_scheme_www_trailing_slash_default_port_and_tracking_params(self):
+        assert url_key("https://www.Reuters.com:443/world/x/?utm_source=rss&fbclid=abc#top") == url_key(
+            "http://reuters.com/world/x"
+        )
+
+    def test_keeps_page_query_and_explicit_port(self):
+        assert url_key("https://eltiempo.com/?p=12345&utm_medium=x") == "eltiempo.com?p=12345"
+        assert url_key("https://example.com:8443/a") == "example.com:8443/a"
+        assert url_key("https://example.com:notaport/a") == ""
 
 
 class TestUrlInText:

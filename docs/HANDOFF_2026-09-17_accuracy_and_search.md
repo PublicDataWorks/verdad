@@ -63,14 +63,15 @@ work. Confidence carries no information about correctness: about 95 percent of c
 
 Older open PRs: #79 (ASR-name sweep, VER-337), #68 (downvote review automation, VER-312), #54, #49.
 
-## 4. Production changes (all applied 2026-09-17 20:35 UTC by the team; kept for the record)
+## 4. Production changes (ALL APPLIED 2026-09-17 ~20:25 UTC; see section 0. Kept for the record, do not re-run)
 
 Status: `13_hide` (73 rows), `12_kb_deactivate` (10 rows), `11_seed` (14 rows, embedded), `04b` snapshot for the
 batch and the 36-snippet re-queue are DONE. Do not re-run them. Still to run: `10_unhide_after_reprocess.sql`
 once the 36 finish, and `14_seed_corrections.sql` (added 2026-09-18).
 
-The sandbox permission layer blocks production DDL/DML from Claude Code sessions, and the Supabase MCP
-connector is not attached to the verdad project (`dzujjhzgzguciwryzwlx`). Read-only SQL works through the
+At writing time the sandbox permission layer blocked production DDL/DML from Claude Code sessions and the
+Supabase MCP connector was not attached to the verdad project (`dzujjhzgzguciwryzwlx`); it was attached the
+same evening and the files below were applied through it. Read-only SQL works through the
 Management API (`POST https://api.supabase.com/v1/projects/dzujjhzgzguciwryzwlx/database/query`; the
 gateway returns 502 after about 30 s while Postgres keeps running, so keep queries small). Attaching the
 verdad project to the Supabase connector would remove this blocker for future sessions.

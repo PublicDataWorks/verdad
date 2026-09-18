@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 
-from processing_pipeline.kb_sources import is_http_url, parse_iso_date, url_key
+from processing_pipeline.kb_sources import is_http_url, parse_iso_date, strip_tracking_params, url_key
 from processing_pipeline.temporal_context import BREAKING_NEWS_TIERS
 
 
@@ -345,47 +345,58 @@ def asserts_falsity(analysis: dict) -> bool:
 # Hosts and paths that can never be "a source that contradicts the claim": a search-results page, a WHOIS
 # lookup, a web cache, or a site's front page. The model has cited every one of these as contradicting evidence.
 _SEARCH_PAGE_HOSTS = ("google.", "bing.com", "duckduckgo.com", "search.yahoo.", "yandex.", "baidu.com")
-_NON_ARTICLE_HOSTS = ("whois.", "who.is", "webcache.googleusercontent.com", "archive.org/search")
+_LOOKUP_HOSTS = ("whois.", "who.is", "webcache.googleusercontent.com")
 _LOCALE_SEGMENT_RE = re.compile(r"^[a-z]{2}(?:[-_][a-z]{2})?$", re.IGNORECASE)
+
+
+def _host_matches(host: str, pattern: str) -> bool:
+    """``"google."`` matches ``google.com`` and ``news.google.es``; ``"who.is"`` matches ``who.is`` and ``a.who.is``."""
+    if pattern.endswith("."):
+        return host.startswith(pattern) or ("." + pattern) in host
+    return host == pattern or host.endswith("." + pattern)
 
 
 def is_article_url(url) -> bool:
     """True when ``url`` points at a specific page that could contradict a claim, not a front page or a search.
 
-    Rejected: non-http URLs; search-engine result pages (``google.com/search?q=…``); WHOIS and cache lookups;
-    and front pages, i.e. an empty path or one made only of locale segments (``https://apnews.com/``,
-    ``https://www.microsoft.com/en-us``). A front page shows today's headlines, never the fact the model claims
-    it contains.
+    Rejected: non-http URLs; search-engine result pages (``google.com/search?q=…``); WHOIS, cache and archive
+    lookups; and front pages, i.e. an empty path or one made only of locale segments (``https://apnews.com/``,
+    ``https://www.microsoft.com/en-us``) with no query string. A front page shows today's headlines, never the
+    fact the model claims it contains. ``https://eltiempo.com/?p=12345`` is a page, so it counts.
     """
     if not is_http_url(url):
         return False
     parts = urlsplit(url.strip())
     host = (parts.hostname or "").lower().removeprefix("www.")
     path = parts.path or ""
-    if any(host == h.rstrip(".") or host.startswith(h) or ("." + h) in ("." + host) for h in _SEARCH_PAGE_HOSTS):
+    if any(_host_matches(host, h) for h in _SEARCH_PAGE_HOSTS):
         if path.rstrip("/") in ("", "/search", "/s", "/html") or path.startswith("/search"):
             return False
-    if any(h in host or h in (host + path) for h in _NON_ARTICLE_HOSTS):
+    if any(_host_matches(host, h) for h in _LOOKUP_HOSTS):
+        return False
+    if _host_matches(host, "archive.org") and path.startswith("/search"):
         return False
     segments = [seg for seg in path.split("/") if seg]
     if not segments or all(_LOCALE_SEGMENT_RE.match(seg) for seg in segments):
-        return False
+        return bool(strip_tracking_params(parts.query))
     return True
 
 
-def latest_claim_event_date(analysis: dict | None) -> date | None:
+def latest_claim_event_date(analysis: dict | None, not_after: date | None = None) -> date | None:
     """The latest ``claims[].event_date`` the model recorded (None when no claim carries a parseable date).
 
     Search results are not linked to individual claims, so the gate cannot tell which claim a contradicting
     source refutes. The latest event date is the conservative boundary: a source older than the most recent
-    claimed event could only refute an earlier claim, and the verdict rests on all of them.
+    claimed event could only refute an earlier claim, and the verdict rests on all of them. A date after
+    ``not_after`` (the recording date) cannot be an event the recording talks about and is ignored, so one
+    mistyped year does not disqualify every source.
     """
     if not isinstance(analysis, dict):
         return None
     scores = analysis.get("confidence_scores")
     claims = (((scores or {}).get("analysis") or {}).get("claims") or []) if isinstance(scores, dict) else []
     dates = [parse_iso_date(c.get("event_date")) for c in claims if isinstance(c, dict)]
-    dates = [d for d in dates if d is not None]
+    dates = [d for d in dates if d is not None and (not_after is None or d <= not_after)]
     return max(dates) if dates else None
 
 
@@ -435,10 +446,15 @@ def url_was_observed(url, observed_urls: set[str]) -> bool:
     return url_key(url) in observed_urls
 
 
+def _model_dated_before(result: dict, boundary: date) -> bool:
+    published = parse_iso_date(result.get("publication_date"))
+    return published is not None and published < boundary and result.get("publication_date_source") != "tool"
+
+
 def _result_counts(
     result: dict,
     observed_urls: set[str] | None,
-    earliest_event_date: date | None,
+    not_published_before: date | None,
     require_date: bool,
 ) -> bool:
     """Whether one contradicts_claim result is admissible as contradicting evidence under every active rule."""
@@ -451,8 +467,12 @@ def _result_counts(
         # returned stays inadmissible when the reviewer re-runs the gate on the stored evidence.
         return False
     published = parse_iso_date(result.get("publication_date"))
-    if earliest_event_date is not None and published is not None and published < earliest_event_date:
-        return False
+    if not_published_before is not None and published is not None and published < not_published_before:
+        if result.get("publication_date_source") != "tool":
+            return False
+        # A feed date is unvalidated (engines report 1970 or a crawl date): it never disqualifies a source,
+        # it just proves nothing about when the page was published.
+        published = None
     if require_date and published is None:
         return False
     return True
@@ -461,7 +481,7 @@ def _result_counts(
 def has_contradicting_evidence(
     verification_evidence: dict | None,
     observed_urls: set[str] | None = None,
-    earliest_event_date: date | None = None,
+    not_published_before: date | None = None,
     require_date: bool = False,
 ) -> bool:
     """True when at least one recorded search result contradicts the claim and is admissible as evidence.
@@ -476,16 +496,17 @@ def has_contradicting_evidence(
     no Stage 3 tool record; the evaluation harness reading stored records; offline callers) any http(s) URL
     counts, as before.
 
-    ``earliest_event_date`` is the boundary date (callers pass ``latest_claim_event_date``: results are not linked
-    to claims, so the most recent claimed event is the conservative choice). A source published before it
-    cannot refute it (a 2024 fact-check cannot contradict a 2026 ruling). Undated sources still count, so the
-    URL-only decision stands; the publication date is not required unless ``require_date``.
+    ``not_published_before`` is the boundary date (callers pass ``latest_claim_event_date``: results are not
+    linked to claims, so the most recent claimed event is the conservative choice). A source the model dated
+    before it cannot refute it (a 2024 fact-check cannot contradict a 2026 ruling); a tool-supplied date before
+    it is treated as no date. Undated sources still count, so the URL-only decision stands; the publication date
+    is not required unless ``require_date``.
 
     A result Stage 3 already marked ``url_observed_in_tools = False`` never counts, even when ``observed_urls``
     is ``None``, so Stage 4 cannot restore a score Stage 3 capped for an invented URL.
     """
     for result in _contradicting_results(verification_evidence):
-        if _result_counts(result, observed_urls, earliest_event_date, require_date):
+        if _result_counts(result, observed_urls, not_published_before, require_date):
             return True
     return False
 
@@ -496,7 +517,7 @@ def _mark_observed(verification_evidence: dict | None, observed_urls: set[str]) 
         result["url_observed_in_tools"] = url_was_observed(result.get("url"), observed_urls)
 
 
-def _cap_scores(confidence_scores: dict, cap: int) -> tuple:
+def _cap_scores(confidence_scores: dict, cap: int) -> tuple[int | float | None, list[dict]]:
     original_overall = confidence_scores.get("overall")
     categories = [c for c in confidence_scores.get("categories") or [] if isinstance(c, dict)]
     original_categories = [{"category": c.get("category"), "score": c.get("score")} for c in categories]
@@ -514,6 +535,8 @@ def breaking_news_cap(hours_since_recording) -> int | None:
         hours = float(hours_since_recording)
     except (TypeError, ValueError):
         return None
+    if hours < 0:  # a recording "from the future" is bad station metadata, not breaking news
+        return None
     for max_hours, max_score in BREAKING_NEWS_TIERS:
         if hours <= max_hours:
             return max_score
@@ -525,6 +548,8 @@ def apply_evidence_caps(
     verification_evidence: dict | None = None,
     observed_urls: set[str] | None = None,
     hours_since_recording: float | str | None = None,
+    recorded_on: date | None = None,
+    event_date: date | None = None,
 ) -> dict:
     """Clamp confidence scores that are not backed by evidence.
 
@@ -550,6 +575,10 @@ def apply_evidence_caps(
     contradicting result count only when a tool actually returned its URL; see ``has_contradicting_evidence``.
     When given and the evidence is the copy's own, each contradicting result is also marked with
     ``url_observed_in_tools`` so the outcome is auditable in the stored record.
+
+    ``event_date`` is the date-precedence boundary; it defaults to ``latest_claim_event_date`` of ``analysis``
+    itself, bounded by ``recorded_on``. Stage 4 passes the Stage 3 record's date because the reviewer output
+    carries no ``claims[].event_date``.
     """
     result = copy.deepcopy(analysis)
     confidence_scores = result.get("confidence_scores")
@@ -569,7 +598,8 @@ def apply_evidence_caps(
             if language in explanation:
                 explanation[language] = _without_gate_note(explanation[language])
 
-    event_date = latest_claim_event_date(result)
+    if event_date is None:
+        event_date = latest_claim_event_date(result, not_after=recorded_on)
     status = confidence_scores.get("verification_status")
     falsity_verdict = status == "verified_false" or asserts_falsity(result)
 
@@ -586,17 +616,17 @@ def apply_evidence_caps(
             "the analysis asserts the content is fabricated/false but no search result with a URL is "
             "marked contradicts_claim"
         )
-    if reasons and not evidenced:
-        # Say which rule disqualified the contradicting URLs on record, since the reasons above read as
+    recorded = list(_contradicting_results(verification_evidence)) if reasons and not evidenced else []
+    if recorded:
+        # Say which rules disqualified the contradicting URLs on record, since the reasons above read as
         # "no contradicting result" and the analyst will see one in the evidence.
-        recorded = list(_contradicting_results(verification_evidence))
-        if recorded and not any(is_article_url(r.get("url")) for r in recorded):
+        if not any(is_article_url(r.get("url")) for r in recorded):
             reasons.append("the only contradicting URLs are front pages, search pages or lookups, not articles")
-        elif recorded and observed_urls is not None and not any(
-            url_was_observed(r.get("url"), observed_urls) for r in recorded
-        ):
+        if observed_urls is not None and not any(url_was_observed(r.get("url"), observed_urls) for r in recorded):
             reasons.append("contradicting URL not returned by any search or fetch tool in this session")
-        elif recorded and event_date is not None:
+        if observed_urls is None and all(r.get("url_observed_in_tools") is False for r in recorded):
+            reasons.append("contradicting URL was not returned by any search or fetch tool when the analysis ran")
+        if event_date is not None and all(_model_dated_before(r, event_date) for r in recorded):
             reasons.append(
                 f"every contradicting source is dated before the latest claimed event ({event_date.isoformat()})"
             )

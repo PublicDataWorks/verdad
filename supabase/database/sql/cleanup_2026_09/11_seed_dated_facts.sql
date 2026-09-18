@@ -1,4 +1,5 @@
 -- cleanup_2026_09 / step 11: seed dated, analyst-verified knowledge-base facts (WRITES).
+-- EXECUTED 2026-09-17 ~20:25 UTC: 14 rows; embeddings backfilled the same evening with a paged one-off (VER-377).
 --
 -- VER-326 / VER-338. Fourteen post-cutoff facts that Stage 3 keeps labelling 'fabricated' (Tamoa's Feedback #5-#7,
 -- the 45 still-visible Colombia/Peru/Brazil snippets, the Syria and Colombia-earthquake clusters). Each fact was

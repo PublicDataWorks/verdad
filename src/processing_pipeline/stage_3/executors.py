@@ -146,7 +146,10 @@ class Stage3Executor:
             if filled:
                 print(f"Filled {filled} publication_date value(s) from search tool results")
             output = apply_evidence_caps(
-                output, observed_urls=observed.urls, hours_since_recording=temporal["hours_since_recording"]
+                output,
+                observed_urls=observed.urls,
+                hours_since_recording=temporal["hours_since_recording"],
+                recorded_on=parse_iso_date(additional_info.get("recorded_at_iso")),
             )
             evidence_gate = output.pop("evidence_gate")
             grounding_metadata = dict(output.get("verification_evidence") or {})
