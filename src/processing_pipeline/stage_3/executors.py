@@ -149,7 +149,7 @@ class Stage3Executor:
                 output,
                 observed_urls=observed.urls,
                 hours_since_recording=temporal["hours_since_recording"],
-                recorded_on=parse_iso_date(additional_info.get("recorded_at_iso")),
+                recorded_on=parse_iso_date(additional_info.get("recorded_at_iso") or additional_info.get("recorded_at")),
             )
             evidence_gate = output.pop("evidence_gate")
             grounding_metadata = dict(output.get("verification_evidence") or {})

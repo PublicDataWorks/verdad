@@ -1,4 +1,4 @@
-# Handoff: VERDAD accuracy, false positives and search (as of 2026-09-17 19:30 UTC)
+# Handoff: VERDAD accuracy, false positives and search (as of 2026-09-18 01:45 UTC)
 
 Written by Claude Code (session `claude/verdad-accuracy-hallucination-xn7kgv`) for the next Claude Code
 instance. Rajiv Sinclair (technical PM, subject-matter expert) owns product decisions; Thien Lam (engineer,
@@ -6,7 +6,13 @@ East Agile) owns deploys and reviews, on VERDAD until 2026-10-02. Coordination l
 project "Continuous Refinement System"), Slack `#verdad` (channel `C07JYU3729G`), and GitHub
 `PublicDataWorks/verdad`. Keep all three updated; Linear is the source of truth for other coding agents.
 
-## 0. Update 20:30 UTC (after the playbook was run by the team)
+## 0. Update 20:30 UTC (after the playbook was run by the team), amended 2026-09-18 01:45 UTC
+
+Later on 2026-09-17: PR #101's index applied and merged (state filter still 9 to 19 s with the count, see VER-373);
+the 14 seeds were embedded; #98's evaluation run 35270925849 timed out at 180 min, PR #105 raised the workflow
+timeout on main, and the verdad-62 Claude session merged main into the #98 branch (13fb4ae) and re-ran it as
+run 35295378105. CodeRabbit's second review (9 findings) is addressed in the stacked follow-up PR
+`claude/pr98-review-followups`, which also adds `14_seed_corrections.sql` for production.
 
 Applied to production: #73 steps 1 to 4 with #100's operator (PR #100 merged into #73), `13_hide` (73 rows),
 `12_kb_deactivate` (10 rows), `11_seed` (14 rows, no embeddings yet), and the 36 Fulton/Georgia snippets
@@ -48,7 +54,7 @@ work. Confidence carries no information about correctness: about 95 percent of c
 
 | PR | Branch | Base | State | What | Next |
 |---|---|---|---|---|---|
-| #98 | `claude/verdad-accuracy-hallucination-xn7kgv` | main | ready, 7 CodeRabbit findings fixed and resolved, prompt evaluation running on head `fdc4ab5` since 19:19 UTC (about 90 min) | Includes #86 (tool-echo). Article-only contradicting URLs; SearXNG `publishedDate` carried into evidence; `claims[].event_date` with date precedence (latest claim date is the boundary); deterministic 24/72 h breaking-news cap; Stage 4 honours stored `url_observed_in_tools=false`; KB provenance `curated|pipeline`, pipeline entries context only; prompts stage_3 1.5.0, reviewer 1.2.0, kb_researcher 1.1.0; eval set `prompts/eval/post-cutoff-true-events-2026-09.json`; runbook SQL 11/12/13 and `fulton_georgia_hidden_95_ids.txt` | Wait for the evaluation report comment, then merge (Rajiv approved merging "if safe"). Merge auto-imports prompts; the code half needs `fly deploy -c fly.processing_worker.toml` (Thien), ideally right after a :10 cron tick. Then close #86 as superseded. |
+| #98 | `claude/verdad-accuracy-hallucination-xn7kgv` | main | first evaluation (run 35270925849) timed out at the 180 min `WAIT_TIMEOUT` at snippet 22/24 of the second set; re-running as run 35295378105 on head `13fb4ae` after PR #105 raised the limit; 9 further CodeRabbit findings fixed in the stacked follow-up PR | Includes #86 (tool-echo). Article-only contradicting URLs; SearXNG `publishedDate` carried into evidence; `claims[].event_date` with date precedence (latest claim date is the boundary); deterministic 24/72 h breaking-news cap; Stage 4 honours stored `url_observed_in_tools=false`; KB provenance `curated` / `pipeline`, pipeline entries context only; prompts stage_3 1.5.0, reviewer 1.2.0, kb_researcher 1.1.0; eval set `prompts/eval/post-cutoff-true-events-2026-09.json`; runbook SQL 11/12/13 and `fulton_georgia_hidden_95_ids.txt` | The verdad-62 session owns the merge and the worker deploy (its PR comment, 20:36 UTC); do not push to the branch. Merge after the report (Rajiv approved merging "if safe"). Merge auto-imports prompts; the code half needs `fly deploy -c fly.processing_worker.toml` (Thien), ideally right after a :10 cron tick. Then close #86 as superseded. |
 | #99 | `claude/ver-367-news-ledger` | #98 branch | green, Thien to review | VER-367 slice 1: `news_index` migration (unapplied), feed YAML, hourly poller flow, Stage 3 `news_ledger_search` tool registered first in `WEB_TOOLS`. Adds `feedparser` (Fly image rebuild), new `[processes] news_ledger_poller` in `fly.processing_worker.toml` and `main.py` | Retarget to main after #98. Not needed for Monday. |
 | #100 | `claude/search-multiword-query` | #73 branch | green | One commit on #73: `&@` to `&@~ pgroonga_query_escape(...)` in `get_snippets` so multi-word searches AND their words | Merge into #73, then #73 to main, after the migrations are applied. |
 | #73 | `claude/frontend-rpc-timeouts` (earlier Claude session) | main | draft, green | Five SQL migrations: indexes, `get_trending_topics`, single-scan `get_snippets` with `p_include_count`. Fixes the 8 s timeouts on state filters and "trump" | Apply to production (section 5A), then merge. |
@@ -58,6 +64,10 @@ work. Confidence carries no information about correctness: about 95 percent of c
 Older open PRs: #79 (ASR-name sweep, VER-337), #68 (downvote review automation, VER-312), #54, #49.
 
 ## 4. Production changes (ALL APPLIED 2026-09-17 ~20:25 UTC; see section 0. Kept for the record, do not re-run)
+
+Status: `13_hide` (73 rows), `12_kb_deactivate` (10 rows), `11_seed` (14 rows, embedded), `04b` snapshot for the
+batch and the 36-snippet re-queue are DONE. Do not re-run them. Still to run: `10_unhide_after_reprocess.sql`
+once the 36 finish, and `14_seed_corrections.sql` (added 2026-09-18).
 
 At writing time the sandbox permission layer blocked production DDL/DML from Claude Code sessions and the
 Supabase MCP connector was not attached to the verdad project (`dzujjhzgzguciwryzwlx`); it was attached the
@@ -95,12 +105,14 @@ A. Search (highest value). Paste each file alone in the SQL editor: 000100 (no-o
    expect about 82 (was 0). Then on verdad.app try "georgia elections", "stolen election", "candidate
    campaign", and "fulton" with Arizona + California + Georgia selected. Then merge #100 into #73, #73 into
    main, add the five versions to `supabase/migrations/applied_versions.txt`, merge verdad-frontend #262.
-B. Run `13_hide_postcutoff_clusters.sql`, then `04b` for the batch.
-C. Run `12_...` then `11_...`, then the embedding backfill.
-D. Re-queue the 36 Fulton/Georgia ids; when processed, run `10_unhide_after_reprocess.sql`.
+B. DONE 2026-09-17 20:35 UTC: `13_hide_postcutoff_clusters.sql` (73 rows) and `04b` for the batch.
+C. DONE 2026-09-17: `12_...` (10 rows), `11_...` (14 rows), embeddings backfilled. Pending: `14_seed_corrections.sql`.
+D. IN PROGRESS: the 36 Fulton/Georgia ids are re-queued (Prefect run `fulton-georgia-36-2026-09-17`; 7 done at
+   20:50 UTC); when processed, run `10_unhide_after_reprocess.sql`.
 E. Decide on reprocessing piles A2 (4,363 no-evidence) and A3 (15,159 fabrication-label). Thien asked on
    2026-09-16; unanswered. At about 2,800 analyses/day shared with live intake: about 2 and 6 days.
-F. Merge #98 after its evaluation report; Thien deploys the worker.
+F. Merge #98 after its evaluation report (run 35295378105; the first run timed out); the verdad-62 session owns
+   the merge and the worker deploy.
 G. Re-test Tamoa's searches, post results to VER-373 and `#verdad`, and tell Tamoa.
 
 ## 6. Linear map (team VERDAD)
@@ -145,7 +157,7 @@ House visit 2025-11-10; Viktor Orbán lost 2026-04-12 to Péter Magyar. Sources 
 ## 8. Code map for the next agent
 
 - Gate: `src/processing_pipeline/stage_3/models.py` (`apply_evidence_caps`, `is_article_url`,
-  `latest_claim_event_date`, `fill_publication_dates`, `breaking_news_cap`), tests in
+  `latest_claim_event_date`, `fill_publication_dates`, `in_breaking_news_window`), tests in
   `tests/processing_pipeline/test_evidence_gate.py`.
 - Tool loop and observed URLs/dates: `stage_3/executors.py` (`ObservedToolOutput`), `stage_3/web_tools.py`
   (`tool_result_urls`, `tool_result_dates`), tests `test_stage_3_tool_loop.py`.
@@ -156,7 +168,8 @@ House visit 2025-11-10; Viktor Orbán lost 2026-04-12 to Péter Magyar. Sources 
   about 90 min, shares Gemini quota with production reprocessing. Name sets in the PR body with `Eval-set:`.
 - Reprocess: `src/scripts/reprocess_snippets.py` (`--ids-file`, `--quarantine-batch`, `--error-keyerror`).
 - Runbook: `supabase/database/sql/cleanup_2026_09/README.md` (status sections dated 09-15, 09-16, 09-17).
-- Run `make check` before every commit (ruff + pytest, coverage gate 84 percent; 839 tests pass on #98).
+- Run `make check` before every commit (ruff + pytest, coverage gate 84 percent; 839 tests passed on #98 at
+  commit `0550bca`; re-run on the current head before merging).
 
 ## 9. Open decisions for Rajiv
 
