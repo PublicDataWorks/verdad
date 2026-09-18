@@ -44,3 +44,4 @@
 20260917220100	get_snippets_accent_insensitive
 20260918020000	drop_dead_search_rpcs
 20260918020100	autovacuum_thresholds_large_tables
+20260918030000	sweep_retryable_errors
