@@ -1,4 +1,4 @@
--- 16_unmask_carlos_fulton_clips.sql (2026-09-19, applied 21:02 UTC): restore the pre-gate confidence scores of
+-- 16_unmask_carlos_fulton_clips.sql (2026-09-19, applied 20:05 UTC): restore the pre-gate confidence scores of
 -- three Radio Mundo (WNMA, Florida) clips from 2026-09-10 07:24-07:27 UTC so they are searchable on verdad.app,
 -- per docs/HANDOFF_2026-09-19_carlos_fulton_clips.md and Rajiv's direction ("our system should not hide them,
 -- it should analyze them and explain correctly when they are misleading"). Tracking: VER-373, VER-358.
@@ -8,6 +8,10 @@
 -- override for exactly these ids. The gate's own record (grounding_metadata.evidence_gate.original_*) supplies
 -- the scores that are restored, and an editor's note is prefixed to the explanation in both languages.
 -- Re-queuing these rows through Stage 3/4 would cap them again; exclude them from VER-389 batches.
+--
+-- Note: only 3e53d8e1 had been through Stage 4 review (2026-09-19 19:34 UTC). c253e70f and fb43bf56 were capped by
+-- the Stage 3 gate and have reviewed_at NULL, so this puts unreviewed Stage 3 output into the feed at 95; their
+-- explanations were regrounded by hand on 2026-09-19 (batch regrounded-2026-09-19-carlos, see VER-373).
 --
 -- Idempotent: the snapshot insert is skipped if the batch already exists, and the note is not added twice.
 
@@ -40,12 +44,13 @@ SET confidence_scores = jsonb_set(jsonb_set(s.confidence_scores, '{overall}', g.
     updated_at = now()
 FROM g
 WHERE s.id = g.id
+  AND g.eg ? 'original_overall' AND g.eg ? 'original_categories'   -- never write NULL scores if the gate record is missing
   AND (s.explanation ->> 'english') NOT LIKE 'Editor''s note (2026-09-19)%';
 
 COMMIT;
 
 -- Verify (as an authenticated user; the three ids should be the newest results at 95):
---   select set_config('request.jwt.claims', '{"sub":"<user uuid>","role":"authenticated"}', false);
+--   select set_config('request.jwt.claims', '{"sub":"<user uuid>","role":"authenticated"}', true);   -- transaction-local
 --   select public.get_snippets('spanish', null, 0, 10, 'latest', 'fulton', true) -> 'num_of_snippets';   -- 50 on 2026-09-19
 --
 -- ROLLBACK:
