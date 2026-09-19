@@ -22,10 +22,16 @@ search:
   autocomplete: ""
 
 outgoing:
-  request_timeout: 5.0
+  # VER-390: 5 s made DuckDuckGo time out on every call from this host; give slow engines room
+  # and retry once instead of counting the request as a failure.
+  request_timeout: 10.0
+  max_request_timeout: 15.0
+  retries: 1
   pool_connections: 100
   pool_maxsize: 20
   enable_http2: true
+  # Identify the instance instead of looking like an anonymous scraper (VER-390).
+  useragent_suffix: "verdad-monitoring (contact: rajiv@publicdata.works)"
 
 engines:
   # Web Search
@@ -35,14 +41,32 @@ engines:
   - name: bing
     engine: bing
     disabled: false
+  # VER-390 (2026-09-19): brave ("too many requests"), qwant ("access denied") and startpage
+  # (CAPTCHA) are suspended for this instance's IP and duckduckgo times out on every call, so
+  # they only consume the request budget. Disabled by default; re-enable one at a time from a
+  # new egress IP after checking each with ?engines=<name>&format=json.
   - name: duckduckgo
     engine: duckduckgo
-    disabled: false
+    disabled: true
   - name: brave
     engine: brave
-    disabled: false
+    disabled: true
   - name: qwant
     engine: qwant
+    disabled: true
+  # Engines that tolerate automated use, added as fallbacks for bing (VER-390).
+  - name: mojeek
+    engine: xpath
+    search_url: https://www.mojeek.com/search?q={query}&s={pageno}
+    results_xpath: //ul[@class="results-standard"]/li
+    url_xpath: ./h2/a/@href
+    title_xpath: ./h2/a
+    content_xpath: ./p[@class="s"]
+    page_size: 10
+    first_page_num: 1
+    disabled: false
+  - name: yahoo
+    engine: yahoo
     disabled: false
 
   # News Sources
