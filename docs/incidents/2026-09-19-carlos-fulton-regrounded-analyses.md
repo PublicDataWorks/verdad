@@ -148,3 +148,37 @@ originally pinned it to the 10th. Both languages now state the capture time and 
 ambiguity, and record that no ruling was issued on **either** date — which is what matters for the
 verdict and is what a journalist pinning the date would need. (Caught by the drafting agent; the
 Stage 3 log only ever queried 10 September, so a 9 September search is an obvious follow-up gap.)
+
+## Addendum 2: audit follow-ups (applied 20:27 UTC)
+
+kathmandu-98's independent audit returned PASS on every criterion — transcript traceability of every
+quoted phrase, search counts and outcomes matching the Stage 3 logs, no URLs or outlets named as
+corroborating in any rendered text, Spanish matching English paragraph for paragraph, the Alito quote
+nowhere called fabricated, `evidence_gate` and Stage 3 evidence intact with `original_overall` preserved,
+and both snapshot batches holding three rows each. Two non-blocking findings were raised and both were
+acted on:
+
+1. **Structured record lagged the prose.** `fb43bf56` `claims[1]`, `claims[2]` and
+   `score_adjustments.adjustment_reason`, and `c253e70f` `claims[0]`, still read as retrieved
+   verification findings ("Numerous investigations, audits, and court rulings have affirmed…",
+   "Recounts and audits have repeatedly affirmed…", "…rated false by numerous fact-checking
+   organizations") while the rewritten explanations correctly said the assessment rests on general
+   knowledge. Each now carries an `[Annotated 2026-09-19: … the analysing model's general knowledge,
+   NOT evidence retrieved for this clip …]` suffix naming how many searches ran and what they returned —
+   the same treatment applied to `3e53d8e1`. Four annotations total.
+
+2. **"Three months earlier" was wrong.** 29 June to 9/10 September is about 2.4 months. Both languages
+   now say "in late June" / "a finales de junio" rather than asserting an interval.
+
+**Exposure note on the retained fabricated excerpts.** The `!! UNRELIABLE !!` banner and the fabricated
+excerpts beneath it cannot render in verdad.app — the frontend never reads `grounding_metadata` and no
+RPC returns it. However, the `snippets` RLS policy grants authenticated SELECT, so a logged-in user
+could read the column directly through PostgREST. Keeping the excerpts is still the right call, since
+they are the artifact needed to build the Stage 4 tool-echo check, and the banner is the first thing
+anyone reading the column sees. Recorded here so the decision is explicit rather than assumed.
+
+**Alito's vote.** Verified after the fact: Alito wrote the principal dissent in *Watson*, joined by
+Thomas and Gorsuch, with Kavanaugh joining most of it; Barrett wrote for the majority, joined by
+Roberts, Sotomayor, Kagan and Jackson. The explanations do not assert his vote — they say only that
+the Court decided against the position the host celebrates — but the fact is correct and is safe to
+use in briefing material.
