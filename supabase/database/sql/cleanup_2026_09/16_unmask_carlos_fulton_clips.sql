@@ -14,6 +14,12 @@
 -- explanations were regrounded by hand on 2026-09-19 (batch regrounded-2026-09-19-carlos, see VER-373).
 --
 -- Idempotent: the snapshot insert is skipped if the batch already exists, and the note is not added twice.
+--
+-- PROVENANCE: after this file and the regrounding recorded in docs/incidents/2026-09-19-carlos-fulton-regrounded-analyses.md
+-- (PR #121), these three rows are curated, not pipeline output. Markers: the "Editor's note (2026-09-19)" prefix in
+-- explanation, "CORRECTED 2026-09-19 (manual review)" in confidence_scores.analysis.claims, and the two
+-- snippet_analysis_snapshot batches. Do not re-queue them; a Stage 3/4 re-run overwrites the curation. If more rows
+-- ever need this, add an explicit curated-override marker (column or override table) rather than repeating the pattern.
 
 BEGIN;
 
