@@ -166,12 +166,32 @@ already do this; if you write your own, do the same.
 
 ## 8. Known interactions
 
-- **VER-388 (open):** the Stage 4 review evidence gate is **not** capping absence-of-evidence
-  verdicts. Two snippets were re-scored 98 and 100 on 2026-09-18 with zero contradicting URLs in
-  their Stage 3 record. Re-queued rows go back through Stage 4, so **a score can come back
-  different**. For `3e53d8e1` the 95 should hold: it claims a Supreme Court mail-in ruling on
-  2026-09-10, four days before the real USPS v. California order of 2026-09-14. Do not promise
-  Carlos a specific score before it completes.
+- **CORRECTED 2026-09-19 19:46 UTC (was wrong above): re-queued rows going to `Ready for review`
+  will NOT recover a 95+ score, structurally, not intermittently.** `apply_evidence_caps` runs at
+  Stage 4 too, but Stage 4 does no web research of its own; it re-reads the `verification_evidence`
+  that Stage 3 already froze into `previous_analysis`. If that record has no result marked
+  `contradicts_claim`, no number of Stage 4 retries changes the outcome, because there is nothing
+  new for the gate to find. Checked against production 2026-09-19: **0 of the 101 rows in step
+  2's exact set have any `contradicts_claim` result.** `3e53d8e1` proved this individually (`95`
+  before, `40` after, `evidence_gate.applied = true`, `original_overall` preserved at `95`); the
+  same thing then happened to `717925c8` and (reported by a second reviewer) `0759b76b`. This is
+  not the VER-388 leak failing to fire; it is the gate working exactly as designed on content for
+  which no contradicting source exists to cite, which is the same absence-of-evidence tension
+  VER-358 and VER-348 already describe for hyper-local, one-off fabrications.
+  **The corrected understanding of the previous paragraph (kept for the record, do not act on
+  it):** ~~the Stage 4 review evidence gate is not capping absence-of-evidence verdicts... For
+  `3e53d8e1` the 95 should hold~~ — both claims were wrong; the gate caps every row of this shape,
+  every time, and `3e53d8e1` did not hold.
+- **Design decision needed before running step 2 (Rajiv's call, flagged by review on #118):**
+  sending a `[Stage 4]%`-error row to `Ready for review` (as `sweep_retryable_errors()` and this
+  runbook's step 1/2 both do) can only ever reproduce the same capped score. The only path that
+  can legitimately recover a 95 is sending the row to `New` for a full Stage 3 re-run, so today's
+  web search tools get a chance to find a source that did not exist or was not surfaced the first
+  time. For a claim about an event that never happened, such a source may never exist at all
+  (nobody fact-checks a broadcast this obscure), so even a `New` re-run is not guaranteed to help.
+  **Do not run step 2 until this is decided**, or it will re-run the retry ceiling to 3 on 101 rows
+  for no gain, and further narrow the chance a future `New` re-run has to fix them (the guards cap
+  `analysis_attempts < 3` for a reason).
 - **VER-358 (open, Rajiv's decision):** the feed shows only `overall >= 95`. Fulton and fraud
   *narratives* (a host asserting fraud with no checkable claim) score below 50 by design and stay
   invisible whatever this fix does. 61 Fulton mentions Aug+Sep, 0 at 95+, 48 below 50.
