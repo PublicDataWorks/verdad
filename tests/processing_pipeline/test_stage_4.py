@@ -233,6 +233,116 @@ class TestStage4:
         mock_supabase_client.update_snippet_previous_analysis.assert_not_called()
         assert mock_run.await_args.kwargs["transcription"] == "Original transcription"
 
+    # --- VER-388: the evidence gate must survive a Stage 4 review -------------
+
+    @staticmethod
+    def _stage_3_record_with_no_contradicting_urls():
+        """The Stage 3 grounding_metadata of the VER-388 snippet: five searches, every one no_results."""
+        return json.dumps(
+            {
+                "searches_performed": [
+                    {
+                        "query": f"query {i}",
+                        "search_intent": "verify the claim",
+                        "result_status": "no_results",
+                        "results": [],
+                    }
+                    for i in range(5)
+                ],
+                "verification_summary": "No sources found for the claimed ruling.",
+            }
+        )
+
+    def _downvoted_snippet(self, sample_snippet):
+        snippet = {**sample_snippet, "recorded_at": "2026-09-15T18:58:47+00:00"}
+        snippet["previous_analysis"] = {
+            **snippet,
+            "grounding_metadata": self._stage_3_record_with_no_contradicting_urls(),
+            "previous_analysis": None,
+        }
+        return snippet
+
+    def test_review_with_zero_contradicting_urls_cannot_exceed_40(
+        self, mock_supabase_client, sample_snippet, review_result
+    ):
+        """VER-388: a Stage 4 review with zero contradicting URLs in the Stage 3 record cannot exceed 40."""
+        review_result["confidence_scores"] = {
+            "overall": 98,
+            "verification_status": "verified_false",
+            "categories": [
+                {"category": "Fabricated Content", "score": 98},
+                {"category": "Election Integrity and Voting Processes", "score": 95},
+            ],
+        }
+        review_result["explanation"] = {
+            "english": "This claim is a complete fabrication; no such ruling exists.",
+            "spanish": "Esta afirmación es una fabricación completa.",
+        }
+
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, json.dumps({"kb_research": "kb findings"}))),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, self._downvoted_snippet(sample_snippet))
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 40
+        assert [c["score"] for c in kwargs["confidence_scores"]["categories"]] == [40, 40]
+        # the gate and the Stage 3 record it judged are both kept on the row, for audit
+        grounding_metadata = json.loads(kwargs["grounding_metadata"])
+        assert grounding_metadata["evidence_gate"]["applied"] is True
+        assert grounding_metadata["evidence_gate"]["original_overall"] == 98
+        assert len(grounding_metadata["stage_3_verification_evidence"]["searches_performed"]) == 5
+        assert "Evidence gate" in kwargs["explanation"]["english"]
+
+    def test_pipeline_written_kb_entry_is_not_a_contradicting_source(
+        self, mock_supabase_client, sample_snippet, review_result
+    ):
+        """VER-388: a pipeline-written KB entry is not a contradicting source.
+
+        The reviewer cited KB entry acae79dc ("the ruling is a fabrication") as definitive proof. A KB entry
+        is pipeline-written -- it can be poisoned by an earlier unevidenced analysis -- and carries no
+        retrievable URL, so it must not lift the cap, whether it arrives as the Stage 4 research report or as
+        a contradicting "result" in a verification_evidence block the reviewer wrote itself.
+        """
+        review_result["confidence_scores"] = {
+            "overall": 100,
+            "verification_status": "verified_false",
+            "categories": [{"category": "Fabricated Content", "score": 100}],
+        }
+        review_result["explanation"] = {
+            "english": "KB entry acae79dc proves the ruling is a fabrication.",
+            "spanish": "La entrada acae79dc prueba que el fallo es una fabricación.",
+        }
+        review_result["verification_evidence"] = {
+            "searches_performed": [
+                {
+                    "query": "Supreme Court mail ballot ruling",
+                    "search_intent": "verify the claim",
+                    "result_status": "results_found",
+                    "results": [
+                        {
+                            "url": "kb://acae79dc-0713-424d-944e-f01ff6e6b350",
+                            "title": "KB: the ruling is a fabrication",
+                            "relevance_to_claim": "contradicts_claim",
+                        }
+                    ],
+                }
+            ]
+        }
+        kb_report = json.dumps({"kb_research": "KB entry acae79dc: definitive proof the ruling is a fabrication"})
+
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, kb_report)),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, self._downvoted_snippet(sample_snippet))
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 40
+        assert [c["score"] for c in kwargs["confidence_scores"]["categories"]] == [40]
+        assert json.loads(kwargs["grounding_metadata"])["evidence_gate"]["applied"] is True
+
     def test_process_snippet_with_empty_disinformation_categories(
         self, mock_supabase_client, sample_snippet, review_result
     ):
