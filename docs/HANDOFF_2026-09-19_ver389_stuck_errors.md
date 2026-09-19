@@ -102,25 +102,45 @@ of the few election items that completed.
 ## 6. Your task
 
 Apply `supabase/database/sql/cleanup_2026_09/15_requeue_stuck_retryable_errors.sql`
-(committed as `79eff43` on branch `claude/verdad-accuracy-hallucination-xn7kgv`).
+(branch `claude/ver-389-requeue-stuck-errors`, PR #118).
+
+**Status as of 2026-09-19 19:40 UTC: step 1 has already been applied** by someone running an
+earlier revision of this file. `3e53d8e1` is out of `Error` with `analysis_attempts = 1` and was
+in `Reviewing`. It is not in `user_hide_snippets`. Steps 0, 2 and 3 have not been run: the
+`snippet_requeue_log` table does not exist and no `sweep-retryable-errors` cron job is scheduled.
+Run step 0 before steps 2 and 3, and confirm `3e53d8e1` reached `Processed` at a score of 95
+before telling anyone it is searchable.
 
 Paste each step separately into the Supabase SQL editor, in order, checking the inline
 verification query before moving on. Per `.claude/rules/supabase-sql.md`, migrations and loose SQL
 in this repo are applied by hand; do not use `supabase db push`.
 
+**Step 0** creates `public.snippet_requeue_log`, same shape and intent as the existing
+`snippet_quarantine_log`. Steps 1 and 2 record every row they touch in it. **This is what makes
+rollback safe:** once step 3 is running, `sweep_retryable_errors()` also sets
+`analysis_attempts = 1` on rows of its own, so any rollback keyed on `analysis_attempts` alone
+would drag unrelated pending work back into `Error`. Always scope to the log.
+
 **Step 1** moves `3e53d8e1` to `Ready for review`. One row. Watch it complete end to end
 (`reviewed_at` becomes non-NULL, `status` becomes `Processed`) before releasing the batch. At
-current review rates this should be minutes, not hours.
+current review rates this should be minutes, not hours. Its predicate carries the same
+`analysis_attempts < 3` ceiling and retryable-error guards as the sweeper, so re-running it after
+a second failure cannot push the row past the retry limit or re-queue a non-transient failure.
 
-**Step 2** moves the 102 election-tagged 95+ rows. Dry-run verified read-only: **101** to
-`Ready for review`, **1** to `New`. Expect it to clear inside a day.
+**Step 2** moves the election-tagged 95+ rows. Dry-run verified read-only on 2026-09-19:
+**101** to `Ready for review`, **1** to `New`. (It was 102 before step 1 was applied; step 1's row
+is logged under the step-1 batch and is not counted again here.) Expect it to clear inside a day.
 
 **Step 3** schedules the sweeper: `cron.schedule('sweep-retryable-errors', '15 * * * *',
 $$SELECT public.sweep_retryable_errors(6)$$)`. Batch 6 hourly is ~144/day, sized to stay under the
-observed Stage 4 peak while leaving headroom for live recordings.
+observed Stage 4 peak while leaving headroom for live recordings. The sweeper deliberately does
+**not** write to `snippet_requeue_log`.
 
 Step 1's row is inside step 2's set. Running step 1 first is safe: step 2 only touches rows still
 in `Error`, so the row is not picked up twice and `analysis_attempts` stays at 1.
+
+**Verify against the log, not against `analysis_attempts`.** The runbook's verification queries
+already do this; if you write your own, do the same.
 
 ### After applying
 
