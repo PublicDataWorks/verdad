@@ -7,17 +7,18 @@ from google.adk.tools.tool_context import ToolContext
 from openai import OpenAI
 from tiktoken import encoding_for_model
 
-from processing_pipeline.constants import KB_DEDUP_SIMILARITY_THRESHOLD, GeminiModel
+from processing_pipeline.constants import KB_DEDUP_SIMILARITY_THRESHOLD
 from processing_pipeline.kb_sources import (
     VALID_SOURCE_TYPES,
     contains_http_url,
     is_http_url,
     parse_iso_date,
-    url_appears_in_text,
+    url_key,
 )
 from processing_pipeline.processing_utils import normalize_embedding
 from processing_pipeline.stage_1.constants import KB_STAGE1_MIN_CONFIDENCE, STAGE_1_KB_MATCH_THRESHOLD
 from processing_pipeline.stage_1.kb_context import is_pipeline_authored, select_trustworthy_entries
+from processing_pipeline.stage_4.constants import KB_WRITER_MODEL, OBSERVED_URLS_STATE_KEY
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -114,12 +115,13 @@ def validate_kb_source(
     source_name: str,
     source_type: str,
     publication_date: str | None,
-    web_research: str | None,
+    observed_urls: set[str],
 ) -> str | None:
     """Return an error message when the source does not qualify as KB evidence, else None.
 
-    ``web_research`` is the web researcher's output for this session; the URL must appear in it (the model
-    may only cite what it actually found), so without it nothing can be written.
+    ``observed_urls`` holds the ``url_key`` of every URL the session's search and read tools returned; the
+    source must be one of them (the model may only cite what it actually found), so with none nothing can
+    be written.
     """
     if not is_http_url(source_url):
         return "source_url must be an absolute http(s) URL with a host name (e.g. https://apnews.com/article/...)."
@@ -137,22 +139,22 @@ def validate_kb_source(
             f"publication_date {publication_date!r} is required and must be an ISO date (YYYY-MM-DD): the date the "
             "source was published. A source without one cannot back a KB entry."
         )
-    if not web_research:
+    if not observed_urls:
         return (
-            "No web research is recorded for this session, so the source cannot be verified as actually found. "
-            "The knowledge base only accepts sources returned by the search or read tools."
+            "No search or read tool returned a URL in this session, so the source cannot be verified as actually "
+            "found. The knowledge base only accepts sources returned by the search or read tools."
         )
-    if not url_appears_in_text(source_url, web_research):
+    if url_key(source_url) not in observed_urls:
         return (
-            f"source_url '{source_url}' does not appear in this session's web research. "
-            "Only cite URLs that were actually returned by the search or read tools."
+            f"source_url '{source_url}' was not returned by any search or read tool in this session. "
+            "Only cite URLs that the tools actually returned."
         )
     return None
 
 
-def _web_research_text(tool_context: ToolContext | None) -> str | None:
-    value = tool_context.state.get("web_research") if tool_context is not None else None
-    return value if isinstance(value, str) and value.strip() else None
+def _observed_urls(tool_context: ToolContext | None) -> set[str]:
+    value = tool_context.state.get(OBSERVED_URLS_STATE_KEY) if tool_context is not None else None
+    return set(value) if isinstance(value, list) else set()
 
 
 def upsert_knowledge_entry(
@@ -204,7 +206,7 @@ def upsert_knowledge_entry(
         return _error("Confidence score must be >= 70 to store in the knowledge base.")
 
     source_error = validate_kb_source(
-        source_url, source_name, source_type, publication_date, _web_research_text(tool_context)
+        source_url, source_name, source_type, publication_date, _observed_urls(tool_context)
     )
     if source_error:
         return _error(source_error)
@@ -246,7 +248,7 @@ def upsert_knowledge_entry(
             "disinformation_categories": categories,
             "keywords": keywords,
             "is_time_sensitive": is_time_sensitive,
-            "created_by_model": GeminiModel.GEMINI_2_5_FLASH.value,
+            "created_by_model": KB_WRITER_MODEL.value,
         }
         if related_claim:
             new_entry_data["related_claim"] = related_claim
@@ -271,7 +273,7 @@ def upsert_knowledge_entry(
             valid_from=valid_from,
             valid_until=valid_until,
             created_by_snippet=snippet_id,
-            created_by_model=GeminiModel.GEMINI_2_5_FLASH.value,
+            created_by_model=KB_WRITER_MODEL.value,
         )
         action = "created"
 
