@@ -82,6 +82,15 @@ def test_ddl_migration_caps_lock_timeout():
     assert statements.index("SET lock_timeout = '3s';") < statements.index("ALTER TABLE")
 
 
+def test_backfill_and_guard_cover_exactly_the_visible_rows():
+    # Only visible rows are backfilled, so every write that can make a row visible must fill it.
+    visible = "status = 'Processed'::processing_status\n            AND ((confidence_scores ->> 'overall'::text))::integer >= 95"
+    columns_sql, backfill_sql, _, get_snippets_sql = (path.read_text() for path in VER_387_MIGRATIONS)
+    assert "BEFORE INSERT OR UPDATE OF audio_file, status, confidence_scores ON public.snippets" in columns_sql
+    assert visible.replace("confidence_scores", "s2.confidence_scores").replace("status =", "s2.status =") in backfill_sql
+    assert visible.replace("\n            ", "\n          ") in get_snippets_sql
+
+
 def test_concurrent_index_migration_warns_about_transactions():
     sql = (MIGRATIONS_DIR / "20260921000300_snippets_visible_location_indexes.sql").read_text()
     assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_snippets_visible_state" in sql

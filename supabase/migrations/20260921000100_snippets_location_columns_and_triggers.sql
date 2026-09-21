@@ -14,14 +14,17 @@
 -- ============================================================================================
 -- 1. snippets gains two nullable text columns: location_state, radio_station_code. Adding a
 --    nullable column with no default is a catalog-only change in PostgreSQL (no table rewrite).
--- 2. A BEFORE INSERT OR UPDATE OF audio_file, status trigger on snippets fills them from audio_files, so
---    every row the Python pipeline inserts through PostgREST (.insert(...) in
---    src/processing_pipeline/supabase_utils.py) is correct without any change on the Python side.
+-- 2. A BEFORE INSERT OR UPDATE OF audio_file, status, confidence_scores trigger on snippets fills
+--    them from audio_files, so every row the Python pipeline inserts through PostgREST
+--    (.insert(...) in src/processing_pipeline/supabase_utils.py) is correct without any change on
+--    the Python side, and every write that can make a row visible fills it too.
 -- 3. An AFTER UPDATE OF location_state, radio_station_code trigger on audio_files propagates
 --    later edits of the station metadata down to the affected snippets.
 --
--- Existing rows keep NULL until the backfill (20260921000200) runs. Nothing reads the new
--- columns until 20260921000400 replaces get_snippets, so this file is invisible to the frontend.
+-- Existing rows keep NULL until the backfill (20260921000200) runs; it fills only the visible
+-- rows (status = 'Processed' AND overall >= 95), which is all get_snippets reads. Nothing reads
+-- the new columns until 20260921000400 replaces get_snippets, so this file is invisible to the
+-- frontend.
 --
 -- ============================================================================================
 -- SECURITY DEFINER? No.
@@ -69,13 +72,13 @@ COMMENT ON COLUMN public.snippets.radio_station_code IS
     'Denormalized copy of audio_files.radio_station_code for the get_snippets sources filter (VER-387). Maintained by the snippets_copy_audio_file_location / audio_files_propagate_location triggers; do not write it directly.';
 
 -- Fill the denormalized columns from the parent audio_files row on insert, whenever a snippet is
--- repointed at a different audio file, and on every status change. The status case exists for
--- rows that were in flight (Processing / Reviewing) while the backfill (20260921000200) or the
--- propagate trigger below deliberately skipped them: the first status transition afterwards
--- brings their columns up to date, so nothing is left behind and nobody has to re-run anything.
--- It costs one primary-key lookup on audio_files per status change, which the pipeline does a
--- handful of times per snippet. Any value the caller supplied for these two columns is
--- overwritten on purpose: audio_files is the single source of truth.
+-- repointed at a different audio file, and on every status or confidence_scores write. Those two
+-- columns are the visibility predicate: the backfill (20260921000200) fills only rows visible at
+-- the time, and the propagate trigger below skips in-flight rows, so a row that becomes visible
+-- later (Stage 3 setting Processed, a curation UPDATE restoring a score) is filled by the write
+-- that makes it visible. One primary-key lookup on audio_files per such write. Any value the
+-- caller supplied for these two columns is overwritten on purpose: audio_files is the single
+-- source of truth.
 CREATE OR REPLACE FUNCTION public.snippets_copy_audio_file_location()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -99,7 +102,7 @@ $function$;
 
 DROP TRIGGER IF EXISTS snippets_copy_audio_file_location ON public.snippets;
 CREATE TRIGGER snippets_copy_audio_file_location
-    BEFORE INSERT OR UPDATE OF audio_file, status ON public.snippets
+    BEFORE INSERT OR UPDATE OF audio_file, status, confidence_scores ON public.snippets
     FOR EACH ROW
     EXECUTE FUNCTION public.snippets_copy_audio_file_location();
 
@@ -110,7 +113,7 @@ CREATE TRIGGER snippets_copy_audio_file_location
 -- that rewrite the same values. Rows in flight through the pipeline are skipped: the UPDATE
 -- fires snippets_handle_updated_at, and sweep_stuck_snippets (20260917080000) keys on
 -- updated_at < now() - 2 h, so touching a Processing / Reviewing row would hide a stuck snippet
--- from the sweep. The copy trigger above catches them on their next status change.
+-- from the sweep. The copy trigger above catches them on their next status write.
 CREATE OR REPLACE FUNCTION public.audio_files_propagate_location()
 RETURNS trigger
 LANGUAGE plpgsql

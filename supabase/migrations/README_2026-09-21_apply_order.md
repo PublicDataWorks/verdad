@@ -1,18 +1,25 @@
 # 2026-09-21 VER-387 (states / sources filter denormalization) — apply order
 
-Nothing in this set has been applied to production. `applied_versions.txt` is deliberately
-untouched. Run the files **by hand in the Supabase SQL editor**, in this order, one file per run.
+`applied_versions.txt` is deliberately untouched. Run the files **by hand in the Supabase SQL
+editor**, in this order, one file per run.
 
-**Windows:** not on Sat 2026-09-19 (demo) and not on Mon 2026-09-21 (Tamoa's story). Plan: steps 1
-to 3b in one off-peak window (Tue 2026-09-22 HCM daytime = US night), step 4 the next day after the
-before-measurements. Step 2's runtime is unknown until one batch is measured (see "Measure one batch
-first"); if it measures in hours, do not start it in a weekday window.
+**Status (2026-09-21 11:35 UTC):** step 1 applied 11:29 UTC (with the earlier trigger definition:
+re-run the file, it is re-runnable, to pick up `confidence_scores` in the copy trigger's `UPDATE OF`);
+the backfill function created 11:31 UTC (re-run the file for the visible-only predicate); the
+measurement below done; the temp index exists with the old, whole-table predicate (drop and
+recreate with the one in the file header). Steps 2 (batches), 3, 3b, 4 not run.
+
+**Windows:** not on Sat 2026-09-19 (demo) and not on Mon 2026-09-21 (Tamoa's story). Steps 1 to 3b
+in one off-peak window (HCM daytime = US night; ~1 h), step 4 the next day after the
+before-measurements.
 
 The change: `get_snippets` currently serves a `states` / `sources` filter by walking every visible
 snippet (~43k of 563k rows; visible = `status = 'Processed' AND (confidence_scores->>'overall')::int
 >= 95`) and probing `audio_files` (573 MB heap) on `s.audio_file`. Warm 0.12-0.22 s, cold ~4 s. We
 copy `audio_files.location_state` and `audio_files.radio_station_code` onto `snippets`, keep them in
-sync with triggers, and filter them directly from a partial index.
+sync with triggers, and filter them directly from a partial index. Only the visible rows are
+backfilled; the copy trigger fires on every `status` / `confidence_scores` write, so any other row
+is filled by the write that makes it visible (see "Why visible rows only").
 
 The frontend is unaffected at every step: the signature and the returned shape do not change, and
 the `audio_file` object in the result still comes from the `audio_files` join.
@@ -20,10 +27,10 @@ the `audio_file` object in the result still comes from the `audio_files` join.
 | # | File | Transaction | Duration | Verify after |
 |---|------|-------------|----------|--------------|
 | 1 | `20260921000100_snippets_location_columns_and_triggers.sql` | Safe in one transaction (nullable `ADD COLUMN` = catalog only, no rewrite; brief ACCESS EXCLUSIVE lock on `snippets` and `audio_files`). The file sets `lock_timeout = '3s'`; on "canceling statement due to lock timeout" nothing changed, run it again | < 1 s once the lock is granted | `SELECT column_name FROM information_schema.columns WHERE table_name='snippets' AND column_name IN ('location_state','radio_station_code');` → 2 rows. `SELECT tgname, tgenabled FROM pg_trigger WHERE tgname IN ('snippets_copy_audio_file_location','audio_files_propagate_location');` → 2 rows, `tgenabled = 'O'`. Then insert nothing by hand — just confirm a freshly produced snippet has the columns filled: `SELECT id, location_state, radio_station_code FROM public.snippets ORDER BY created_at DESC LIMIT 5;` |
-| 2 | `20260921000200_snippets_location_backfill.sql` | Creating the function is transactional; **running** it is a series of one-transaction batches. First create the throwaway `idx_snippets_location_backfill` partial index named in the file header (CONCURRENTLY, outside a transaction); keep it until after step 4 (its guard uses the same predicate). Run **one** batch and measure before the rest (below) | ~563k rows, ~113 batches of 5000. **Unknown until measured**: seconds per batch if the updates are HOT, much longer if each row has to enter the 17 pgroonga indexes | `SELECT count(*) FILTER (WHERE radio_station_code IS NULL AND audio_file IS NOT NULL) AS remaining, count(*) FILTER (WHERE status IN ('Processing','Reviewing')) AS in_flight, count(*) FROM public.snippets;` → `remaining` must reach 0 (see below; it plateaus near the in-flight count while the pipeline is busy). Then `SELECT relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze FROM pg_stat_user_tables WHERE relname='snippets';` |
-| 3 | `20260921000300_snippets_visible_location_indexes.sql` | **MUST run outside a transaction** (`CREATE INDEX CONCURRENTLY`). Paste each statement alone; do not wrap in `BEGIN`/`COMMIT` or use a migration runner that does. **Only after step 2 reports 0 remaining** (see Sequencing) | ~1-3 min per index on 563k rows | `SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_snippets_visible_state'::regclass;` and the same for `idx_snippets_visible_station` — both must be `true` |
+| 2 | `20260921000200_snippets_location_backfill.sql` | Creating the function is transactional; **running** it is a series of one-transaction batches of 1000. First create the throwaway `idx_snippets_location_backfill` partial index named in the file header (CONCURRENTLY, outside a transaction); keep it until after step 4 (its guard uses the same predicate) | ~43k visible rows, ~43 batches of 1000 at ~50 s each (measured, below): ~40 min by hand or on the per-minute cron job | `SELECT count(*) FILTER (WHERE radio_station_code IS NULL) AS remaining, count(*) AS visible FROM public.snippets WHERE status = 'Processed' AND (confidence_scores->>'overall')::int >= 95;` → `remaining` must reach 0. Then `SELECT relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze FROM pg_stat_user_tables WHERE relname='snippets';` |
+| 3 | `20260921000300_snippets_visible_location_indexes.sql` | **MUST run outside a transaction** (`CREATE INDEX CONCURRENTLY`). Paste each statement alone; do not wrap in `BEGIN`/`COMMIT` or use a migration runner that does. After step 2 reports 0 remaining, so each index is built once over final values | ~1-3 min per index on 563k rows | `SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_snippets_visible_state'::regclass;` and the same for `idx_snippets_visible_station` — both must be `true` |
 | 3b | `ANALYZE public.snippets;` (no file) | Plain statement, no lock that blocks reads or writes | ~10-30 s | `SELECT last_analyze FROM pg_stat_user_tables WHERE relname='snippets';` → just now. Without it the new columns have no statistics and the step-4 EXPLAINs are not trustworthy |
-| 4 | `20260921000400_get_snippets_denormalized_location.sql` | Safe in one transaction (`CREATE OR REPLACE`, same signature, re-`GRANT`, `NOTIFY pgrst`). Starts with a `DO` guard that raises if any snippet still has `radio_station_code IS NULL`, so running it early fails loudly instead of returning empty pages (an index probe while `idx_snippets_location_backfill` exists, a 591 MB seq scan otherwise) | < 1 s | The EXPLAIN and result-equivalence checks below. Then `DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_location_backfill;` outside a transaction |
+| 4 | `20260921000400_get_snippets_denormalized_location.sql` | Safe in one transaction (`CREATE OR REPLACE`, same signature, re-`GRANT`, `NOTIFY pgrst`). Starts with a `DO` guard that raises if any visible snippet still has `radio_station_code IS NULL`, so running it early fails loudly instead of returning empty pages (an index probe while `idx_snippets_location_backfill` exists) | < 1 s | The EXPLAIN and result-equivalence checks below. Then `DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_location_backfill;` outside a transaction |
 
 ## Sequencing
 
@@ -36,51 +43,31 @@ filtered page is empty for every snippet whose `location_state` / `radio_station
 NULL, because the filter no longer consults `audio_files`. Being slow is recoverable; being
 silently empty during Tamoa's reporting is not.
 
-**Do not run step 3 before step 2 finishes.** Correct either way (the indexes cover NULLs too), but
-once `location_state` is an indexed column every backfill UPDATE is non-HOT by definition and has to
-insert into all 35 indexes on `snippets`, 17 of them pgroonga full-text. That is the difference
-between a backfill measured in minutes and one measured in hours.
+### Why visible rows only
 
-### Measure one batch first
+`snippets` has 35 indexes (18 btree, 17 pgroonga over the full text of `transcription`,
+`translation`, `title`, `summary`, `explanation`; the pgroonga ones report 0 bytes to
+`pg_relation_size`). A HOT update touches no index; a non-HOT one re-enters the row into all 35.
+Measured on production 2026-09-21 11:31 UTC with the whole-table predicate:
 
-`snippets` has 35 indexes (measured 2026-09-21: 18 btree, 17 pgroonga). The pgroonga ones report
-0 bytes to `pg_relation_size` (data lives outside the relation files) and cover the full text of
-`transcription`, `translation`, `title`, `summary` and `explanation`. A non-HOT update re-enters the
-row into every one of them; a HOT update touches none. The backfill writes only unindexed columns
-(before step 3), so HOT is possible, but whether it happens depends on free space in each heap page.
-Historical HOT ratio on the table is 2.7% and says nothing about this write. So, right after
-creating `idx_snippets_location_backfill`:
-
-```sql
-SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables WHERE relname = 'snippets';
-SELECT public.backfill_snippets_location(5000);   -- note the wall time
-SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables WHERE relname = 'snippets';
-```
-
-- HOT delta near 5000 and a sub-second call: run the remaining ~112 batches (by hand or via the
-  per-minute cron job in the file header, which takes ~2 h and unschedules cleanly).
-- HOT delta near 0 and seconds per call: multiply by 112 and re-plan. Options: a weekend window, or
-  narrow the backfill to the ~43k visible rows (`status = 'Processed' AND
-  (confidence_scores->>'overall')::int >= 95`, which is all `get_snippets` reads; the step-4 guard
-  would then need the same predicate and the copy trigger `UPDATE OF audio_file, status,
-  confidence_scores`, because a row could cross the 95 threshold without a status write).
-
-Write the measured numbers here before continuing:
-
-| measured | wall time per 5000 | HOT delta | decision |
+| batch | wall time | HOT delta | result |
 |---|---|---|---|
-| (not yet run) | | | |
+| 5000 rows | > 120 s, cancelled by `statement_timeout` inside `verdad_unaccent` | 0 of ~2,365 rows updated | rolled back; ~50 ms per row |
+
+The heap pages have no free space, so every update is non-HOT and pays the pgroonga cost. The whole
+table (563k rows) would be ~8 h of index churn for 520k rows `get_snippets` never reads. The visible
+set (~43k) is ~36 min. Consequences, all in the files: the backfill and the step-4 guard use the
+visibility predicate; the copy trigger fires on `UPDATE OF audio_file, status, confidence_scores`,
+so a row that becomes visible later (Stage 3 setting `Processed`, a curation UPDATE restoring a
+score) is filled by that write; batches are 1000 (~50 s, under the 2-min timeout).
 
 ### When is the backfill done?
 
-`remaining` (snippets with `radio_station_code IS NULL` and an `audio_file`) must be **0**.
-`audio_files.radio_station_code` is `NOT NULL`, so there is no permanent floor. While the pipeline is
-busy the count plateaus at roughly the number of `Processing` / `Reviewing` rows, because the
-backfill skips those on purpose: updating them would bump `updated_at` (via the existing
-`snippets_handle_updated_at` trigger) and hide a genuinely stuck row from `sweep_stuck_snippets`
-for up to two hours. Those rows fill themselves in on their next status change (the copy trigger
-also fires on `UPDATE OF status`), so `remaining` reaches 0 within the pipeline's normal cycle; keep
-calling the function or leave the cron job running until it does.
+`remaining` (visible snippets with `radio_station_code IS NULL`) must be **0**.
+`audio_files.radio_station_code` is `NOT NULL`, so there is no permanent floor. A visible row locked
+by the pipeline at batch time is skipped (`SKIP LOCKED`) and picked up by the next batch; keep
+calling the function or leave the cron job running until 0. Rows outside the visible set stay NULL
+by design.
 
 `location_state` may legitimately stay NULL where `audio_files.location_state` is NULL; on production
 on 2026-09-18 that was 0 snippets (`SELECT count(*) FROM public.snippets s JOIN public.audio_files a

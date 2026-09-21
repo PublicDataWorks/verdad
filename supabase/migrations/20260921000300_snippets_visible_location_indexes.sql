@@ -33,9 +33,8 @@
 --   DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_visible_state;
 --   DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_visible_station;
 --
--- Do NOT build these before the backfill (20260921000200) reports 0 remaining. Once
--- location_state is an indexed column, every backfill UPDATE is non-HOT by definition and has to
--- insert into all 35 indexes, 17 of them pgroonga full-text: the cheap path disappears.
+-- Build these after the backfill (20260921000200) reports 0 remaining, so they are built once
+-- over final values.
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_snippets_visible_state
     ON public.snippets (location_state, recorded_at DESC, id DESC)

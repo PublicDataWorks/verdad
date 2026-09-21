@@ -1,19 +1,33 @@
 -- Backfill snippets.location_state / snippets.radio_station_code from audio_files (VER-387).
 --
 -- Companion to 20260921000100 (columns + sync triggers). The triggers only cover new and updated
--- rows; the ~563k existing snippets need one batched pass. get_snippets must NOT be switched to
--- the denormalized columns (20260921000400) until this reports 0 remaining, or filtered pages
--- come back empty for rows that are still NULL.
+-- rows; the rows that already exist need one batched pass. Only the VISIBLE ones (status =
+-- 'Processed' AND overall >= 95, ~43k of 563k) are backfilled: they are all get_snippets reads,
+-- and the copy trigger fires on every status / confidence_scores write, so any other row is
+-- filled by the write that makes it visible. get_snippets must NOT be switched to the
+-- denormalized columns (20260921000400) until this reports 0 remaining, or filtered pages come
+-- back empty for rows that are still NULL.
+--
+-- ============================================================================================
+-- Why visible rows only (measured 2026-09-21 11:31 UTC on production)
+-- ============================================================================================
+-- snippets carries 35 indexes, 17 of them pgroonga over the full text of transcription,
+-- translation, title, summary and explanation. Every backfill UPDATE is non-HOT (0 HOT of the
+-- first 2,365 rows: the heap pages have no free space) and re-enters the row into all of them,
+-- detoast + unaccent + tokenize: ~50 ms per row. A 5000-row batch hit the 2-minute
+-- statement_timeout inside verdad_unaccent. The whole table would be ~8 hours of pgroonga churn
+-- for 520k rows nobody can see; the visible set is ~36 minutes.
 --
 -- ============================================================================================
 -- How to run it
 -- ============================================================================================
--- (a) By hand, in the Supabase SQL editor, repeat until it returns 0 (~113 batches at 5000):
---       SELECT public.backfill_snippets_location(5000);
+-- Batches of 1000 (~50 s each, under the 2-minute statement_timeout with margin), ~43 of them.
+-- (a) By hand, in the Supabase SQL editor, repeat until it returns 0:
+--       SELECT public.backfill_snippets_location(1000);
 --
 -- (b) As a one-off pg_cron job (pg_cron 1.6 is installed), every minute:
 --       SELECT cron.schedule('backfill-snippets-location', '* * * * *',
---                            $$SELECT public.backfill_snippets_location(5000)$$);
+--                            $$SELECT public.backfill_snippets_location(1000)$$);
 --     and when the verification query below reports 0 remaining:
 --       SELECT cron.unschedule('backfill-snippets-location');
 --     Check progress with:
@@ -23,37 +37,21 @@
 -- Each call is its own transaction (one UPDATE), so it can be stopped at any point and resumed;
 -- FOR UPDATE SKIP LOCKED means it never blocks the pipeline's own writes.
 --
--- Before the first batch, build a throwaway partial index over the rows still to do. Without it
--- every batch walks snippets_pkey in id order and heap-checks the rows already filled (the skip
--- grows by 5000 per batch: ~25M visibility checks over the run); with it each batch is an
--- index walk over exactly the remaining rows. It shrinks as the backfill progresses. Keep it
--- until 20260921000400 has been applied: that file's guard runs the same predicate and would
--- otherwise seq-scan the heap. Both statements MUST run outside a transaction (CONCURRENTLY):
+-- Before the first batch, build a throwaway partial index over the rows still to do, so each
+-- batch is an index walk over exactly the remaining rows instead of a filter over the visible
+-- set. It shrinks as the backfill progresses. Keep it until 20260921000400 has been applied:
+-- that file's guard runs the same predicate. Both statements MUST run outside a transaction
+-- (CONCURRENTLY):
 --       CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_snippets_location_backfill
 --           ON public.snippets (id)
---           WHERE radio_station_code IS NULL;
+--           WHERE radio_station_code IS NULL
+--             AND status = 'Processed'::processing_status
+--             AND ((confidence_scores ->> 'overall'::text))::integer >= 95;
 --     ... run the batches, 20260921000300, 20260921000400 ...
 --       DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_location_backfill;
 --
--- ============================================================================================
--- Cost: measure ONE batch before scheduling the rest
--- ============================================================================================
--- snippets carries 35 indexes, 17 of them pgroonga over the full text of transcription,
--- translation, title, summary and explanation (0 bytes in pg_relation_size: pgroonga stores its
--- data outside the relation files). A non-HOT update re-enters the row into every one of them,
--- detoast + unaccent + tokenize, 563k times; a HOT update touches no index. HOT is possible only
--- because nothing this UPDATE writes is indexed (location_state, radio_station_code, updated_at)
--- and 20260921000300 has not indexed location_state yet; whether it happens depends on free space
--- in each heap page. So the runtime is unknown until measured:
---   SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables WHERE relname = 'snippets';
---   SELECT public.backfill_snippets_location(5000);   -- note the wall time
---   SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables WHERE relname = 'snippets';
--- HOT delta near 5000 and sub-second: proceed. Near 0 and seconds per call: multiply by 113 and
--- re-plan (README "Measure one batch first" has the options).
---
--- Either way every updated row is a new heap tuple (up to 591 MB of dead ones). The autovacuum
--- thresholds for the large tables were tuned in 20260918020100_autovacuum_thresholds_large_tables.sql,
--- but vacuum needs time and I/O headroom: run off-peak and check afterwards
+-- Every updated row is a new heap tuple (~43k dead ones). The autovacuum thresholds for the large
+-- tables were tuned in 20260918020100_autovacuum_thresholds_large_tables.sql; check afterwards
 --   SELECT relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze
 --   FROM pg_stat_user_tables WHERE relname = 'snippets';
 -- If n_dead_tup is still large hours later, run `VACUUM (ANALYZE) public.snippets;` by hand
@@ -64,17 +62,13 @@
 -- ============================================================================================
 -- Verification
 -- ============================================================================================
---   SELECT count(*) FILTER (WHERE radio_station_code IS NULL AND audio_file IS NOT NULL) AS remaining,
---          count(*) FILTER (WHERE status IN ('Processing', 'Reviewing'))              AS in_flight,
---          count(*)
---   FROM public.snippets;
+--   SELECT count(*) FILTER (WHERE radio_station_code IS NULL) AS remaining, count(*) AS visible
+--   FROM public.snippets
+--   WHERE status = 'Processed' AND (confidence_scores ->> 'overall')::integer >= 95;
 --
--- Done means `remaining` = 0. The batches skip rows that are Processing / Reviewing (see the note
--- inside the function), so `remaining` plateaus at roughly `in_flight` (single digits on
--- production, 2026-09-18) while the pipeline is busy. Those rows fill themselves in on their
--- next status change (the copy trigger fires on UPDATE OF status), so `remaining` reaches 0
--- within the pipeline's normal cycle even if no further batch runs. audio_files.radio_station_code
--- is NOT NULL, so there is no permanent floor on this count.
+-- Done means `remaining` = 0. audio_files.radio_station_code is NOT NULL, so there is no
+-- permanent floor on this count; a row locked by the pipeline is skipped and picked up by the
+-- next batch. Rows outside the visible set stay NULL by design.
 --
 -- location_state is allowed to stay NULL where audio_files.location_state is NULL. On production
 -- on 2026-09-18 that was 0 snippets:
@@ -83,8 +77,8 @@
 -- Those rows (if any) match no states filter, exactly as before this change.
 --
 -- Side effect to know about: every backfilled row gets updated_at = now() from the existing
--- snippets_handle_updated_at trigger. That is harmless for Processed / Error / New rows (nothing
--- reads their updated_at for scheduling) and is why in-flight rows are excluded.
+-- snippets_handle_updated_at trigger. Harmless for Processed rows (nothing reads their
+-- updated_at for scheduling; sweep_stuck_snippets only looks at Processing / Reviewing).
 --
 -- ============================================================================================
 -- Transactionality and rollback
@@ -123,17 +117,14 @@ BEGIN
           -- location_state is deliberately not part of the predicate: audio_files.location_state
           -- is nullable, and a snippet whose audio file has no state must be allowed to stay NULL
           -- without being re-selected forever.
-          -- Rows in flight through the pipeline (Processing / Reviewing) are skipped: this UPDATE
-          -- fires snippets_handle_updated_at, which bumps updated_at, and sweep_stuck_snippets
-          -- (20260917080000) uses updated_at < now() - 2 h to requeue stuck rows, so touching an
-          -- in-flight row here would hide it from the sweep for up to two hours. They are picked
-          -- up by a later batch, or by snippets_copy_audio_file_location (20260921000100), which
-          -- also fires on their next status change.
+          -- Visible rows only (see the header); the predicate is the one idx_snippets_visible_cover
+          -- and 20260921000300 use, character for character.
           SELECT s2.id
           FROM public.snippets s2
           WHERE s2.audio_file IS NOT NULL
             AND s2.radio_station_code IS NULL
-            AND s2.status NOT IN ('Processing', 'Reviewing')
+            AND s2.status = 'Processed'::processing_status
+            AND ((s2.confidence_scores ->> 'overall'::text))::integer >= 95
           ORDER BY s2.id
           LIMIT p_batch
           FOR UPDATE SKIP LOCKED
@@ -145,4 +136,4 @@ END;
 $function$;
 
 COMMENT ON FUNCTION public.backfill_snippets_location(integer) IS
-    'One batch of the VER-387 backfill of snippets.location_state / radio_station_code from audio_files. Returns rows updated; call repeatedly until it returns 0.';
+    'One batch of the VER-387 backfill of snippets.location_state / radio_station_code from audio_files, visible rows only. Returns rows updated; call repeatedly until it returns 0.';

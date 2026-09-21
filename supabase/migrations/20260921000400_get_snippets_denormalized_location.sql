@@ -27,7 +27,7 @@
 -- Prerequisites -- APPLY LAST
 -- ============================================================================================
 -- 1. 20260921000100_snippets_location_columns_and_triggers.sql (columns + sync triggers)
--- 2. 20260921000200_snippets_location_backfill.sql, run to completion (0 remaining)
+-- 2. 20260921000200_snippets_location_backfill.sql, run to completion (0 visible rows remaining)
 -- 3. 20260921000300_snippets_visible_location_indexes.sql, both indexes indisvalid
 -- 4. ANALYZE public.snippets; (the new columns have no statistics until then)
 -- Applying this file before the backfill reports 0 remaining returns WRONG (empty) results for
@@ -38,20 +38,21 @@
 -- and PostgREST keeps working; NOTIFY pgrst reloads the schema cache.
 -- Rollback: supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql (run as is).
 
--- Prerequisite guard: refuse to swap the function while any snippet still lacks its denormalized
--- station code (audio_files.radio_station_code is NOT NULL, so NULL here means "not backfilled").
--- Rows in flight are deliberately NOT excluded: the backfill skips them, and this file must wait
--- until they have left flight and been filled in by the copy trigger or a later batch.
--- The EXISTS is an index probe while idx_snippets_location_backfill (20260921000200) still
--- exists, a 591 MB seq scan once it is dropped: drop that index after this file, not before.
+-- Prerequisite guard: refuse to swap the function while any VISIBLE snippet still lacks its
+-- denormalized station code (audio_files.radio_station_code is NOT NULL, so NULL here means "not
+-- backfilled"). Rows outside the visible set stay NULL by design (20260921000200 header); the copy
+-- trigger fills them on the write that makes them visible. The EXISTS is an index probe while
+-- idx_snippets_location_backfill (20260921000200) still exists: drop that index after this file.
 DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM public.snippets
         WHERE audio_file IS NOT NULL AND radio_station_code IS NULL
+          AND status = 'Processed'::processing_status
+          AND ((confidence_scores ->> 'overall'::text))::integer >= 95
     ) THEN
         RAISE EXCEPTION
-            'VER-387: snippets still have radio_station_code IS NULL; run public.backfill_snippets_location() until it returns 0 and remaining = 0 before replacing get_snippets';
+            'VER-387: visible snippets still have radio_station_code IS NULL; run public.backfill_snippets_location() until it returns 0 and remaining = 0 before replacing get_snippets';
     END IF;
 END
 $$;
