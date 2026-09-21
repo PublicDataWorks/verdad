@@ -3,11 +3,15 @@
 `applied_versions.txt` is deliberately untouched. Run the files **by hand in the Supabase SQL
 editor**, in this order, one file per run.
 
-**Status (2026-09-21 11:35 UTC):** step 1 applied 11:29 UTC (with the earlier trigger definition:
-re-run the file, it is re-runnable, to pick up `confidence_scores` in the copy trigger's `UPDATE OF`);
-the backfill function created 11:31 UTC and replaced with the visible-only version 11:48 and
-11:55 UTC; the measurements below done; the step-2 batches started 11:56 UTC. Steps 3, 3b, 4 not
-run.
+**Status (2026-09-21 13:10 UTC):** step 1 applied 11:29 UTC and re-applied 11:48 UTC (trigger on
+`confidence_scores`); the backfill function created 11:31 UTC, replaced 11:48 and 11:55 UTC
+(visible-only, no ORDER BY); step 2 batches ran 11:56 to 13:09 UTC (43,017 visible rows, 0
+remaining, 0 mismatches against `audio_files`; batches of 500, then 250, then 100: an autovacuum
+on `snippets` starts after every ~13k updated rows and doubles to quadruples the per-row cost, two
+batches were cancelled by the 2-min timeout and rolled back, nothing lost). Steps 3, 3b, 4 not run.
+Step 3 caveat: the `postgres` role has `statement_timeout = 2min` and the visibility predicate
+detoasts `confidence_scores` for every row, so each CONCURRENTLY build needs a session without that
+timeout (a temp index with the same predicate did not finish inside 2 min on 21 Sep).
 
 **Windows:** not on Sat 2026-09-19 (demo) and not on Mon 2026-09-21 (Tamoa's story). Steps 1 to 3b
 in one off-peak window (HCM daytime = US night; ~1.5 h), step 4 the next day after the
