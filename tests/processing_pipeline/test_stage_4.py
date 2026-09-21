@@ -357,7 +357,29 @@ class TestStage4:
             }
         )
 
-    def test_review_citing_a_url_no_tool_returned_is_capped(self, mock_supabase_client, sample_snippet, review_result):
+    def test_review_citing_a_url_no_tool_returned_is_recorded_not_capped_by_default(
+        self, mock_supabase_client, sample_snippet, review_result
+    ):
+        review_result["confidence_scores"] = {"overall": 97, "categories": [{"category": "Fabricated Content", "score": 97}]}
+        review_result["explanation"] = {"english": "PolitiFact: https://www.politifact.com/factchecks/2026/mar/05/x/.", "spanish": "x"}
+
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, self._stage_4_record(["apnews.com/article/real"]))),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet)
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 97
+        assert "Citation check" not in kwargs["explanation"]["english"]
+        check = json.loads(kwargs["grounding_metadata"])["stage_4_citation_check"]
+        assert check["applied"] is False
+        assert check["unobserved"] == ["https://www.politifact.com/factchecks/2026/mar/05/x/"]
+
+    def test_review_citing_a_url_no_tool_returned_is_capped_when_enforced(
+        self, mock_supabase_client, sample_snippet, review_result, monkeypatch
+    ):
+        monkeypatch.setattr("processing_pipeline.stage_4.constants.CITATION_CHECK_CAPS", True)
         review_result["confidence_scores"] = {"overall": 97, "categories": [{"category": "Fabricated Content", "score": 97}]}
         review_result["explanation"] = {
             "english": "PolitiFact rated this Pants on Fire: https://www.politifact.com/factchecks/2026/mar/05/x/.",

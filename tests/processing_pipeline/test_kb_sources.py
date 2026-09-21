@@ -90,3 +90,7 @@ class TestUrlInText:
         text = "See https://apnews.com/article/abc. Also [R](https://www.reuters.com/x?y=1), then https://apnews.com/article/abc"
         assert urls_in_text(text) == ["https://apnews.com/article/abc", "https://www.reuters.com/x?y=1"]
         assert urls_in_text(None) == []
+
+    def test_urls_in_text_keeps_balanced_parentheses(self):
+        text = "(see https://en.wikipedia.org/wiki/Rubio_(politician)). Then (https://x.com/a)."
+        assert urls_in_text(text) == ["https://en.wikipedia.org/wiki/Rubio_(politician)", "https://x.com/a"]
