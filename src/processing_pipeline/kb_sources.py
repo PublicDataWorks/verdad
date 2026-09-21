@@ -7,7 +7,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit
 VALID_SOURCE_TYPES = frozenset(
     {"tier1_wire_service", "tier1_factchecker", "tier2_major_news", "tier3_regional_news", "official_source", "other"}
 )
-_URL_IN_TEXT = re.compile(r"https?://[^\s<>\"')\]]+", re.IGNORECASE)
+_URL_IN_TEXT = re.compile(r"https?://[^\s<>\"'\]]+", re.IGNORECASE)
 
 
 def is_http_url(value) -> bool:
@@ -80,10 +80,23 @@ def url_key(url) -> str:
     return key
 
 
+def _trim_url(found: str) -> str:
+    # a closing parenthesis belongs to the URL only when it balances one ("/wiki/X_(y)" yes, "(see https://x/a)" no)
+    url = found.rstrip(_URL_TRAILING_CHARS)
+    while url.endswith(")") and url.count(")") > url.count("("):
+        url = url[:-1].rstrip(_URL_TRAILING_CHARS)
+    return url
+
+
+def urls_in_text(text) -> list[str]:
+    """Every http(s) URL in ``text`` in order of first appearance, trailing prose punctuation dropped."""
+    return list(dict.fromkeys(_trim_url(found) for found in _URL_IN_TEXT.findall(text or "")))
+
+
 def url_appears_in_text(url: str, text: str) -> bool:
     """True when ``url`` (ignoring case, a trailing slash and trailing punctuation) is one of the URLs in ``text``."""
     target = normalize_url(url)
-    return any(normalize_url(found) == target for found in _URL_IN_TEXT.findall(text or ""))
+    return any(normalize_url(found) == target for found in urls_in_text(text))
 
 
 def contains_http_url(text: str) -> bool:

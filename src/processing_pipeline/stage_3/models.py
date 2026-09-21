@@ -305,7 +305,6 @@ _NEGATED_AFTER_RE = re.compile(
     r"^\w*(?:\s+\w+){0,2}\s*:\s*(?:none|no|n/a|ninguno|ninguna|not(?:\s+\w+)?)\b\s*(?:[.;,!?)\]]|$)"
 )
 _NEGATION_WINDOW = 60
-_GATE_NOTE_RE = re.compile(r"\s*" + re.escape(EVIDENCE_GATE_NOTE_PREFIX) + r"[^\n]*")
 
 
 def _bilingual_texts(value) -> list[str]:
@@ -329,9 +328,13 @@ def mentions_falsity(text: str) -> bool:
     return False
 
 
-def _without_gate_note(text) -> str:
+def strip_pipeline_note(text, prefix: str) -> str:
     """Drop a note appended by an earlier run so a re-review neither keeps a stale note nor gets two."""
-    return _GATE_NOTE_RE.sub("", text if isinstance(text, str) else "").strip()
+    return re.sub(r"\s*" + re.escape(prefix) + r"[^\n]*", "", text if isinstance(text, str) else "").strip()
+
+
+def _without_gate_note(text) -> str:
+    return strip_pipeline_note(text, EVIDENCE_GATE_NOTE_PREFIX)
 
 
 def asserts_falsity(analysis: dict) -> bool:
@@ -530,7 +533,7 @@ def _mark_observed(verification_evidence: dict | None, observed_urls: set[str]) 
         result["url_observed_in_tools"] = url_was_observed(result.get("url"), observed_urls)
 
 
-def _cap_scores(confidence_scores: dict, cap: int) -> tuple[int | float | None, list[dict]]:
+def cap_scores(confidence_scores: dict, cap: int) -> tuple[int | float | None, list[dict]]:
     original_overall = confidence_scores.get("overall")
     categories = [c for c in confidence_scores.get("categories") or [] if isinstance(c, dict)]
     original_categories = [{"category": c.get("category"), "score": c.get("score")} for c in categories]
@@ -663,7 +666,7 @@ def apply_evidence_caps(
         result["evidence_gate"] = {"applied": False}
         return result
 
-    original_overall, original_categories = _cap_scores(confidence_scores, cap)
+    original_overall, original_categories = cap_scores(confidence_scores, cap)
 
     note_en = f"{EVIDENCE_GATE_NOTE_PREFIX} Confidence capped at {cap} by the pipeline because " + "; ".join(reasons) + "."
     note_es = (

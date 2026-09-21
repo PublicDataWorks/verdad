@@ -212,8 +212,11 @@ class TestStage4:
         kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
         assert kwargs["id"] == "test-id"
         assert kwargs["translation"] == "Reviewed translation"
-        # no stage-3 evidence and the gate did not apply, so the reviewer's record passes through unchanged
-        assert json.loads(kwargs["grounding_metadata"]) == {"kb_research": "kb findings"}
+        # no stage-3 evidence and no cap applied: the reviewer's record plus the (empty) citation check
+        grounding_metadata = json.loads(kwargs["grounding_metadata"])
+        assert grounding_metadata["kb_research"] == "kb findings"
+        assert grounding_metadata["stage_4_citation_check"]["applied"] is False
+        assert "evidence_gate" not in grounding_metadata
         assert kwargs["reviewed_by"] == GeminiModel.GEMINI_2_5_PRO.value
         mock_postprocess.assert_called_once_with(
             mock_supabase_client, "test-id", review_result["disinformation_categories"]
@@ -343,6 +346,79 @@ class TestStage4:
         assert [c["score"] for c in kwargs["confidence_scores"]["categories"]] == [40]
         assert json.loads(kwargs["grounding_metadata"])["evidence_gate"]["applied"] is True
 
+    # --- VER-391: citations are checked against the Stage 4 tool record --------
+
+    @staticmethod
+    def _stage_4_record(observed_urls):
+        return json.dumps(
+            {
+                "web_research": "notes",
+                "stage_4_tool_record": {"searches": [], "fetches": [], "observed_urls": observed_urls},
+            }
+        )
+
+    def test_review_citing_a_url_no_tool_returned_is_recorded_not_capped_by_default(
+        self, mock_supabase_client, sample_snippet, review_result
+    ):
+        review_result["confidence_scores"] = {"overall": 97, "categories": [{"category": "Fabricated Content", "score": 97}]}
+        review_result["explanation"] = {"english": "PolitiFact: https://www.politifact.com/factchecks/2026/mar/05/x/.", "spanish": "x"}
+
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, self._stage_4_record(["apnews.com/article/real"]))),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet)
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 97
+        assert "Citation check" not in kwargs["explanation"]["english"]
+        check = json.loads(kwargs["grounding_metadata"])["stage_4_citation_check"]
+        assert check["applied"] is False
+        assert check["unobserved"] == ["https://www.politifact.com/factchecks/2026/mar/05/x/"]
+
+    def test_review_citing_a_url_no_tool_returned_is_capped_when_enforced(
+        self, mock_supabase_client, sample_snippet, review_result, monkeypatch
+    ):
+        monkeypatch.setattr("processing_pipeline.stage_4.constants.CITATION_CHECK_CAPS", True)
+        review_result["confidence_scores"] = {"overall": 97, "categories": [{"category": "Fabricated Content", "score": 97}]}
+        review_result["explanation"] = {
+            "english": "PolitiFact rated this Pants on Fire: https://www.politifact.com/factchecks/2026/mar/05/x/.",
+            "spanish": "PolitiFact lo calificó como falso.",
+        }
+
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, self._stage_4_record(["apnews.com/article/real"]))),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet)
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 40
+        assert "Citation check" in kwargs["explanation"]["english"]
+        grounding_metadata = json.loads(kwargs["grounding_metadata"])
+        assert grounding_metadata["stage_4_citation_check"]["applied"] is True
+        assert grounding_metadata["stage_4_citation_check"]["unobserved"] == [
+            "https://www.politifact.com/factchecks/2026/mar/05/x/"
+        ]
+        assert grounding_metadata["stage_4_tool_record"]["observed_urls"] == ["apnews.com/article/real"]
+
+    def test_review_citing_a_url_a_tool_returned_keeps_its_score(self, mock_supabase_client, sample_snippet, review_result):
+        review_result["confidence_scores"] = {"overall": 97, "categories": [{"category": "Fabricated Content", "score": 97}]}
+        review_result["explanation"] = {
+            "english": "Coverage at https://apnews.com/article/real contradicts the claim.",
+            "spanish": "La cobertura contradice la afirmación.",
+        }
+
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, self._stage_4_record(["apnews.com/article/real"]))),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet)
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 97
+        assert json.loads(kwargs["grounding_metadata"])["stage_4_citation_check"]["applied"] is False
+
     def test_process_snippet_with_empty_disinformation_categories(
         self, mock_supabase_client, sample_snippet, review_result
     ):
@@ -425,6 +501,8 @@ class TestStage4:
             "kb_research": "kb findings",
             "kb_updates": "kb updated",
         }
+        record = {"searches": [], "fetches": [], "observed_urls": []}
+        assert json.loads(Stage4Executor._build_grounding_metadata("", "", "", record)) == {"stage_4_tool_record": record}
 
     # --- analysis_review flow --------------------------------------------------------
 

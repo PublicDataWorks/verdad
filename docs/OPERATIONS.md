@@ -185,6 +185,18 @@ refuses the production project unless `--allow-production` is passed.
 - **Transient Gemini errors are retried** (`src/processing_pipeline/gemini_retry.py`: 429/5xx and empty or
   unparseable output, waits of 30 s, 2 min, 5 min) in Stage 3 and Stage 4; the snippet only reaches `Error`
   after the fourth failure, with that message stored. Rerun those ids once the outage is over.
+- **Stage 4 reviews carry a tool record and a citation check** (VER-391) in `snippets.grounding_metadata`:
+  `stage_4_tool_record` lists every `searxng_web_search` / `web_url_read` call (query or URL, status, returned URLs),
+  every `search_knowledge_base` call (curated entries' source URLs) and `observed_urls` (`url_key` of everything the
+  tools put in front of the model); `stage_4_citation_check` lists every URL in the reviewer's visible text with
+  `observed` true/false and the `unobserved` ones (neither a tool returned them nor the Stage 3 record holds them).
+  `upsert_knowledge_entry` rejects an unobserved URL as a KB source. Capping is behind
+  `CITATION_CHECK_CAPS` (`stage_4/constants.py`, off until a day of numbers): when on, an unobserved URL caps the
+  scores at 40 with a `[Citation check]` note, and the check's `original_*` are the scores as received (already 40
+  when the evidence gate fired first; the gate's own `original_*` hold the pre-gate values). `evidence_gate` is
+  stored only when it applied; the citation check always, so
+  `jsonb_array_length(grounding_metadata::jsonb -> 'stage_4_citation_check' -> 'unobserved') > 0` is the
+  would-cap rate.
 - **A transient DB error on the fetch-work RPC no longer kills the stage loop** (VER-378): statement timeout
   (`57014`), lock/deadlock, server restart (`57P01`-`57P03`), any class-08 connection error, PostgREST's own
   `PGRST000`-`PGRST002` (cannot reach Postgres / schema cache reloading after DDL) or gateway 502/503/504/520/522/524
