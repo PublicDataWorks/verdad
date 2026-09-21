@@ -76,10 +76,10 @@ how fact-checking coverage of local radio disinformation actually works.
 - **VER-348**: an earlier "absence-of-evidence" hotfix in the same area. Worth
   reading for prior context/tradeoffs before proposing a new fix, to avoid
   re-litigating a decision that was already made once.
-- **VER-389** (separate, already fixed in a different PR): an unrelated bug where a
-  sweeper job that requeues stuck `Error`-status rows was never scheduled, stranding
-  ~3,900 clips in an `Error` queue since August. That bug is being fixed separately
-  and is NOT the cause of this problem — even with that queue fully cleared, this
+- **VER-389** (open, PR #118, the runbook `15_requeue_stuck_retryable_errors.sql`): an
+  unrelated bug where a sweeper job that requeues stuck `Error`-status rows was never
+  scheduled, stranding ~2,800 clips scoring 95+ since August (~102k retryable rows since
+  June). That bug is NOT the cause of this problem — even with that queue fully cleared, this
   specific clip and most others like it would still fail the evidence gate and stay
   hidden. Do not conflate the two; a reader of Slack thread `1789491342.759259` may
   see both discussed together.

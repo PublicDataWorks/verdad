@@ -1,5 +1,12 @@
 # Handoff: the 3 Fulton County clips for Carlos Chirinos
 
+**Status 2026-09-21: DONE on 2026-09-19 21:02 UTC.** All three clips are `Processed` at 95 and
+searchable, restored by manual override with regrounded explanations (batch
+`unmask-2026-09-19-carlos`, PR #120 runbook, PR #121 incident write-up). They were never in
+`user_hide_snippets`; the evidence gate had capped them below the feed's 95 floor. Do not apply
+another override. Kept as the record of the request. One correction to item 3 below: the Alito
+quote is real (Watson v. RNC oral argument, 2026-03-23); what is false is the claimed 10 Sep ruling.
+
 Date: 2026-09-19
 Author: Claude (session `session_01RbFdV1RH3zCkU5y5JZ4bnp`), for Rajiv Sinclair
 
@@ -33,8 +40,9 @@ visible in app search.
    Whitmer / Jocelyn Benson (Michigan); claims Fulton County "recognized" violating 1.7 million
    votes in Georgia. No such recognition exists.
 3. **`3e53d8e1-fdbd-4c4c-a692-f34be0b10962`** — 07:27 UTC — Fabricated September 2026 Supreme
-   Court ruling on mail-in voting, plus a fabricated Justice Alito quote (independently debunked
-   by PolitiFact and FactCheck.org as a recurring recycled fabrication).
+   Court ruling on mail-in voting. (The original text here called the Alito quote fabricated and
+   "debunked by PolitiFact and FactCheck.org"; that rested on invented Stage 4 citations. See the
+   status note at the top.)
 
 Full Spanish transcripts, English translations, and per-clip "why this is false" analysis for
 all three are in the artifact HTML (`carlos_fulton_briefing.html`, also attached in this session's

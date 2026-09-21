@@ -1,8 +1,9 @@
 # Handoff: VER-389, snippets stranded in `Error` (as of 2026-09-19 19:20 UTC)
 
 Written by Claude Code (session `claude/verdad-accuracy-hallucination-xn7kgv`) for the Claude Code
-instance that will execute this. **Your job is to apply three SQL steps to production and verify
-them.** Everything is already written, dry-run verified and committed. Nothing has been applied.
+instance that will execute this. **Your job is to apply steps 0, 2 and 3 of the runbook to
+production and verify them.** Everything is already written, dry-run verified and committed.
+Nothing has been applied (updated 2026-09-21 by Thien after review; step 1 is closed).
 
 Rajiv Sinclair (technical PM, `rajiv@publicdata.works`) owns product decisions and has asked for
 this to be done immediately without waiting for Thien Lam (engineer, East Agile, owns deploys,
@@ -53,9 +54,9 @@ weekly arrivals of stuck 95+ rows fell from 722 (week of 09-07) to 175 (week of 
 | Total rows in `Error` | 275,914 |
 | Sweeper-eligible since June | ~101,700 |
 | of those, scoring 95+ and recorded since 2026-08-01 | 2,837 |
-| of those, tagged `Election Integrity` | 102 |
-| Stage 3 throughput | ~155/hour (~3,700/day), live queue shallow |
-| Stage 4 throughput | ~254/day observed peak (09-10..14); now 50-80/day, `Ready for review` empty |
+| of those, tagged `Election Integrity` | 101 on 2026-09-21 (102 on 09-19, before `3e53d8e1` left `Error`) |
+| Stage 3 throughput | 2,800-3,700/day (2026-09-21: `New` queue ~3,700 deep; ~40% slower 00:00-07:00 UTC on the Gemini free-tier daily cap) |
+| Stage 4 throughput | 46-178/day over 14-20 Sep; no reviews complete 00:00-07:00 UTC |
 
 Eligible `Error` rows by recording month (`skipped_backlog` is excluded by the sweeper):
 
@@ -69,8 +70,9 @@ Eligible `Error` rows by recording month (`skipped_backlog` is excluded by the s
 Failure modes among the 3,932 stuck 95+ rows since Aug 1: 2,250 `503 UNAVAILABLE`, 1,231 other
 Stage 4, 442 `429` quota, 9 other.
 
-**Stage 4 is the binding constraint.** At ~254/day the full 2,837 is roughly two weeks. That is why
-the runbook releases in priority order instead of all at once.
+91% of the eligible tail routes to `New`, so **Stage 3 is the binding constraint** for the drain;
+Stage 4 only sees the 95+ fraction. That is why the runbook releases in priority order instead of
+all at once.
 
 ## 4. Carlos's specific snippet
 
@@ -104,12 +106,11 @@ of the few election items that completed.
 Apply `supabase/database/sql/cleanup_2026_09/15_requeue_stuck_retryable_errors.sql`
 (branch `claude/ver-389-requeue-stuck-errors`, PR #118).
 
-**Status as of 2026-09-19 19:40 UTC: step 1 has already been applied** by someone running an
-earlier revision of this file. `3e53d8e1` is out of `Error` with `analysis_attempts = 1` and was
-in `Reviewing`. It is not in `user_hide_snippets`. Steps 0, 2 and 3 have not been run: the
-`snippet_requeue_log` table does not exist and no `sweep-retryable-errors` cron job is scheduled.
-Run step 0 before steps 2 and 3, and confirm `3e53d8e1` reached `Processed` at a score of 95
-before telling anyone it is searchable.
+**Status as of 2026-09-21 (Thien):** step 1 is closed and must not be re-run. An earlier revision
+re-queued `3e53d8e1` on 2026-09-19; Stage 4 capped it to 40; it was then restored to `Processed`
+95 by hand with a regrounded explanation (batch `unmask-2026-09-19-carlos`, PR #120/#121), together
+with `fb43bf56` and `c253e70f`. Re-queueing any of the three would overwrite that text. Steps 0, 2
+and 3 have not been run: `snippet_requeue_log` does not exist and no sweeper cron job is scheduled.
 
 Paste each step separately into the Supabase SQL editor, in order, checking the inline
 verification query before moving on. Per `.claude/rules/supabase-sql.md`, migrations and loose SQL
@@ -121,37 +122,32 @@ rollback safe:** once step 3 is running, `sweep_retryable_errors()` also sets
 `analysis_attempts = 1` on rows of its own, so any rollback keyed on `analysis_attempts` alone
 would drag unrelated pending work back into `Error`. Always scope to the log.
 
-**Step 1** moves `3e53d8e1` to `Ready for review`. One row. Watch it complete end to end
-(`reviewed_at` becomes non-NULL, `status` becomes `Processed`) before releasing the batch. At
-current review rates this should be minutes, not hours. Its predicate carries the same
-`analysis_attempts < 3` ceiling and retryable-error guards as the sweeper, so re-running it after
-a second failure cannot push the row past the retry limit or re-queue a non-transient failure.
+**Step 1** is done (see the status above); the file keeps a note in its place.
 
-**Step 2** moves the election-tagged 95+ rows. Dry-run verified read-only on 2026-09-19:
-**101** to `Ready for review`, **1** to `New`. (It was 102 before step 1 was applied; step 1's row
-is logged under the step-1 batch and is not counted again here.) Expect it to clear inside a day.
+**Step 2** moves the election-tagged 95+ rows plus the four hand-held Fulton rows, all to `New`
+(section 8 says why not `Ready for review`). Dry run read-only 2026-09-21: **105** rows, batch
+`requeue-2026-09-21-ver389-step2`. Stage 3 polls newest-first and its `New` queue on 2026-09-21
+is ~3,700 rows recorded 2-5 Sep (live recordings are processed within hours), so step-2 rows
+recorded after 5 Sep run almost at once and the August ones wait until that backlog drains,
+about a week at the current ~500/day net.
+**Needs Rajiv's go**: his sessions asked on 19 Sep to hold this set (section 8).
 
-**Step 3** schedules the sweeper: `cron.schedule('sweep-retryable-errors', '15 * * * *',
-$$SELECT public.sweep_retryable_errors(6)$$)`. Batch 6 hourly is ~144/day, sized to stay under the
-observed Stage 4 peak while leaving headroom for live recordings. The sweeper deliberately does
-**not** write to `snippet_requeue_log`.
-
-Step 1's row is inside step 2's set. Running step 1 first is safe: step 2 only touches rows still
-in `Error`, so the row is not picked up twice and `analysis_attempts` stays at 1.
+**Step 3** schedules the sweeper: `cron.schedule('sweep_retryable_errors', '15 8-23 * * *',
+$$SELECT public.sweep_retryable_errors(50)$$)`. 91% of the eligible tail routes to `New`, so Stage 3
+is the constraint; 50/hour outside the Gemini quota dead window (00:00-07:00 UTC) is ~800/day, about
+a quarter on top of live work. The sweeper deliberately does **not** write to `snippet_requeue_log`.
 
 **Verify against the log, not against `analysis_attempts`.** The runbook's verification queries
 already do this; if you write your own, do the same.
 
 ### After applying
 
-1. Confirm `3e53d8e1` reaches `Processed` and is **not** in `user_hide_snippets`. If it is hidden,
-   check `snippet_quarantine_log` for which batch caught it before assuming a bug.
-2. Re-run Carlos's search and report the newest result date:
-   `get_snippets('spanish', '{}', 0, 10, 'latest', 'fulton', true)`.
-3. Watch `cron.job_run_details` for the first sweeper firing, then watch Stage 4 throughput for a
-   few hours. **If Stage 4 throughput stays at or below ~254/day, `p_batch` can be raised.** If the
-   `Ready for review` queue grows without draining, lower it or unschedule.
-4. Post results to `#verdad` thread `1789491342.759259` and comment on VER-389.
+1. Run the yield query at the end of step 2 after a day or two: how many came back `Processed` at
+   95+ vs capped vs `Error` again. Spot-check the 95+ ones against their sources before anyone
+   tells a reporter they are back.
+2. Watch `cron.job_run_details` for the first sweeper firing, then Stage 3 throughput and the `New`
+   queue depth for a day. If the queue grows without draining, lower `p_batch` or unschedule.
+3. Post results to `#verdad` thread `1789491342.759259` and comment on VER-389.
 
 ## 7. Constraints you must respect
 
@@ -166,32 +162,32 @@ already do this; if you write your own, do the same.
 
 ## 8. Known interactions
 
-- **CORRECTED 2026-09-19 19:46 UTC (was wrong above): re-queued rows going to `Ready for review`
-  will NOT recover a 95+ score, structurally, not intermittently.** `apply_evidence_caps` runs at
-  Stage 4 too, but Stage 4 does no web research of its own; it re-reads the `verification_evidence`
-  that Stage 3 already froze into `previous_analysis`. If that record has no result marked
-  `contradicts_claim`, no number of Stage 4 retries changes the outcome, because there is nothing
-  new for the gate to find. Checked against production 2026-09-19: **0 of the 101 rows in step
-  2's exact set have any `contradicts_claim` result.** `3e53d8e1` proved this individually (`95`
-  before, `40` after, `evidence_gate.applied = true`, `original_overall` preserved at `95`); the
-  same thing then happened to `717925c8` and (reported by a second reviewer) `0759b76b`. This is
-  not the VER-388 leak failing to fire; it is the gate working exactly as designed on content for
-  which no contradicting source exists to cite, which is the same absence-of-evidence tension
-  VER-358 and VER-348 already describe for hyper-local, one-off fabrications.
-  **The corrected understanding of the previous paragraph (kept for the record, do not act on
-  it):** ~~the Stage 4 review evidence gate is not capping absence-of-evidence verdicts... For
-  `3e53d8e1` the 95 should hold~~ — both claims were wrong; the gate caps every row of this shape,
-  every time, and `3e53d8e1` did not hold.
-- **Design decision needed before running step 2 (Rajiv's call, flagged by review on #118):**
-  sending a `[Stage 4]%`-error row to `Ready for review` (as `sweep_retryable_errors()` and this
-  runbook's step 1/2 both do) can only ever reproduce the same capped score. The only path that
-  can legitimately recover a 95 is sending the row to `New` for a full Stage 3 re-run, so today's
-  web search tools get a chance to find a source that did not exist or was not surfaced the first
-  time. For a claim about an event that never happened, such a source may never exist at all
-  (nobody fact-checks a broadcast this obscure), so even a `New` re-run is not guaranteed to help.
-  **Do not run step 2 until this is decided**, or it will re-run the retry ceiling to 3 on 101 rows
-  for no gain, and further narrow the chance a future `New` re-run has to fix them (the guards cap
-  `analysis_attempts < 3` for a reason).
+- **Why step 2 routes everything to `New` (settled 2026-09-21, pending Rajiv's go).** A
+  `[Stage 4]` failure re-queued to `Ready for review` is re-judged on the Stage 3 evidence already
+  in `grounding_metadata`; `apply_evidence_caps` caps a `verified_false` verdict at 40 unless that
+  record holds a `contradicts_claim` article URL not marked `url_observed_in_tools = false`. The
+  2026-09-19 count "0 of 101 hold one" looked under a `verification_evidence` key that does not
+  exist (the evidence is top-level, `searches_performed`); measured there, **34 of 101** do. But all
+  34 predate the tool record (PR #98) so `url_observed_in_tools` is unset, and the URLs are mostly
+  PolitiFact / FactCheck / Snopes / AP links of the kind the VER-391 audit found 85-90% dead: Stage 4
+  would restore 95 on unverifiable citations. So `Ready for review` is wrong for both halves, and
+  `New` (full Stage 3 re-run: search fixed by VER-390, only tool-returned URLs count, Stage 4 tool
+  record and KB validation from PR #125) is the only route where a 95 means something.
+  `3e53d8e1`, `717925c8` and `0759b76b` capping to 40 on re-review were the gate working as
+  designed. **Rajiv's sessions (VER-389 comment 19 Sep 20:22 UTC, Slack 22:50 UTC) asked to hold
+  the whole set** until the pipeline cannot call a true post-cutoff event false on model knowledge
+  alone (VER-391 item 4, not built), with a hand-audited allowlist as the only release path. That
+  was argued against the pre-VER-390/391 pipeline; under today's gates a re-run reaches 95 only on
+  a tool-returned article, the same bar live rows meet, and the residual misread-article risk is
+  the pipeline's normal risk. Rajiv decides whether that is enough.
+- **Since 2026-09-21 Stage 4 also stores a tool record and a citation check (PR #125/#126, worker
+  v256).** Capping on invented URLs is off for now (`CITATION_CHECK_CAPS = False`), so it changes
+  nothing here yet; when it is turned on it is a second 40-cap path for re-reviewed rows.
+- **Four Fulton rows were parked by hand outside every pattern:** `a09b0842`, `b8f8e3ea`,
+  `961d43c5`, `2dc8cf14` carry `error_message = '[manual] held VER-389 re-queue: ...'` with
+  `analysis_attempts = 1` (set 2026-09-19 by a session that stopped short of re-queueing them to
+  `Ready for review`). The sweeper never matches that marker; step 2 picks them up by id and routes
+  them to `New` with the rest.
 - **VER-358 (open, Rajiv's decision):** the feed shows only `overall >= 95`. Fulton and fraud
   *narratives* (a host asserting fraud with no checkable claim) score below 50 by design and stay
   invisible whatever this fix does. 61 Fulton mentions Aug+Sep, 0 at 95+, 48 below 50.
