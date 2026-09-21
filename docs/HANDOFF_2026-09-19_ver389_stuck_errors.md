@@ -109,8 +109,10 @@ Apply `supabase/database/sql/cleanup_2026_09/15_requeue_stuck_retryable_errors.s
 **Status as of 2026-09-21 (Thien):** step 1 is closed and must not be re-run. An earlier revision
 re-queued `3e53d8e1` on 2026-09-19; Stage 4 capped it to 40; it was then restored to `Processed`
 95 by hand with a regrounded explanation (batch `unmask-2026-09-19-carlos`, PR #120/#121), together
-with `fb43bf56` and `c253e70f`. Re-queueing any of the three would overwrite that text. Steps 0, 2
-and 3 have not been run: `snippet_requeue_log` does not exist and no sweeper cron job is scheduled.
+with `fb43bf56` and `c253e70f`. Re-queueing any of the three would overwrite that text.
+**Steps 0 and 2 were applied 2026-09-21 08:33-08:34 UTC** (105 rows to `New`, batch
+`requeue-2026-09-21-ver389-step2`, pre-run snapshot kept by Thien). Step 3 is not scheduled yet:
+run it after a day of step 2 yield.
 
 Paste each step separately into the Supabase SQL editor, in order, checking the inline
 verification query before moving on. Per `.claude/rules/supabase-sql.md`, migrations and loose SQL
@@ -129,8 +131,8 @@ would drag unrelated pending work back into `Error`. Always scope to the log.
 `requeue-2026-09-21-ver389-step2`. Stage 3 polls newest-first and its `New` queue on 2026-09-21
 is ~3,700 rows recorded 2-5 Sep (live recordings are processed within hours), so step-2 rows
 recorded after 5 Sep run almost at once and the August ones wait until that backlog drains,
-about a week at the current ~500/day net.
-**Needs Rajiv's go**: his sessions asked on 19 Sep to hold this set (section 8).
+about a week at the current ~500/day net. Applied 2026-09-21 on Thien's call (section 8 has the
+19 Sep hold request and why it no longer applies).
 
 **Step 3** schedules the sweeper: `cron.schedule('sweep_retryable_errors', '15 8-23 * * *',
 $$SELECT public.sweep_retryable_errors(50)$$)`. 91% of the eligible tail routes to `New`, so Stage 3
