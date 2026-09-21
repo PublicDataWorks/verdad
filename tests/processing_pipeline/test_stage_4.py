@@ -559,3 +559,22 @@ class TestStage4:
 
         assert sleep_calls == [2, 60]
         mock_process.assert_awaited_once()
+
+
+class TestBuildReviewPipeline:
+    def test_every_agent_retries_429_inside_the_run(self):
+        from google.adk.models.google_llm import Gemini
+
+        from processing_pipeline.stage_4.agents import RETRY_OPTIONS, build_review_pipeline
+
+        pipeline, _ = build_review_pipeline(PROMPT_VERSIONS, GeminiModel.GEMINI_2_5_PRO)
+        research, reviewer, kb_updater = pipeline.sub_agents
+
+        models = {a.name: a.model for a in [*research.sub_agents, reviewer, kb_updater]}
+        assert all(isinstance(m, Gemini) and m.retry_options is RETRY_OPTIONS for m in models.values())
+        assert {name: m.model for name, m in models.items()} == {
+            "kb_researcher": "gemini-2.5-flash",
+            "web_researcher": "gemini-2.5-flash",
+            "analysis_reviewer": "gemini-2.5-pro",
+            "kb_updater": "gemini-2.5-flash",
+        }

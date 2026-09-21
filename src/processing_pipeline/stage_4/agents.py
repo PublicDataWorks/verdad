@@ -1,6 +1,7 @@
 import os
 
 from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
+from google.adk.models.google_llm import Gemini
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.mcp_tool.mcp_toolset import StdioConnectionParams
 from google.genai import types
@@ -16,6 +17,14 @@ from processing_pipeline.stage_4.tools import (
     search_knowledge_base,
     upsert_knowledge_entry,
 )
+
+# The Gemini key sits on the free tier (gemini-2.5-flash: 15 requests/min) and a research agent fires ~20 tool
+# rounds in seconds, so back off per request instead of failing the whole review (outer retries: with_retries)
+RETRY_OPTIONS = types.HttpRetryOptions(attempts=6, initial_delay=10, max_delay=60)
+
+
+def _model(model: GeminiModel) -> Gemini:
+    return Gemini(model=model.value, retry_options=RETRY_OPTIONS)
 
 
 def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: GeminiModel):
@@ -49,7 +58,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     kb_researcher = LlmAgent(
         name="kb_researcher",
         description="Searches the internal knowledge base for verified facts relevant to the flagged claims.",
-        model=GeminiModel.GEMINI_2_5_FLASH,
+        model=_model(GeminiModel.GEMINI_2_5_FLASH),
         instruction=prompt_versions["kb_researcher"]["system_instruction"],
         tools=[FunctionTool(search_knowledge_base)],
         output_key="kb_research",
@@ -59,7 +68,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     web_researcher = LlmAgent(
         name="web_researcher",
         description="Performs web-based fact-checking using search engines and source reading.",
-        model=GeminiModel.GEMINI_2_5_FLASH,
+        model=_model(GeminiModel.GEMINI_2_5_FLASH),
         instruction=prompt_versions["web_researcher"]["system_instruction"],
         tools=[searxng_toolset],
         output_key="web_research",
@@ -69,7 +78,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     analysis_reviewer = LlmAgent(
         name="analysis_reviewer",
         description="Synthesizes research findings to produce a revised disinformation analysis.",
-        model=reviewer_model,
+        model=_model(reviewer_model),
         instruction=prompt_versions["reviewer"]["system_instruction"],
         output_key="revised_analysis",
         output_schema=ReviewAnalysisOutput,
@@ -82,7 +91,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     kb_updater = LlmAgent(
         name="kb_updater",
         description="Updates the knowledge base with newly verified facts from the review.",
-        model=KB_WRITER_MODEL,
+        model=_model(KB_WRITER_MODEL),
         instruction=prompt_versions["kb_updater"]["system_instruction"],
         tools=[
             FunctionTool(upsert_knowledge_entry),
