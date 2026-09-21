@@ -106,5 +106,8 @@
         /* Completeness */
         // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
         "skipLibCheck": true /* Skip type checking all .d.ts files. */
-    }
+    },
+    "include": ["src"],
+    /* Tests are type-checked by tsconfig.test.json, but must not end up in dist/. */
+    "exclude": ["node_modules", "dist", "src/**/__tests__/**"]
 }
