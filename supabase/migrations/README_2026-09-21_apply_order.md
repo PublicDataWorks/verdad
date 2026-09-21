@@ -5,12 +5,12 @@ editor**, in this order, one file per run.
 
 **Status (2026-09-21 11:35 UTC):** step 1 applied 11:29 UTC (with the earlier trigger definition:
 re-run the file, it is re-runnable, to pick up `confidence_scores` in the copy trigger's `UPDATE OF`);
-the backfill function created 11:31 UTC (re-run the file for the visible-only predicate); the
-measurement below done; the temp index exists with the old, whole-table predicate (drop and
-recreate with the one in the file header). Steps 2 (batches), 3, 3b, 4 not run.
+the backfill function created 11:31 UTC and replaced with the visible-only version 11:48 and
+11:55 UTC; the measurements below done; the step-2 batches started 11:56 UTC. Steps 3, 3b, 4 not
+run.
 
 **Windows:** not on Sat 2026-09-19 (demo) and not on Mon 2026-09-21 (Tamoa's story). Steps 1 to 3b
-in one off-peak window (HCM daytime = US night; ~1 h), step 4 the next day after the
+in one off-peak window (HCM daytime = US night; ~1.5 h), step 4 the next day after the
 before-measurements.
 
 The change: `get_snippets` currently serves a `states` / `sources` filter by walking every visible
@@ -27,10 +27,10 @@ the `audio_file` object in the result still comes from the `audio_files` join.
 | # | File | Transaction | Duration | Verify after |
 |---|------|-------------|----------|--------------|
 | 1 | `20260921000100_snippets_location_columns_and_triggers.sql` | Safe in one transaction (nullable `ADD COLUMN` = catalog only, no rewrite; brief ACCESS EXCLUSIVE lock on `snippets` and `audio_files`). The file sets `lock_timeout = '3s'`; on "canceling statement due to lock timeout" nothing changed, run it again | < 1 s once the lock is granted | `SELECT column_name FROM information_schema.columns WHERE table_name='snippets' AND column_name IN ('location_state','radio_station_code');` → 2 rows. `SELECT tgname, tgenabled FROM pg_trigger WHERE tgname IN ('snippets_copy_audio_file_location','audio_files_propagate_location');` → 2 rows, `tgenabled = 'O'`. Then insert nothing by hand — just confirm a freshly produced snippet has the columns filled: `SELECT id, location_state, radio_station_code FROM public.snippets ORDER BY created_at DESC LIMIT 5;` |
-| 2 | `20260921000200_snippets_location_backfill.sql` | Creating the function is transactional; **running** it is a series of one-transaction batches of 1000. First create the throwaway `idx_snippets_location_backfill` partial index named in the file header (CONCURRENTLY, outside a transaction); keep it until after step 4 (its guard uses the same predicate) | ~43k visible rows, ~43 batches of 1000 at ~50 s each (measured, below): ~40 min by hand or on the per-minute cron job | `SELECT count(*) FILTER (WHERE radio_station_code IS NULL) AS remaining, count(*) AS visible FROM public.snippets WHERE status = 'Processed' AND (confidence_scores->>'overall')::int >= 95;` → `remaining` must reach 0. Then `SELECT relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze FROM pg_stat_user_tables WHERE relname='snippets';` |
+| 2 | `20260921000200_snippets_location_backfill.sql` | Creating the function is transactional; **running** it is a series of one-transaction batches of 500. No throwaway index (the candidate query walks `idx_snippets_visible_recorded_at`; a CONCURRENTLY build with the cast predicate did not finish inside the 2-min statement_timeout) | ~43k visible rows, ~86 batches of 500 at ~55 s each (measured, below): ~80 min by hand or on the per-minute cron job | `SELECT count(*) FILTER (WHERE radio_station_code IS NULL) AS remaining, count(*) AS visible FROM public.snippets WHERE status = 'Processed' AND (confidence_scores->>'overall')::int >= 95;` → `remaining` must reach 0. Then `SELECT relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze FROM pg_stat_user_tables WHERE relname='snippets';` |
 | 3 | `20260921000300_snippets_visible_location_indexes.sql` | **MUST run outside a transaction** (`CREATE INDEX CONCURRENTLY`). Paste each statement alone; do not wrap in `BEGIN`/`COMMIT` or use a migration runner that does. After step 2 reports 0 remaining, so each index is built once over final values | ~1-3 min per index on 563k rows | `SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_snippets_visible_state'::regclass;` and the same for `idx_snippets_visible_station` — both must be `true` |
 | 3b | `ANALYZE public.snippets;` (no file) | Plain statement, no lock that blocks reads or writes | ~10-30 s | `SELECT last_analyze FROM pg_stat_user_tables WHERE relname='snippets';` → just now. Without it the new columns have no statistics and the step-4 EXPLAINs are not trustworthy |
-| 4 | `20260921000400_get_snippets_denormalized_location.sql` | Safe in one transaction (`CREATE OR REPLACE`, same signature, re-`GRANT`, `NOTIFY pgrst`). Starts with a `DO` guard that raises if any visible snippet still has `radio_station_code IS NULL`, so running it early fails loudly instead of returning empty pages (an index probe while `idx_snippets_location_backfill` exists) | < 1 s | The EXPLAIN and result-equivalence checks below. Then `DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_location_backfill;` outside a transaction |
+| 4 | `20260921000400_get_snippets_denormalized_location.sql` | Safe in one transaction (`CREATE OR REPLACE`, same signature, re-`GRANT`, `NOTIFY pgrst`). Starts with a `DO` guard that raises if any visible snippet still has `radio_station_code IS NULL`, so running it early fails loudly instead of returning empty pages (a walk of the visible index with a heap filter, under a minute cold) | < 1 min | The EXPLAIN and result-equivalence checks below |
 
 ## Sequencing
 
@@ -52,14 +52,17 @@ Measured on production 2026-09-21 11:31 UTC with the whole-table predicate:
 
 | batch | wall time | HOT delta | result |
 |---|---|---|---|
-| 5000 rows | > 120 s, cancelled by `statement_timeout` inside `verdad_unaccent` | 0 of ~2,365 rows updated | rolled back; ~50 ms per row |
+| 5000 rows, whole table, with the `WHERE radio_station_code IS NULL` temp index | > 120 s, cancelled by `statement_timeout` inside `verdad_unaccent` | 0 of ~2,365 | rolled back; ~50 ms per row. Not conclusive on its own: a column in an index predicate blocks HOT by itself |
+| 500 rows, whole table, no temp index | 26.5 s | 67 of 503 (13%) | the heap pages have little free space; ~50 ms per row stands |
+| 1000 rows, visible only, no temp index | 105 s | 34 of 1010 | visible rows carry the long bilingual analysis text: ~105 ms per row |
 
-The heap pages have no free space, so every update is non-HOT and pays the pgroonga cost. The whole
-table (563k rows) would be ~8 h of index churn for 520k rows `get_snippets` never reads. The visible
-set (~43k) is ~36 min. Consequences, all in the files: the backfill and the step-4 guard use the
-visibility predicate; the copy trigger fires on `UPDATE OF audio_file, status, confidence_scores`,
-so a row that becomes visible later (Stage 3 setting `Processed`, a curation UPDATE restoring a
-score) is filled by that write; batches are 1000 (~50 s, under the 2-min timeout).
+Every update pays the pgroonga cost. The whole table (563k rows) would be ~8 h of index churn for
+520k rows `get_snippets` never reads. The visible set (~43k) is ~75 min. Consequences, all in the
+files: the backfill and the step-4 guard use the visibility predicate; the copy trigger fires on
+`UPDATE OF audio_file, status, confidence_scores`, so a row that becomes visible later (Stage 3
+setting `Processed`, a curation UPDATE restoring a score) is filled by that write; batches are 500
+(~55 s, under the 2-min timeout); no `ORDER BY` in the candidate query (a sort forces a full
+visible scan per batch, 47 s cold) and no temp index.
 
 ### When is the backfill done?
 
@@ -136,7 +139,7 @@ A difference in cases 1-4 with an identical case 5 means the backfill is incompl
 |---|---|
 | 4 | Run `supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql` as is (`CREATE OR REPLACE`, same signature; the search_path pin is written into the definition) |
 | 3 | `DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_visible_state;` and `DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_visible_station;` — outside a transaction |
-| 2 | No rollback needed (data only). To undo: `UPDATE public.snippets SET location_state = NULL, radio_station_code = NULL WHERE status NOT IN ('Processing', 'Reviewing');` (in-flight rows are excluded for the same `updated_at` reason as the backfill; repeat once they have left flight, or drop the columns via step 1's rollback instead). `DROP FUNCTION IF EXISTS public.backfill_snippets_location(integer);` if the function is not wanted. `DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_location_backfill;` if it is still there |
+| 2 | No rollback needed (data only). To undo: `UPDATE public.snippets SET location_state = NULL, radio_station_code = NULL WHERE status NOT IN ('Processing', 'Reviewing');` (in-flight rows are excluded for the same `updated_at` reason as the backfill; repeat once they have left flight, or drop the columns via step 1's rollback instead). `DROP FUNCTION IF EXISTS public.backfill_snippets_location(integer);` if the function is not wanted |
 | 1 | `DROP TRIGGER IF EXISTS audio_files_propagate_location ON public.audio_files; DROP TRIGGER IF EXISTS snippets_copy_audio_file_location ON public.snippets; DROP FUNCTION IF EXISTS public.audio_files_propagate_location(); DROP FUNCTION IF EXISTS public.snippets_copy_audio_file_location(); ALTER TABLE public.snippets DROP COLUMN IF EXISTS location_state, DROP COLUMN IF EXISTS radio_station_code;` — **roll back step 4 first**, or the feed breaks |
 
 ## Files changed in the repo

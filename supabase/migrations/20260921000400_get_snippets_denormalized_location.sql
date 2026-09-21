@@ -41,8 +41,8 @@
 -- Prerequisite guard: refuse to swap the function while any VISIBLE snippet still lacks its
 -- denormalized station code (audio_files.radio_station_code is NOT NULL, so NULL here means "not
 -- backfilled"). Rows outside the visible set stay NULL by design (20260921000200 header); the copy
--- trigger fills them on the write that makes them visible. The EXISTS is an index probe while
--- idx_snippets_location_backfill (20260921000200) still exists: drop that index after this file.
+-- trigger fills them on the write that makes them visible. The EXISTS walks the visible index
+-- with a heap filter: under a minute cold, instant warm.
 DO $$
 BEGIN
     IF EXISTS (

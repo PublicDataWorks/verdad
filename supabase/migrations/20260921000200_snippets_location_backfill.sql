@@ -14,20 +14,21 @@
 -- snippets carries 35 indexes, 17 of them pgroonga over the full text of transcription,
 -- translation, title, summary and explanation. Every backfill UPDATE is non-HOT (0 HOT of the
 -- first 2,365 rows: the heap pages have no free space) and re-enters the row into all of them,
--- detoast + unaccent + tokenize: ~50 ms per row. A 5000-row batch hit the 2-minute
--- statement_timeout inside verdad_unaccent. The whole table would be ~8 hours of pgroonga churn
--- for 520k rows nobody can see; the visible set is ~36 minutes.
+-- detoast + unaccent + tokenize: ~50 ms per row on the whole table, ~105 ms on visible rows (long
+-- bilingual explanation text). A 5000-row batch hit the 2-minute statement_timeout inside
+-- verdad_unaccent. The whole table would be ~8 hours of pgroonga churn for 520k rows nobody can
+-- see; the visible set is ~75 minutes.
 --
 -- ============================================================================================
 -- How to run it
 -- ============================================================================================
--- Batches of 1000 (~50 s each, under the 2-minute statement_timeout with margin), ~43 of them.
+-- Batches of 500 (~55 s each, under the 2-minute statement_timeout with margin), ~86 of them.
 -- (a) By hand, in the Supabase SQL editor, repeat until it returns 0:
---       SELECT public.backfill_snippets_location(1000);
+--       SELECT public.backfill_snippets_location(500);
 --
 -- (b) As a one-off pg_cron job (pg_cron 1.6 is installed), every minute:
 --       SELECT cron.schedule('backfill-snippets-location', '* * * * *',
---                            $$SELECT public.backfill_snippets_location(1000)$$);
+--                            $$SELECT public.backfill_snippets_location(500)$$);
 --     and when the verification query below reports 0 remaining:
 --       SELECT cron.unschedule('backfill-snippets-location');
 --     Check progress with:
@@ -35,20 +36,9 @@
 --       FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
 --
 -- Each call is its own transaction (one UPDATE), so it can be stopped at any point and resumed;
--- FOR UPDATE SKIP LOCKED means it never blocks the pipeline's own writes.
---
--- Before the first batch, build a throwaway partial index over the rows still to do, so each
--- batch is an index walk over exactly the remaining rows instead of a filter over the visible
--- set. It shrinks as the backfill progresses. Keep it until 20260921000400 has been applied:
--- that file's guard runs the same predicate. Both statements MUST run outside a transaction
--- (CONCURRENTLY):
---       CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_snippets_location_backfill
---           ON public.snippets (id)
---           WHERE radio_station_code IS NULL
---             AND status = 'Processed'::processing_status
---             AND ((confidence_scores ->> 'overall'::text))::integer >= 95;
---     ... run the batches, 20260921000300, 20260921000400 ...
---       DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_location_backfill;
+-- FOR UPDATE SKIP LOCKED means it never blocks the pipeline's own writes. No throwaway index is
+-- needed: the candidate query walks idx_snippets_visible_recorded_at (and a CONCURRENTLY build
+-- with the cast predicate did not finish inside the 2-minute statement_timeout on production).
 --
 -- Every updated row is a new heap tuple (~43k dead ones). The autovacuum thresholds for the large
 -- tables were tuned in 20260918020100_autovacuum_thresholds_large_tables.sql; check afterwards
@@ -118,14 +108,15 @@ BEGIN
           -- is nullable, and a snippet whose audio file has no state must be allowed to stay NULL
           -- without being re-selected forever.
           -- Visible rows only (see the header); the predicate is the one idx_snippets_visible_cover
-          -- and 20260921000300 use, character for character.
+          -- and 20260921000300 use, character for character, so the planner walks that index
+          -- newest-first and stops at LIMIT. No ORDER BY: a sort would force a full visible scan
+          -- per batch (47 s cold on production).
           SELECT s2.id
           FROM public.snippets s2
           WHERE s2.audio_file IS NOT NULL
             AND s2.radio_station_code IS NULL
             AND s2.status = 'Processed'::processing_status
             AND ((s2.confidence_scores ->> 'overall'::text))::integer >= 95
-          ORDER BY s2.id
           LIMIT p_batch
           FOR UPDATE SKIP LOCKED
       );
