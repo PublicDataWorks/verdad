@@ -48,10 +48,14 @@ export const resolveRoomGrants = async (
     }
 
     // No room in the body: the client is asking for a user-level token (inbox notifications). Issue a
-    // token with no room permissions -- `Session.authorize()` allows that, it only logs a warning
-    // ("Access tokens without any permission will not be supported soon ...", @liveblocks/node 2.9.0,
-    // dist/index.js:164). If notifications ever come back empty, the smallest escalation is
-    // `allow('*', READ_ACCESS)`, never FULL_ACCESS.
+    // token with no room permissions. On the pinned SDKs (@liveblocks/node 2.9, client 2.9) that is
+    // supported: Liveblocks returns all of the user's notifications regardless of room access, and
+    // `Session.authorize()` only logs "Access tokens without any permission will not be supported
+    // soon" (dist/index.js:164). Liveblocks' documented alternatives are a wildcard grant or ID tokens
+    // (docs/errors/liveblocks-client/access-tokens-not-enough-permissions). Do NOT switch this to
+    // `allow('*', READ_ACCESS)`: @liveblocks/client reuses any cached `*` token for room joins without
+    // checking its scopes, so commenting would silently fail for non-admins. Revisit before upgrading
+    // Liveblocks past 2.x.
     if (room === undefined || room === null) {
         return { type: 'grant', rooms: [] };
     }
