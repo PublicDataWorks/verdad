@@ -4,7 +4,7 @@
 -- Why
 -- ============================================================================================
 -- get_snippets serves the `states` and `sources` filters by walking every visible snippet
--- (~43k of 505k rows) and probing audio_files (573 MB heap) on s.audio_file. Warm 0.12-0.22 s,
+-- (~43k of 563k rows) and probing audio_files (573 MB heap) on s.audio_file. Warm 0.12-0.22 s,
 -- cold ~4 s. An audio file's state and station code never change for a given recording, so the
 -- two columns can live on snippets and be filtered directly from a partial index
 -- (20260921000300), turning the filter into an index-only walk.
@@ -34,6 +34,9 @@
 -- trigger function runs with the caller's search_path and an unqualified name must not be
 -- resolvable to an attacker-controlled temp object (VER-372); every reference below is
 -- schema-qualified as well.
+-- The flip side: the copy trigger's SELECT on audio_files runs as whoever writes the snippet.
+-- A role that can UPDATE snippets.status but cannot SELECT audio_files (RLS or GRANT) would get
+-- both columns silently NULLed. True for no role today; keep it true.
 --
 -- ============================================================================================
 -- Transactionality and rollback
@@ -41,6 +44,9 @@
 -- Safe to run as one transaction: ADD COLUMN IF NOT EXISTS on a nullable column takes a brief
 -- ACCESS EXCLUSIVE lock and does not rewrite the heap; CREATE TRIGGER takes the same lock for an
 -- instant. Re-runnable (IF NOT EXISTS / CREATE OR REPLACE / DROP TRIGGER IF EXISTS).
+-- A pending ACCESS EXCLUSIVE on snippets / audio_files queues every later reader and pipeline
+-- write behind the statement in flight (a cold get_snippets is ~4 s), hence the lock_timeout
+-- below. On "canceling statement due to lock timeout" nothing changed: run the file again.
 --
 -- Rollback (in this order):
 --   DROP TRIGGER IF EXISTS audio_files_propagate_location ON public.audio_files;
@@ -50,6 +56,8 @@
 --   ALTER TABLE public.snippets DROP COLUMN IF EXISTS location_state,
 --                               DROP COLUMN IF EXISTS radio_station_code;
 -- Roll back 20260921000400 (the function) BEFORE dropping the columns, or the feed breaks.
+
+SET lock_timeout = '3s';
 
 ALTER TABLE public.snippets
     ADD COLUMN IF NOT EXISTS location_state text,
@@ -125,3 +133,5 @@ CREATE TRIGGER audio_files_propagate_location
     WHEN (NEW.location_state IS DISTINCT FROM OLD.location_state
           OR NEW.radio_station_code IS DISTINCT FROM OLD.radio_station_code)
     EXECUTE FUNCTION public.audio_files_propagate_location();
+
+RESET lock_timeout;

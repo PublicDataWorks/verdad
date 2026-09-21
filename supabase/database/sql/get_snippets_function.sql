@@ -46,7 +46,7 @@ DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text,
 --   snippets.radio_station_code (columns + triggers: 20260921000100, backfill: 20260921000200)
 --   and the filter is now `s.location_state = ANY(state_codes)` served by the partial indexes
 --   idx_snippets_visible_state / idx_snippets_visible_station (20260921000300). The old shape
---   walked every visible snippet (~43k of 505k rows) and probed the 573 MB audio_files heap
+--   walked every visible snippet (~43k of 563k rows) and probed the 573 MB audio_files heap
 --   through the state_filtered_audio_ids / source_filtered_audio_ids CTEs: 0.12-0.22 s warm,
 --   ~4 s cold. The audio_files join in the final projection is unchanged -- the returned
 --   audio_file object still reads a.location_state and a.radio_station_code.

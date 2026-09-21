@@ -3,12 +3,15 @@
 -- Third of four (20260921000100 columns+triggers, 20260921000200 backfill, this, then
 -- 20260921000400 get_snippets). The new get_snippets filters on snippets.location_state /
 -- snippets.radio_station_code directly instead of probing audio_files; these two indexes make
--- that an index-only walk over the visible subset (~43k of 505k rows) for both the page and the
+-- that an index-only walk over the visible subset (~43k of 563k rows) for both the page and the
 -- page-0 count.
 --
 -- Key shape mirrors idx_snippets_visible_cover (20260917213000): the filter column first so it is
--- an equality index condition, then (recorded_at DESC, id DESC) so the default 'latest' ordering
--- and its LIMIT are satisfied by the index walk with no sort.
+-- an index condition, then (recorded_at DESC, id DESC). The filter is `= ANY(state_codes)`, a
+-- ScalarArrayOp, so the planner cannot treat location_state as a constant and the index order is
+-- not the query's ORDER BY: expect an Index Only Scan over the matching rows plus a Sort node
+-- (Florida, the biggest state, is ~13k visible rows, milliseconds). That is still far cheaper
+-- than 43k heap probes into audio_files, and it is the expected plan shape, not a regression.
 --
 -- `language` is INCLUDEd as a payload column for the same reason it was added to
 -- idx_snippets_visible_cover: the languages filter is evaluated in the same predicate
@@ -20,7 +23,7 @@
 -- *** MUST be run OUTSIDE a transaction (paste each statement alone in the Supabase SQL editor, or
 -- *** run through a one-off pg_cron job): the CONCURRENTLY form cannot run inside a transaction
 -- *** block, and a plain CREATE INDEX would take a SHARE lock on snippets for the length of a
--- *** 505k-row heap scan, stalling the pipeline.
+-- *** 563k-row heap scan, stalling the pipeline.
 -- Verify (both must be true):
 --   SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_snippets_visible_state'::regclass;
 --   SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_snippets_visible_station'::regclass;
@@ -30,8 +33,9 @@
 --   DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_visible_state;
 --   DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_visible_station;
 --
--- These can be built before the backfill finishes (they index NULLs too), but they are only
--- useful once it has.
+-- Do NOT build these before the backfill (20260921000200) reports 0 remaining. Once
+-- location_state is an indexed column, every backfill UPDATE is non-HOT by definition and has to
+-- insert into all 35 indexes, 17 of them pgroonga full-text: the cheap path disappears.
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_snippets_visible_state
     ON public.snippets (location_state, recorded_at DESC, id DESC)

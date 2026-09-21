@@ -1,14 +1,14 @@
 -- Backfill snippets.location_state / snippets.radio_station_code from audio_files (VER-387).
 --
 -- Companion to 20260921000100 (columns + sync triggers). The triggers only cover new and updated
--- rows; the ~505k existing snippets need one batched pass. get_snippets must NOT be switched to
+-- rows; the ~563k existing snippets need one batched pass. get_snippets must NOT be switched to
 -- the denormalized columns (20260921000400) until this reports 0 remaining, or filtered pages
 -- come back empty for rows that are still NULL.
 --
 -- ============================================================================================
 -- How to run it
 -- ============================================================================================
--- (a) By hand, in the Supabase SQL editor, repeat until it returns 0 (~100 batches at 5000):
+-- (a) By hand, in the Supabase SQL editor, repeat until it returns 0 (~113 batches at 5000):
 --       SELECT public.backfill_snippets_location(5000);
 --
 -- (b) As a one-off pg_cron job (pg_cron 1.6 is installed), every minute:
@@ -26,25 +26,40 @@
 -- Before the first batch, build a throwaway partial index over the rows still to do. Without it
 -- every batch walks snippets_pkey in id order and heap-checks the rows already filled (the skip
 -- grows by 5000 per batch: ~25M visibility checks over the run); with it each batch is an
--- index walk over exactly the remaining rows. It shrinks as the backfill progresses and is
--- dropped at the end. Both statements MUST run outside a transaction (CONCURRENTLY):
+-- index walk over exactly the remaining rows. It shrinks as the backfill progresses. Keep it
+-- until 20260921000400 has been applied: that file's guard runs the same predicate and would
+-- otherwise seq-scan the heap. Both statements MUST run outside a transaction (CONCURRENTLY):
 --       CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_snippets_location_backfill
 --           ON public.snippets (id)
 --           WHERE radio_station_code IS NULL;
---     ... run the batches ...
+--     ... run the batches, 20260921000300, 20260921000400 ...
 --       DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_location_backfill;
 --
 -- ============================================================================================
--- Bloat: run it off-peak
+-- Cost: measure ONE batch before scheduling the rest
 -- ============================================================================================
--- Every updated row is a new heap tuple, so this rewrites the whole 581 MB snippets heap into
--- dead tuples over the course of the backfill. The autovacuum thresholds for the large tables
--- were tuned in 20260918020100_autovacuum_thresholds_large_tables.sql, so autovacuum will pick
--- this up, but it needs time and I/O headroom: run off-peak and check afterwards
---   SELECT relname, n_live_tup, n_dead_tup, last_autovacuum
+-- snippets carries 35 indexes, 17 of them pgroonga over the full text of transcription,
+-- translation, title, summary and explanation (0 bytes in pg_relation_size: pgroonga stores its
+-- data outside the relation files). A non-HOT update re-enters the row into every one of them,
+-- detoast + unaccent + tokenize, 563k times; a HOT update touches no index. HOT is possible only
+-- because nothing this UPDATE writes is indexed (location_state, radio_station_code, updated_at)
+-- and 20260921000300 has not indexed location_state yet; whether it happens depends on free space
+-- in each heap page. So the runtime is unknown until measured:
+--   SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables WHERE relname = 'snippets';
+--   SELECT public.backfill_snippets_location(5000);   -- note the wall time
+--   SELECT n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables WHERE relname = 'snippets';
+-- HOT delta near 5000 and sub-second: proceed. Near 0 and seconds per call: multiply by 113 and
+-- re-plan (README "Measure one batch first" has the options).
+--
+-- Either way every updated row is a new heap tuple (up to 591 MB of dead ones). The autovacuum
+-- thresholds for the large tables were tuned in 20260918020100_autovacuum_thresholds_large_tables.sql,
+-- but vacuum needs time and I/O headroom: run off-peak and check afterwards
+--   SELECT relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze
 --   FROM pg_stat_user_tables WHERE relname = 'snippets';
 -- If n_dead_tup is still large hours later, run `VACUUM (ANALYZE) public.snippets;` by hand
--- (plain VACUUM, never VACUUM FULL -- that takes an ACCESS EXCLUSIVE lock).
+-- (plain VACUUM, never VACUUM FULL -- that takes an ACCESS EXCLUSIVE lock). The new columns have
+-- no statistics until an ANALYZE runs; the README makes `ANALYZE public.snippets;` an explicit
+-- step before the function swap rather than waiting for autoanalyze.
 --
 -- ============================================================================================
 -- Verification

@@ -75,6 +75,13 @@ def test_security_definer_functions_pin_search_path():
             )
 
 
+def test_ddl_migration_caps_lock_timeout():
+    # ACCESS EXCLUSIVE on snippets and audio_files must not queue the feed behind a slow reader.
+    lines = VER_387_MIGRATIONS[0].read_text().splitlines()
+    statements = "\n".join(line for line in lines if not line.lstrip().startswith("--"))
+    assert statements.index("SET lock_timeout = '3s';") < statements.index("ALTER TABLE")
+
+
 def test_concurrent_index_migration_warns_about_transactions():
     sql = (MIGRATIONS_DIR / "20260921000300_snippets_visible_location_indexes.sql").read_text()
     assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_snippets_visible_state" in sql

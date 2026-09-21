@@ -4,7 +4,7 @@
 -- Why
 -- ============================================================================================
 -- With a `states` or `sources` filter the previous body walked every visible snippet
--- (~43k of 505k rows; visible = status = 'Processed' AND (confidence_scores->>'overall')::int >= 95)
+-- (~43k of 563k rows; visible = status = 'Processed' AND (confidence_scores->>'overall')::int >= 95)
 -- and probed audio_files (573 MB heap) through the state_filtered_audio_ids /
 -- source_filtered_audio_ids CTEs, LEFT JOINed on s.audio_file. Warm that is 0.12-0.22 s; cold it is
 -- ~4 s, which is the filter latency Tamoa keeps hitting.
@@ -29,6 +29,7 @@
 -- 1. 20260921000100_snippets_location_columns_and_triggers.sql (columns + sync triggers)
 -- 2. 20260921000200_snippets_location_backfill.sql, run to completion (0 remaining)
 -- 3. 20260921000300_snippets_visible_location_indexes.sql, both indexes indisvalid
+-- 4. ANALYZE public.snippets; (the new columns have no statistics until then)
 -- Applying this file before the backfill reports 0 remaining returns WRONG (empty) results for
 -- filtered pages whose snippets still have NULL location_state / radio_station_code. See
 -- supabase/migrations/README_2026-09-21_apply_order.md.
@@ -41,6 +42,8 @@
 -- station code (audio_files.radio_station_code is NOT NULL, so NULL here means "not backfilled").
 -- Rows in flight are deliberately NOT excluded: the backfill skips them, and this file must wait
 -- until they have left flight and been filled in by the copy trigger or a later batch.
+-- The EXISTS is an index probe while idx_snippets_location_backfill (20260921000200) still
+-- exists, a 591 MB seq scan once it is dropped: drop that index after this file, not before.
 DO $$
 BEGIN
     IF EXISTS (
