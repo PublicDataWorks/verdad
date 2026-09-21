@@ -11,6 +11,8 @@ from google.genai import types
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_4.agents import build_review_pipeline
+from processing_pipeline.stage_4.constants import OBSERVED_URLS_STATE_KEY
+from processing_pipeline.stage_4.tool_record import ToolRecordPlugin
 from processing_pipeline.temporal_context import build_temporal_context, parse_recorded_at
 
 
@@ -103,13 +105,15 @@ class Stage4Executor:
                     "web_research": "",
                     "revised_analysis": "",
                     "kb_update_summary": "",
+                    OBSERVED_URLS_STATE_KEY: [],
                 },
             )
 
+            tool_record = ToolRecordPlugin()
             app = App(
                 name=app_name,
                 root_agent=review_pipeline,
-                plugins=[ToolErrorHandlerPlugin()],
+                plugins=[tool_record, ToolErrorHandlerPlugin()],  # recorder first: the handler ends the error chain
             )
             runner = Runner(
                 app=app,
@@ -153,6 +157,7 @@ class Stage4Executor:
                 final_session.state.get("kb_research", ""),
                 final_session.state.get("web_research", ""),
                 final_session.state.get("kb_update_summary", ""),
+                tool_record.record.to_dict(),
             )
 
             return result, grounding_metadata
@@ -163,8 +168,8 @@ class Stage4Executor:
             print("Cleanup complete.")
 
     @staticmethod
-    def _build_grounding_metadata(kb_research, web_research, kb_update_summary):
-        """Build a grounding metadata dict from research findings."""
+    def _build_grounding_metadata(kb_research, web_research, kb_update_summary, tool_record: dict | None = None):
+        """Build a grounding metadata dict from research findings and the tool record."""
         metadata = {}
         if kb_research:
             metadata["kb_research"] = kb_research
@@ -172,4 +177,6 @@ class Stage4Executor:
             metadata["web_research"] = web_research
         if kb_update_summary:
             metadata["kb_updates"] = kb_update_summary
+        if tool_record is not None:
+            metadata["stage_4_tool_record"] = tool_record
         return json.dumps(metadata) if metadata else None
