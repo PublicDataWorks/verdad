@@ -17,6 +17,10 @@ Env vars the Claude Code web environment may provide (all optional; the hook rep
 - `FLY_API_TOKEN` - flyctl auth (org `verdad`)
 - `SUPABASE_ACCESS_TOKEN` - supabase CLI auth; project ref `dzujjhzgzguciwryzwlx`
 - `SUPABASE_DB_URL` - Postgres connection string for `psql`
+- `PREFECT_API_AUTH_STRING` - `user:password` for the Prefect API and UI at `https://prefect.fly.dev` (basic auth since
+  VER-384). The Prefect client/CLI read it from the env; raw `curl` needs `-u "$PREFECT_API_AUTH_STRING"`. Without it
+  every call but `GET /api/health` is 401. If `prefect.fly.dev` is unreachable (proxy `CONNECT` 403), the
+  environment's network policy does not allow the host; that is an environment setting, not an outage.
 - Pipeline only: `SUPABASE_URL`, `SUPABASE_KEY`, `R2_*`, `GOOGLE_GEMINI_KEY`, `OPENAI_API_KEY`, `SEARXNG_URL` (see `.env.sample`)
 
 Verify access:
@@ -25,6 +29,8 @@ Verify access:
 fly apps list && fly status -a prefect
 supabase projects list
 psql "$SUPABASE_DB_URL" -c 'select 1'
+curl -sS -u "$PREFECT_API_AUTH_STRING" -X POST https://prefect.fly.dev/api/deployments/filter \
+  -H 'content-type: application/json' -d '{"limit":1}'   # 401 without -u
 ```
 
 If `fly` is unavailable (GitHub release downloads are blocked in the web sandbox), the Machines API works with curl:
