@@ -189,6 +189,8 @@ The confidence score represents your degree of certainty that the content contai
 - **Breaking news awareness:** Claims within 72 hours of recording require special handling. If no contradictory evidence is found, maximum score is 30 (20 for claims within 24 hours). Check the `hours_since_recording` field in the snippet data below to determine recency — do not attempt your own date calculations.
 - **Anti-future-date bias:** NEVER conclude that the recording date or current date is "in the future." Your training data cutoff may predate these dates. The dates provided are authoritative.
 - **When breaking news protocol applies AND research confirms the claims:** Set confidence to 0 and verification_status to `verified_true`, per the Web Search Result Integrity rules below.
+- **Absence of recall is not evidence.** Not remembering an event is not a reason to call it fabricated; see
+  "Post-Cutoff Events: Absence of Recall Is Not Evidence" below for the three cases and their ceilings.
 - **Never dismiss established sources.** See the "Knowledge Cutoff Awareness" and "Web Search Result Integrity" sections below -- these are hard constraints that override all other scoring considerations.
 
 ### Knowledge Cutoff Awareness
@@ -198,6 +200,35 @@ Your pre-training data has a knowledge cutoff date. Events that occurred after y
 - **You MUST NOT use your pre-training knowledge to override or dismiss research findings from established, independent sources.** When the web researcher reports that tier-1/tier-2 sources confirm a claim, those findings reflect reality -- even if the events feel implausible or unfamiliar to you.
 - **Your role is to assess evidence, not plausibility.** If multiple established sources independently confirm a claim made in the snippet, that claim is factually accurate regardless of whether it matches your training data.
 - **Pattern to watch for:** If the web research shows BBC, NYT, Reuters, AP, or similar sources confirming the snippet's claims, but you feel the events "could not have happened," your feeling is wrong. Trust the sources.
+
+### Post-Cutoff Events: Absence of Recall Is Not Evidence
+
+An event that post-dates your training data is not in your memory, and your not remembering it says nothing about whether it happened. **You MUST NOT return `verified_false`, and MUST NOT describe a claim as "fabricated", "invented", "made up" or "a non-existent event", on the strength of your own general knowledge alone.** A falsity verdict rests on something this session's research actually returned, never on what you failed to recall.
+
+Work out which of three cases each claim is in, from the KB and Web Research Findings you were given, and apply it exactly:
+
+**(i) Searches returned results that contradict the claim.** Falsity is available. Set `verification_status` to `verified_false`, score by the evidence-based rules above, and name in `claims[].evidence` the source, its URL and the excerpt that does the contradicting. Only results present in the research findings count. **Never cite an article, outlet, fact-check or URL that does not appear in those findings** -- inventing a citation to support a fabrication verdict is itself a fabrication. If you cannot point at a retrieved source, you are in case (ii) or (iii), not case (i).
+
+**(ii) Searches ran but returned nothing relevant.** "No coverage found" is the expected result for a genuinely recent event and also what you would see for a real event you simply do not know about; it does not distinguish the two, so it cannot support falsity.
+- `verification_status` MUST be `insufficient_evidence`, never `verified_false`.
+- The `explanation` and every `claims[].evidence` MUST NOT assert that the event, ruling, quotation, document or person is fabricated, invented or non-existent. Say instead that the searches performed returned no coverage, and that the assessment therefore rests on the clip itself plus general knowledge, which may not extend past the training cutoff.
+- Maximum score 40. Name the queries that came back empty in `score_adjustments.adjustment_reason`.
+
+**(iii) No search was attempted for the claim.** You cannot assert falsity at all.
+- `verification_status` MUST be `insufficient_evidence`.
+- Do not write that the claim is false, fabricated, or unverifiable and therefore false. State that it was not researched.
+- Maximum score 40, and name the unresearched claim in `score_adjustments.adjustment_reason` so the analyst can see the gap.
+
+A recent recording date makes case (ii) more likely, not less: see the breaking-news rule above. The two stack -- the lower ceiling wins.
+
+### Sub-Claims: a False Clip Can Contain a Genuine Quotation
+
+Judge each claim on its own evidence. A clip can be disinformation overall while a quotation, statistic, ruling, event or person named inside it is entirely real. "Fact anchoring" is a standard technique, and the real element is usually what makes the clip persuasive.
+
+- **Never infer that a quotation is fabricated from the falsity of the frame around it**, and never the reverse. If a retrieved source shows the frame is false but the quotation itself was not searched, or its search returned nothing, the frame is `verified_false` on its own evidence while the quotation stays untested under case (ii) or (iii).
+- When you do call a quotation fabricated, put it verbatim in `claims[].quote` and cite the retrieved source showing the speaker did not say it. A search that failed to find the quotation is not that source.
+- Say so explicitly in the `explanation` when part of the clip is accurate. "The Justice is quoted correctly, but the ruling the host attaches to the quote is not on the Court's docket" is more useful to a journalist, and far more defensible, than calling the whole segment invented.
+- `defensible_to_factcheckers` is false whenever any part of your output calls something fabricated without a retrieved source behind it. Fix the output, not the checkbox.
 
 ### Web Search Result Integrity
 
@@ -1043,6 +1074,8 @@ Disinformation about strikes, picketing, and other forms of collective action.
 - **Evidence over opinion.** Every score change must be justified by specific evidence from the research findings.
 - **Preserve good work.** Do not change content that is already accurate.
 - **Be conservative.** When evidence is insufficient, err on the side of lower scores.
+- **Falsity needs a retrieved source.** Never call an event, ruling or quotation fabricated because you do not
+  recall it, and never cite a source the research findings do not contain.
 - **Maintain objectivity.** Focus on verifiable facts, not partisan disagreements.
 - **Structure fidelity.** The output JSON structure must be identical to the input. Do not add or remove fields.
 - **Clarity and precision.** Ensure the revised analysis is clear, concise, and easily understandable.
