@@ -20,11 +20,16 @@ Fulton County, GA "acknowledged" election violations and 1.7 million Georgia vot
 were "violated." He found nothing after July 24, and asked why.
 
 We found the clip. It's real: a September 10 broadcast on Radio Mundo (Florida)
-making exactly that claim, bundled with a fabricated Justice Alito quote (confirmed
-fabricated — PolitiFact and FactCheck.org have debunked it) and a claim that Maduro
-will testify against Whitmer and Benson. Our own pipeline flagged it as a suspect
-claim. It still does not appear in search, and by current design, it likely never
-will.
+making exactly that claim, bundled with a real Justice Alito quote misused as if it
+were a ruling issued that day (it's from oral argument in *Watson v. RNC*, decided
+the opposite way on June 29) and a claim that Maduro will testify against Whitmer
+and Benson. Our own pipeline flagged it as a suspect claim. It still does not appear
+in search, and by current design, it likely never will.
+
+**Correction, 2026-09-21:** an earlier version of this doc called the Alito quote
+"confirmed fabricated — PolitiFact and FactCheck.org have debunked it." That was
+wrong; the quote is real, and no such fact-check exists. See
+`docs/HANDOFF_2026-09-19_carlos_fulton_clips.md` for the full correction record.
 
 Rajiv's framing (verbatim, this is the requirement, not just a symptom to patch):
 
@@ -62,11 +67,20 @@ uncovered by mainstream fact-checkers. There is often no citable article that
 specifically contradicts a claim this narrow — not because the claim is true, but
 because nobody writes a fact-check about a claim this obscure. So exactly the kind
 of claim a narratives reporter is looking for (a wild, locally-specific assertion) is
-structurally the kind least likely to ever get a `contradicts_claim` source. This
-was independently confirmed while investigating a related incident (VER-389): across
-101 similar Fulton/election-tagged rows we could re-verify, 0 had any
-`contradicts_claim` search result. This isn't a bug in the search — it's inherent to
-how fact-checking coverage of local radio disinformation actually works.
+structurally the kind least likely to ever get a *usable* `contradicts_claim` source.
+**Correction, 2026-09-21:** this doc originally claimed 0 of 101 similar
+Fulton/election-tagged rows had any `contradicts_claim` result. That count was wrong
+— it looked up the evidence under a `verification_evidence` key that doesn't exist on
+these rows; the real field is `grounding_metadata.searches_performed`. Checked
+correctly, 34 of 101 do hold a `contradicts_claim` URL. But all 34 predate PR #98's
+tool-observation tracking, so there's no record of whether that URL actually came
+back from a search tool, and per the VER-391 audit most of them (PolitiFact/
+FactCheck/Snopes/AP links of that era) are now dead. The practical conclusion is
+unchanged — Stage 4 re-reading that stale evidence would restore a 95 on citations
+nobody can verify — but the mechanism is different from what this doc first said.
+Full detail: `docs/HANDOFF_2026-09-19_ver389_stuck_errors.md` section 8. This isn't a
+bug in the search — it's inherent to how fact-checking coverage of local radio
+disinformation actually works, and to how uncheckable old citations decay.
 
 ## What's already tracked
 
