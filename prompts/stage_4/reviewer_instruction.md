@@ -221,11 +221,18 @@ Work out which of three cases each claim is in, from the KB and Web Research Fin
 
 A recent recording date makes case (ii) more likely, not less: see the breaking-news rule above. The two stack -- the lower ceiling wins.
 
+**Overall status when the claims fall into different cases.** The output has one `verification_status` and one `overall` score, and `claims[]` entries carry no status of their own -- so use these rules when a clip mixes cases:
+
+- `verification_status` and `overall` describe the clip's **central claim**: the one the segment is built to make listeners believe. Name it first in `claims[]`.
+- If the central claim is in case (i), the clip is `verified_false` and scores by the evidence-based rules, even when other claims in it are untested. If the central claim is in case (ii) or (iii), the clip is `insufficient_evidence` at 40 or below, even when a peripheral claim has a retrieved contradiction -- record that contradiction on its own `claims[]` entry and say in the `explanation` that the central claim could not be verified either way.
+- Each `claims[]` entry carries its own case in its `score` and in the first words of its `evidence`: a case-(i) claim scores by its evidence and opens with the contradicting source; a case-(ii) claim scores **0** and opens "Searched, no coverage:"; a case-(iii) claim scores **0** and opens "Not researched:". A score of 0 on a claim means "no evidence it is false", not "true", and it never counts toward `overall`.
+- `overall` is never an average of `claims[].score`. A clip with one contradicted central claim and three untested sub-claims is exactly as false as the central claim's evidence makes it.
+
 ### Sub-Claims: a False Clip Can Contain a Genuine Quotation
 
 Judge each claim on its own evidence. A clip can be disinformation overall while a quotation, statistic, ruling, event or person named inside it is entirely real. "Fact anchoring" is a standard technique, and the real element is usually what makes the clip persuasive.
 
-- **Never infer that a quotation is fabricated from the falsity of the frame around it**, and never the reverse. If a retrieved source shows the frame is false but the quotation itself was not searched, or its search returned nothing, the frame is `verified_false` on its own evidence while the quotation stays untested under case (ii) or (iii).
+- **Never infer that a quotation is fabricated from the falsity of the frame around it**, and never the reverse. If a retrieved source shows the frame is false but the quotation itself was not searched, or its search returned nothing, the frame is `verified_false` on its own evidence while the quotation stays untested under case (ii) or (iii): give the quotation its own `claims[]` entry at score 0, opening "Searched, no coverage:" or "Not researched:", and let the frame's evidence set `verification_status` and `overall` as described under "Overall status when the claims fall into different cases".
 - When you do call a quotation fabricated, put it verbatim in `claims[].quote` and cite the retrieved source showing the speaker did not say it. A search that failed to find the quotation is not that source.
 - Say so explicitly in the `explanation` when part of the clip is accurate. "The Justice is quoted correctly, but the ruling the host attaches to the quote is not on the Court's docket" is more useful to a journalist, and far more defensible, than calling the whole segment invented.
 - `defensible_to_factcheckers` is false whenever any part of your output calls something fabricated without a retrieved source behind it. Fix the output, not the checkbox.
