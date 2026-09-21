@@ -31,14 +31,21 @@ const USER = { id: 'user-uuid', email: 'reporter@example.com', user_metadata: {}
 type QueryResult = { data: unknown; error: { message: string } | null };
 
 /** Minimal stand-in for the PostgREST builder: every filter returns itself, `maybeSingle` resolves. */
-const queryChain = (result: QueryResult): Record<string, unknown> => {
+const queryChain = (table: string, result: QueryResult): Record<string, unknown> => {
     const chain: Record<string, unknown> = {};
-    for (const method of ['select', 'eq', 'limit']) {
+    for (const method of ['select', 'limit']) {
         chain[method] = () => chain;
     }
+    chain.eq = (column: string, value: unknown) => {
+        eqCalls.push([table, column, value]);
+        return chain;
+    };
     chain.maybeSingle = () => Promise.resolve(result);
     return chain;
 };
+
+/** Every `.eq(column, value)` filter applied, as [table, column, value]. */
+let eqCalls: [string, string, unknown][];
 
 let adminRow: QueryResult;
 let snippetRow: QueryResult;
@@ -75,38 +82,39 @@ beforeEach(() => {
     adminRow = { data: null, error: null };
     snippetRow = { data: { id: SNIPPET_ROOM }, error: null };
     mocks.getUser.mockResolvedValue({ data: { user: USER }, error: null });
+    eqCalls = [];
     mocks.from.mockImplementation((table: string) =>
-        queryChain(table === 'user_roles' ? adminRow : snippetRow)
+        queryChain(table, table === 'user_roles' ? adminRow : snippetRow)
     );
     mocks.prepareSession.mockImplementation(() => makeSession());
 });
 
 describe('resolveRoomGrants', () => {
     it('gives admins the wildcard without looking up a snippet', async () => {
-        const snippetExists = vi.fn();
+        const snippetVisible = vi.fn();
 
         await expect(
-            resolveRoomGrants({ room: SNIPPET_ROOM, isAdmin: true, snippetExists })
+            resolveRoomGrants({ room: SNIPPET_ROOM, isAdmin: true, snippetVisible })
         ).resolves.toEqual({ type: 'grant', rooms: ['*'] });
-        expect(snippetExists).not.toHaveBeenCalled();
+        expect(snippetVisible).not.toHaveBeenCalled();
     });
 
     it('grants no rooms when the body has no room (inbox token)', async () => {
-        const snippetExists = vi.fn();
+        const snippetVisible = vi.fn();
 
         await expect(
-            resolveRoomGrants({ room: undefined, isAdmin: false, snippetExists })
+            resolveRoomGrants({ room: undefined, isAdmin: false, snippetVisible })
         ).resolves.toEqual({ type: 'grant', rooms: [] });
-        expect(snippetExists).not.toHaveBeenCalled();
+        expect(snippetVisible).not.toHaveBeenCalled();
     });
 
     it('grants exactly the requested room when the snippet exists', async () => {
-        const snippetExists = vi.fn().mockResolvedValue(true);
+        const snippetVisible = vi.fn().mockResolvedValue(true);
 
         await expect(
-            resolveRoomGrants({ room: SNIPPET_ROOM, isAdmin: false, snippetExists })
+            resolveRoomGrants({ room: SNIPPET_ROOM, isAdmin: false, snippetVisible })
         ).resolves.toEqual({ type: 'grant', rooms: [SNIPPET_ROOM] });
-        expect(snippetExists).toHaveBeenCalledWith(SNIPPET_ROOM);
+        expect(snippetVisible).toHaveBeenCalledWith(SNIPPET_ROOM);
     });
 
     it.each([
@@ -116,21 +124,21 @@ describe('resolveRoomGrants', () => {
         ['a uuid with trailing content', `${SNIPPET_ROOM} `],
         ['a non-string', 42],
     ])('denies %s without hitting the database', async (_label, room) => {
-        const snippetExists = vi.fn();
+        const snippetVisible = vi.fn();
 
-        await expect(resolveRoomGrants({ room, isAdmin: false, snippetExists })).resolves.toEqual({
+        await expect(resolveRoomGrants({ room, isAdmin: false, snippetVisible })).resolves.toEqual({
             type: 'deny',
             status: 403,
             error: 'Room not found',
         });
-        expect(snippetExists).not.toHaveBeenCalled();
+        expect(snippetVisible).not.toHaveBeenCalled();
     });
 
     it('denies a well-formed uuid that is not a snippet', async () => {
-        const snippetExists = vi.fn().mockResolvedValue(false);
+        const snippetVisible = vi.fn().mockResolvedValue(false);
 
         await expect(
-            resolveRoomGrants({ room: SNIPPET_ROOM, isAdmin: false, snippetExists })
+            resolveRoomGrants({ room: SNIPPET_ROOM, isAdmin: false, snippetVisible })
         ).resolves.toEqual({ type: 'deny', status: 403, error: 'Room not found' });
     });
 });
@@ -168,6 +176,37 @@ describe('liveblocksAuth', () => {
         expect(mocks.prepareSession).not.toHaveBeenCalled();
         expect(res.status).toHaveBeenCalledWith(403);
         expect(res.json).toHaveBeenCalledWith({ error: 'Room not found' });
+    });
+
+    it('only grants a room for a Processed snippet', async () => {
+        await callHandler(makeReq({ room: SNIPPET_ROOM }));
+
+        expect(eqCalls).toContainEqual(['snippets', 'id', SNIPPET_ROOM]);
+        expect(eqCalls).toContainEqual(['snippets', 'status', 'Processed']);
+    });
+
+    it.each([
+        ['an embedded hide row', { snippet: SNIPPET_ROOM }],
+        ['a list of hide rows', [{ snippet: SNIPPET_ROOM }]],
+    ])('rejects a hidden snippet returned with %s', async (_label, hideRows) => {
+        snippetRow = { data: { id: SNIPPET_ROOM, user_hide_snippets: hideRows }, error: null };
+
+        const { res } = await callHandler(makeReq({ room: SNIPPET_ROOM }));
+
+        expect(mocks.prepareSession).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Room not found' });
+    });
+
+    it('grants a snippet whose hide embed is an empty list', async () => {
+        snippetRow = { data: { id: SNIPPET_ROOM, user_hide_snippets: [] }, error: null };
+        const session = makeSession();
+        mocks.prepareSession.mockReturnValue(session);
+
+        const { res } = await callHandler(makeReq({ room: SNIPPET_ROOM }));
+
+        expect(session.allow).toHaveBeenCalledWith(SNIPPET_ROOM, FULL_ACCESS);
+        expect(res.status).toHaveBeenCalledWith(200);
     });
 
     it('rejects a uuid that is not a snippet', async () => {

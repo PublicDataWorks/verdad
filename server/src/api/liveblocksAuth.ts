@@ -28,7 +28,7 @@ export interface ResolveRoomGrantsArgs {
     room: unknown;
     isAdmin: boolean;
     /** Injected so this stays testable without a database. Only called for a well-formed room id. */
-    snippetExists: (roomId: string) => Promise<boolean>;
+    snippetVisible: (roomId: string) => Promise<boolean>;
 }
 
 /**
@@ -40,7 +40,7 @@ export interface ResolveRoomGrantsArgs {
  * verifiable from the installed packages.
  */
 export const resolveRoomGrants = async (
-    {room, isAdmin, snippetExists}: ResolveRoomGrantsArgs
+    {room, isAdmin, snippetVisible}: ResolveRoomGrantsArgs
 ): Promise<RoomGrants> => {
     // Admins moderate arbitrary threads, so they keep the wildcard they have always had.
     if (isAdmin) {
@@ -64,7 +64,8 @@ export const resolveRoomGrants = async (
         return { type: 'deny', status: 403, error: 'Room not found' };
     }
 
-    if (!(await snippetExists(room))) {
+    // Same rule as `public.get_snippet` for non-admins: a snippet they could not open gets no room either.
+    if (!(await snippetVisible(room))) {
         return { type: 'deny', status: 403, error: 'Room not found' };
     }
 
@@ -88,17 +89,30 @@ const isAdminUser = async (userId: string): Promise<boolean> => {
     return data !== null;
 };
 
-const snippetExists = async (roomId: string): Promise<boolean> => {
+/**
+ * Mirrors the visibility rule of `public.get_snippet` for non-admins: the snippet must exist, be
+ * `Processed`, and not be hidden. `user_hide_snippets` is keyed by snippet only (a moderation hide that
+ * applies to everyone), so its row is embedded through the `user_hide_snippets_snippet_fkey` FK.
+ */
+const snippetVisible = async (roomId: string): Promise<boolean> => {
     const { data, error } = await supabase
         .from('snippets')
-        .select('id')
+        .select('id, user_hide_snippets(snippet)')
         .eq('id', roomId)
+        .eq('status', 'Processed')
         .maybeSingle();
 
     if (error) {
         throw new Error(`Failed to look up snippet: ${error.message}`);
     }
-    return data !== null;
+    if (!data) {
+        return false;
+    }
+    // PostgREST returns a one-to-one embed as an object (or null) and a one-to-many embed as an array;
+    // treat anything but null/undefined/[] as "a hide row exists".
+    const hide = (data as { user_hide_snippets?: unknown }).user_hide_snippets;
+    const hidden = hide !== null && hide !== undefined && !(Array.isArray(hide) && hide.length === 0);
+    return !hidden;
 };
 
 export const liveblocksAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -123,7 +137,7 @@ export const liveblocksAuth = async (req: Request, res: Response, next: NextFunc
         const grants = await resolveRoomGrants({
             room,
             isAdmin: await isAdminUser(user.id),
-            snippetExists,
+            snippetVisible,
         });
 
         if (grants.type === 'deny') {
