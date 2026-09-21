@@ -7,6 +7,7 @@ from processing_pipeline.kb_sources import (
     source_is_usable,
     url_appears_in_text,
     url_key,
+    urls_in_text,
 )
 
 
@@ -84,3 +85,8 @@ class TestUrlInText:
     def test_contains_http_url(self):
         assert contains_http_url("Superseded per https://apnews.com/article/abc")
         assert not contains_http_url("Outdated, trust me")
+
+    def test_urls_in_text_in_order_without_duplicates_or_trailing_punctuation(self):
+        text = "See https://apnews.com/article/abc. Also [R](https://www.reuters.com/x?y=1), then https://apnews.com/article/abc"
+        assert urls_in_text(text) == ["https://apnews.com/article/abc", "https://www.reuters.com/x?y=1"]
+        assert urls_in_text(None) == []

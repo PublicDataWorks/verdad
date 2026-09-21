@@ -454,6 +454,11 @@ class TestGroundingMetadataHelpers:
         assert merged["stage_3_verification_evidence"] == evidence
         assert merged["evidence_gate"] == gate
 
+    def test_merge_stores_the_citation_check_even_when_it_did_not_apply(self):
+        check = {"applied": False, "cited": [], "unobserved": []}
+        merged = json.loads(merge_grounding_metadata(None, None, {"applied": False}, check))
+        assert merged == {"stage_4_citation_check": check}
+
     def test_merge_with_no_stage_4_metadata(self):
         merged = json.loads(merge_grounding_metadata(None, None, {"applied": False}))
         assert merged == {}

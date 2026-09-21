@@ -80,10 +80,15 @@ def url_key(url) -> str:
     return key
 
 
+def urls_in_text(text) -> list[str]:
+    """Every http(s) URL in ``text`` in order of first appearance, trailing prose punctuation dropped."""
+    return list(dict.fromkeys(found.rstrip(_URL_TRAILING_CHARS) for found in _URL_IN_TEXT.findall(text or "")))
+
+
 def url_appears_in_text(url: str, text: str) -> bool:
     """True when ``url`` (ignoring case, a trailing slash and trailing punctuation) is one of the URLs in ``text``."""
     target = normalize_url(url)
-    return any(normalize_url(found) == target for found in _URL_IN_TEXT.findall(text or ""))
+    return any(normalize_url(found) == target for found in urls_in_text(text))
 
 
 def contains_http_url(text: str) -> bool:
