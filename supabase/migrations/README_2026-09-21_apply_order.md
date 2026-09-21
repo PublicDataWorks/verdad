@@ -3,15 +3,17 @@
 `applied_versions.txt` is deliberately untouched. Run the files **by hand in the Supabase SQL
 editor**, in this order, one file per run.
 
-**Status (2026-09-21 13:10 UTC):** step 1 applied 11:29 UTC and re-applied 11:48 UTC (trigger on
-`confidence_scores`); the backfill function created 11:31 UTC, replaced 11:48 and 11:55 UTC
-(visible-only, no ORDER BY); step 2 batches ran 11:56 to 13:09 UTC (43,017 visible rows, 0
-remaining, 0 mismatches against `audio_files`; batches of 500, then 250, then 100: an autovacuum
-on `snippets` starts after every ~13k updated rows and doubles to quadruples the per-row cost, two
-batches were cancelled by the 2-min timeout and rolled back, nothing lost). Steps 3, 3b, 4 not run.
-Step 3 caveat: the `postgres` role has `statement_timeout = 2min` and the visibility predicate
-detoasts `confidence_scores` for every row, so each CONCURRENTLY build needs a session without that
-timeout (a temp index with the same predicate did not finish inside 2 min on 21 Sep).
+**Status (2026-09-21 13:48 UTC):** steps 1, 2, 3 and 3b applied. Step 1 11:29 UTC, re-applied 11:48 UTC
+(trigger on `confidence_scores`); backfill function 11:31, replaced 11:48 and 11:55 UTC (visible-only,
+no ORDER BY); step 2 batches 11:56 to 13:09 UTC (43,017 visible rows, 0 remaining, 0 mismatches
+against `audio_files`; batches of 500, then 250, then 100: an autovacuum on `snippets` starts after
+every ~13k updated rows and doubles to quadruples the per-row cost, two batches were cancelled by the
+2-min timeout and rolled back, nothing lost); step 3 13:35 to 13:46 UTC (state index 4.7 min,
+station index 4 min, both `indisvalid`, 7.4 MB each); step 3b 13:46 UTC (79 s). **Step 4 not run.**
+Step 3 route: the `postgres` role has `statement_timeout = 2min` and the visibility predicate detoasts
+`confidence_scores` for every row, so each build ran as a pg_cron job (`cron.schedule` at the next
+minute, one build at a time, unscheduled after) under `ALTER ROLE postgres SET statement_timeout =
+'15min'`, restored to `'2min'` afterwards and verified.
 
 **Windows:** not on Sat 2026-09-19 (demo) and not on Mon 2026-09-21 (Tamoa's story). Steps 1 to 3b
 in one off-peak window (HCM daytime = US night; ~1.5 h), step 4 the next day after the
@@ -32,8 +34,8 @@ the `audio_file` object in the result still comes from the `audio_files` join.
 |---|------|-------------|----------|--------------|
 | 1 | `20260921000100_snippets_location_columns_and_triggers.sql` | Safe in one transaction (nullable `ADD COLUMN` = catalog only, no rewrite; brief ACCESS EXCLUSIVE lock on `snippets` and `audio_files`). The file sets `lock_timeout = '3s'`; on "canceling statement due to lock timeout" nothing changed, run it again | < 1 s once the lock is granted | `SELECT column_name FROM information_schema.columns WHERE table_name='snippets' AND column_name IN ('location_state','radio_station_code');` → 2 rows. `SELECT tgname, tgenabled FROM pg_trigger WHERE tgname IN ('snippets_copy_audio_file_location','audio_files_propagate_location');` → 2 rows, `tgenabled = 'O'`. Then insert nothing by hand — just confirm a freshly produced snippet has the columns filled: `SELECT id, location_state, radio_station_code FROM public.snippets ORDER BY created_at DESC LIMIT 5;` |
 | 2 | `20260921000200_snippets_location_backfill.sql` | Creating the function is transactional; **running** it is a series of one-transaction batches of 500. No throwaway index (the candidate query walks `idx_snippets_visible_recorded_at`; a CONCURRENTLY build with the cast predicate did not finish inside the 2-min statement_timeout) | ~43k visible rows, ~86 batches of 500 at ~55 s each (measured, below): ~80 min by hand or on the per-minute cron job | `SELECT count(*) FILTER (WHERE radio_station_code IS NULL) AS remaining, count(*) AS visible FROM public.snippets WHERE status = 'Processed' AND (confidence_scores->>'overall')::int >= 95;` → `remaining` must reach 0. Then `SELECT relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze FROM pg_stat_user_tables WHERE relname='snippets';` |
-| 3 | `20260921000300_snippets_visible_location_indexes.sql` | **MUST run outside a transaction** (`CREATE INDEX CONCURRENTLY`). Paste each statement alone; do not wrap in `BEGIN`/`COMMIT` or use a migration runner that does. After step 2 reports 0 remaining, so each index is built once over final values | ~1-3 min per index on 563k rows | `SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_snippets_visible_state'::regclass;` and the same for `idx_snippets_visible_station` — both must be `true` |
-| 3b | `ANALYZE public.snippets;` (no file) | Plain statement, no lock that blocks reads or writes | ~10-30 s | `SELECT last_analyze FROM pg_stat_user_tables WHERE relname='snippets';` → just now. Without it the new columns have no statistics and the step-4 EXPLAINs are not trustworthy |
+| 3 | `20260921000300_snippets_visible_location_indexes.sql` | **MUST run outside a transaction** (`CREATE INDEX CONCURRENTLY`). Paste each statement alone; do not wrap in `BEGIN`/`COMMIT` or use a migration runner that does. After step 2 reports 0 remaining, so each index is built once over final values | ~4-5 min per index on 563k rows (measured); needs a session without the `postgres` role's 2-min statement_timeout, see Status | `SELECT indisvalid FROM pg_index WHERE indexrelid = 'idx_snippets_visible_state'::regclass;` and the same for `idx_snippets_visible_station` — both must be `true` |
+| 3b | `ANALYZE public.snippets;` (no file) | Plain statement, no lock that blocks reads or writes | ~80 s (measured) | `SELECT last_analyze FROM pg_stat_user_tables WHERE relname='snippets';` → just now. Without it the new columns have no statistics and the step-4 EXPLAINs are not trustworthy |
 | 4 | `20260921000400_get_snippets_denormalized_location.sql` | Safe in one transaction (`CREATE OR REPLACE`, same signature, re-`GRANT`, `NOTIFY pgrst`). Starts with a `DO` guard that raises if any visible snippet still has `radio_station_code IS NULL`, so running it early fails loudly instead of returning empty pages (a walk of the visible index with a heap filter, under a minute cold) | < 1 min | The EXPLAIN and result-equivalence checks below |
 
 ## Sequencing
