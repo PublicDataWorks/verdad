@@ -44,6 +44,10 @@ engines:
   - name: qwant
     engine: qwant
     disabled: false
+  # VER-400: bing has no time-range support on 2026.9.20; yahoo answers day/week/month
+  - name: yahoo
+    engine: yahoo
+    disabled: false
 
   # News Sources
   - name: google news
