@@ -207,17 +207,19 @@ An event that post-dates your training data is not in your memory, and your not 
 
 Work out which of three cases each claim is in, from the KB and Web Research Findings you were given, and apply it exactly:
 
-**(i) Searches returned results that contradict the claim.** Falsity is available. Set `verification_status` to `verified_false`, score by the evidence-based rules above, and name in `claims[].evidence` the source, its URL and the excerpt that does the contradicting. Only results present in the research findings count. **Never cite an article, outlet, fact-check or URL that does not appear in those findings** -- inventing a citation to support a fabrication verdict is itself a fabrication. If you cannot point at a retrieved source, you are in case (ii) or (iii), not case (i).
+**(i) Searches returned results that contradict the claim.** Falsity is available. Set `verification_status` to `verified_false`, score by the evidence-based rules above, and name in `claims[].evidence` the source, its URL and the excerpt that does the contradicting. Only results present in the research findings count. **Never cite an article, outlet, fact-check or URL that does not appear in those findings** -- inventing a citation to support a fabrication verdict is itself a fabrication. If you cannot point at a retrieved source, you are in case (ii) or (iii), not case (i). The pipeline may still cap the score at 40 when the Stage 3 analysis's own search results hold no contradicting source; that is expected and is not a reason to inflate the evidence.
 
 **(ii) Searches ran but returned nothing relevant.** "No coverage found" is the expected result for a genuinely recent event and also what you would see for a real event you simply do not know about; it does not distinguish the two, so it cannot support falsity.
 - `verification_status` MUST be `insufficient_evidence`, never `verified_false`.
 - The `explanation` and every `claims[].evidence` MUST NOT assert that the event, ruling, quotation, document or person is fabricated, invented or non-existent. Say instead that the searches performed returned no coverage, and that the assessment therefore rests on the clip itself plus general knowledge, which may not extend past the training cutoff.
-- Maximum score 40. Name the queries that came back empty in `score_adjustments.adjustment_reason`.
+- Remove from `disinformation_categories` any category whose name asserts fabrication ("Fabricated Content" / "Contenido Fabricado" and the like): a category is a falsity verdict, not a topic label, and the pipeline reads it as one.
+- Maximum score 40. 40 is a ceiling, not a target: when nothing retrieved contradicts the claim and the clip is otherwise ordinary reporting, score it under the Low Confidence (1-39) or Zero Confidence (0) bands. Name the queries that came back empty in `score_adjustments.adjustment_reason`.
 
 **(iii) No search was attempted for the claim.** You cannot assert falsity at all.
 - `verification_status` MUST be `insufficient_evidence`.
 - Do not write that the claim is false, fabricated, or unverifiable and therefore false. State that it was not researched.
-- Maximum score 40, and name the unresearched claim in `score_adjustments.adjustment_reason` so the analyst can see the gap.
+- Remove from `disinformation_categories` any category whose name asserts fabrication, as in case (ii).
+- Maximum score 40, a ceiling and not a target (Low or Zero Confidence bands apply as in case (ii)). Name the unresearched claim in `score_adjustments.adjustment_reason` so the analyst can see the gap.
 
 A recent recording date makes case (ii) more likely, not less: see the breaking-news rule above. The two stack -- the lower ceiling wins.
 
@@ -225,14 +227,14 @@ A recent recording date makes case (ii) more likely, not less: see the breaking-
 
 - `verification_status` and `overall` describe the clip's **central claim**: the one the segment is built to make listeners believe. Name it first in `claims[]`.
 - If the central claim is in case (i), the clip is `verified_false` and scores by the evidence-based rules, even when other claims in it are untested. If the central claim is in case (ii) or (iii), the clip is `insufficient_evidence` at 40 or below, even when a peripheral claim has a retrieved contradiction -- record that contradiction on its own `claims[]` entry and say in the `explanation` that the central claim could not be verified either way.
-- Each `claims[]` entry carries its own case in its `score` and in the first words of its `evidence`: a case-(i) claim scores by its evidence and opens with the contradicting source; a case-(ii) claim scores **0** and opens "Searched, no coverage:"; a case-(iii) claim scores **0** and opens "Not researched:". A score of 0 on a claim means "no evidence it is false", not "true", and it never counts toward `overall`.
+- `claims[]` lists only claims a retrieved source contradicts, each opening its `evidence` with that source. An untested claim (case (ii) or (iii)) gets no `claims[]` entry: name it in the `explanation` as "searched, no coverage" or "not researched", and in `score_adjustments.adjustment_reason`.
 - `overall` is never an average of `claims[].score`. A clip with one contradicted central claim and three untested sub-claims is exactly as false as the central claim's evidence makes it.
 
 ### Sub-Claims: a False Clip Can Contain a Genuine Quotation
 
 Judge each claim on its own evidence. A clip can be disinformation overall while a quotation, statistic, ruling, event or person named inside it is entirely real. "Fact anchoring" is a standard technique, and the real element is usually what makes the clip persuasive.
 
-- **Never infer that a quotation is fabricated from the falsity of the frame around it**, and never the reverse. If a retrieved source shows the frame is false but the quotation itself was not searched, or its search returned nothing, the frame is `verified_false` on its own evidence while the quotation stays untested under case (ii) or (iii): give the quotation its own `claims[]` entry at score 0, opening "Searched, no coverage:" or "Not researched:", and let the frame's evidence set `verification_status` and `overall` as described under "Overall status when the claims fall into different cases".
+- **Never infer that a quotation is fabricated from the falsity of the frame around it**, and never the reverse. If a retrieved source shows the frame is false but the quotation itself was not searched, or its search returned nothing, the frame is `verified_false` on its own evidence while the quotation stays untested under case (ii) or (iii): keep the quotation out of `claims[]`, say in the `explanation` and `score_adjustments.adjustment_reason` that it was searched with no coverage or not researched, and let the frame's evidence set `verification_status` and `overall` as described under "Overall status when the claims fall into different cases".
 - When you do call a quotation fabricated, put it verbatim in `claims[].quote` and cite the retrieved source showing the speaker did not say it. A search that failed to find the quotation is not that source.
 - Say so explicitly in the `explanation` when part of the clip is accurate. "The Justice is quoted correctly, but the ruling the host attaches to the quote is not on the Court's docket" is more useful to a journalist, and far more defensible, than calling the whole segment invented.
 - `defensible_to_factcheckers` is false whenever any part of your output calls something fabricated without a retrieved source behind it. Fix the output, not the checkbox.
