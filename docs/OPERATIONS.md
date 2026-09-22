@@ -186,7 +186,8 @@ refuses the production project unless `--allow-production` is passed.
   unparseable output, waits of 30 s, 2 min, 5 min) in Stage 3 and Stage 4; the snippet only reaches `Error`
   after the fourth failure, with that message stored. Rerun those ids once the outage is over.
 - **Stage 4 reviews carry a tool record and a citation check** (VER-391) in `snippets.grounding_metadata`:
-  `stage_4_tool_record` lists every `searxng_web_search` / `web_url_read` call (query or URL, status, returned URLs),
+  `stage_4_tool_record` lists every `searxng_web_search` / `web_url_read` call (query or URL, status, returned URLs;
+  `time_range` is hidden from the Stage 4 searcher since VER-392),
   every `search_knowledge_base` call (curated entries' source URLs) and `observed_urls` (`url_key` of everything the
   tools put in front of the model); `stage_4_citation_check` lists every URL in the reviewer's visible text with
   `observed` true/false and the `unobserved` ones (neither a tool returned them nor the Stage 3 record holds them).

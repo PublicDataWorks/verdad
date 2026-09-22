@@ -6,6 +6,7 @@ with integer enums (e.g., [0, 1, 2]), which Gemini rejects with a 400 error.
 This module provides McpToolset/McpTool subclasses that:
 - Convert integer enum values to strings in tool schemas before Gemini sees them
 - Convert string enum values back to integers when calling the MCP server
+- Hide named arguments from the model (schema and call), e.g. searxng's time_range (VER-392)
 """
 
 import copy
@@ -80,20 +81,39 @@ def _coerce_str_args_to_int(
     return converted
 
 
-class GeminiSafeMcpTool(McpTool):
-    """McpTool that converts string enum args back to integers for the MCP server."""
+def _hide_args(schema: dict[str, Any], names: frozenset[str]) -> None:
+    """Drop ``names`` from a tool's input schema in-place so the model never sees them."""
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        for name in names:
+            properties.pop(name, None)
+    if isinstance(schema.get("required"), list):
+        schema["required"] = [r for r in schema["required"] if r not in names]
 
-    def __init__(self, *, int_enum_paths: dict[str, list], **kwargs):
+
+class GeminiSafeMcpTool(McpTool):
+    """McpTool that converts string enum args back to integers and drops hidden args before the MCP call."""
+
+    def __init__(self, *, int_enum_paths: dict[str, list], hidden_args: frozenset[str] = frozenset(), **kwargs):
         super().__init__(**kwargs)
         self._int_enum_paths = int_enum_paths
+        self._hidden_args = hidden_args
 
     async def run_async(self, *, args: dict[str, Any], tool_context: ToolContext) -> Any:
-        converted_args = _coerce_str_args_to_int(args, self._int_enum_paths)
+        visible_args = {k: v for k, v in args.items() if k not in self._hidden_args}
+        converted_args = _coerce_str_args_to_int(visible_args, self._int_enum_paths)
         return await super().run_async(args=converted_args, tool_context=tool_context)
 
 
 class GeminiSafeMcpToolset(McpToolset):
-    """McpToolset that sanitizes integer enum values for Gemini compatibility."""
+    """McpToolset that sanitizes integer enum values for Gemini compatibility.
+
+    ``hidden_args`` maps a tool name to argument names removed from its schema and from every call.
+    """
+
+    def __init__(self, *args, hidden_args: dict[str, set[str]] | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._hidden_args = {tool: frozenset(names) for tool, names in (hidden_args or {}).items()}
 
     @retry_on_errors
     async def get_tools(
@@ -109,6 +129,8 @@ class GeminiSafeMcpToolset(McpToolset):
         tools = []
         for tool in tools_response.tools:
             schema = copy.deepcopy(tool.inputSchema)
+            hidden_args = self._hidden_args.get(tool.name, frozenset())
+            _hide_args(schema, hidden_args)
             int_enum_paths = _coerce_int_enums_to_str(schema)
             tool.inputSchema = schema
 
@@ -120,6 +142,7 @@ class GeminiSafeMcpToolset(McpToolset):
                 require_confirmation=self._require_confirmation,
                 header_provider=self._header_provider,
                 int_enum_paths=int_enum_paths,
+                hidden_args=hidden_args,
             )
 
             if self._is_tool_selected(mcp_tool, readonly_context):
