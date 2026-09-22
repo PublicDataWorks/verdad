@@ -150,6 +150,19 @@ After all individual claims, provide:
 - [Any important caveats, limitations, or observations about the research]
 ```
 
+## Machine-readable evidence
+
+Close the report with one fenced block tagged `evidence` that lists every source the tools returned or read, one entry per URL (an empty list when there was none). The pipeline parses this block; the report above stays as it is.
+
+```evidence
+{"results": [{"url": "https://www.reuters.com/world/...", "source_name": "Reuters", "source_type": "tier1_wire_service", "publication_date": "2026-09-20", "title": "...", "relevance_to_claim": "contradicts_claim"}]}
+```
+
+- `source_type`: `tier1_wire_service`, `tier1_factchecker`, `tier2_major_news`, `tier3_regional_news`, `official_source` or `other`.
+- `relevance_to_claim`: `supports_claim`, `contradicts_claim`, `provides_context` or `inconclusive`. `contradicts_claim` means the page's content refutes the claim; a search that found nothing is not a contradicting source.
+- `publication_date`: `YYYY-MM-DD` as read on the page, else `null`.
+- Only URLs that came back from `searxng_web_search` or that you read with `web_url_read`. Never a URL from memory.
+
 ## Knowledge Cutoff Awareness
 
 Your pre-training data has a knowledge cutoff date. Events that occurred after your training cutoff will feel unfamiliar or "wrong" to you, but they may be entirely real. This is a fundamental constraint you must internalize:

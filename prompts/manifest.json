@@ -54,8 +54,8 @@
     }
   },
   "stage_4/web_researcher": {
-    "version": "1.0.0",
-    "description": "Active version seeded from the database on 2026-09-14",
+    "version": "1.1.0",
+    "description": "Machine-readable evidence block at the end of the report, so the evidence gate can see what Stage 4 retrieved (VER-396)",
     "files": {
       "system_instruction": "prompts/stage_4/web_researcher_instruction.md",
       "user_prompt": null,
