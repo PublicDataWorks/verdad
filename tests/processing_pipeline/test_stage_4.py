@@ -8,6 +8,7 @@ import pytest
 from google.genai import errors
 
 from processing_pipeline.constants import GeminiModel
+from processing_pipeline.kb_sources import url_key
 from processing_pipeline.stage_4 import (
     Stage4Executor,
     analysis_review,
@@ -345,6 +346,76 @@ class TestStage4:
         assert kwargs["confidence_scores"]["overall"] == 40
         assert [c["score"] for c in kwargs["confidence_scores"]["categories"]] == [40]
         assert json.loads(kwargs["grounding_metadata"])["evidence_gate"]["applied"] is True
+
+    # --- VER-396: the gate also sees what the Stage 4 researcher retrieved ------
+
+    @staticmethod
+    def _stage_4_report(cited_url, fetched_url):
+        """The researcher's report with its evidence block; the tool record holds one page read."""
+        result = {"url": cited_url, "source_type": "tier1_wire_service", "relevance_to_claim": "contradicts_claim"}
+        block = json.dumps({"results": [result]})
+        return json.dumps(
+            {
+                "web_research": f"findings\n```evidence\n{block}\n```",
+                "stage_4_tool_record": {
+                    "searches": [],
+                    "fetches": [{"url": fetched_url, "status": "ok"}],
+                    "observed_urls": [url_key(fetched_url)],
+                },
+            }
+        )
+
+    @staticmethod
+    def _falsity_review(review_result):
+        review_result["confidence_scores"] = {
+            "overall": 98,
+            "verification_status": "verified_false",
+            "categories": [{"category": "Fabricated Content", "score": 98}],
+        }
+        review_result["explanation"] = {
+            "english": "The claim is false: Reuters reports the government is still in place.",
+            "spanish": "La afirmación es falsa.",
+        }
+        return review_result
+
+    def test_stage_4_retrieved_contradicting_article_releases_the_cap(
+        self, mock_supabase_client, sample_snippet, review_result
+    ):
+        """VER-396: Stage 3 found nothing, the Stage 4 researcher read a contradicting article a tool returned."""
+        url = "https://www.reuters.com/world/middle-east/government-still-in-place-2026-09-20/"
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(self._falsity_review(review_result), self._stage_4_report(url, url))),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, self._downvoted_snippet(sample_snippet))
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 98
+        grounding_metadata = json.loads(kwargs["grounding_metadata"])
+        assert "evidence_gate" not in grounding_metadata
+        assert grounding_metadata["stage_4_citation_check"]["applied"] is False
+        evidence = grounding_metadata["stage_4_verification_evidence"]
+        assert evidence["admissible_contradicting"] is True
+        assert evidence["results"][0]["url_observed_in_tools"] is True
+        assert len(grounding_metadata["stage_3_verification_evidence"]["searches_performed"]) == 5
+
+    def test_stage_4_source_no_tool_returned_keeps_the_cap(self, mock_supabase_client, sample_snippet, review_result):
+        cited = "https://www.reuters.com/world/middle-east/government-still-in-place-2026-09-20/"
+        fetched = "https://www.reuters.com/world/middle-east/unrelated-2026-09-20/"
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(self._falsity_review(review_result), self._stage_4_report(cited, fetched))),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, self._downvoted_snippet(sample_snippet))
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 40
+        grounding_metadata = json.loads(kwargs["grounding_metadata"])
+        assert (
+            "contradicting URL was not returned by any search or fetch tool when the analysis ran"
+            in grounding_metadata["evidence_gate"]["reasons"]
+        )
+        assert grounding_metadata["stage_4_verification_evidence"]["admissible_contradicting"] is False
 
     # --- VER-391: citations are checked against the Stage 4 tool record --------
 

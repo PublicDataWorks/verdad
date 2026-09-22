@@ -7,6 +7,7 @@ from processing_pipeline.processing_utils import postprocess_snippet
 from processing_pipeline.kb_sources import parse_iso_date
 from processing_pipeline.stage_3.models import apply_evidence_caps, latest_claim_event_date
 from processing_pipeline.stage_4.citation_check import check_stage_4_citations
+from processing_pipeline.stage_4.evidence import combine_evidence, stage_4_evidence
 from processing_pipeline.stage_4.executor import Stage4Executor
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.temporal_context import build_temporal_context
@@ -127,15 +128,22 @@ def extract_stage_3_verification_evidence(grounding_metadata) -> dict | None:
 
 
 def merge_grounding_metadata(
-    stage_4_grounding_metadata: str | None, stage_3_verification_evidence, evidence_gate, citation_check=None
+    stage_4_grounding_metadata: str | None,
+    stage_3_verification_evidence,
+    evidence_gate,
+    citation_check=None,
+    stage_4_verification_evidence=None,
 ) -> str:
     """Combine the Stage 4 research record (JSON string or None) with the Stage 3 search record and the checks.
 
-    The gate is stored only when it applied; the citation check always, so the invented-citation rate is measurable.
+    The gate is stored only when it applied; the citation check always, so the invented-citation rate is measurable;
+    the Stage 4 evidence whenever the researcher wrote its block.
     """
     merged = json.loads(stage_4_grounding_metadata) if stage_4_grounding_metadata else {}
     if stage_3_verification_evidence:
         merged["stage_3_verification_evidence"] = stage_3_verification_evidence
+    if stage_4_verification_evidence is not None:
+        merged["stage_4_verification_evidence"] = stage_4_verification_evidence
     if evidence_gate and evidence_gate.get("applied"):
         merged["evidence_gate"] = evidence_gate
     if citation_check is not None:
@@ -179,17 +187,20 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
             )
         )
 
-        # Deterministic evidence gate. The reviewer output has no structured evidence or claim dates of its
-        # own, so both come from the Stage 3 record.
+        # Deterministic evidence gate. The reviewer output has no structured evidence or claim dates of its own:
+        # the dates come from the Stage 3 record, the evidence from that record plus what the Stage 4 researcher
+        # reported in its evidence block (VER-396), a result counting only when a tool returned its URL.
         stage_3_evidence = extract_stage_3_verification_evidence(previous_analysis.get("grounding_metadata"))
         hours_since_recording = build_temporal_context(prepared["recorded_at"])["hours_since_recording"]
         recorded_on = parse_iso_date(prepared["recorded_at"])
+        event_date = latest_claim_event_date(previous_analysis, not_after=recorded_on)
+        stage_4_record, stage_4_verification_evidence = stage_4_evidence(grounding_metadata, event_date)
         response = apply_evidence_caps(
             response,
-            verification_evidence=stage_3_evidence,
+            verification_evidence=combine_evidence(stage_3_evidence, stage_4_record),
             hours_since_recording=hours_since_recording,
             recorded_on=recorded_on,
-            event_date=latest_claim_event_date(previous_analysis, not_after=recorded_on),
+            event_date=event_date,
         )
         evidence_gate = response.pop("evidence_gate")
         if evidence_gate.get("applied"):
@@ -197,7 +208,9 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         response, citation_check = check_stage_4_citations(response, grounding_metadata, stage_3_evidence)
         if citation_check["applied"]:
             print(f"Citation check applied: {citation_check['note']}")
-        grounding_metadata = merge_grounding_metadata(grounding_metadata, stage_3_evidence, evidence_gate, citation_check)
+        grounding_metadata = merge_grounding_metadata(
+            grounding_metadata, stage_3_evidence, evidence_gate, citation_check, stage_4_verification_evidence
+        )
 
         print("Review completed. Updating the snippet in Supabase")
         submit_snippet_review_result(supabase_client, snippet["id"], response, grounding_metadata, reviewer_model.value)
