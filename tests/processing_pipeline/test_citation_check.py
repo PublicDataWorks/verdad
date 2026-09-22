@@ -131,7 +131,7 @@ class TestCheckStage4Citations:
         assert check["retrieval"] == {"searches": 2, "searches_with_results": 0, "pages_read": 0, "kb_curated_sources": 0}
         assert check["reasons"] == [
             "the review asserts the content is fabricated/false but no web search returned results, no page was "
-            "read and no curated knowledge-base source came back in this session (2 searches)"
+            "read and no curated knowledge-base source came back in this session (searches run: 2)"
         ]
         assert result["confidence_scores"]["overall"] == 40
         assert result["explanation"]["english"].endswith(check["note"]) and "limited to 40" in check["note"]

@@ -196,10 +196,10 @@ refuses the production project unless `--allow-production` is passed.
   `verified_false` verdict with nothing retrieved in the session, i.e. no web search with results, no page read,
   no curated KB source (`retrieval`, VER-369 item 2; the Stage 3 record is the evidence gate's business, not
   this rule's). Setting `CITATION_CHECK_CAPS` (`stage_4/constants.py`, on since 2026-09-22) to `False` switches
-  all three back to record-only. The check's `original_*` are
-  the scores as received (already 40 when the evidence gate fired first; the gate's own `original_*` hold the
-  pre-gate values). `evidence_gate` is stored only when it applied; the citation check always. To undo a period
-  of capping, run `supabase/database/sql/rollback/2026-09-22_stage_4_citation_check_restore.sql`.
+  all three back to record-only. The check's `original_*` are the scores as received (already 40 when the
+  evidence gate fired first; the gate's own `original_*` hold the pre-gate values). `evidence_gate` is stored
+  only when it applied; the citation check always. To undo a period of capping, run
+  `supabase/database/sql/rollback/2026-09-22_stage_4_citation_check_restore.sql`.
 - **A transient DB error on the fetch-work RPC no longer kills the stage loop** (VER-378): statement timeout
   (`57014`), lock/deadlock, server restart (`57P01`-`57P03`), any class-08 connection error, PostgREST's own
   `PGRST000`-`PGRST002` (cannot reach Postgres / schema cache reloading after DDL) or gateway 502/503/504/520/522/524

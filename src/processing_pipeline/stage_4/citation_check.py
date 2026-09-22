@@ -60,7 +60,7 @@ def _retrieval(tool_record: dict) -> dict:
 
 
 def _falsity_verdict(response: dict) -> bool:
-    """The reviewer's own verdict, judged without the evidence gate's note (the citation note is already gone)."""
+    """The reviewer's own verdict, judged without the evidence gate's note."""
     status = (response.get("confidence_scores") or {}).get("verification_status")
     if status == "verified_false":
         return True
@@ -73,33 +73,25 @@ def _falsity_verdict(response: dict) -> bool:
     return asserts_falsity({**response, "explanation": explanation})
 
 
-def _listed(urls: list[str], more_en: bool) -> str:
+def _listed(urls: list[str], english: bool) -> str:
     shown = ", ".join(urls[:NOTE_URL_LIMIT])
     rest = len(urls) - NOTE_URL_LIMIT
     if rest <= 0:
         return shown
-    return f"{shown} and {rest} more" if more_en else f"{shown} y {rest} más"
+    return f"{shown} and {rest} more" if english else f"{shown} y {rest} más"
 
 
 def check_stage_4_citations(
     response: dict, stage_4_grounding_metadata: str | None, stage_3_evidence, enforce: bool | None = None
 ) -> tuple[dict, dict]:
-    """Judge the review against the Stage 4 tool record.
+    """Judge the review against the Stage 4 tool record; returns a deep copy of ``response`` and the check dict.
 
-    Returns a deep copy of ``response`` and the ``stage_4_citation_check`` dict. Three rules, each a reason:
-
-    1. the review's visible text cites an article URL that neither a Stage 4 tool returned nor the Stage 3
-       record holds;
-    2. (VER-393) the web researcher's prose cites such a URL: the reviewer scored on invented research;
-    3. (VER-369 item 2) the review asserts fabrication / ``verified_false`` while nothing was retrieved in this
-       session: no web search returned results, no page was read, no curated KB source came back. The Stage 3
-       record is deliberately not consulted here: the evidence gate judges it, this rule asks what the review
-       itself retrieved.
-
-    Only article URLs count in 1 and 2 (``is_article_url``): a front page or a search page is not a citation.
+    Reasons: (1) the review's visible text cites an article URL neither a Stage 4 tool returned nor the Stage 3
+    record holds; (2, VER-393) the web researcher's prose does; (3, VER-369 item 2) the review asserts
+    fabrication / ``verified_false`` while this session retrieved nothing (no search with results, no page read,
+    no curated KB source). Rule 3 ignores the Stage 3 record on purpose: the evidence gate judges that.
     With ``enforce`` (default ``CITATION_CHECK_CAPS``) any reason clamps the scores to ``EVIDENCE_CAP_MAX_SCORE``
-    and appends a bilingual explanation note; ``original_*`` are the scores as received, i.e. already 40 when
-    the evidence gate ran first (its own ``original_*`` hold the pre-gate values).
+    and appends a bilingual note; ``original_*`` are the scores as received (already 40 when the gate ran first).
     """
     if enforce is None:
         enforce = constants.CITATION_CHECK_CAPS
@@ -155,10 +147,10 @@ def check_stage_4_citations(
         reasons.append(
             (
                 "the review asserts the content is fabricated/false but no web search returned results, no page "
-                f"was read and no curated knowledge-base source came back in this session ({retrieval['searches']} searches)",
+                f"was read and no curated knowledge-base source came back in this session (searches run: {retrieval['searches']})",
                 "la revisión afirma que el contenido es fabricado/falso pero ninguna búsqueda web devolvió "
                 "resultados, no se leyó ninguna página y ninguna fuente curada de la base de conocimiento "
-                f"apareció en esta sesión ({retrieval['searches']} búsquedas)",
+                f"apareció en esta sesión (búsquedas realizadas: {retrieval['searches']})",
             )
         )
 

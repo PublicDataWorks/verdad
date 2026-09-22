@@ -21,9 +21,9 @@ SET confidence_scores = jsonb_set(
             JOIN jsonb_array_elements(c.check -> 'original_categories') WITH ORDINALITY AS b(orig, j) ON i = j
         ), s.confidence_scores -> 'categories')
     ),
-    explanation = jsonb_build_object(
-        'english', regexp_replace(s.explanation ->> 'english', '\n\n\[Citation check\][^\n]*$', ''),
-        'spanish', regexp_replace(s.explanation ->> 'spanish', '\n\n\[Citation check\][^\n]*$', '')
+    explanation = s.explanation || jsonb_build_object(
+        'english', regexp_replace(s.explanation ->> 'english', '(\n\n)?\[Citation check\][^\n]*$', ''),
+        'spanish', regexp_replace(s.explanation ->> 'spanish', '(\n\n)?\[Citation check\][^\n]*$', '')
     ),
     grounding_metadata = jsonb_set(
         s.grounding_metadata::jsonb, '{stage_4_citation_check,restored_at}', to_jsonb(now()::text)
@@ -37,7 +37,11 @@ FROM (
       AND NOT (grounding_metadata::jsonb -> 'stage_4_citation_check' ? 'restored_at')
 ) c
 WHERE s.id = c.id
-  -- jsonb_set is strict: a NULL input would null the whole column, so only rows with every piece present
+  -- jsonb_set is strict (a NULL input nulls the column) and the ordinal join would truncate a longer
+  -- categories array, so only rows shaped exactly as the cap left them
   AND jsonb_typeof(c.check -> 'original_overall') = 'number'
-  AND s.confidence_scores ? 'categories'
-  AND s.explanation IS NOT NULL;
+  AND jsonb_typeof(s.confidence_scores -> 'categories') = 'array'
+  AND jsonb_typeof(c.check -> 'original_categories') = 'array'
+  AND jsonb_array_length(s.confidence_scores -> 'categories') = jsonb_array_length(c.check -> 'original_categories')
+  AND jsonb_typeof(s.explanation -> 'english') = 'string'
+  AND jsonb_typeof(s.explanation -> 'spanish') = 'string';
