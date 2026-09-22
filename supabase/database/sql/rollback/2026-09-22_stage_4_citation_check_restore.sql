@@ -37,4 +37,7 @@ FROM (
       AND NOT (grounding_metadata::jsonb -> 'stage_4_citation_check' ? 'restored_at')
 ) c
 WHERE s.id = c.id
-  AND c.check ? 'original_overall';
+  -- jsonb_set is strict: a NULL input would null the whole column, so only rows with every piece present
+  AND jsonb_typeof(c.check -> 'original_overall') = 'number'
+  AND s.confidence_scores ? 'categories'
+  AND s.explanation IS NOT NULL;
