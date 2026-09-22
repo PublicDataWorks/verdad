@@ -1,56 +1,61 @@
--- The signature changed on 2026-09-14 (p_include_count added); drop the old overload so
--- PostgREST does not see two get_snippets functions.
-DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text, text);
-
--- Optimized get_snippets function
--- Key optimizations:
--- 1. Uses JOINs with pre-filtered CTEs instead of EXISTS subqueries for starred/labeled/upvotedBy filters
--- 2. Uses JOINs with pre-filtered CTEs for state/source filters (avoids IN subquery on audio_files)
--- 3. Single query with CTE chain — filter CTEs defined once, count + data in one pass
+-- get_snippets: serve the states / sources filters from denormalized columns on snippets (VER-387).
 --
--- Performance improvements:
--- - starredBy filter: timeout (>30s) -> <1s
--- - labeledBy filter: timeout (>30s) -> <1s
--- - upvotedBy filter: 6.7s -> <1s
--- - state filter: ~134ms -> <50ms
--- - source filter: similar improvement
+-- ============================================================================================
+-- Why
+-- ============================================================================================
+-- With a `states` or `sources` filter the previous body walked every visible snippet
+-- (~43k of 563k rows; visible = status = 'Processed' AND (confidence_scores->>'overall')::int >= 95)
+-- and probed audio_files (573 MB heap) through the state_filtered_audio_ids /
+-- source_filtered_audio_ids CTEs, LEFT JOINed on s.audio_file. Warm that is 0.12-0.22 s; cold it is
+-- ~4 s, which is the filter latency Tamoa keeps hitting.
 --
--- 2026-09-14 (see supabase/migrations/20260915000400_get_snippets_include_count.sql):
--- - p_include_count boolean DEFAULT true: when false, skips the total count and returns
---   num_of_snippets / total_pages as null (the frontend only needs them on page 0)
--- - one plain ORDER BY branch per p_order_by value so 'latest' is served from
---   idx_snippets_visible_recorded_at (20260915000500) instead of sorting every visible
---   snippet by a CASE
--- - states/sources filters use "= ANY(text[])" so audio_files indexes are usable
--- 2026-09-15:
--- - full-text search evaluated in the same bitmap scan as the visibility predicates
---   (candidate_snippets UNION ALL with a via_search discriminator) instead of a materialized
---   search CTE hash-joined to a second scan of every visible snippet ('trump': 14-19 s -> <1 s)
+-- ============================================================================================
+-- What changes (and only this)
+-- ============================================================================================
+-- Starting from the definition in supabase/database/sql/get_snippets_function.sql:
+--   * the state_filtered_audio_ids and source_filtered_audio_ids CTEs are removed;
+--   * the two LEFT JOINs onto them (and their comment block) are removed;
+--   * candidate_snippets carries s.location_state and s.radio_station_code in both branches;
+--   * `AND (state_codes IS NULL OR sfa.id IS NOT NULL)` becomes
+--     `AND (state_codes IS NULL OR s.location_state = ANY(state_codes))`, and likewise for
+--     sources with s.radio_station_code.
+-- Everything else is byte-identical, including the `audio_files a` join in the final projection:
+-- the returned audio_file object still reports a.location_state / a.radio_station_code, so the
+-- result shape the frontend consumes does not change.
+--
+-- ============================================================================================
+-- Prerequisites -- APPLY LAST
+-- ============================================================================================
+-- 1. 20260921000100_snippets_location_columns_and_triggers.sql (columns + sync triggers)
+-- 2. 20260921000200_snippets_location_backfill.sql, run to completion (0 visible rows remaining)
+-- 3. 20260921000300_snippets_visible_location_indexes.sql, both indexes indisvalid
+-- 4. ANALYZE public.snippets; (the new columns have no statistics until then)
+-- Applying this file before the backfill reports 0 remaining returns WRONG (empty) results for
+-- filtered pages whose snippets still have NULL location_state / radio_station_code. See
+-- supabase/migrations/README_2026-09-21_apply_order.md.
+--
+-- Safe to run inside a transaction (plain CREATE OR REPLACE). Same signature, so no DROP is needed
+-- and PostgREST keeps working; NOTIFY pgrst reloads the schema cache.
+-- Rollback: supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql (run as is).
 
--- 2026-09-17 (see supabase/migrations/20260917210000_get_snippets_state_filter_plan.sql):
--- - SET plan_cache_mode TO 'force_custom_plan': a `states`/`sources` filter timed out at the
---   authenticated 8 s statement_timeout (Georgia page 0: 10.7 s) because the cached generic plan
---   lost idx_audio_files_location_state_id
--- 2026-09-17 (see supabase/migrations/20260917220000_unaccent_search_function_and_indexes.sql
---   and 20260917220100_get_snippets_accent_insensitive.sql):
--- - accent-insensitive search: pgroonga's NormalizerAuto does not fold Latin diacritics, so
---   `campana politica` returned 0 while `campaña política` returned 432
---   (VER-339 / VER-373, Tamoa Feedback #8). Both sides of the match now go through
---   public.verdad_unaccent(), an IMMUTABLE unaccent() wrapper, backed by eight
---   idx_snippets_ua_* pgroonga expression indexes. The older accent-sensitive pgroonga
---   indexes stay in place for other callers but are no longer used by this function.
-
--- 2026-09-21 (VER-387, see supabase/migrations/20260921000400_get_snippets_denormalized_location.sql):
--- - states / sources filters no longer probe audio_files. audio_files.location_state and
---   audio_files.radio_station_code are denormalized onto snippets.location_state /
---   snippets.radio_station_code (columns + triggers: 20260921000100, backfill: 20260921000200)
---   and the filter is now `s.location_state = ANY(state_codes)` served by the partial indexes
---   idx_snippets_visible_state / idx_snippets_visible_station (20260921000300). The old shape
---   walked every visible snippet (~43k of 563k rows) and probed the 573 MB audio_files heap
---   through the state_filtered_audio_ids / source_filtered_audio_ids CTEs: 0.12-0.22 s warm,
---   ~4 s cold. The audio_files join in the final projection is unchanged -- the returned
---   audio_file object still reads a.location_state and a.radio_station_code.
--- - Rollback: supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql
+-- Prerequisite guard: refuse to swap the function while any VISIBLE snippet still lacks its
+-- denormalized station code (audio_files.radio_station_code is NOT NULL, so NULL here means "not
+-- backfilled"). Rows outside the visible set stay NULL by design (20260921000200 header); the copy
+-- trigger fills them on the write that makes them visible. The EXISTS walks the visible index
+-- with a heap filter: under a minute cold, instant warm.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM public.snippets
+        WHERE audio_file IS NOT NULL AND radio_station_code IS NULL
+          AND status = 'Processed'::processing_status
+          AND ((confidence_scores ->> 'overall'::text))::integer >= 95
+    ) THEN
+        RAISE EXCEPTION
+            'VER-387: visible snippets still have radio_station_code IS NULL; run public.backfill_snippets_location() until it returns 0 and remaining = 0 before replacing get_snippets';
+    END IF;
+END
+$$;
 
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
