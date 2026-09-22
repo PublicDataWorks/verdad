@@ -63,8 +63,8 @@
     }
   },
   "stage_4/reviewer": {
-    "version": "1.2.0",
-    "description": "Pipeline-authored knowledge-base entries are context only, never contradicting evidence (VER-341)",
+    "version": "1.3.0",
+    "description": "Post-cutoff events: verified_false and fabrication wording need a retrieved contradicting source; untested claims are insufficient_evidence at 40 or below (VER-391 item 4)",
     "files": {
       "system_instruction": "prompts/stage_4/reviewer_instruction.md",
       "user_prompt": null,

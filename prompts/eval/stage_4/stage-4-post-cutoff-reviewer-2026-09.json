@@ -1,0 +1,31 @@
+{
+  "description": "VER-391 item 4: the Stage 4 reviewer must not return verified_false on general knowledge alone for a post-cutoff event. reported = the reviewer wrongly asserted fabrication; case (ii) searches ran and returned nothing (3e53d8e1 Alito/SCOTUS mail-in, the motivating failure, 6 empty searches plus two cited fact-checks that do not exist; 717925c8 Kushner Russia diplomacy; 1f6dfaad 'Zamora Live'), case (iii) no search attempted (da72ac15 2026 football transfers and 8a9516b8 Don Omar ticket giveaway, both corrected by analysts on 2026-09-19; f87db054 'likely fictitious' station anniversary; e64085f7 Falklands report; 71ab1c01 Rubio's post), and real post-cutoff events already reported in post-cutoff-true-events-2026-09 (0f4d87ac SCOTUS mail-in order, 64c426bf Trump dividend, a750f33e Fujimori, 69fc4d65 Trump-Lula). control = detections the rule must not weaken; case (i) fabrication with a retrieved contradicting source (1ecb1b30 Messi farewell, 95b46c92 Pope Leo XIV, cc377301 FBI director, 50a1cea7 Charlie Kirk, f5cb1009 wrong election date, eb72097b and 0c91142e Syria, 09200a34 dinosaurs, 464e0dd9 miracle cure) and the sub-claim case, where a genuine element sits inside a false frame (e901055b real Juanes concert as bait, 38a9d35b real iPhone 18 Pro Max with an invented feature, c9b90151 real Benson Mule Days with an invented lineup).",
+  "reported": [
+    "3e53d8e1-fdbd-4c4c-a692-f34be0b10962",
+    "717925c8-5fa2-4530-9e34-2ac0e943e337",
+    "1f6dfaad-59da-445b-b134-1637a88be6ba",
+    "da72ac15-c6f5-474d-9847-37a68c164d67",
+    "8a9516b8-e237-4e69-830d-6721e6c0a184",
+    "f87db054-3fb3-48a3-a0f6-ce250bfcdc85",
+    "e64085f7-bf44-414b-b39d-dc04a2788e9d",
+    "71ab1c01-dcae-4d73-b6f8-46a56f841524",
+    "0f4d87ac-03ad-45c9-be28-40f8ea6af8cc",
+    "64c426bf-e1ac-4c69-aa33-bbd5e2f4f117",
+    "a750f33e-6fb8-4187-9019-1e2f45fd435c",
+    "69fc4d65-e6f4-4f0a-a793-9a974aa0cfd8"
+  ],
+  "control": [
+    "1ecb1b30-b196-4abc-a085-b866ab69b720",
+    "95b46c92-a82a-4717-adbb-df42775b9bef",
+    "cc377301-ac79-4628-9c2c-7e431657c359",
+    "50a1cea7-23a1-4a4d-bf65-fca7f6f8bdc9",
+    "f5cb1009-0c83-4da6-ab0f-282a8e9a6bc1",
+    "eb72097b-36b4-495a-ac7c-242886053cf9",
+    "0c91142e-3253-4595-a13d-3a107e826870",
+    "09200a34-42b9-4eb9-9204-dec97f861723",
+    "464e0dd9-b067-46ff-bfa3-477aa040e4d1",
+    "e901055b-0231-4931-b438-6387523474cb",
+    "38a9d35b-e833-461d-9011-3ad2cfc76d0d",
+    "c9b90151-63d0-4a4e-96f6-449b8ffc2cda"
+  ]
+}
