@@ -82,7 +82,7 @@ def _coerce_str_args_to_int(
 
 
 def _hide_args(schema: dict[str, Any], names: frozenset[str]) -> None:
-    """Drop ``names`` from a tool's input schema in-place so the model never sees them."""
+    """Drop top-level ``names`` from a tool's input schema in-place so the model never sees them."""
     properties = schema.get("properties")
     if isinstance(properties, dict):
         for name in names:
@@ -111,8 +111,8 @@ class GeminiSafeMcpToolset(McpToolset):
     ``hidden_args`` maps a tool name to argument names removed from its schema and from every call.
     """
 
-    def __init__(self, *args, hidden_args: dict[str, set[str]] | None = None, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *, hidden_args: dict[str, set[str]] | None = None, **kwargs):
+        super().__init__(**kwargs)
         self._hidden_args = {tool: frozenset(names) for tool, names in (hidden_args or {}).items()}
 
     @retry_on_errors

@@ -1,11 +1,14 @@
 import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
+from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from google.adk.tools.mcp_tool.mcp_tool import McpTool
+from mcp import StdioServerParameters
 from mcp.types import ListToolsResult, Tool
 
 from processing_pipeline.stage_4.gemini_mcp_toolset import GeminiSafeMcpTool, GeminiSafeMcpToolset, _hide_args
 
+# Synthetic: exercises the int-enum and `required` paths, not mcp-searxng's real schema
 SEARCH_SCHEMA = {
     "type": "object",
     "properties": {
@@ -42,17 +45,18 @@ class TestGeminiSafeMcpTool:
             hidden_args=frozenset({"time_range"}),
         )
         with patch.object(McpTool, "run_async", AsyncMock(return_value={"content": []})) as run:
-            asyncio.run(tool.run_async(args={"query": "q", "time_range": "year", "safesearch": "1"}, tool_context=Mock()))
+            asyncio.run(
+                tool.run_async(args={"query": "q", "time_range": "year", "safesearch": "1"}, tool_context=Mock())
+            )
         assert run.call_args.kwargs["args"] == {"query": "q", "safesearch": 1}
 
 
 class TestGeminiSafeMcpToolset:
-    def _toolset(self, **kwargs):
-        with patch("processing_pipeline.stage_4.gemini_mcp_toolset.McpToolset.__init__", return_value=None):
-            toolset = GeminiSafeMcpToolset(**kwargs)
-        for attr in ("_mcp_session_manager", "_auth_scheme", "_auth_credential", "_require_confirmation", "_header_provider"):
-            setattr(toolset, attr, None)
-        toolset._is_tool_selected = lambda tool, ctx: True
+    @staticmethod
+    def _toolset(**kwargs):
+        # No process is spawned: the session manager only connects inside _execute_with_session, replaced here
+        params = StdioConnectionParams(server_params=StdioServerParameters(command="true"), timeout=5)
+        toolset = GeminiSafeMcpToolset(connection_params=params, tool_filter=["searxng_web_search"], **kwargs)
         toolset._execute_with_session = AsyncMock(return_value=ListToolsResult(tools=[_search_tool()]))
         return toolset
 
@@ -60,10 +64,12 @@ class TestGeminiSafeMcpToolset:
         toolset = self._toolset(hidden_args={"searxng_web_search": {"time_range"}})
         (tool,) = asyncio.run(toolset.get_tools())
         schema = tool._mcp_tool.inputSchema
-        assert "time_range" not in schema["properties"] and schema["required"] == ["query"]
+        assert "time_range" not in schema["properties"]
+        assert schema["required"] == ["query"]
         assert schema["properties"]["safesearch"]["enum"] == ["0", "1", "2"]
         assert tool._hidden_args == frozenset({"time_range"})
 
     def test_no_hidden_args_keeps_the_schema(self):
         (tool,) = asyncio.run(self._toolset().get_tools())
-        assert "time_range" in tool._mcp_tool.inputSchema["properties"] and tool._hidden_args == frozenset()
+        assert "time_range" in tool._mcp_tool.inputSchema["properties"]
+        assert tool._hidden_args == frozenset()
