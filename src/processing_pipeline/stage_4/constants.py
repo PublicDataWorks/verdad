@@ -16,6 +16,6 @@ KB_WRITER_MODEL = GeminiModel.GEMINI_2_5_FLASH
 # Session-state key: url_key of every URL the search and read tools returned so far (VER-391)
 OBSERVED_URLS_STATE_KEY = "stage_4_observed_urls"
 
-# False = record-only: stage_4_citation_check lists unobserved URLs but nothing is capped. Flip once a day of
-# production numbers shows the false-cap rate is acceptable.
-CITATION_CHECK_CAPS = False
+# False = record-only: stage_4_citation_check lists its reasons but nothing is capped. On since 2026-09-22
+# (one day of record-only numbers: 20 of 37 visible reviews would have been capped).
+CITATION_CHECK_CAPS = True

@@ -190,13 +190,16 @@ refuses the production project unless `--allow-production` is passed.
   every `search_knowledge_base` call (curated entries' source URLs) and `observed_urls` (`url_key` of everything the
   tools put in front of the model); `stage_4_citation_check` lists every URL in the reviewer's visible text with
   `observed` true/false and the `unobserved` ones (neither a tool returned them nor the Stage 3 record holds them).
-  `upsert_knowledge_entry` rejects an unobserved URL as a KB source. Capping is behind
-  `CITATION_CHECK_CAPS` (`stage_4/constants.py`, off until a day of numbers): when on, an unobserved URL caps the
-  scores at 40 with a `[Citation check]` note, and the check's `original_*` are the scores as received (already 40
-  when the evidence gate fired first; the gate's own `original_*` hold the pre-gate values). `evidence_gate` is
-  stored only when it applied; the citation check always, so
-  `jsonb_array_length(grounding_metadata::jsonb -> 'stage_4_citation_check' -> 'unobserved') > 0` is the
-  would-cap rate.
+  `upsert_knowledge_entry` rejects an unobserved URL as a KB source. The check caps the scores at 40 with a
+  `[Citation check]` note for any of its `reasons`: an unobserved article URL in the reviewer's text; an
+  unobserved article URL in the web researcher's prose (`web_research_unobserved`, VER-393); a fabricated /
+  `verified_false` verdict with nothing retrieved in the session, i.e. no web search with results, no page read,
+  no curated KB source (`retrieval`, VER-369 item 2; the Stage 3 record is the evidence gate's business, not
+  this rule's). Setting `CITATION_CHECK_CAPS` (`stage_4/constants.py`, on since 2026-09-22) to `False` switches
+  all three back to record-only. The check's `original_*` are the scores as received (already 40 when the
+  evidence gate fired first; the gate's own `original_*` hold the pre-gate values). `evidence_gate` is stored
+  only when it applied; the citation check always. To undo a period of capping, run
+  `supabase/database/sql/rollback/2026-09-22_stage_4_citation_check_restore.sql`.
 - **A transient DB error on the fetch-work RPC no longer kills the stage loop** (VER-378): statement timeout
   (`57014`), lock/deadlock, server restart (`57P01`-`57P03`), any class-08 connection error, PostgREST's own
   `PGRST000`-`PGRST002` (cannot reach Postgres / schema cache reloading after DDL) or gateway 502/503/504/520/522/524

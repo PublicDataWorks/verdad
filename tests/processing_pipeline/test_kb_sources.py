@@ -91,6 +91,9 @@ class TestUrlInText:
         assert urls_in_text(text) == ["https://apnews.com/article/abc", "https://www.reuters.com/x?y=1"]
         assert urls_in_text(None) == []
 
+    def test_urls_in_text_drops_a_model_truncation_ellipsis(self):
+        assert urls_in_text("See https://apnews.com/article/abc… and more") == ["https://apnews.com/article/abc"]
+
     def test_urls_in_text_keeps_balanced_parentheses(self):
         text = "(see https://en.wikipedia.org/wiki/Rubio_(politician)). Then (https://x.com/a)."
         assert urls_in_text(text) == ["https://en.wikipedia.org/wiki/Rubio_(politician)", "https://x.com/a"]

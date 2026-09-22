@@ -39,7 +39,7 @@ def parse_iso_date(value) -> date | None:
 
 # Prose and markdown glue a URL to what follows it ("...article/abc.", "**https://x.com/a**"); none of these
 # characters end a real article URL, so they are dropped before comparing.
-_URL_TRAILING_CHARS = ".,;:!?*_'\"`"
+_URL_TRAILING_CHARS = ".,;:!?*_'\"`…"
 
 
 def normalize_url(url: str) -> str:
