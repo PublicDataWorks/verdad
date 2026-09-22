@@ -51,6 +51,8 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
             timeout=60,
         ),
         tool_filter=["searxng_web_search", "web_url_read"],
+        # VER-392: time-range queries return nothing while only bing answers, and the model sent one every time
+        hidden_args={"searxng_web_search": {"time_range"}},
     )
 
     # Research agents and KB updater on Flash: Pro invented citations several times more often (VER-391, PR #122)
