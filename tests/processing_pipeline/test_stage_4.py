@@ -357,9 +357,10 @@ class TestStage4:
             }
         )
 
-    def test_review_citing_a_url_no_tool_returned_is_recorded_not_capped_by_default(
-        self, mock_supabase_client, sample_snippet, review_result
+    def test_review_citing_a_url_no_tool_returned_is_recorded_not_capped_when_record_only(
+        self, mock_supabase_client, sample_snippet, review_result, monkeypatch
     ):
+        monkeypatch.setattr("processing_pipeline.stage_4.constants.CITATION_CHECK_CAPS", False)
         review_result["confidence_scores"] = {"overall": 97, "categories": [{"category": "Fabricated Content", "score": 97}]}
         review_result["explanation"] = {"english": "PolitiFact: https://www.politifact.com/factchecks/2026/mar/05/x/.", "spanish": "x"}
 
@@ -376,10 +377,7 @@ class TestStage4:
         assert check["applied"] is False
         assert check["unobserved"] == ["https://www.politifact.com/factchecks/2026/mar/05/x/"]
 
-    def test_review_citing_a_url_no_tool_returned_is_capped_when_enforced(
-        self, mock_supabase_client, sample_snippet, review_result, monkeypatch
-    ):
-        monkeypatch.setattr("processing_pipeline.stage_4.constants.CITATION_CHECK_CAPS", True)
+    def test_review_citing_a_url_no_tool_returned_is_capped(self, mock_supabase_client, sample_snippet, review_result):
         review_result["confidence_scores"] = {"overall": 97, "categories": [{"category": "Fabricated Content", "score": 97}]}
         review_result["explanation"] = {
             "english": "PolitiFact rated this Pants on Fire: https://www.politifact.com/factchecks/2026/mar/05/x/.",
