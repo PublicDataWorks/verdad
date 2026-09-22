@@ -29,3 +29,22 @@ jobs:
       - run: pip install -r requirements.txt
       - run: ruff check src tests scripts
       - run: pytest
+
+  server:
+    # server/ is the Express app (Liveblocks auth, Resend email); Node 20 matches server/Dockerfile.server.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - name: Type-check the tests too (excluded from the build config so they stay out of dist/)
+        run: npx tsc -p tsconfig.test.json
+      - run: npm test

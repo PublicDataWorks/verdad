@@ -2,6 +2,7 @@ import express from 'express';
 import { config } from 'dotenv';
 import cors from 'cors';
 import { setupRoutes } from './routes';
+import { internalErrorHandler } from './errorHandler';
 
 config();
 
@@ -19,6 +20,7 @@ app.use(express.json());
 
 // Setup routes
 setupRoutes(app);
+app.use(internalErrorHandler);
 
 // Start server
 app.listen(port, () => {

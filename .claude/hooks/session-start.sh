@@ -84,7 +84,7 @@ fi
 command -v psql >/dev/null 2>&1 || warn "psql not found; SUPABASE_DB_URL checks will not work"
 
 # --- 4. Credentials present? (names only, never values) -----------------------
-for v in FLY_API_TOKEN SUPABASE_ACCESS_TOKEN SUPABASE_DB_URL; do
+for v in FLY_API_TOKEN SUPABASE_ACCESS_TOKEN SUPABASE_DB_URL PREFECT_API_AUTH_STRING; do
   if [ -n "${!v:-}" ]; then log "$v is set"; else warn "$v is not set (see CLAUDE.md > Cloud environment)"; fi
 done
 

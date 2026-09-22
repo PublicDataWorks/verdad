@@ -43,6 +43,12 @@ cd server && fly deploy -c fly.server.toml    # the server app builds from serve
   and server disagree until all four apps carry the new one. Set it on the four apps back to back (each
   `fly secrets set` restarts that app, which orphans its runs anyway), then recreate the runs as in the restart
   gotchas below. Only the first enablement could go clients first, because a server without auth ignores the header.
+- `verdad-server`'s `POST /api/liveblocks-auth` issues a room-scoped Liveblocks token (VER-385): a non-admin gets
+  full access to the one snippet room it asked for, and only if that `room` is a `public.snippets.id` uuid the user
+  could open (`Processed` and not in `user_hide_snippets`, the `get_snippet` rule) -- anything else answers
+  `403 {"error":"Room not found"}`. A request without a `room` (the frontend's inbox
+  notifications) gets a token with no room permissions, and users carrying the `admin` role in `public.user_roles`
+  still get the `*` wildcard for moderation. Deploy it with `cd server && fly deploy -c fly.server.toml`.
 - Who has deploy rights and the Fly org/billing owner: **unknown** (org name `verdad` per CLAUDE.md).
 
 ## The 6-hourly restart cycle (`prefect` app, `cron` process)
