@@ -207,6 +207,13 @@ refuses the production project unless `--allow-production` is passed.
   evidence gate fired first; the gate's own `original_*` hold the pre-gate values). `evidence_gate` is stored
   only when it applied; the citation check always. To undo a period of capping, run
   `supabase/database/sql/rollback/2026-09-22_stage_4_citation_check_restore.sql`.
+  `stage_4_verification_evidence` (VER-396) is the source list from the fenced `evidence` block that
+  `stage_4/web_researcher` 1.1.0 writes at the end of its report, each contradicting result marked
+  `url_observed_in_tools` against the tool record, plus `admissible_contradicting` (whether one of them passes
+  the gate's URL and date rules) and `dropped` (entries that failed validation). The gate judges the Stage 3
+  record and these results together, so a review that read a contradicting article a tool returned is not
+  capped for lack of a Stage 3 source; a URL no tool returned still never counts. Rows reviewed before 1.1.0
+  have no such key.
 - **A transient DB error on the fetch-work RPC no longer kills the stage loop** (VER-378): statement timeout
   (`57014`), lock/deadlock, server restart (`57P01`-`57P03`), any class-08 connection error, PostgREST's own
   `PGRST000`-`PGRST002` (cannot reach Postgres / schema cache reloading after DDL) or gateway 502/503/504/520/522/524

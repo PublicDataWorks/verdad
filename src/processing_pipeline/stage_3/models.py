@@ -527,7 +527,7 @@ def has_contradicting_evidence(
     return False
 
 
-def _mark_observed(verification_evidence: dict | None, observed_urls: set[str]) -> None:
+def mark_observed(verification_evidence: dict | None, observed_urls: set[str]) -> None:
     """Record on each contradicting result (in place) whether a tool returned its URL, for the audit trail."""
     for result in _contradicting_results(verification_evidence):
         result["url_observed_in_tools"] = url_was_observed(result.get("url"), observed_urls)
@@ -602,7 +602,7 @@ def apply_evidence_caps(
     if verification_evidence is None:
         verification_evidence = result.get("verification_evidence")
         if observed_urls is not None:
-            _mark_observed(verification_evidence, observed_urls)
+            mark_observed(verification_evidence, observed_urls)
 
     # A previous run's note (e.g. Stage 3's, echoed by the Stage 4 reviewer) must not be judged or kept
     explanation = result.get("explanation")
