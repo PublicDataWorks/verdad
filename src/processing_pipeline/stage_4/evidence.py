@@ -8,7 +8,8 @@ from pydantic import BaseModel, ValidationError
 from processing_pipeline.kb_sources import is_http_url
 from processing_pipeline.stage_3.models import has_contradicting_evidence, mark_observed
 
-_EVIDENCE_BLOCK_RE = re.compile(r"```evidence\s*\n(.*?)```", re.DOTALL)
+# closing fence on its own line, so backticks inside a JSON string do not end the block
+_EVIDENCE_BLOCK_RE = re.compile(r"```evidence[ \t]*\r?\n(.*?)^`{3,}[ \t]*$", re.DOTALL | re.MULTILINE)
 
 
 class EvidenceResult(BaseModel):

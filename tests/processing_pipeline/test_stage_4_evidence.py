@@ -43,6 +43,10 @@ class TestParseEvidenceBlock:
             "relevance_to_claim": "provides_context",
         }
 
+    def test_backticks_inside_a_field_do_not_end_the_block(self):
+        result = {**_result(), "title": "The ```official``` statement"}
+        assert parse_evidence_block(_report(result)) == {"results": [result], "dropped": 0}
+
     def test_no_block_or_unusable_block(self):
         assert parse_evidence_block("prose only") is None
         assert parse_evidence_block(None) is None
