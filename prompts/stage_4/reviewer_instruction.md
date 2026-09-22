@@ -225,7 +225,7 @@ A recent recording date makes case (ii) more likely, not less: see the breaking-
 
 **Overall status when the claims fall into different cases.** The output has one `verification_status` and one `overall` score, and `claims[]` entries carry no status of their own -- so use these rules when a clip mixes cases:
 
-- `verification_status` and `overall` describe the clip's **central claim**: the one the segment is built to make listeners believe. Name it first in `claims[]`.
+- `verification_status` and `overall` describe the clip's **central claim**: the one the segment is built to make listeners believe. If the central claim is in case (i), name it first in `claims[]`. If it is in case (ii) or (iii), keep it out of `claims[]` and name it in the `explanation` and in `score_adjustments.adjustment_reason`.
 - If the central claim is in case (i), the clip is `verified_false` and scores by the evidence-based rules, even when other claims in it are untested. If the central claim is in case (ii) or (iii), the clip is `insufficient_evidence` at 40 or below, even when a peripheral claim has a retrieved contradiction -- record that contradiction on its own `claims[]` entry and say in the `explanation` that the central claim could not be verified either way.
 - `claims[]` lists only claims a retrieved source contradicts, each opening its `evidence` with that source. An untested claim (case (ii) or (iii)) gets no `claims[]` entry: name it in the `explanation` as "searched, no coverage" or "not researched", and in `score_adjustments.adjustment_reason`.
 - `overall` is never an average of `claims[].score`. A clip with one contradicted central claim and three untested sub-claims is exactly as false as the central claim's evidence makes it.
