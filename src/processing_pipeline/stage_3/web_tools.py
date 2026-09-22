@@ -16,7 +16,6 @@ _ssl_context = ssl.create_default_context(cafile=certifi.where())
 async def searxng_web_search(
     query: str,
     pageno: int = 1,
-    time_range: str | None = None,
     language: str = "all",
     safesearch: int = 0,
 ) -> dict:
@@ -25,7 +24,6 @@ async def searxng_web_search(
     Args:
         query: The search query string.
         pageno: Page number for pagination, starting from 1.
-        time_range: Time range filter. One of 'day', 'month', or 'year'.
         language: Language code for search results, or 'all' for no filter.
         safesearch: Safe search level. 0 for off, 1 for moderate, 2 for strict.
 
@@ -37,13 +35,13 @@ async def searxng_web_search(
         results list: treat that as "search failed", not "no results".
     """
     try:
-        return await _searxng_web_search(query, pageno, time_range, language, safesearch)
+        return await _searxng_web_search(query, pageno, language, safesearch)
     except Exception as e:
         print(f"[web_tools] searxng_web_search failed for {query!r}: {type(e).__name__}: {e}")
         return {"query": query, "failed": True, "error": f"{type(e).__name__}: {e}", "results": []}
 
 
-async def _searxng_web_search(query: str, pageno: int, time_range: str | None, language: str, safesearch: int) -> dict:
+async def _searxng_web_search(query: str, pageno: int, language: str, safesearch: int) -> dict:
     if not SEARXNG_URL:
         raise ValueError("SEARXNG_URL environment variable is not set")
 
@@ -52,8 +50,6 @@ async def _searxng_web_search(query: str, pageno: int, time_range: str | None, l
         "format": "json",
         "pageno": pageno,
     }
-    if time_range in ("day", "month", "year"):
-        params["time_range"] = time_range
     if language and language != "all":
         params["language"] = language
     if safesearch in (0, 1, 2):
