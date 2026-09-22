@@ -122,6 +122,7 @@ describe('resolveRoomGrants', () => {
         ['a prefix pattern', `${SNIPPET_ROOM}*`],
         ['a non-uuid string', 'lobby'],
         ['a uuid with trailing content', `${SNIPPET_ROOM} `],
+        ['an uppercase uuid (Liveblocks room ids are case-sensitive)', 'ABCDEF01-2222-4333-8444-555555555555'],
         ['a non-string', 42],
     ])('denies %s without hitting the database', async (_label, room) => {
         const snippetVisible = vi.fn();

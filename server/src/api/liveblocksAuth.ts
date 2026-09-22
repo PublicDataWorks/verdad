@@ -16,8 +16,9 @@ const supabase = createClient(
 );
 
 // Liveblocks rooms are snippet comment threads, so a room id is always a `public.snippets.id` uuid.
-// Matching strictly also keeps Liveblocks room patterns (`*`, `prefix*`) out of the snippet lookup.
-const ROOM_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Matching strictly also keeps Liveblocks room patterns (`*`, `prefix*`) out of the snippet lookup. Lowercase
+// only: Postgres matches an uppercase uuid, Liveblocks room ids are case-sensitive (a different, empty room).
+const ROOM_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export type RoomGrants =
     | { type: 'grant'; rooms: string[] }
