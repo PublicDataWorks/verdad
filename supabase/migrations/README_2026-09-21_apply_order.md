@@ -9,7 +9,14 @@ no ORDER BY); step 2 batches 11:56 to 13:09 UTC (43,017 visible rows, 0 remainin
 against `audio_files`; batches of 500, then 250, then 100: an autovacuum on `snippets` starts after
 every ~13k updated rows and doubles to quadruples the per-row cost, two batches were cancelled by the
 2-min timeout and rolled back, nothing lost); step 3 13:35 to 13:46 UTC (state index 4.7 min,
-station index 4 min, both `indisvalid`, 7.4 MB each); step 3b 13:46 UTC (79 s). **Step 4 not run.**
+station index 4 min, both `indisvalid`, 7.4 MB each); step 3b 13:46 UTC (79 s). **Step 4 applied
+2026-09-22 01:40:51 UTC** (guard + swap, 8 s): the five result-equivalence cases returned identical
+page-0 ids and counts before and after; warm `EXPLAIN ANALYZE` of the function call, before -> after:
+Georgia 136 -> 54 ms, AZ+CA+GA 203 -> 168-205 ms (Sort over 5,879 rows), `sources` SPMN 103 -> 57 ms,
+`trump` + Florida 755 -> 537 ms, default feed 75 -> 70 ms. Standalone plans of the filter shapes:
+states = `Index Only Scan using idx_snippets_visible_state` + top-N Sort (1,327 buffers), station =
+`Index Only Scan using idx_snippets_visible_station` (893 buffers), default feed unchanged on
+`idx_snippets_visible_recorded_at` (7 buffers). Logs: `/tmp/ver387_step4_{before,after}.log`.
 Step 3 route: the `postgres` role has `statement_timeout = 2min` and the visibility predicate detoasts
 `confidence_scores` for every row, so each build ran as a pg_cron job (`cron.schedule` at the next
 minute, one build at a time, unscheduled after) under `ALTER ROLE postgres SET statement_timeout =
