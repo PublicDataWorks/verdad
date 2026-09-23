@@ -5,7 +5,7 @@ from unittest import mock
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
-from google.genai import errors
+from google.genai import errors, types
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.kb_sources import url_key
@@ -667,3 +667,47 @@ class TestBuildReviewPipeline:
             "analysis_reviewer": "gemini-2.5-pro",
             "kb_updater": "gemini-2.5-flash",
         }
+
+    def test_only_the_web_researcher_forces_its_first_search_ver_406(self):
+        from processing_pipeline.stage_4.agents import build_review_pipeline, force_first_search
+
+        pipeline, _ = build_review_pipeline(PROMPT_VERSIONS, GeminiModel.GEMINI_2_5_PRO)
+        research, reviewer, kb_updater = pipeline.sub_agents
+
+        callbacks = {a.name: a.before_model_callback for a in [*research.sub_agents, reviewer, kb_updater]}
+        assert callbacks == {
+            "kb_researcher": None,
+            "web_researcher": force_first_search,
+            "analysis_reviewer": None,
+            "kb_updater": None,
+        }
+
+
+class TestForceFirstSearch:
+    @staticmethod
+    def _request(*parts):
+        from google.adk.models.llm_request import LlmRequest
+
+        return LlmRequest(contents=[types.Content(role="user", parts=[types.Part(text="Begin.")]), *parts])
+
+    def test_first_turn_must_call_the_search_tool(self):
+        from processing_pipeline.stage_4.agents import force_first_search
+
+        request = self._request()
+        assert force_first_search(None, request) is None
+
+        config = request.config.tool_config.function_calling_config
+        assert config.mode == types.FunctionCallingConfigMode.ANY
+        assert config.allowed_function_names == ["searxng_web_search"]
+
+    def test_model_chooses_freely_once_a_tool_answered(self):
+        from processing_pipeline.stage_4.agents import force_first_search
+
+        answered = types.Content(
+            role="user",
+            parts=[types.Part(function_response=types.FunctionResponse(name="searxng_web_search", response={}))],
+        )
+        request = self._request(answered)
+        force_first_search(None, request)
+
+        assert request.config.tool_config is None
