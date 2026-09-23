@@ -1,7 +1,9 @@
 import os
 
 from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.google_llm import Gemini
+from google.adk.models.llm_request import LlmRequest
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.mcp_tool.mcp_toolset import StdioConnectionParams
 from google.genai import types
@@ -25,6 +27,17 @@ RETRY_OPTIONS = types.HttpRetryOptions(attempts=6, initial_delay=10, max_delay=6
 
 def _model(model: GeminiModel) -> Gemini:
     return Gemini(model=model.value, retry_options=RETRY_OPTIONS)
+
+
+def force_first_search(callback_context: CallbackContext, llm_request: LlmRequest) -> None:
+    """Make the first model turn a search call; Flash otherwise narrates a search report from memory (VER-406)."""
+    if any(part.function_response for content in llm_request.contents for part in content.parts or []):
+        return
+    llm_request.config.tool_config = types.ToolConfig(
+        function_calling_config=types.FunctionCallingConfig(
+            mode=types.FunctionCallingConfigMode.ANY, allowed_function_names=["searxng_web_search"]
+        )
+    )
 
 
 def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: GeminiModel):
@@ -74,6 +87,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
         instruction=prompt_versions["web_researcher"]["system_instruction"],
         tools=[searxng_toolset],
         output_key="web_research",
+        before_model_callback=force_first_search,
     )
 
     # Agent 3: Analysis Reviewer — produces revised analysis JSON

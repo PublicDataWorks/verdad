@@ -216,6 +216,9 @@ refuses the production project unless `--allow-production` is passed.
   record and these results together, so a review that read a contradicting article a tool returned is not
   capped for lack of a Stage 3 source; a URL no tool returned still never counts. Rows reviewed before 1.1.0
   have no such key.
+- **The web researcher's first model turn is forced to be a `searxng_web_search` call** (VER-406, `force_first_search`
+  in `stage_4/agents.py`): on Flash the agent otherwise skipped the tools in about half of the reviews and narrated a
+  search report from memory. After one tool answer the model chooses freely again.
 - **A transient DB error on the fetch-work RPC no longer kills the stage loop** (VER-378): statement timeout
   (`57014`), lock/deadlock, server restart (`57P01`-`57P03`), any class-08 connection error, PostgREST's own
   `PGRST000`-`PGRST002` (cannot reach Postgres / schema cache reloading after DDL) or gateway 502/503/504/520/522/524
