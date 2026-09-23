@@ -199,7 +199,9 @@ refuses the production project unless `--allow-production` is passed.
   `observed` true/false and the `unobserved` ones (neither a tool returned them nor the Stage 3 record holds them).
   `upsert_knowledge_entry` rejects an unobserved URL as a KB source. The check caps the scores at 40 with a
   `[Citation check]` note for any of its `reasons`: an unobserved article URL in the reviewer's text; an
-  unobserved article URL in the web researcher's prose (`web_research_unobserved`, VER-393); a fabricated /
+  unobserved article URL in the web researcher's prose (`web_research_unobserved`, VER-393; recorded but not
+  capped when `evidence_backed` is true, i.e. `stage_4_verification_evidence.admissible_contradicting`, VER-405);
+  a fabricated /
   `verified_false` verdict with nothing retrieved in the session, i.e. no web search with results, no page read,
   no curated KB source (`retrieval`, VER-369 item 2; the Stage 3 record is the evidence gate's business, not
   this rule's). Setting `CITATION_CHECK_CAPS` (`stage_4/constants.py`, on since 2026-09-22) to `False` switches

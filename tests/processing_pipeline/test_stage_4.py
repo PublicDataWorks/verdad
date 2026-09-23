@@ -350,13 +350,13 @@ class TestStage4:
     # --- VER-396: the gate also sees what the Stage 4 researcher retrieved ------
 
     @staticmethod
-    def _stage_4_report(cited_url, fetched_url):
+    def _stage_4_report(cited_url, fetched_url, prose="findings"):
         """The researcher's report with its evidence block; the tool record holds one page read."""
         result = {"url": cited_url, "source_type": "tier1_wire_service", "relevance_to_claim": "contradicts_claim"}
         block = json.dumps({"results": [result]})
         return json.dumps(
             {
-                "web_research": f"findings\n```evidence\n{block}\n```",
+                "web_research": f"{prose}\n```evidence\n{block}\n```",
                 "stage_4_tool_record": {
                     "searches": [],
                     "fetches": [{"url": fetched_url, "status": "ok"}],
@@ -398,6 +398,26 @@ class TestStage4:
         assert evidence["admissible_contradicting"] is True
         assert evidence["results"][0]["url_observed_in_tools"] is True
         assert len(grounding_metadata["stage_3_verification_evidence"]["searches_performed"]) == 5
+
+    def test_stray_prose_url_does_not_cap_an_evidence_backed_review(
+        self, mock_supabase_client, sample_snippet, review_result
+    ):
+        """VER-405: the evidence block holds an observed contradicting article; the prose names one unseen URL."""
+        url = "https://www.reuters.com/world/middle-east/government-still-in-place-2026-09-20/"
+        stray = "https://apnews.com/article/government-still-in-place-0f1e2d3c"
+        report = self._stage_4_report(url, url, prose=f"Reuters and AP ({stray}) both report the government in place.")
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(self._falsity_review(review_result), report)),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, self._downvoted_snippet(sample_snippet))
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 98
+        assert "Citation check" not in kwargs["explanation"]["english"]
+        check = json.loads(kwargs["grounding_metadata"])["stage_4_citation_check"]
+        assert check["applied"] is False and check["evidence_backed"] is True
+        assert check["web_research_unobserved"] == [stray]
 
     def test_stage_4_source_no_tool_returned_keeps_the_cap(self, mock_supabase_client, sample_snippet, review_result):
         cited = "https://www.reuters.com/world/middle-east/government-still-in-place-2026-09-20/"
