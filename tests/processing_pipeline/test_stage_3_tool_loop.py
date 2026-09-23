@@ -74,7 +74,7 @@ def test_unknown_tool_name_is_reported_to_the_model_instead_of_raising():
     (response,) = function_responses(second)
     assert response.name == "search"
     assert "Unknown tool 'search'" in response.response["error"]
-    assert "searxng_web_search, web_url_read" in response.response["error"]
+    assert "news_ledger_search, searxng_web_search, web_url_read" in response.response["error"]
     # The model's own turn is echoed back before the tool responses, as the API requires.
     assert second.kwargs["contents"][-2].parts[0].function_call.name == "search"
 
@@ -146,7 +146,7 @@ def test_automatic_function_calling_is_disabled_and_tools_are_declared():
     config = client.aio.models.generate_content.await_args.kwargs["config"]
     assert config.automatic_function_calling.disable is True
     declared = [d.name for tool in config.tools for d in tool.function_declarations]
-    assert declared == ["searxng_web_search", "web_url_read"]
+    assert declared == ["news_ledger_search", "searxng_web_search", "web_url_read"]
 
 
 def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypatch):

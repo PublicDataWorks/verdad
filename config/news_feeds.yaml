@@ -1,0 +1,126 @@
+# VERDAD news ledger -- the RSS/Atom feeds that fill the `news_index` table.
+#
+# The ledger is Stage 3's first evidence source: a dated list of headlines from wire services, public
+# broadcasters and IFCN fact-checkers. Nothing in the pipeline writes to it, only the poller
+# (`src/news_ledger/poller.py`), so it cannot be poisoned by the pipeline's own output.
+#
+# Fields
+#   name      Outlet name, stored as news_index.outlet. Must be unique.
+#   url       Feed URL (RSS or Atom). Must be unique.
+#   language  es | en | ar
+#   tier      1 = wire service / public broadcaster / IFCN fact-checker, 2 = major outlet.
+#             Stored as news_index.credibility_tier.
+#   enabled   false keeps the outlet documented without polling it. Defaults to true.
+#
+# Feed list still to be reviewed against the VER-360 source tiers.
+
+feeds:
+  # --- Wires and public broadcasters -------------------------------------------------------------
+  - name: AP News
+    # AP retired its public RSS feeds; apnews.com serves no documented feed URL. Needs the AP
+    # licensed feed or a scrape before it can be enabled.
+    url: https://apnews.com/index.rss
+    language: en
+    tier: 1
+    enabled: false
+
+  - name: Reuters
+    # Reuters shut down its public RSS feeds in 2020. Left here so the gap is visible; enabling it
+    # needs a Reuters Connect licence.
+    url: https://www.reutersagency.com/feed/
+    language: en
+    tier: 1
+    enabled: false
+
+  - name: EFE
+    # EFE's public feed URL could not be verified from this environment. Disabled until someone
+    # confirms the current address on efe.com.
+    url: https://www.efe.com/efe/espana/rss
+    language: es
+    tier: 1
+    enabled: false
+
+  - name: NPR News
+    url: https://feeds.npr.org/1001/rss.xml
+    language: en
+    tier: 1
+
+  - name: BBC Mundo
+    url: https://feeds.bbci.co.uk/mundo/rss.xml
+    language: es
+    tier: 1
+
+  - name: BBC World
+    url: https://feeds.bbci.co.uk/news/world/rss.xml
+    language: en
+    tier: 1
+
+  - name: Al Jazeera
+    url: https://www.aljazeera.com/xml/rss/all.xml
+    language: en
+    tier: 1
+
+  - name: DW Espanol
+    url: https://rss.dw.com/xml/rss-es-all
+    language: es
+    tier: 1
+
+  - name: France24 Espanol
+    url: https://www.france24.com/es/rss
+    language: es
+    tier: 1
+
+  # --- Major outlets ------------------------------------------------------------------------------
+  - name: El Pais America
+    url: https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/america/portada
+    language: es
+    tier: 2
+
+  # --- Fact-checkers ------------------------------------------------------------------------------
+  - name: AFP Factual
+    # AFP's Spanish fact-check feed URL could not be verified from this environment. Confirm the
+    # current address on factual.afp.com before enabling.
+    url: https://factual.afp.com/rss.xml
+    language: es
+    tier: 1
+    enabled: false
+
+  - name: PolitiFact
+    url: https://www.politifact.com/rss/all/
+    language: en
+    tier: 1
+
+  - name: Snopes
+    url: https://www.snopes.com/feed/
+    language: en
+    tier: 1
+
+  - name: FactCheck.org
+    url: https://www.factcheck.org/feed/
+    language: en
+    tier: 1
+
+  - name: Chequeado
+    url: https://chequeado.com/feed/
+    language: es
+    tier: 1
+
+  - name: Maldita
+    url: https://maldita.es/feed/
+    language: es
+    tier: 1
+
+  - name: Newtral
+    url: https://www.newtral.es/feed/
+    language: es
+    tier: 1
+
+  - name: Factchequeado
+    url: https://factchequeado.com/feed/
+    language: es
+    tier: 1
+
+  - name: Verificado
+    url: https://verificado.com.mx/feed/
+    language: es
+    tier: 1

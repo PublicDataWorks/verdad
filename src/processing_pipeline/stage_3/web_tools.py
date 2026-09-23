@@ -138,6 +138,8 @@ def tool_result_urls(tool_name: str, result) -> list[str]:
         return [r.get("url") for r in result.get("results") or [] if isinstance(r, dict) and r.get("url")]
     if tool_name == web_url_read.__name__:
         return [result["url"]] if result.get("url") else []
+    if tool_name == "news_ledger_search":  # stage_3/news_tools.py; same {"results": [{"url": ...}]} shape
+        return [r.get("url") for r in result.get("results") or [] if isinstance(r, dict) and r.get("url")]
     return []
 
 
@@ -145,15 +147,22 @@ def tool_result_dates(tool_name: str, result) -> dict[str, str]:
     """URL -> ISO publication date (YYYY-MM-DD) for the results a search tool returned with a date.
 
     SearXNG reports ``publishedDate`` for many news engines (ISO timestamps such as ``2026-09-15T10:00:00``);
-    only the date part is kept. Results without a parseable date, failed calls and page reads contribute nothing.
+    the news ledger (``news_ledger_search``) reports ``published_at`` for every row. Only the date part is kept.
+    Results without a parseable date, failed calls and page reads contribute nothing.
     """
-    if not isinstance(result, dict) or result.get("failed") or tool_name != searxng_web_search.__name__:
+    if not isinstance(result, dict) or result.get("failed"):
+        return {}
+    if tool_name == searxng_web_search.__name__:
+        field = "publishedDate"
+    elif tool_name == "news_ledger_search":
+        field = "published_at"
+    else:
         return {}
     dates = {}
     for r in result.get("results") or []:
         if not isinstance(r, dict) or not r.get("url"):
             continue
-        published = r.get("publishedDate")
+        published = r.get(field)
         if isinstance(published, str) and len(published) >= 10:
             dates[r["url"]] = published[:10]
     return dates
