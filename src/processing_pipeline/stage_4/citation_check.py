@@ -82,12 +82,17 @@ def _listed(urls: list[str], english: bool) -> str:
 
 
 def check_stage_4_citations(
-    response: dict, stage_4_grounding_metadata: str | None, stage_3_evidence, enforce: bool | None = None
+    response: dict,
+    stage_4_grounding_metadata: str | None,
+    stage_3_evidence,
+    enforce: bool | None = None,
+    evidence_backed: bool = False,
 ) -> tuple[dict, dict]:
     """Judge the review against the Stage 4 tool record; returns a deep copy of ``response`` and the check dict.
 
     Reasons: (1) the review's visible text cites an article URL neither a Stage 4 tool returned nor the Stage 3
-    record holds; (2, VER-393) the web researcher's prose does; (3, VER-369 item 2) the review asserts
+    record holds; (2, VER-393) the web researcher's prose does, recorded but not capped when ``evidence_backed``
+    (VER-405: its evidence block holds an admissible contradicting result); (3, VER-369 item 2) the review asserts
     fabrication / ``verified_false`` while this session retrieved nothing (no search with results, no page read,
     no curated KB source). Rule 3 ignores the Stage 3 record on purpose: the evidence gate judges that.
     With ``enforce`` (default ``CITATION_CHECK_CAPS``) any reason clamps the scores to ``EVIDENCE_CAP_MAX_SCORE``
@@ -131,7 +136,7 @@ def check_stage_4_citations(
                 + _listed(unobserved, False),
             )
         )
-    if web_research_unobserved:
+    if web_research_unobserved and not evidence_backed:
         reasons.append(
             (
                 "the web research cites URLs that no search or read tool returned: "
@@ -160,6 +165,7 @@ def check_stage_4_citations(
         "cited": cited,
         "unobserved": unobserved,
         "web_research_unobserved": web_research_unobserved,
+        "evidence_backed": evidence_backed,
         "retrieval": retrieval,
     }
     if not check["applied"]:

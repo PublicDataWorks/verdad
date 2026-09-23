@@ -205,7 +205,14 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         evidence_gate = response.pop("evidence_gate")
         if evidence_gate.get("applied"):
             print(f"Evidence gate applied: {evidence_gate['note']}")
-        response, citation_check = check_stage_4_citations(response, grounding_metadata, stage_3_evidence)
+        response, citation_check = check_stage_4_citations(
+            response,
+            grounding_metadata,
+            stage_3_evidence,
+            evidence_backed=bool(
+                stage_4_verification_evidence and stage_4_verification_evidence["admissible_contradicting"]
+            ),
+        )
         if citation_check["applied"]:
             print(f"Citation check applied: {citation_check['note']}")
         grounding_metadata = merge_grounding_metadata(

@@ -115,6 +115,24 @@ class TestCheckStage4Citations:
         )
         assert check["applied"] is False and check["web_research_unobserved"] == []
 
+    def test_fake_url_in_web_research_is_recorded_not_capped_when_evidence_backed_ver_405(self):
+        review = _review("The claim is unsupported.")
+        result, check = check_stage_4_citations(
+            review, _metadata([], web_research=f"Found {FAKE}."), None, evidence_backed=True
+        )
+
+        assert check["applied"] is False and check["reasons"] == []
+        assert check["web_research_unobserved"] == [FAKE] and check["evidence_backed"] is True
+        assert result["confidence_scores"]["overall"] == 97
+        assert CITATION_CHECK_NOTE_PREFIX not in result["explanation"]["english"]
+
+    def test_fake_url_in_the_review_still_caps_when_evidence_backed(self):
+        review = _review(f"Debunked by {FAKE}.")
+        result, check = check_stage_4_citations(review, _metadata(), None, evidence_backed=True)
+
+        assert check["applied"] is True and check["unobserved"] == [FAKE]
+        assert result["confidence_scores"]["overall"] == 40
+
     # --- VER-369 item 2: absence of recall is not evidence ---------------------
 
     @staticmethod
@@ -230,6 +248,7 @@ class TestCheckStage4Citations:
             "cited": [],
             "unobserved": [],
             "web_research_unobserved": [],
+            "evidence_backed": False,
             "retrieval": {"searches": 0, "searches_with_results": 0, "pages_read": 0, "kb_curated_sources": 0},
         }
         assert result["confidence_scores"]["overall"] == 97
