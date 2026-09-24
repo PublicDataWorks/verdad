@@ -99,6 +99,7 @@ then run `10_unhide_after_reprocess.sql` for their batches so the real catches r
 | 08 | `08_kb_deactivate_rollback.sql` | yes | valid; only to undo 07, per batch |
 | 10 | `10_unhide_after_reprocess.sql` | yes | **TO RUN** per batch after reprocessing; removes the NULL-user hide row and stamps `restored_at` for snippets that came back at 95+ with a real verdict; repeat per 5,000 until 0 rows |
 | 15 | `15_requeue_stuck_retryable_errors.sql` | DDL (log table) + yes + cron | VER-389, PR #118. **Step 0 EXECUTED** 2026-09-21 08:33 UTC (`snippet_requeue_log`); **step 2 EXECUTED** 08:34 UTC: 105 rows (101 election-tagged 95+ `Error` rows since Aug + the 4 hand-held Fulton rows) to `New`, batch `requeue-2026-09-21-ver389-step2`; **step 3 TO RUN** after a day of step 2 yield (`sweep_retryable_errors(50)` hourly 08-23 UTC). Rollback inside the file, scoped to the log |
+| 16 | `16_drain_error_backlog_95.sql` | yes + cron | VER-389. **TO RUN** after migration `20260924100000` and after the A2 re-check ends: `drain_error_backlog_95(50)` hourly 08-23 UTC for the 95+ `Error` rows recorded since Aug (3,787 on 2026-09-24), all to `New`, batch `drain-95-<utc day>`. Do not schedule 15 step 3 while it runs (same pool). Rollback inside the file, scoped to the log |
 
 Removed from the tree (superseded by the hide, all selected on `status = 'Quarantined'` or added that enum value; last present at commit `58b11d6`): `01_add_quarantined_status.sql`, `03_quarantine_select.sql`, `04_quarantine_execute.sql`, `05_quarantine_rollback.sql`, `09_reprocess_requeue.sql`.
 

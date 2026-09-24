@@ -188,6 +188,11 @@ refuses the production project unless `--allow-production` is passed.
   (VER-379). Enable with `SELECT cron.schedule('sweep_retryable_errors', '*/10 * * * *',
   $$SELECT public.sweep_retryable_errors(200)$$)`, pause with `cron.unschedule`, and run one batch by hand with
   `SELECT public.sweep_retryable_errors(50)`, which returns counts by destination.
+- **The 95+ Error backlog drains through Stage 3.** `public.drain_error_backlog_95(p_batch)` (migration
+  `20260924100000`, VER-389) moves up to `p_batch` `Error` rows scoring 95+ and recorded since 2026-08-01 back to
+  `New`, `[Stage 4]` failures included, so Stage 3 rebuilds the evidence. Each row is drained once and logged in
+  `snippet_requeue_log` under batch `drain-95-<utc day>`. Not scheduled by default; schedule, yield query, pause
+  and rollback are in `supabase/database/sql/cleanup_2026_09/16_drain_error_backlog_95.sql`.
 - **Transient Gemini errors are retried** (`src/processing_pipeline/gemini_retry.py`: 429/5xx and empty or
   unparseable output, waits of 30 s, 2 min, 5 min) in Stage 3 and Stage 4; the snippet only reaches `Error`
   after the fourth failure, with that message stored. Rerun those ids once the outage is over.
