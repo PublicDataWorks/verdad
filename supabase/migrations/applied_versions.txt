@@ -1,4 +1,4 @@
-# supabase_migrations.schema_migrations in production, fetched 2026-09-18; regenerate with `make migrations-manifest`.
+# supabase_migrations.schema_migrations in production, fetched 2026-09-24; regenerate with `make migrations-manifest`.
 # version<TAB>name
 20241029135243	remote_schema
 20241029135348	remote_schema
@@ -48,3 +48,8 @@
 20260918040000	unschedule_retry_failed_jobs
 20260918050000	pin_search_path_security_definer
 20260918053000	search_path_pg_temp_last
+20260921000100	snippets_location_columns_and_triggers
+20260921000200	snippets_location_backfill
+20260921000300	snippets_visible_location_indexes
+20260921000400	get_snippets_denormalized_location
+20260924100000	drain_error_backlog_95
