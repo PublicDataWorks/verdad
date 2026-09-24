@@ -128,6 +128,36 @@ def test_known_tool_is_invoked_with_integer_coerced_args(monkeypatch):
     assert response.response == {"result": {"query": "q", "results": []}}
 
 
+def test_every_tool_call_is_logged_with_its_outcome(monkeypatch, capsys):
+    async def fake_search(query: str) -> dict:
+        return {"query": query, "results": [{"url": "https://a.com"}, {"url": "https://b.com"}]}
+
+    async def fake_read(url: str) -> dict:
+        if "down" in url:
+            return {"url": url, "failed": True, "error": "404", "content": ""}
+        return {"url": url, "content": "hello"}
+
+    monkeypatch.setitem(executors.WEB_TOOLS, "searxng_web_search", fake_search)
+    monkeypatch.setitem(executors.WEB_TOOLS, "web_url_read", fake_read)
+    client = fake_client(
+        model_turn(
+            tool_call("searxng_web_search", query="q"),
+            tool_call("web_url_read", url="https://up.com"),
+            tool_call("web_url_read", url="https://down.com"),
+            tool_call("web_url_read", nope=1),
+        ),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    run(client)
+
+    out = capsys.readouterr().out
+    assert "Tool call searxng_web_search {'query': 'q'}: 2 results" in out
+    assert "Tool call web_url_read {'url': 'https://up.com'}: 5 chars" in out
+    assert "Tool call web_url_read {'url': 'https://down.com'}: failed 404" in out
+    assert "Tool call web_url_read {'nope': 1}: error TypeError" in out
+
+
 def test_tool_exception_becomes_a_function_response_error(monkeypatch):
     async def broken(url: str) -> dict:
         raise RuntimeError("SEARXNG_URL environment variable is not set")

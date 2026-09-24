@@ -271,6 +271,18 @@ class Stage3Executor:
             return []
         return [part.function_call for part in content.parts if part.function_call]
 
+    @staticmethod
+    def __outcome(payload: dict) -> str:
+        """Log summary of a tool payload: the result count, the content length, or the failure."""
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            return f"error {payload.get('error')}"
+        if result.get("failed"):
+            return f"failed {result.get('error')}"
+        if "results" in result:
+            return f"{len(result['results'] or [])} results"
+        return f"{len(result.get('content') or '')} chars"
+
     @classmethod
     async def __call_tool(cls, function_call: FunctionCall, observed: "ObservedToolOutput") -> Part:
         """Run one requested tool and wrap its result (or error) as a function-response part.
@@ -302,6 +314,7 @@ class Stage3Executor:
                 observed.record(tool_name, payload["result"])
             except Exception as e:  # the model gets the error and may retry with different arguments
                 payload = {"error": f"{type(e).__name__}: {e}"}
+            print(f"Tool call {tool_name} {args}: {cls.__outcome(payload)}")
 
         return Part.from_function_response(name=name or "unknown_tool", response=payload)
 
