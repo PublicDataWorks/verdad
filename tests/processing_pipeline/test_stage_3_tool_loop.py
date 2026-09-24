@@ -145,6 +145,7 @@ def test_every_tool_call_is_logged_with_its_outcome(monkeypatch, capsys):
             tool_call("web_url_read", url="https://up.com"),
             tool_call("web_url_read", url="https://down.com"),
             tool_call("web_url_read", nope=1),
+            tool_call("run", cmd="ls"),
         ),
         model_turn(Part.from_text(text="done")),
     )
@@ -156,6 +157,7 @@ def test_every_tool_call_is_logged_with_its_outcome(monkeypatch, capsys):
     assert "Tool call web_url_read {'url': 'https://up.com'}: 5 chars" in out
     assert "Tool call web_url_read {'url': 'https://down.com'}: failed 404" in out
     assert "Tool call web_url_read {'nope': 1}: error TypeError" in out
+    assert "Tool call 'run' {'cmd': 'ls'}: error Unknown tool 'run'" in out
 
 
 def test_tool_exception_becomes_a_function_response_error(monkeypatch):
