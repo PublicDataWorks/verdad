@@ -53,3 +53,4 @@
 20260921000300	snippets_visible_location_indexes
 20260921000400	get_snippets_denormalized_location
 20260924100000	drain_error_backlog_95
+20260924120000	search_hit_monitor
