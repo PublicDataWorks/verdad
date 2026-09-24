@@ -1,7 +1,22 @@
 -- VER-389: 95+ Error rows go back to New so Stage 3 rebuilds the evidence (sweep_retryable_errors would send
--- '[Stage 4]' failures to Stage 4 on stale evidence). Needs snippet_requeue_log (cleanup_2026_09/15 step 0);
--- a row already in it is never picked. Scheduled from cleanup_2026_09/16_drain_error_backlog_95.sql.
--- Rollback: DROP FUNCTION public.drain_error_backlog_95(integer);
+-- '[Stage 4]' failures to Stage 4 on stale evidence). A row already in snippet_requeue_log is never picked.
+-- Scheduled from cleanup_2026_09/16_drain_error_backlog_95.sql.
+-- Rollback: DROP FUNCTION public.drain_error_backlog_95(integer);  (the log table predates this migration)
+
+-- Hand-created in production by cleanup_2026_09/15 step 0; repeated here so a fresh database has it.
+CREATE TABLE IF NOT EXISTS public.snippet_requeue_log (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    snippet         UUID NOT NULL,
+    previous_status public.processing_status NOT NULL,
+    previous_error  TEXT,
+    new_status      public.processing_status NOT NULL,
+    batch           TEXT NOT NULL,
+    requeued_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (snippet, batch)
+);
+CREATE INDEX IF NOT EXISTS idx_snippet_requeue_log_batch ON public.snippet_requeue_log (batch);
+ALTER TABLE public.snippet_requeue_log ENABLE ROW LEVEL SECURITY;
+GRANT ALL ON TABLE public.snippet_requeue_log TO service_role;
 
 CREATE OR REPLACE FUNCTION public.drain_error_backlog_95(p_batch integer DEFAULT 50)
  RETURNS jsonb

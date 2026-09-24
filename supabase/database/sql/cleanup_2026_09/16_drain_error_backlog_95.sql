@@ -68,8 +68,9 @@ WHERE l.batch LIKE 'drain-95-%'
 GROUP BY 1 ORDER BY 1;
 
 -- --------------------------------------------------------------------------------------------
--- Rollback. Unschedule this job (and sweep_retryable_errors, if scheduled) first. Only rows Stage 3
--- has not picked up yet; rolled-back rows keep their log entry, so the drain skips them afterwards.
+-- Rollback. Unschedule this job (and sweep_retryable_errors, if scheduled) first. Only rows no worker
+-- has touched since the drain (updated_at still equals the log's requeued_at, same transaction);
+-- rolled-back rows keep their log entry, so the drain skips them afterwards.
 -- --------------------------------------------------------------------------------------------
 --   BEGIN;
 --   UPDATE public.snippets s
@@ -79,5 +80,6 @@ GROUP BY 1 ORDER BY 1;
 --   FROM public.snippet_requeue_log l
 --   WHERE s.id = l.snippet
 --     AND l.batch LIKE 'drain-95-%'
---     AND s.status = 'New';
+--     AND s.status = 'New'
+--     AND s.updated_at <= l.requeued_at;
 --   COMMIT;
