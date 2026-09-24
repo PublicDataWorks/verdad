@@ -62,7 +62,7 @@ def function_responses(call):
 
 def test_unknown_tool_name_is_reported_to_the_model_instead_of_raising():
     client = fake_client(
-        model_turn(tool_call("search", query="who said it")),
+        model_turn(tool_call("run", cmd="ls")),
         model_turn(Part.from_text(text='{"final": true}')),
     )
 
@@ -72,11 +72,39 @@ def test_unknown_tool_name_is_reported_to_the_model_instead_of_raising():
     assert client.aio.models.generate_content.await_count == 2
     second = client.aio.models.generate_content.await_args_list[1]
     (response,) = function_responses(second)
-    assert response.name == "search"
-    assert "Unknown tool 'search'" in response.response["error"]
+    assert response.name == "run"
+    assert "Unknown tool 'run'" in response.response["error"]
     assert "searxng_web_search, web_url_read" in response.response["error"]
     # The model's own turn is echoed back before the tool responses, as the API requires.
-    assert second.kwargs["contents"][-2].parts[0].function_call.name == "search"
+    assert second.kwargs["contents"][-2].parts[0].function_call.name == "run"
+
+
+@pytest.mark.parametrize(
+    ("name", "args", "target"),
+    [
+        ("call", {"query": "who said it"}, "searxng_web_search"),
+        ("search", {"query": "who said it", "pageno": 2.0}, "searxng_web_search"),
+        ("searxxng_web_search", {"query": "who said it"}, "searxng_web_search"),
+        ("run", {"url": "https://reuters.com/a"}, "web_url_read"),
+    ],
+)
+def test_unknown_tool_name_with_known_arguments_runs_the_matching_tool(monkeypatch, name, args, target):
+    seen = {}
+
+    async def fake_tool(**kwargs) -> dict:
+        seen.update(kwargs)
+        return {"results": [{"url": "https://apnews.com/a"}]} if "query" in kwargs else {"url": kwargs["url"]}
+
+    monkeypatch.setitem(executors.WEB_TOOLS, target, fake_tool)
+    client = fake_client(model_turn(tool_call(name, **args)), model_turn(Part.from_text(text="done")))
+
+    _, _, _, observed = run(client)
+
+    assert seen == {key: int(value) if isinstance(value, float) else value for key, value in args.items()}
+    (response,) = function_responses(client.aio.models.generate_content.await_args_list[1])
+    assert response.name == name
+    assert "result" in response.response
+    assert observed.urls == ({"apnews.com/a"} if target == "searxng_web_search" else {"reuters.com/a"})
 
 
 def test_known_tool_is_invoked_with_integer_coerced_args(monkeypatch):
@@ -126,7 +154,7 @@ def test_endless_tool_calls_stop_at_the_turn_budget():
 
 
 def test_usage_is_summed_over_every_turn():
-    first = model_turn(tool_call("search", query="q"))
+    first = model_turn(tool_call("run", cmd="q"))
     first.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=100, total_token_count=120)
     second = model_turn(Part.from_text(text="done"))
     second.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=150, total_token_count=200)
@@ -172,7 +200,7 @@ def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypa
             tool_call("searxng_web_search", query="q"),
             tool_call("web_url_read", url="http://Reuters.com/a#top"),
         ),
-        model_turn(tool_call("search", query="hallucinated tool")),
+        model_turn(tool_call("run", cmd="hallucinated tool")),
         model_turn(Part.from_text(text="done")),
     )
 

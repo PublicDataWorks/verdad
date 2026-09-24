@@ -286,14 +286,20 @@ class Stage3Executor:
             for key, value in (function_call.args or {}).items()
         }
 
-        tool = WEB_TOOLS.get(name)
+        tool_name = name
+        if name not in WEB_TOOLS:
+            # Pro calls the search tool 'call', 'run' or 'search' and then answers without retrying on an error.
+            tool_name = "searxng_web_search" if "query" in args else "web_url_read" if "url" in args else None
+            action = f"running {tool_name}" if tool_name else "telling it which tools exist"
+            print(f"Model called unknown tool {name!r} with {args}; {action}.")
+
+        tool = WEB_TOOLS.get(tool_name)
         if tool is None:
-            print(f"Model called unknown tool {name!r} with {args}; telling it which tools exist.")
             payload = {"error": f"Unknown tool {name!r}. The only available tools are: {', '.join(WEB_TOOLS)}."}
         else:
             try:
                 payload = {"result": await tool(**args)}
-                observed.record(name, payload["result"])
+                observed.record(tool_name, payload["result"])
             except Exception as e:  # the model gets the error and may retry with different arguments
                 payload = {"error": f"{type(e).__name__}: {e}"}
 
