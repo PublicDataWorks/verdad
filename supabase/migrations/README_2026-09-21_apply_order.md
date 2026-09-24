@@ -1,7 +1,7 @@
 # 2026-09-21 VER-387 (states / sources filter denormalization) — apply order
 
-`applied_versions.txt` is deliberately untouched. Run the files **by hand in the Supabase SQL
-editor**, in this order, one file per run.
+Run the files **by hand in the Supabase SQL editor**, in this order, one file per run. All four versions
+were recorded in `supabase_migrations.schema_migrations` and `applied_versions.txt` on 2026-09-24.
 
 **Status (2026-09-21 13:48 UTC):** steps 1, 2, 3 and 3b applied. Step 1 11:29 UTC, re-applied 11:48 UTC
 (trigger on `confidence_scores`); backfill function 11:31, replaced 11:48 and 11:55 UTC (visible-only,
