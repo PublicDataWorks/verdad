@@ -1,5 +1,5 @@
 {
-  "description": "True post-cutoff events labelled Fabricated Content (Tamoa's Feedback #6 of 2026-09-15 and #7 of 2026-09-17, VER-338): SCOTUS USPS order, Trump dividend, de la Espriella, Fujimori, Nicaragua reform, Maduro capture, Trump-Lula meeting, Flavio Bolsonaro candidacy. Controls reuse the fabricated-content set.",
+  "description": "True post-cutoff events labelled Fabricated Content (Tamoa's Feedback #6 of 2026-09-15 and #7 of 2026-09-17, VER-338): SCOTUS USPS order, Trump dividend, de la Espriella, Fujimori, Nicaragua reform, Maduro capture, Trump-Lula meeting, Flavio Bolsonaro candidacy. Controls reuse the fabricated-content set. Added 2026-09-24: ef2070d3 (Radio Libre 790, Sept 18: Axios report of a planned Trump meeting with interim president Delcy Rodriguez after Maduro's Jan 3 capture; gemini-2.5-flash scored it 90 'False Claim of Maduro's Capture').",
   "reported": [
     "0f4d87ac-03ad-45c9-be28-40f8ea6af8cc",
     "64c426bf-e1ac-4c69-aa33-bbd5e2f4f117",
@@ -12,7 +12,8 @@
     "69fc4d65-e6f4-4f0a-a793-9a974aa0cfd8",
     "6621b71f-d097-4c47-99c6-a1e4da16efe4",
     "f280ca46-061a-4f6f-bc6b-8313153f7efd",
-    "1ca79347-60e6-4d39-8ac9-2e579037c24f"
+    "1ca79347-60e6-4d39-8ac9-2e579037c24f",
+    "ef2070d3-db33-4273-9439-ae9598648e7c"
   ],
   "control": [
     "e1cca2ee-8522-4b93-b18b-efa173d88c77",
