@@ -193,6 +193,16 @@ refuses the production project unless `--allow-production` is passed.
   `New`, `[Stage 4]` failures included, so Stage 3 rebuilds the evidence. Each row is drained once and logged in
   `snippet_requeue_log` under batch `drain-95-<utc day>`. Not scheduled by default; schedule, yield query, pause
   and rollback are in `supabase/database/sql/cleanup_2026_09/16_drain_error_backlog_95.sql`.
+- **Search hit share is recorded hourly** (VER-402, migration `20260924120000`). pg_cron job
+  `record_search_hit_stats` (`7 * * * *`) writes one `public.search_hit_stats` row for the last full hour: Stage 3
+  analyses with a search and with a `results_found` search, query counts, and Stage 4 searches from
+  `stage_4_citation_check.retrieval`. Only live rows count (recorded in the last 7 days), because old reprocessed
+  claims hit less for reasons unrelated to search. When fewer than 60% of analyses have a hit two hours running
+  (with at least 20 analyses in each hour), it posts once per streak to the Slack webhook stored in Vault as
+  `ops_alerts_slack_webhook`. Set or switch the channel with `vault.create_secret(<url>, 'ops_alerts_slack_webhook')`
+  or `vault.update_secret(<id>, <url>)`. Backfill with `SELECT public.record_search_hit_stats(h, p_alert => false)
+  FROM generate_series(<from>, <to>, interval '1 hour') h`. Test the alert with `p_min_share => 1.01` on the
+  last hour, then re-run that hour with the defaults. Pause with `cron.unschedule('record_search_hit_stats')`.
 - **Transient Gemini errors are retried** (`src/processing_pipeline/gemini_retry.py`: 429/5xx and empty or
   unparseable output, waits of 30 s, 2 min, 5 min) in Stage 3 and Stage 4; the snippet only reaches `Error`
   after the fourth failure, with that message stored. Rerun those ids once the outage is over.
