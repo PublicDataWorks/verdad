@@ -88,6 +88,11 @@ LITE_CODES = [
     "WYMY",
     "WSGH",
     "KVNR",
+    "KHEM - 89.3 FM",
+    "KVIV - 1340 AM",
+    "XEZOL - 860 AM",
+    "XEMX - 1120 AM",
+    "XEKAM - 950 AM",
 ]
 
 # The six browser-driven stations, in order.
@@ -105,6 +110,11 @@ PREFECT_RUNS = {
     "Audio Recording: Lite Recorder/ARAB",
     "Audio Recording: Lite Recorder/KMRO",
     "Audio Recording: Lite Recorder/KVNR",
+    "Audio Recording: Lite Recorder/KHEM - 89.3 FM",
+    "Audio Recording: Lite Recorder/KVIV - 1340 AM",
+    "Audio Recording: Lite Recorder/XEZOL - 860 AM",
+    "Audio Recording: Lite Recorder/XEMX - 1120 AM",
+    "Audio Recording: Lite Recorder/XEKAM - 950 AM",
     "Audio Recording: Lite Recorder/MCD",
     "Audio Recording: Lite Recorder/WGOS",
     "Audio Recording: Lite Recorder/WGSP",
@@ -192,7 +202,7 @@ def write_config(tmp_path, rows):
 class TestSnapshots:
     def test_default_config_is_the_repo_file(self):
         assert CONFIG_PATH.is_file()
-        assert len(load_stations()) == 59
+        assert len(load_stations()) == 64
 
     def test_max_recorder_stations(self):
         assert [s.code for s in stations_for("max")] == MAX_CODES
@@ -200,7 +210,7 @@ class TestSnapshots:
 
     def test_lite_recorder_stations(self):
         assert [s.code for s in stations_for("lite")] == LITE_CODES
-        assert len(LITE_CODES) == 14
+        assert len(LITE_CODES) == 19
 
     def test_generic_recorder_stations(self):
         assert [s.code for s in stations_for("generic")] == GENERIC_CODES
@@ -208,7 +218,7 @@ class TestSnapshots:
 
     def test_station_dicts_match_the_legacy_shape_and_order(self):
         dicts = station_dicts()
-        assert len(dicts) == 53
+        assert len(dicts) == 58
         assert [d["code"] for d in dicts] == MAX_CODES + LITE_CODES
         assert all(set(d) == {"code", "url", "state", "name"} for d in dicts)
 
@@ -218,7 +228,7 @@ class TestSnapshots:
 
     def test_prefect_run_targets_match_the_old_arrays(self):
         assert set(prefect_run_targets()) == PREFECT_RUNS
-        assert len(prefect_run_targets()) == 59
+        assert len(prefect_run_targets()) == 64
 
     def test_flow_names_are_unchanged(self):
         assert FLOW_NAMES == {

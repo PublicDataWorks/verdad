@@ -6,7 +6,8 @@
 #   name      Human-readable station name (audio_files.radio_station_name).
 #   url       Stream URL (direct recorders) or web player page (generic recorder). Must be unique.
 #             The R2 prefix is radio_<last 6 hex of sha256(url)>/, so changing a URL moves its audio.
-#   state     US state (or "Russia"/"International" for the two non-US streams).
+#   state     US state, or "Mexico" for Mexican-licensed border stations, or "Russia"/"International"
+#             for the other non-US streams.
 #   recorder  Which recorder records this station. This is a TOPOLOGY fact tied to the fly.*.toml
 #             files, not a preference -- it selects the Fly machine, its memory sizing and its
 #             Dockerfile, and it only takes effect on deploy:
@@ -299,6 +300,37 @@ stations:
     name: "Little Saigon Radio"
     url: "https://stream-146.zeno.fm/2znsmu8d8zquv"
     state: "California"
+    recorder: lite
+  # --- US-Mexico border expansion, wave 1 (news/talk) ---
+  # Radio Bilingue network feed (Zapata TX); same feed airs on KRZU, KXJT (TX), KUBO (CA), KREE (AZ), KQTO (NM)
+  - code: "KHEM - 89.3 FM"
+    name: "Radio Bilingüe"
+    url: "https://radio.radiobilingue.org/"
+    state: "Texas"
+    recorder: lite
+  # El Paso; Spanish Christian talk plus CNN en Espanol news
+  - code: "KVIV - 1340 AM"
+    name: "Radio Victoria"
+    url: "http://n02.radiojar.com/y5zx4f9x7bhvv"
+    state: "Texas"
+    recorder: lite
+  # Ciudad Juarez, Chihuahua; news/talk heard in El Paso
+  - code: "XEZOL - 860 AM"
+    name: "Líder Informativo"
+    url: "https://stream.zeno.fm/wwsc28r91rhvv"
+    state: "Mexico"
+    recorder: lite
+  # Mexicali, Baja California; news/talk heard in the Imperial Valley
+  - code: "XEMX - 1120 AM"
+    name: "Noticias MVS"
+    url: "https://playerservices.streamtheworld.com/api/livestream-redirect/XEMXAAC.aac"
+    state: "Mexico"
+    recorder: lite
+  # Rosarito/Tijuana, Baja California; news/talk heard in San Diego
+  - code: "XEKAM - 950 AM"
+    name: "Radio Fórmula"
+    url: "https://stream.radiojar.com/nce1peen3p8uv"
+    state: "Mexico"
     recorder: lite
   # ===============================================================
   # Generic (browser-driven) radio stations -- one Fly machine each
