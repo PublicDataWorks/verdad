@@ -48,8 +48,9 @@ connection) into "no work" so the loop sleeps and retries instead of failing the
   (`gemini_client: genai.Client`, or `openai_client: OpenAI` in stage 5). Stage 3 and stage 4 flows are
   `async def` and call `gemini_client.aio.*`; stage 1, 2 and 5 are synchronous.
 - Stage 3 runs its own tool-calling loop (`WEB_TOOLS`, `MAX_MODEL_TURNS` in `stage_3/executors.py`) with the SDK's
-  automatic function calling disabled, so a hallucinated tool name is answered with a function-response error
-  instead of failing the analysis; `run_async` returns the token `usage` summed over every model turn.
+  automatic function calling disabled, so a hallucinated tool name runs the tool its arguments match (`query` =
+  search, `url` = read) or is answered with a function-response error instead of failing the analysis;
+  `run_async` returns the token `usage` summed over every model turn.
 - Stage 4 is a Google ADK pipeline (`LlmAgent`/`ParallelAgent`/`SequentialAgent` in `agents.py`) with MCP
   tools; it sets `GOOGLE_API_KEY` from `GOOGLE_GEMINI_KEY` at flow start.
 

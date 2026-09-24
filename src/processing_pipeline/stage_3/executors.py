@@ -271,6 +271,18 @@ class Stage3Executor:
             return []
         return [part.function_call for part in content.parts if part.function_call]
 
+    @staticmethod
+    def __outcome(payload: dict) -> str:
+        """Log summary of a tool payload: the result count, the content length, or the failure."""
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            return f"error {payload.get('error')}"
+        if result.get("failed"):
+            return f"failed {result.get('error')}"
+        if "results" in result:
+            return f"{len(result['results'] or [])} results"
+        return f"{len(result.get('content') or '')} chars"
+
     @classmethod
     async def __call_tool(cls, function_call: FunctionCall, observed: "ObservedToolOutput") -> Part:
         """Run one requested tool and wrap its result (or error) as a function-response part.
@@ -286,16 +298,23 @@ class Stage3Executor:
             for key, value in (function_call.args or {}).items()
         }
 
-        tool = WEB_TOOLS.get(name)
+        tool_name = name
+        if name not in WEB_TOOLS:
+            # Pro calls the search tool 'call', 'run' or 'search' and then answers without retrying on an error.
+            tool_name = "searxng_web_search" if "query" in args else "web_url_read" if "url" in args else None
+            action = f"running {tool_name}" if tool_name else "telling it which tools exist"
+            print(f"Model called unknown tool {name!r} with {args}; {action}.")
+
+        tool = WEB_TOOLS.get(tool_name)
         if tool is None:
-            print(f"Model called unknown tool {name!r} with {args}; telling it which tools exist.")
             payload = {"error": f"Unknown tool {name!r}. The only available tools are: {', '.join(WEB_TOOLS)}."}
         else:
             try:
                 payload = {"result": await tool(**args)}
-                observed.record(name, payload["result"])
+                observed.record(tool_name, payload["result"])
             except Exception as e:  # the model gets the error and may retry with different arguments
                 payload = {"error": f"{type(e).__name__}: {e}"}
+        print(f"Tool call {tool_name or repr(name)} {args}: {cls.__outcome(payload)}")
 
         return Part.from_function_response(name=name or "unknown_tool", response=payload)
 
