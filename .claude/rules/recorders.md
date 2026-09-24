@@ -32,7 +32,7 @@ tests point it at a temporary file rather than mutating the real one.
 ## `recorder` is topology, not preference
 
 Each station's `recorder` field assigns it to a machine; there is no positional split any more. `max` and
-`lite` are the two `fly.recording_worker.toml` process groups (8 GB / 4 GB, one ffmpeg process per station),
+`lite` are the two `fly.recording_worker.toml` process groups (8 GB / 6 GB, one ffmpeg process per station),
 `generic` is `fly.generic_recording_worker.toml` (one Chrome + PulseAudio machine per station). Changing the
 field only takes effect on `fly deploy`, so treat it as part of the deploy topology. Adding a station is one
 YAML entry plus its snapshot in `tests/test_stations.py`; see docs/OPERATIONS.md, "Adding or disabling a station".
