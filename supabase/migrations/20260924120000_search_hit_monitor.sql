@@ -43,12 +43,11 @@ BEGIN
     WITH g AS (
         SELECT coalesce(gm->'searches_performed', gm->'stage_3_verification_evidence'->'searches_performed') AS sp,
                gm->'stage_4_citation_check'->'retrieval' AS s4
-        FROM (SELECT s.grounding_metadata::jsonb AS gm
+        FROM (SELECT CASE WHEN s.grounding_metadata IS JSON OBJECT THEN s.grounding_metadata::jsonb END AS gm
               FROM public.snippets s
               WHERE s.status = 'Processed'
                 AND s.recorded_at >= v_row.hour_start - interval '7 days'
-                AND s.updated_at >= v_row.hour_start AND s.updated_at < v_row.hour_start + interval '1 hour'
-                AND left(s.grounding_metadata, 1) = '{') r
+                AND s.updated_at >= v_row.hour_start AND s.updated_at < v_row.hour_start + interval '1 hour') r
     ), a AS (
         SELECT sp, s4,
                (SELECT count(*) FILTER (WHERE e->>'result_status' = 'results_found') FROM jsonb_array_elements(sp) e) AS hits
@@ -65,11 +64,11 @@ BEGIN
     SELECT * INTO v_prev FROM public.search_hit_stats WHERE hour_start = v_row.hour_start - interval '1 hour';
     v_bad := v_row.analyses >= p_min_analyses AND v_row.analyses_with_hit < p_min_share * v_row.analyses;
     v_prev_bad := coalesce(v_prev.analyses >= p_min_analyses AND v_prev.analyses_with_hit < p_min_share * v_prev.analyses, false);
-    -- One alert per streak: an hour after an alerted hour inherits the flag instead of posting again.
-    v_row.alerted := v_bad AND (v_prev_bad OR coalesce(v_prev.alerted, false));
+    -- alerted = a post was queued for this bad streak; bad hours after it inherit the flag instead of posting again.
+    v_row.alerted := v_bad AND (coalesce(v_prev.alerted, false) OR coalesce(v_was_alerted, false));
     v_row.recorded_at := now();
 
-    IF v_row.alerted AND NOT coalesce(v_prev.alerted, false) AND NOT coalesce(v_was_alerted, false) AND p_alert THEN
+    IF v_bad AND v_prev_bad AND NOT v_row.alerted AND p_alert THEN
         SELECT decrypted_secret INTO v_url FROM vault.decrypted_secrets WHERE name = 'ops_alerts_slack_webhook';
         IF v_url IS NULL THEN
             RAISE NOTICE 'search hit share low for % but vault secret ops_alerts_slack_webhook is missing', v_row.hour_start;
@@ -79,6 +78,7 @@ BEGIN
                 round(100.0 * v_row.analyses_with_hit / v_row.analyses), v_row.analyses_with_hit, v_row.analyses,
                 to_char(v_row.hour_start AT TIME ZONE 'utc', 'YYYY-MM-DD HH24:MI'),
                 round(100.0 * v_prev.analyses_with_hit / v_prev.analyses), round(100 * p_min_share))));
+            v_row.alerted := true;
         END IF;
     END IF;
 

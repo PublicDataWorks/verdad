@@ -195,9 +195,10 @@ refuses the production project unless `--allow-production` is passed.
   and rollback are in `supabase/database/sql/cleanup_2026_09/16_drain_error_backlog_95.sql`.
 - **Search hit share is recorded hourly** (VER-402, migration `20260924120000`). pg_cron job
   `record_search_hit_stats` (`7 * * * *`) writes the last full hour's Stage 3 analysis and query hit counts, plus
-  Stage 4 search counts, to `public.search_hit_stats`. Only rows recorded in the last 7 days count: old
-  reprocessed claims hit less for reasons unrelated to search. When under 60% of analyses (at least 20) have a hit
-  two hours running, it posts once per streak to the webhook in Vault secret `ops_alerts_slack_webhook`; switch
+  Stage 4 search counts, to `public.search_hit_stats`. Only rows recorded in the last 7 days count: old reprocessed
+  claims hit less for reasons unrelated to search. Rows are bucketed by `updated_at`, so a Stage 4 review, like or
+  comment moves a row into that hour; a backfill is approximate. When under 60% of analyses (at least 20) have a
+  hit two hours running, it posts once per streak to the webhook in Vault secret `ops_alerts_slack_webhook`; switch
   channels with `vault.update_secret`. Backfill with `SELECT public.record_search_hit_stats(h, p_alert => false)
   FROM generate_series(<from>, <to>, interval '1 hour') h`; test the alert with `p_min_share => 1.01` on the last
   hour, then re-run it with the defaults. Pause with `cron.unschedule('record_search_hit_stats')`.
