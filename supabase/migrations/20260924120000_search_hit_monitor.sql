@@ -21,7 +21,7 @@ ALTER TABLE public.search_hit_stats ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON TABLE public.search_hit_stats TO service_role;
 
 CREATE OR REPLACE FUNCTION public.record_search_hit_stats(
-    p_hour timestamptz DEFAULT date_trunc('hour', now()) - interval '1 hour',
+    p_hour timestamptz DEFAULT date_trunc('hour', now(), 'UTC') - interval '1 hour',
     p_alert boolean DEFAULT true,
     p_min_share numeric DEFAULT 0.60,
     p_min_analyses integer DEFAULT 20)
@@ -38,7 +38,7 @@ DECLARE
     v_prev_bad boolean;
     v_url text;
 BEGIN
-    v_row.hour_start := date_trunc('hour', p_hour);
+    v_row.hour_start := date_trunc('hour', p_hour, 'UTC');
 
     WITH g AS (
         SELECT coalesce(gm->'searches_performed', gm->'stage_3_verification_evidence'->'searches_performed') AS sp,
