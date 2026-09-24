@@ -72,20 +72,15 @@ MAX_CODES = [
     "WZTU - 94.9 FM",
 ]
 
-# The 14 stations the lite recorder served as radio_stations[39:], in order.
+# The enabled lite stations, in file order.
 LITE_CODES = [
     "WWFE - 670 AM",
     "MCD",
     "WMUZ - 1200 AM",
-    "WNZK - 680 AM",
     "ARAB",
-    "WOLS",
     "WSRP",
     "WIST",
-    "KMRO",
     "WGOS",
-    "WGSP",
-    "WYMY",
     "WSGH",
     "KVNR",
     "KHEM - 89.3 FM",
@@ -108,7 +103,6 @@ GENERIC_CODES = [
 # Exactly the strings the three hard-coded arrays in scripts/start_recording.sh produced.
 PREFECT_RUNS = {
     "Audio Recording: Lite Recorder/ARAB",
-    "Audio Recording: Lite Recorder/KMRO",
     "Audio Recording: Lite Recorder/KVNR",
     "Audio Recording: Lite Recorder/KHEM - 89.3 FM",
     "Audio Recording: Lite Recorder/KVIV - 1340 AM",
@@ -117,15 +111,11 @@ PREFECT_RUNS = {
     "Audio Recording: Lite Recorder/XEKAM - 950 AM",
     "Audio Recording: Lite Recorder/MCD",
     "Audio Recording: Lite Recorder/WGOS",
-    "Audio Recording: Lite Recorder/WGSP",
     "Audio Recording: Lite Recorder/WIST",
     "Audio Recording: Lite Recorder/WMUZ - 1200 AM",
-    "Audio Recording: Lite Recorder/WNZK - 680 AM",
-    "Audio Recording: Lite Recorder/WOLS",
     "Audio Recording: Lite Recorder/WSGH",
     "Audio Recording: Lite Recorder/WSRP",
     "Audio Recording: Lite Recorder/WWFE - 670 AM",
-    "Audio Recording: Lite Recorder/WYMY",
     "Audio Recording: Max Recorder/K229DB - 93.7 FM",
     "Audio Recording: Max Recorder/KABA - 90.3 FM",
     "Audio Recording: Max Recorder/KBIC - 105.7 FM",
@@ -210,7 +200,7 @@ class TestSnapshots:
 
     def test_lite_recorder_stations(self):
         assert [s.code for s in stations_for("lite")] == LITE_CODES
-        assert len(LITE_CODES) == 19
+        assert len(LITE_CODES) == 14
 
     def test_generic_recorder_stations(self):
         assert [s.code for s in stations_for("generic")] == GENERIC_CODES
@@ -218,7 +208,7 @@ class TestSnapshots:
 
     def test_station_dicts_match_the_legacy_shape_and_order(self):
         dicts = station_dicts()
-        assert len(dicts) == 58
+        assert len(dicts) == 53
         assert [d["code"] for d in dicts] == MAX_CODES + LITE_CODES
         assert all(set(d) == {"code", "url", "state", "name"} for d in dicts)
 
@@ -228,7 +218,7 @@ class TestSnapshots:
 
     def test_prefect_run_targets_match_the_old_arrays(self):
         assert set(prefect_run_targets()) == PREFECT_RUNS
-        assert len(prefect_run_targets()) == 64
+        assert len(prefect_run_targets()) == 59
 
     def test_flow_names_are_unchanged(self):
         assert FLOW_NAMES == {
@@ -254,8 +244,9 @@ class TestSnapshots:
             assert (station.process_group is not None) is is_generic
             assert (station.driver is not None) is is_generic
 
-    def test_every_station_is_enabled_in_this_revision(self):
-        assert all(s.enabled for s in load_stations())
+    def test_disabled_stations_in_this_revision(self):
+        disabled = {s.code for s in load_stations() if not s.enabled}
+        assert disabled == {"WNZK - 680 AM", "WOLS", "KMRO", "WGSP", "WYMY"}
 
 
 class TestLookups:

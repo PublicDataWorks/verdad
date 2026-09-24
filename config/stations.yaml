@@ -243,11 +243,13 @@ stations:
     url: "https://ais-sa8.cdnstream1.com/prhwjmv4dpl/ct8wcmajf2n"
     state: "Michigan"
     recorder: lite
+  # Disabled 2026-09-24: no audio in 180 days, stream host does not resolve.
   - code: "WNZK - 680 AM"
     name: "WNZK-AM"
     url: "http://wnzk.birach.com:9000/stream"
     state: "Michigan"
     recorder: lite
+    enabled: false
   - code: "ARAB"
     name: "US Arab Radio"
     url: "https://s3.radio.co/sc618789ff/listen"
@@ -256,11 +258,13 @@ stations:
   # ===============================================================
   # New radio stations
   # ===============================================================
+  # Disabled 2026-09-24: no audio in 180 days, stream hangs.
   - code: "WOLS"
     name: "La Raza"
     url: "https://sonos.norsanmedia.com/wols"
     state: "North Carolina"
     recorder: lite
+    enabled: false
   - code: "WSRP"
     name: "La Grande"
     url: "https://radioenhd.com:7108/;"
@@ -271,26 +275,32 @@ stations:
     url: "https://stream-153.zeno.fm/wspmwfvneg8uv"
     state: "North Carolina"
     recorder: lite
+  # Disabled 2026-09-24: no audio since 2026-06-11, stream 404.
   - code: "KMRO"
     name: "Radio Nueva Vida"
     url: "https://ice10.securenetsystems.net/KMRO"
     state: "North Carolina"
     recorder: lite
+    enabled: false
   - code: "WGOS"
     name: "Radio Vida Nueva"
     url: "https://stream10.usastreams.com/8040/stream"
     state: "North Carolina"
     recorder: lite
+  # Disabled 2026-09-24: no audio in 180 days, stream 404.
   - code: "WGSP"
     name: "Latina tu Musica"
     url: "https://stream-163.zeno.fm/xaz83f7uapjtv"
     state: "North Carolina"
     recorder: lite
+    enabled: false
+  # Disabled 2026-09-24: no audio since 2026-05-05, stream host does not resolve.
   - code: "WYMY"
     name: "La Ley"
     url: "https://29263.live.streamtheworld.com/WYMYPRIVATEAAC_SC?dist=triton-web&pname=StandardPlayerV4"
     state: "North Carolina"
     recorder: lite
+    enabled: false
   - code: "WSGH"
     name: "Activa"
     url: "https://ice7.securenetsystems.net/MOVIDITA"

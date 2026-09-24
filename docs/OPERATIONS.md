@@ -9,7 +9,7 @@ Items marked **unknown** are not recorded anywhere in the repo; ask a maintainer
 |---|---|---|---|
 | `prefect` (`fly.prefect.toml`) | `Dockerfile.prefect` (prefecthq/prefect:3.4.24-python3.11 + supercronic + flyctl) | `server`: `scripts/start_prefect_server.sh` (port 4200, health `/api/health`); `cron`: `scripts/start_cron.sh` | `server`, `cron` |
 | `processing-worker` (`fly.processing_worker.toml`) | `Dockerfile.processing_worker` (python3.12 + node22 + ffmpeg + `@google/gemini-cli@0.20.0`) | `scripts/trigger_processing_worker.sh` -> waits for `https://prefect.fly.dev/api/health` -> `python src/processing_pipeline/main.py` | `initial_disinformation_detection`, `initial_disinformation_detection_2`, `audio_clipping`, `in_depth_analysis`, `regenerate_timestamped_transcript`, `redo_main_detection`, `undo_disinformation_detection`, `undo_audio_clipping`, `analysis_review`, `analysis_review_2`, `embedding` |
-| `recording-worker` (`fly.recording_worker.toml`) | `Dockerfile.recording_worker` (python:3.12-slim + ffmpeg) | `scripts/recording.sh` -> `python src/recording.py` | `max_recorder` (`recorder: max` stations, currently 39, 8 GB), `lite_recorder` (`recorder: lite`, currently 14, 4 GB) |
+| `recording-worker` (`fly.recording_worker.toml`) | `Dockerfile.recording_worker` (python:3.12-slim + ffmpeg) | `scripts/recording.sh` -> `python src/recording.py` | `max_recorder` (`recorder: max` stations, currently 39, 8 GB), `lite_recorder` (`recorder: lite`, currently 14 enabled, 6 GB) |
 | `generic-recording-worker` (`fly.generic_recording_worker.toml`) | `Dockerfile.generic_recording_worker` (ubuntu + Chrome + pulseaudio) | `scripts/generic_recording.sh` -> `python src/generic_recording.py` | `radio_khot`, `radio_kisf`, `radio_krgt`, `radio_wkaq`, `radio_wado`, `radio_waqi` (one machine each; the `process_group` of each `recorder: generic` station in `config/stations.yaml`) |
 | `verdad-searxng` (`fly.searxng.toml`) | `Dockerfile.searxng` (searxng/searxng:2026.9.20 + `searxng/config/settings.yml`) | image default | none; serves `https://verdad-searxng.fly.dev` used via `SEARXNG_URL` (stage 3 tools, stage 4 MCP) |
 | `verdad-dev` (`fly.dev.toml`) | `Dockerfile.generic_recording_worker` | same as generic recorder | none defined. Purpose **unknown** (looks like a scratch app) |
@@ -82,7 +82,7 @@ station data: both recorders, `scripts/start_recording.sh` and the generic recor
 1. **Edit `config/stations.yaml` and the snapshots in `tests/test_stations.py` together.** Add an entry with
    `code`, `name`, `url`, `state` and `recorder` (`max` | `lite` | `generic`), or set `enabled: false` on an
    existing one to stop recording it. `code` and `url` must be unique. The tests pin the per-recorder code
-   lists, the station count, the Prefect run strings and that every station is enabled, so `make check` fails
+   lists, the station count, the Prefect run strings and the set of disabled stations, so `make check` fails
    until the snapshots match the YAML; update them in the same commit. Check your edit locally:
 
    ```bash
@@ -96,7 +96,7 @@ station data: both recorders, `scripts/start_recording.sh` and the generic recor
    where that station's audio lands.
 
 2. **Check memory sizing** if you added a `recorder: max` station. `max_recorder` runs one ffmpeg process per
-   station on a single 8 GB / 8 shared-CPU machine (`lite_recorder` is 4 GB); bump `[[vm]] memory` in
+   station on a single 8 GB / 8 shared-CPU machine (`lite_recorder` is 6 GB); bump `[[vm]] memory` in
    `fly.recording_worker.toml` in the same PR if the count grows meaningfully. Prefer `lite` when unsure.
 
 3. **A `recorder: generic` station needs more.** It also needs `process_group: radio_<slug>`, a `driver` block
@@ -128,9 +128,9 @@ station data: both recorders, `scripts/start_recording.sh` and the generic recor
 No Supabase schema change is involved: `audio_files` stores `radio_station_name`/`radio_station_code`/
 `location_state` per recording, denormalized by the recorder.
 
-Follow-up, deliberately not done yet: 10 stations have produced no audio for months (KENO, KNNR, WURN, WOLS,
-KFUE, WNZK, WGSP, WDJA, WYMY, KMRO) and still hold a recorder slot each. Flipping them to `enabled: false` is
-a separate, reviewable change.
+The five dead `lite` stations (WOLS, WNZK, WGSP, WYMY, KMRO) were disabled on 2026-09-24. Follow-up, not done
+yet: five `max` stations have also produced no audio for months (KENO, KNNR, WURN, KFUE, WDJA) and still hold a
+recorder slot each.
 
 ## Triggering one stage run against production
 
