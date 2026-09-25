@@ -651,7 +651,18 @@ class TestStage4:
 
 
 class TestBuildReviewPipeline:
-    def test_every_agent_retries_429_inside_the_run(self):
+    @pytest.fixture
+    def kb_updater_enabled(self, monkeypatch):
+        monkeypatch.setattr("processing_pipeline.stage_4.constants.KB_UPDATER_ENABLED", True)
+
+    def test_no_kb_updater_by_default_ver_412(self):
+        from processing_pipeline.stage_4.agents import build_review_pipeline
+
+        pipeline, _ = build_review_pipeline(PROMPT_VERSIONS, GeminiModel.GEMINI_2_5_PRO)
+
+        assert [a.name for a in pipeline.sub_agents] == ["research", "analysis_reviewer"]
+
+    def test_every_agent_retries_429_inside_the_run(self, kb_updater_enabled):
         from google.adk.models.google_llm import Gemini
 
         from processing_pipeline.stage_4.agents import RETRY_OPTIONS, build_review_pipeline
@@ -668,7 +679,7 @@ class TestBuildReviewPipeline:
             "kb_updater": "gemini-2.5-flash",
         }
 
-    def test_only_the_web_researcher_forces_its_first_search_ver_406(self):
+    def test_only_the_web_researcher_forces_its_first_search_ver_406(self, kb_updater_enabled):
         from processing_pipeline.stage_4.agents import build_review_pipeline, force_first_search
 
         pipeline, _ = build_review_pipeline(PROMPT_VERSIONS, GeminiModel.GEMINI_2_5_PRO)

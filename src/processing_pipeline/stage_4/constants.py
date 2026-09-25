@@ -19,3 +19,7 @@ OBSERVED_URLS_STATE_KEY = "stage_4_observed_urls"
 # False = record-only: stage_4_citation_check lists its reasons but nothing is capped. On since 2026-09-22
 # (one day of record-only numbers: 20 of 37 visible reviews would have been capped).
 CITATION_CHECK_CAPS = True
+
+# False = no kb_updater in the review pipeline: Stage 4 reads the KB but writes nothing to it. Off since 2026-09-25
+# (VER-412: about 1 in 4 of its entries was wrong).
+KB_UPDATER_ENABLED = False

@@ -12,7 +12,7 @@ from processing_pipeline.stage_4.gemini_mcp_toolset import GeminiSafeMcpToolset
 from mcp import StdioServerParameters
 
 from processing_pipeline.constants import GeminiModel
-from processing_pipeline.stage_4.constants import KB_WRITER_MODEL
+from processing_pipeline.stage_4 import constants
 from processing_pipeline.stage_4.models import ReviewAnalysisOutput
 from processing_pipeline.stage_4.tools import (
     deactivate_knowledge_entry,
@@ -107,7 +107,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     kb_updater = LlmAgent(
         name="kb_updater",
         description="Updates the knowledge base with newly verified facts from the review.",
-        model=_model(KB_WRITER_MODEL),
+        model=_model(constants.KB_WRITER_MODEL),
         instruction=prompt_versions["kb_updater"]["system_instruction"],
         tools=[
             FunctionTool(upsert_knowledge_entry),
@@ -116,7 +116,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
         output_key="kb_update_summary",
     )
 
-    # Orchestration: parallel research -> sequential review -> KB update
+    # Orchestration: parallel research -> sequential review -> KB update (when enabled)
     research_agent = ParallelAgent(
         name="research",
         description="Runs KB and web research in parallel.",
@@ -125,8 +125,8 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
 
     review_pipeline = SequentialAgent(
         name="stage4_review_pipeline",
-        description="Full Stage 4 review: parallel research, analysis revision, and KB update.",
-        sub_agents=[research_agent, analysis_reviewer, kb_updater],
+        description="Full Stage 4 review: parallel research, analysis revision, and KB update when enabled.",
+        sub_agents=[research_agent, analysis_reviewer, *([kb_updater] if constants.KB_UPDATER_ENABLED else [])],
     )
 
     return review_pipeline, searxng_toolset
