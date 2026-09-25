@@ -203,7 +203,8 @@ refuses the production project unless `--allow-production` is passed.
   FROM generate_series(<from>, <to>, interval '1 hour') h`; test the alert with `p_min_share => 1.01` on the last
   hour, then re-run it with the defaults. Pause with `cron.unschedule('record_search_hit_stats')`.
 - **`cron.job_run_details` keeps 7 days.** pg_cron job `prune_cron_job_run_details` (`20 3 * * *`, VER-410,
-  migration `20260925100000`) deletes older runs; pg_cron never prunes on its own.
+  migration `20260925100000`) deletes older runs, and failed runs with no end time by their start time; pg_cron
+  never prunes on its own.
 - **Pipeline searches run SearXNG's `general` engines only** (no category is sent). Google, DuckDuckGo and Qwant
   CAPTCHA our Fly IP and Bing returns it junk (Sep 2026), so `searxng/config/settings.yml` also puts Google News,
   Bing News, Reuters and full-text Wikipedia (`mediawiki`, en + es) in `general` (VER-411).

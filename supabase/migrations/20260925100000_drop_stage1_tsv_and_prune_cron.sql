@@ -5,7 +5,8 @@
 -- the finished tsv backfill (cron job every minute, backfill_control paused). The trigger writes the column on
 -- every insert, so it goes in the same transaction. The column's TOAST space returns on the next table rewrite.
 --
--- pg_cron never prunes cron.job_run_details (1.18M rows by 25 Sep 2026, see 20260918040000); keep 7 days.
+-- pg_cron never prunes cron.job_run_details (1.18M rows by 25 Sep 2026, see 20260918040000); keep 7 days. Runs
+-- failed by a server restart keep a NULL end_time, so those age out by start_time.
 --
 -- Rollback: recreate the column, trigger, functions, backfill_control and index from
 -- 20260915000000_baseline_public_schema.sql, then backfill tsv_transcription with to_tsvector('spanish', ...).
@@ -29,6 +30,9 @@ DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
         PERFORM cron.schedule('prune_cron_job_run_details', '20 3 * * *',
-            $cmd$DELETE FROM cron.job_run_details WHERE end_time < now() - interval '7 days'$cmd$);
+            $cmd$DELETE FROM cron.job_run_details
+                WHERE end_time < now() - interval '7 days'
+                   OR (end_time IS NULL AND status NOT IN ('starting', 'running')
+                       AND start_time < now() - interval '7 days')$cmd$);
     END IF;
 END $$;
