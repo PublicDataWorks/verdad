@@ -205,6 +205,8 @@ refuses the production project unless `--allow-production` is passed.
 - **Pipeline searches run SearXNG's `general` engines only** (no category is sent). Google, DuckDuckGo and Qwant
   CAPTCHA our Fly IP and Bing returns it junk (Sep 2026), so `searxng/config/settings.yml` also puts Google News,
   Bing News, Reuters and full-text Wikipedia (`mediawiki`, en + es) in `general` (VER-411).
+- **Stage 4 does not write to the knowledge base** since 2026-09-25 (VER-412): `KB_UPDATER_ENABLED`
+  (`stage_4/constants.py`) is `False`, so the review pipeline runs without `kb_updater`. The KB is still read.
 - **Transient Gemini errors are retried** (`src/processing_pipeline/gemini_retry.py`: 429/5xx and empty or
   unparseable output, waits of 30 s, 2 min, 5 min) in Stage 3 and Stage 4; the snippet only reaches `Error`
   after the fourth failure, with that message stored. Rerun those ids once the outage is over.
