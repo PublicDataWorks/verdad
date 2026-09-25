@@ -75,7 +75,7 @@ Schema: `supabase/database/sql/create_knowledge_base.sql`.
 - `kb_entry_embeddings`: one 3,072-dim embedding per entry; searched by the `search_kb_entries` RPC (`search_kb_entries.sql`) and `find_duplicate_kb_entries`.
 - `kb_entry_snippet_usage`: which entry was `used_for_review`, `triggered_creation` or `triggered_update` for which snippet.
 
-Writers: the Stage 4 KB updater agent through the tools in `src/processing_pipeline/stage_4/tools.py` — `upsert_knowledge_entry` (line 77: dedupes at similarity 0.92, then inserts or supersedes, stores sources, embeds, records usage) and `deactivate_knowledge_entry` (line 223). The `SupabaseClient` methods behind them are in `supabase_utils.py:461-630`. A one-off manual batch was also added on 2026-03-16 (`reports/2026-03-16_downvote_kb_review.md`).
+Writers: the Stage 4 KB updater agent (off since 2026-09-25, `KB_UPDATER_ENABLED` in `stage_4/constants.py`) through the tools in `src/processing_pipeline/stage_4/tools.py` — `upsert_knowledge_entry` (line 77: dedupes at similarity 0.92, then inserts or supersedes, stores sources, embeds, records usage) and `deactivate_knowledge_entry` (line 223). The `SupabaseClient` methods behind them are in `supabase_utils.py:461-630`. A one-off manual batch was also added on 2026-03-16 (`reports/2026-03-16_downvote_kb_review.md`).
 
 Readers: Stage 1 through `kb_context.py` (section 2) and the Stage 4 KB researcher agent through `search_knowledge_base` (`tools.py:44`). Stage 3 does not read the knowledge base.
 
