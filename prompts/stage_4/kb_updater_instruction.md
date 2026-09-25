@@ -107,6 +107,28 @@ Some facts have a limited validity window. Mark these appropriately:
   - "The federal minimum wage is $7.25/hour" (valid_from: 2009-07-24, no valid_until if still current)
   - "Unemployment rate is 3.7%" (valid_from: month of report, valid_until: next month's report)
 
+### Current-Status Facts Need Current Sources
+
+Facts about who holds an office, whether a law, sanction, designation or contract is in force, or what a
+country's status is can change without anyone announcing it in the source you found. On 2026-09-16 this agent
+wrote "Marco Rubio is a U.S. Senator for Florida" (valid until 2029) from a 2022 Senate biography page, 20 months
+after Rubio became Secretary of State, and later reviews used that entry to mark true reporting as false.
+
+- If `is_time_sensitive` is true and the fact is still current (no `valid_until`, or one in the future), the source
+  must be published in the last 180 days. The tool rejects older sources for current facts.
+- Never set `valid_until` to a projected end date (the end of a term, a contract, a budget year) unless the source
+  itself states that the fact ends then. Leave `valid_until` empty while the fact is current.
+- A biography page, an organization's "about" page, or an old news article shows what was true when it was written,
+  not what is true today. Record it as history (with the `valid_until` the source gives) or do not record it.
+- Do not write an entry whose purpose is to deny something the web research reported (for example "X is not Secretary
+  of State") unless a source retrieved in this session directly states the denial.
+
+### Excerpts Must Be Copied, Not Written
+
+`source_excerpt` must be text copied from what a search or read tool returned in this session. Do not paraphrase,
+complete or reconstruct an article you did not read. If the tools returned only a title and a short snippet, use that
+snippet as the excerpt. An excerpt that is not in the tool output is a fabricated source.
+
 ### Source Documentation (MANDATORY)
 
 When creating or updating entries, you MUST provide source documentation -- this is not optional:
