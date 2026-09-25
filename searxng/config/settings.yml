@@ -50,12 +50,19 @@ engines:
     disabled: false
 
   # News Sources
+  # VER-411: also general, since the pipeline sends no category
   - name: google news
     engine: google_news
     disabled: false
+    categories: [general, news]
   - name: bing news
     engine: bing_news
     disabled: false
+    categories: [general, news]
+  - name: reuters
+    engine: reuters
+    disabled: false
+    categories: [general, news]
   - name: yahoo news
     engine: yahoo_news
     disabled: false
@@ -66,6 +73,21 @@ engines:
     disabled: false
   - name: wikidata
     engine: wikidata
+    disabled: false
+  # VER-411: full-text; `wikipedia` above matches exact titles only
+  - name: wikipedia search
+    engine: mediawiki
+    shortcut: wps
+    base_url: https://en.wikipedia.org/
+    search_type: text
+    categories: [general]
+    disabled: false
+  - name: wikipedia search es
+    engine: mediawiki
+    shortcut: wpses
+    base_url: https://es.wikipedia.org/
+    search_type: text
+    categories: [general]
     disabled: false
 
   # Academic Sources
