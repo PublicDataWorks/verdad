@@ -198,15 +198,83 @@ def test_usage_is_summed_over_every_turn():
     assert usage["thoughts_token_count"] == 0
 
 
-def test_automatic_function_calling_is_disabled_and_tools_are_declared():
+def declared_tools(client):
+    config = client.aio.models.generate_content.await_args.kwargs["config"]
+    return [d.name for tool in config.tools for d in tool.function_declarations]
+
+
+def test_automatic_function_calling_is_disabled_and_tools_are_declared(monkeypatch):
+    monkeypatch.delenv("JINA_API_KEY", raising=False)
     client = fake_client(model_turn(Part.from_text(text="done")))
 
     run(client)
 
     config = client.aio.models.generate_content.await_args.kwargs["config"]
     assert config.automatic_function_calling.disable is True
-    declared = [d.name for tool in config.tools for d in tool.function_declarations]
-    assert declared == ["searxng_web_search", "web_url_read"]
+    assert declared_tools(client) == ["searxng_web_search", "web_url_read"]
+
+
+def test_jina_is_declared_only_when_its_key_is_set(monkeypatch):
+    monkeypatch.setenv("JINA_API_KEY", "test-key")
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    run(client)
+
+    assert declared_tools(client) == ["searxng_web_search", "web_url_read", "jina_web_search"]
+
+
+def fake_search_and_jina(monkeypatch):
+    calls = []
+
+    async def fake_search(query: str) -> dict:
+        calls.append(("searxng", query))
+        return {"query": query, "results": []}
+
+    async def fake_jina(query: str) -> dict:
+        calls.append(("jina", query))
+        return {"query": query, "failed": True, "error": "402", "results": []}
+
+    monkeypatch.setenv("JINA_API_KEY", "test-key")
+    monkeypatch.setitem(executors.WEB_TOOLS, "searxng_web_search", fake_search)
+    monkeypatch.setitem(executors.WEB_TOOLS, "jina_web_search", fake_jina)
+    return calls
+
+
+def test_jina_runs_once_per_analysis_even_when_its_first_call_fails(monkeypatch):
+    calls = fake_search_and_jina(monkeypatch)
+    client = fake_client(
+        model_turn(tool_call("searxng_web_search", query="q")),
+        model_turn(tool_call("jina_web_search", query="first")),
+        model_turn(tool_call("jina_web_search", query="second")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    text, _, _, _ = run(client)
+
+    assert text == "done"
+    assert calls == [("searxng", "q"), ("jina", "first")]
+    (response,) = function_responses(client.aio.models.generate_content.await_args_list[3])
+    assert "only once per analysis" in response.response["error"]
+
+
+def test_jina_waits_for_a_searxng_search_in_an_earlier_turn(monkeypatch):
+    calls = fake_search_and_jina(monkeypatch)
+    client = fake_client(
+        model_turn(tool_call("jina_web_search", query="too early")),
+        model_turn(tool_call("searxng_web_search", query="q"), tool_call("jina_web_search", query="same turn")),
+        model_turn(tool_call("jina_web_search", query="fallback")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    run(client)
+
+    assert calls == [("searxng", "q"), ("jina", "fallback")]
+    # One shared contents list: [prompt, model turn 1, responses 1, model turn 2, responses 2, ...]
+    contents = client.aio.models.generate_content.await_args.kwargs["contents"]
+    (early,) = [p.function_response for p in contents[2].parts]
+    _, same_turn = [p.function_response for p in contents[4].parts]
+    assert "search with searxng_web_search first" in early.response["error"]
+    assert "search with searxng_web_search first" in same_turn.response["error"]
 
 
 def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypatch):
