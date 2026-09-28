@@ -9,43 +9,45 @@ from processing_pipeline.stage_3 import web_tools
 NOW = datetime(2026, 9, 28, 3, 0, tzinfo=timezone.utc)
 
 
-class _JinaSession:
-    calls = []
-    payload = {}
+def jina_session(payload, calls):
+    """An aiohttp.ClientSession stand-in that records each GET and answers with ``payload``."""
 
-    def __init__(self, *args, **kwargs):
-        pass
+    class Session:
+        def __init__(self, *args, **kwargs):
+            pass
 
-    async def __aenter__(self):
-        return self
+        async def __aenter__(self):
+            return self
 
-    async def __aexit__(self, *exc):
-        return False
+        async def __aexit__(self, *exc):
+            return False
 
-    def get(self, url, params=None, headers=None):
-        self.calls.append((url, params, headers))
-        return self
+        def get(self, url, params=None, headers=None):
+            calls.append((url, params, headers))
+            return self
 
-    def raise_for_status(self):
-        pass
+        def raise_for_status(self):
+            pass
 
-    async def json(self):
-        return self.payload
+        async def json(self):
+            return payload
+
+    return Session
 
 
 def test_jina_search_asks_for_no_content_and_returns_the_searxng_shape(monkeypatch):
     monkeypatch.setenv("JINA_API_KEY", "test-key")
-    _JinaSession.calls = []
-    _JinaSession.payload = {
+    calls = []
+    payload = {
         "data": [
             {"title": "UN story", "url": "https://news.un.org/a", "description": "d" * 2000, "date": "Sep 24, 2026"},
             {"title": "No date", "url": "https://example.org/b", "date": None},
         ]
     }
-    with patch.object(web_tools.aiohttp, "ClientSession", _JinaSession):
+    with patch.object(web_tools.aiohttp, "ClientSession", jina_session(payload, calls)):
         result = asyncio.run(web_tools.jina_web_search("Zelenskyy UN speech"))
 
-    ((url, params, headers),) = _JinaSession.calls
+    ((url, params, headers),) = calls
     assert url == "https://s.jina.ai/"
     assert params == {"q": "Zelenskyy UN speech"}
     assert headers["X-Respond-With"] == "no-content"
@@ -62,11 +64,11 @@ def test_jina_search_asks_for_no_content_and_returns_the_searxng_shape(monkeypat
 
 def test_jina_search_without_key_fails_without_calling_out(monkeypatch):
     monkeypatch.delenv("JINA_API_KEY", raising=False)
-    _JinaSession.calls = []
-    with patch.object(web_tools.aiohttp, "ClientSession", _JinaSession):
+    calls = []
+    with patch.object(web_tools.aiohttp, "ClientSession", jina_session({}, calls)):
         result = asyncio.run(web_tools.jina_web_search("anything"))
     assert result["failed"] is True and result["results"] == []
-    assert _JinaSession.calls == []
+    assert calls == []
     assert not web_tools.jina_search_available()
 
 

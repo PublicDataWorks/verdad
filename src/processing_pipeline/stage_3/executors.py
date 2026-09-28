@@ -34,7 +34,7 @@ from processing_pipeline.temporal_context import build_temporal_context
 # The web tools the model may call during the analysis, keyed by the name Gemini must use.
 WEB_TOOLS = {tool.__name__: tool for tool in (searxng_web_search, web_url_read, jina_web_search)}
 
-# Jina tokens are prepaid (VER-415): one fallback search per analysis.
+# Jina tokens are prepaid (VER-415).
 ONCE_PER_ANALYSIS = {jina_web_search.__name__}
 
 # Upper bound on model turns per analysis (one final answer plus up to 19 rounds of tool calls).
@@ -240,7 +240,7 @@ class Stage3Executor:
         function_calls = []
         usage = dict.fromkeys(USAGE_FIELDS, 0)  # every turn is billed, so sum them
         observed = ObservedToolOutput()
-        spent: set[str] = set()
+        called: set[str] = set()
         for _ in range(MAX_MODEL_TURNS):
             response = await gemini_client.aio.models.generate_content(
                 model=model_name,
@@ -253,11 +253,13 @@ class Stage3Executor:
             if not function_calls:
                 break
             contents.append(response.candidates[0].content)
+            searched = searxng_web_search.__name__ in called  # the model has seen SearXNG results
             contents.append(
                 Content(
                     role="user",
                     parts=[
-                        await cls.__call_tool(function_call, observed, tools, spent) for function_call in function_calls
+                        await cls.__call_tool(function_call, observed, tools, called, searched)
+                        for function_call in function_calls
                     ],
                 )
             )
@@ -306,11 +308,12 @@ class Stage3Executor:
 
     @classmethod
     async def __call_tool(
-        cls, function_call: FunctionCall, observed: "ObservedToolOutput", tools: dict, spent: set[str]
+        cls, function_call: FunctionCall, observed: "ObservedToolOutput", tools: dict, called: set[str], searched: bool
     ) -> Part:
         """Run one requested tool from ``tools`` and wrap its result (or error) as a function-response part.
 
-        A tool in ``ONCE_PER_ANALYSIS`` is added to ``spent`` on its first call, failed or not; later calls get an error.
+        ``called`` collects the tools run so far. Jina gets an error instead of running unless ``searched`` (a SearXNG
+        search in an earlier turn), and tools in ``ONCE_PER_ANALYSIS`` run once, even when that call failed.
 
         Every URL the tool result shows the model is added to ``observed`` (as ``url_key`` values, with the
         publication date the search tool reported when it did), so the evidence gate can tell a source the
@@ -331,13 +334,14 @@ class Stage3Executor:
             print(f"Model called unknown tool {name!r} with {args}; {action}.")
 
         tool = tools.get(tool_name)
-        if tool_name in spent:
+        if tool_name in ONCE_PER_ANALYSIS and tool_name in called:
             payload = {"error": f"{tool_name} can be called only once per analysis and was already used."}
+        elif tool_name == jina_web_search.__name__ and not searched:
+            payload = {"error": f"{tool_name} is a fallback: search with searxng_web_search first."}
         elif tool is None:
             payload = {"error": f"Unknown tool {name!r}. The only available tools are: {', '.join(tools)}."}
         else:
-            if tool_name in ONCE_PER_ANALYSIS:
-                spent.add(tool_name)
+            called.add(tool_name)
             try:
                 payload = {"result": await tool(**args)}
                 observed.record(tool_name, payload["result"])
