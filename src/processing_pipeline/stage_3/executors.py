@@ -20,12 +20,22 @@ from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import get_safety_settings
 from processing_pipeline.kb_sources import parse_iso_date, url_key
 from processing_pipeline.stage_3.models import Stage3Output, apply_evidence_caps, fill_publication_dates
-from processing_pipeline.stage_3.web_tools import searxng_web_search, tool_result_dates, tool_result_urls, web_url_read
+from processing_pipeline.stage_3.web_tools import (
+    jina_search_available,
+    jina_web_search,
+    searxng_web_search,
+    tool_result_dates,
+    tool_result_urls,
+    web_url_read,
+)
 from processing_pipeline.temporal_context import build_temporal_context
 
 
 # The web tools the model may call during the analysis, keyed by the name Gemini must use.
-WEB_TOOLS = {tool.__name__: tool for tool in (searxng_web_search, web_url_read)}
+WEB_TOOLS = {tool.__name__: tool for tool in (searxng_web_search, web_url_read, jina_web_search)}
+
+# Jina tokens are prepaid (VER-415): one fallback search per analysis.
+ONCE_PER_ANALYSIS = {jina_web_search.__name__}
 
 # Upper bound on model turns per analysis (one final answer plus up to 19 rounds of tool calls).
 MAX_MODEL_TURNS = 20
@@ -38,6 +48,13 @@ USAGE_FIELDS = (
     "tool_use_prompt_token_count",
     "total_token_count",
 )
+
+
+def offered_tools() -> dict:
+    """The web tools declared to the model: Jina only when its API key is set."""
+    return {
+        name: tool for name, tool in WEB_TOOLS.items() if name != jina_web_search.__name__ or jina_search_available()
+    }
 
 
 def usage_metadata_to_dict(usage_metadata) -> dict:
@@ -80,7 +97,7 @@ class Stage3Executor:
         Main execution method for Stage 3 analysis.
 
         Uses the Google GenAI SDK with web search tools (searxng_web_search,
-        web_url_read) for fact checking via automatic function calling.
+        web_url_read, jina_web_search when configured) for fact checking.
 
         Args:
             gemini_client: Google GenAI client instance
@@ -179,7 +196,7 @@ class Stage3Executor:
         """
         Analyze using the GenAI SDK with web search tools.
 
-        Exposes searxng_web_search and web_url_read as function tools and runs the
+        Exposes the ``offered_tools`` as function tools and runs the
         tool-calling loop explicitly instead of via the SDK's automatic function
         calling: the SDK looks each requested tool up with ``function_map[name]``, so a
         hallucinated tool name (``search``, ``run``, ``call``, ...) escapes as a bare
@@ -194,13 +211,14 @@ class Stage3Executor:
         """
         print("Analyzing with SDK + web search tools...")
 
+        tools = offered_tools()
         config = GenerateContentConfig(
             system_instruction=system_instruction,
             max_output_tokens=32768,
             tools=[
                 Tool(
                     function_declarations=[
-                        FunctionDeclaration.from_callable_with_api_option(callable=tool) for tool in WEB_TOOLS.values()
+                        FunctionDeclaration.from_callable_with_api_option(callable=tool) for tool in tools.values()
                     ]
                 )
             ],
@@ -222,6 +240,7 @@ class Stage3Executor:
         function_calls = []
         usage = dict.fromkeys(USAGE_FIELDS, 0)  # every turn is billed, so sum them
         observed = ObservedToolOutput()
+        spent: set[str] = set()
         for _ in range(MAX_MODEL_TURNS):
             response = await gemini_client.aio.models.generate_content(
                 model=model_name,
@@ -237,7 +256,9 @@ class Stage3Executor:
             contents.append(
                 Content(
                     role="user",
-                    parts=[await cls.__call_tool(function_call, observed) for function_call in function_calls],
+                    parts=[
+                        await cls.__call_tool(function_call, observed, tools, spent) for function_call in function_calls
+                    ],
                 )
             )
 
@@ -284,8 +305,12 @@ class Stage3Executor:
         return f"{len(result.get('content') or '')} chars"
 
     @classmethod
-    async def __call_tool(cls, function_call: FunctionCall, observed: "ObservedToolOutput") -> Part:
-        """Run one requested tool and wrap its result (or error) as a function-response part.
+    async def __call_tool(
+        cls, function_call: FunctionCall, observed: "ObservedToolOutput", tools: dict, spent: set[str]
+    ) -> Part:
+        """Run one requested tool from ``tools`` and wrap its result (or error) as a function-response part.
+
+        A tool in ``ONCE_PER_ANALYSIS`` is added to ``spent`` on its first call, failed or not; later calls get an error.
 
         Every URL the tool result shows the model is added to ``observed`` (as ``url_key`` values, with the
         publication date the search tool reported when it did), so the evidence gate can tell a source the
@@ -299,16 +324,20 @@ class Stage3Executor:
         }
 
         tool_name = name
-        if name not in WEB_TOOLS:
+        if name not in tools:
             # Pro calls the search tool 'call', 'run' or 'search' and then answers without retrying on an error.
             tool_name = "searxng_web_search" if "query" in args else "web_url_read" if "url" in args else None
             action = f"running {tool_name}" if tool_name else "telling it which tools exist"
             print(f"Model called unknown tool {name!r} with {args}; {action}.")
 
-        tool = WEB_TOOLS.get(tool_name)
-        if tool is None:
-            payload = {"error": f"Unknown tool {name!r}. The only available tools are: {', '.join(WEB_TOOLS)}."}
+        tool = tools.get(tool_name)
+        if tool_name in spent:
+            payload = {"error": f"{tool_name} can be called only once per analysis and was already used."}
+        elif tool is None:
+            payload = {"error": f"Unknown tool {name!r}. The only available tools are: {', '.join(tools)}."}
         else:
+            if tool_name in ONCE_PER_ANALYSIS:
+                spent.add(tool_name)
             try:
                 payload = {"result": await tool(**args)}
                 observed.record(tool_name, payload["result"])
