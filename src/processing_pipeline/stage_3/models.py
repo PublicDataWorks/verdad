@@ -463,10 +463,12 @@ def cited_url_keys(verification_evidence: dict | None) -> set[str]:
     if not isinstance(verification_evidence, dict):
         return keys
     for search in verification_evidence.get("searches_performed") or []:
-        for result in (search.get("results") or []) if isinstance(search, dict) else []:
+        if not isinstance(search, dict):
+            continue
+        for result in search.get("results") or []:
             if isinstance(result, dict) and result.get("relevance_to_claim") in ("supports_claim", "contradicts_claim"):
                 keys.add(url_key(result.get("url")))
-    keys.discard("")
+    keys.discard("")  # url_key of a non-http URL
     return keys
 
 

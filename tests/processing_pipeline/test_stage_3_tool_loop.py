@@ -21,6 +21,7 @@ from google.genai.types import (
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_3 import executors
 from processing_pipeline.stage_3.executors import Stage3Executor
+from processing_pipeline.stage_3.models import cited_url_keys
 
 analyze = Stage3Executor._Stage3Executor__analyze_with_web_search
 
@@ -351,7 +352,7 @@ def test_tool_usage_counts_runs_and_the_cited_sources_each_search_tool_returned(
             {"results": [cited("https://a.org/context", "provides_context"), cited("not a url")]},
         ]
     }
-    assert executors.cited_url_keys(evidence) == {"a.org/1", "both.org/x", "jina.org/2", "made-up.org/3"}
+    assert cited_url_keys(evidence) == {"a.org/1", "both.org/x", "jina.org/2", "made-up.org/3"}
 
     _, _, _, observed = run(client)
 

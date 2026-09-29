@@ -1,6 +1,6 @@
 import asyncio
 import json
-from collections import Counter, defaultdict
+from collections import Counter
 
 from google import genai
 from google.genai.types import (
@@ -74,19 +74,20 @@ class ObservedToolOutput:
 
     ``urls`` holds the ``url_key`` of every URL a tool returned; ``dates`` maps those keys to the ISO publication
     date the search tool reported, when it did. The evidence gate uses both (see ``apply_evidence_caps``).
+    ``calls`` and ``search_urls`` (URL keys per search tool) feed ``tool_usage``.
     """
 
     def __init__(self):
         self.urls: set[str] = set()
         self.dates: dict[str, str] = {}
         self.calls: Counter[str] = Counter()
-        self.search_urls: defaultdict[str, set[str]] = defaultdict(set)
+        self.search_urls: dict[str, set[str]] = {}
 
     def record(self, tool_name: str, result) -> None:
         keys = set(filter(None, map(url_key, tool_result_urls(tool_name, result))))
         self.urls.update(keys)
         if tool_name in SEARCH_TOOLS:
-            self.search_urls[tool_name].update(keys)
+            self.search_urls.setdefault(tool_name, set()).update(keys)
         for url, published in tool_result_dates(tool_name, result).items():
             key = url_key(url)
             if key and parse_iso_date(published) is not None:
@@ -98,7 +99,7 @@ class ObservedToolOutput:
         return {
             "calls": dict(self.calls),
             "sources_by_tool": {
-                tool: len(cited & self.search_urls[tool]) for tool in self.calls if tool in SEARCH_TOOLS
+                tool: len(cited & self.search_urls.get(tool, set())) for tool in self.calls if tool in SEARCH_TOOLS
             },
         }
 
