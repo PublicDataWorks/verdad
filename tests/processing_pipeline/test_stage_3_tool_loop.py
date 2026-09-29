@@ -21,6 +21,7 @@ from google.genai.types import (
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_3 import executors
 from processing_pipeline.stage_3.executors import Stage3Executor
+from processing_pipeline.stage_3.models import cited_url_keys
 
 analyze = Stage3Executor._Stage3Executor__analyze_with_web_search
 
@@ -319,3 +320,44 @@ def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypa
 
     assert observed.urls == set()
     assert observed.dates == {}
+
+
+def cited(url, relevance="supports_claim"):
+    return {"url": url, "relevance_to_claim": relevance}
+
+
+def test_tool_usage_counts_runs_and_the_cited_sources_each_search_tool_returned(monkeypatch):
+    async def fake_search(query: str) -> dict:
+        return {"query": query, "results": [{"url": "https://a.org/1"}, {"url": "https://both.org/x"}]}
+
+    async def fake_jina(query: str) -> dict:
+        return {"query": query, "results": [{"url": "https://both.org/x"}, {"url": "https://jina.org/2"}]}
+
+    async def fake_read(url: str) -> dict:
+        return {"url": url, "content": "..."}
+
+    monkeypatch.setenv("JINA_API_KEY", "test-key")
+    monkeypatch.setitem(executors.WEB_TOOLS, "searxng_web_search", fake_search)
+    monkeypatch.setitem(executors.WEB_TOOLS, "jina_web_search", fake_jina)
+    monkeypatch.setitem(executors.WEB_TOOLS, "web_url_read", fake_read)
+    client = fake_client(
+        model_turn(tool_call("jina_web_search", query="too early"), tool_call("searxng_web_search", query="q")),
+        model_turn(tool_call("jina_web_search", query="fallback"), tool_call("web_url_read", url="https://jina.org/2")),
+        model_turn(Part.from_text(text="done")),
+    )
+    evidence = {
+        "searches_performed": [
+            {"results": [cited("https://a.org/1"), cited("https://both.org/x", "contradicts_claim")]},
+            {"results": [cited("https://jina.org/2"), cited("https://made-up.org/3")]},
+            {"results": [cited("https://a.org/context", "provides_context"), cited("not a url")]},
+        ]
+    }
+    assert cited_url_keys(evidence) == {"a.org/1", "both.org/x", "jina.org/2", "made-up.org/3"}
+
+    _, _, _, observed = run(client)
+
+    assert observed.tool_usage(evidence) == {
+        "calls": {"searxng_web_search": 1, "jina_web_search": 1, "web_url_read": 1},
+        "sources_by_tool": {"searxng_web_search": 2, "jina_web_search": 2},
+    }
+    assert executors.ObservedToolOutput().tool_usage(evidence) == {"calls": {}, "sources_by_tool": {}}

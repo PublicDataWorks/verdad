@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from unittest import mock
 from unittest.mock import AsyncMock, Mock, call, patch
@@ -402,7 +403,8 @@ class TestStage3:
         result = self._run_executor(mock_gemini_client)
 
         assert result["response"] == {"test": "response", "is_convertible": True}
-        assert result["grounding_metadata"] == "{}"  # no verification_evidence in the output
+        # no verification_evidence in the output, no tool ran
+        assert json.loads(result["grounding_metadata"]) == {"tool_usage": {"calls": {}, "sources_by_tool": {}}}
         assert result["thought_summaries"] is None
         assert result["usage"] == dict.fromkeys(USAGE_FIELDS, 0)  # the response double reports no usage
         assert mock_gemini_client.aio.models.generate_content.await_count == 2

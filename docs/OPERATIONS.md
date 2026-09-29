@@ -214,7 +214,9 @@ refuses the production project unless `--allow-production` is passed.
 - **Stage 3 can fall back to Jina search** (`jina_web_search`, VER-415) when SearXNG found nothing relevant: offered
   only when the `JINA_API_KEY` secret is set, after a SearXNG search, at most once per analysis, in `no-content`
   mode (a flat 10k prepaid tokens per search; with page text one search cost ~120k). Out of tokens = the call fails
-  and the analysis goes on. Token balance: the Jina API dashboard for that key.
+  and the analysis goes on. Token balance: the Jina API dashboard for that key. Each analysis stores
+  `grounding_metadata.tool_usage` (VER-416): runs per tool, and per search tool how many cited sources it returned;
+  Jina rescued the analysis when `sources_by_tool.jina_web_search > 0` and `searxng_web_search` is 0.
 - **Stage 4 does not write to the knowledge base** since 2026-09-25 (VER-412): `KB_UPDATER_ENABLED`
   (`stage_4/constants.py`) is `False`, so the review pipeline runs without `kb_updater`. The KB is still read,
   but since 2026-09-28 (VER-413) it holds only the 18 analyst-written entries: every pipeline-written entry was
