@@ -457,6 +457,19 @@ def _contradicting_results(verification_evidence: dict | None):
                 yield result
 
 
+def cited_url_keys(verification_evidence: dict | None) -> set[str]:
+    """``url_key`` of every recorded result that supports or contradicts the claim."""
+    keys = set()
+    if not isinstance(verification_evidence, dict):
+        return keys
+    for search in verification_evidence.get("searches_performed") or []:
+        for result in (search.get("results") or []) if isinstance(search, dict) else []:
+            if isinstance(result, dict) and result.get("relevance_to_claim") in ("supports_claim", "contradicts_claim"):
+                keys.add(url_key(result.get("url")))
+    keys.discard("")
+    return keys
+
+
 def url_was_observed(url, observed_urls: set[str]) -> bool:
     """True when ``url`` names a page in ``observed_urls`` (a set of ``url_key`` values); see ``url_key``."""
     return url_key(url) in observed_urls

@@ -1,5 +1,6 @@
 import asyncio
 import json
+from collections import Counter, defaultdict
 
 from google import genai
 from google.genai.types import (
@@ -19,8 +20,14 @@ from pydantic import ValidationError
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import get_safety_settings
 from processing_pipeline.kb_sources import parse_iso_date, url_key
-from processing_pipeline.stage_3.models import Stage3Output, apply_evidence_caps, fill_publication_dates
+from processing_pipeline.stage_3.models import (
+    Stage3Output,
+    apply_evidence_caps,
+    cited_url_keys,
+    fill_publication_dates,
+)
 from processing_pipeline.stage_3.web_tools import (
+    SEARCH_TOOLS,
     jina_search_available,
     jina_web_search,
     searxng_web_search,
@@ -72,13 +79,28 @@ class ObservedToolOutput:
     def __init__(self):
         self.urls: set[str] = set()
         self.dates: dict[str, str] = {}
+        self.calls: Counter[str] = Counter()
+        self.search_urls: defaultdict[str, set[str]] = defaultdict(set)
 
     def record(self, tool_name: str, result) -> None:
-        self.urls.update(filter(None, map(url_key, tool_result_urls(tool_name, result))))
+        keys = set(filter(None, map(url_key, tool_result_urls(tool_name, result))))
+        self.urls.update(keys)
+        if tool_name in SEARCH_TOOLS:
+            self.search_urls[tool_name].update(keys)
         for url, published in tool_result_dates(tool_name, result).items():
             key = url_key(url)
             if key and parse_iso_date(published) is not None:
                 self.dates[key] = published
+
+    def tool_usage(self, verification_evidence: dict | None) -> dict:
+        """Runs per tool, and per search tool how many cited sources were in its results (VER-416)."""
+        cited = cited_url_keys(verification_evidence)
+        return {
+            "calls": dict(self.calls),
+            "sources_by_tool": {
+                tool: len(cited & self.search_urls[tool]) for tool in self.calls if tool in SEARCH_TOOLS
+            },
+        }
 
 
 class Stage3Executor:
@@ -170,6 +192,7 @@ class Stage3Executor:
             )
             evidence_gate = output.pop("evidence_gate")
             grounding_metadata = dict(output.get("verification_evidence") or {})
+            grounding_metadata["tool_usage"] = observed.tool_usage(output.get("verification_evidence"))
             if evidence_gate.get("applied"):
                 print(f"Evidence gate applied: {evidence_gate['note']}")
                 grounding_metadata["evidence_gate"] = evidence_gate
@@ -342,6 +365,7 @@ class Stage3Executor:
             payload = {"error": f"Unknown tool {name!r}. The only available tools are: {', '.join(tools)}."}
         else:
             called.add(tool_name)
+            observed.calls[tool_name] += 1
             try:
                 payload = {"result": await tool(**args)}
                 observed.record(tool_name, payload["result"])
