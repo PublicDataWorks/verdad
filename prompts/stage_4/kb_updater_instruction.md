@@ -101,11 +101,11 @@ Some facts have a limited validity window. Mark these appropriately:
 
 - Set `is_time_sensitive` to `true` for facts that will become outdated
 - Set `valid_from` to when the fact became true
-- Set `valid_until` to when the fact is expected to expire (if known)
+- Set `valid_until` only to an end date the source states; leave it empty while the fact is current
 - Examples of time-sensitive facts:
   - "Joe Biden is the President of the United States" (valid_from: 2021-01-20, valid_until: 2025-01-20)
   - "The federal minimum wage is $7.25/hour" (valid_from: 2009-07-24, no valid_until if still current)
-  - "Unemployment rate is 3.7%" (valid_from: month of report, valid_until: next month's report)
+  - "Unemployment rate is 3.7%" (valid_from: month of report, no valid_until while it is the latest report)
 
 ### Current-Status Facts Need Current Sources
 
