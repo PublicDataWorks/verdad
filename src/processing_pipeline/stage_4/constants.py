@@ -13,6 +13,9 @@ class Stage4SubStage(StrEnum):
 # kb_updater's model; every KB entry it writes is labelled with it (created_by_model)
 KB_WRITER_MODEL = GeminiModel.GEMINI_2_5_FLASH
 
+# A time-sensitive KB fact recorded as still current needs a source no older than this (see validate_kb_currency)
+KB_CURRENT_FACT_MAX_SOURCE_AGE_DAYS = 180
+
 # Session-state key: url_key of every URL the search and read tools returned so far (VER-391)
 OBSERVED_URLS_STATE_KEY = "stage_4_observed_urls"
 

@@ -21,6 +21,8 @@ def _args(**overrides):
         quarantine_batch=None,
         quarantine_reason=None,
         error_keyerror=False,
+        stale_verdict=None,
+        deactivated_kb=False,
         since=None,
         min_confidence=None,
         not_hidden=False,
@@ -332,6 +334,16 @@ class _FakeClient:
         return _FakeBuilder(self.rows, self.calls)
 
 
+class _TablesFakeClient(_FakeClient):
+    def __init__(self, rows_by_table):
+        super().__init__([])
+        self.rows_by_table = rows_by_table
+
+    def table(self, name):
+        self.calls.append(("table", (name,)))
+        return _FakeBuilder(self.rows_by_table[name], self.calls)
+
+
 class TestFetchSelectors:
     def test_quarantine_batch_filters_by_batch_and_unrestored(self):
         client = _FakeClient([{"snippet": "s1"}, {"snippet": "s2"}])
@@ -390,6 +402,62 @@ class TestFetchSelectors:
         client = _FakeClient([{"id": "e1"}])
         rs.fetch_keyerror_snippet_ids(client, date(2026, 9, 2))
         assert client.calls[4] == ("gte", ("recorded_at", "2026-09-02"))
+
+
+class TestStaleVerdictSelectors:
+    BEFORE = rs.parse_utc_timestamp("2026-09-22T04:07:30Z")
+
+    def test_stale_verdict_and_deactivated_kb_count_as_reasons(self):
+        args = rs.parse_args(["--stale-verdict", "2026-09-22T04:07:30Z", "--deactivated-kb", "--stage", "4"])
+        assert args.stale_verdict == self.BEFORE and args.deactivated_kb
+
+    def test_timestamp_without_zone_is_utc_and_a_date_is_midnight(self):
+        assert rs.parse_utc_timestamp("2026-09-22T04:07:30") == self.BEFORE
+        assert rs.parse_utc_timestamp("2026-09-22").isoformat() == "2026-09-22T00:00:00+00:00"
+
+    def test_stale_verdict_filters_server_side(self):
+        client = _FakeClient([{"id": "v1"}])
+        assert rs.fetch_stale_verdict_snippet_ids(client, self.BEFORE, date(2026, 8, 1)) == {"v1"}
+        ts = self.BEFORE.isoformat()
+        assert client.calls[:6] == [
+            ("table", ("snippets",)),
+            ("select", ("id",)),
+            ("eq", ("status", "Processed")),
+            ("eq", ("confidence_scores->>verification_status", "verified_false")),
+            ("or_", (f"reviewed_at.lt.{ts},and(reviewed_at.is.null,updated_at.lt.{ts})",)),
+            ("gte", ("recorded_at", "2026-08-01")),
+        ]
+
+    def test_deactivated_kb_follows_write_usage_of_entries_deactivated_other_than_by_the_reset(self):
+        client = _TablesFakeClient(
+            {
+                "kb_entries": [{"id": "k1"}, {"id": "k2"}],
+                "kb_deactivation_log": [{"id": "l2", "kb_entry": "k2"}],
+                "kb_entry_snippet_usage": [{"id": "u1", "snippet": "s1"}],
+            }
+        )
+        assert rs.fetch_deactivated_kb_snippet_ids(client) == {"s1"}
+        assert client.calls[:3] == [
+            ("table", ("kb_entries",)),
+            ("select", ("id",)),
+            ("eq", ("status", "deactivated")),
+        ]
+        log_calls = client.calls[client.calls.index(("table", ("kb_deactivation_log",))):]
+        assert log_calls[1:4] == [
+            ("select", ("id, kb_entry",)),
+            ("eq", ("batch", "ver-403-reset-2026-09")),
+            ("is_", ("restored_at", "null")),
+        ]
+        usage_calls = client.calls[client.calls.index(("table", ("kb_entry_snippet_usage",))):]
+        assert ("in_", ("kb_entry", ["k1"])) in usage_calls
+        assert ("in_", ("usage_type", ["triggered_creation", "triggered_update"])) in usage_calls
+
+    def test_sql_names_both_selectors(self):
+        sql = rs.build_sql(_args(stale_verdict=self.BEFORE, deactivated_kb=True), "Ready for review")
+        assert "COALESCE(s.reviewed_at, s.updated_at) < '2026-09-22T04:07:30+00:00'" in sql
+        assert "verification_status' = 'verified_false'" in sql
+        assert "k.status = 'deactivated' AND u.usage_type IN ('triggered_creation', 'triggered_update')" in sql
+        assert "batch = 'ver-403-reset-2026-09' AND restored_at IS NULL" in sql
 
 
 class TestRequeue:

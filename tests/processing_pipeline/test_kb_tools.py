@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import Mock, patch
 
 import pytest
@@ -69,6 +70,28 @@ class TestValidateKbSource:
         assert tools.validate_kb_source("https://reuters.com/x", "R", "tier1_wire_service", "2026-01-02", observed) is None
 
 
+class TestValidateKbCurrency:
+    TODAY = date(2026, 9, 16)
+
+    def test_rubio_case_current_fact_on_a_2022_source_is_rejected(self):
+        error = tools.validate_kb_currency(True, "2029-01-03", "2022-11-08", self.TODAY)
+        assert "2022-11-08" in error and "180 days" in error
+
+    def test_current_fact_without_valid_until_needs_a_recent_source(self):
+        assert tools.validate_kb_currency(True, None, "2026-01-02", self.TODAY) is not None
+        assert tools.validate_kb_currency(True, None, "2026-08-15", self.TODAY) is None
+
+    def test_history_may_cite_an_old_source(self):
+        assert tools.validate_kb_currency(True, "2025-01-20", "2021-01-20", self.TODAY) is None
+
+    def test_facts_that_do_not_change_are_not_checked(self):
+        assert tools.validate_kb_currency(False, None, "1999-01-01", self.TODAY) is None
+
+    def test_boundary_is_inclusive(self):
+        assert tools.validate_kb_currency(True, None, "2026-03-20", self.TODAY) is None
+        assert tools.validate_kb_currency(True, None, "2026-03-19", self.TODAY) is not None
+
+
 class TestUpsertKnowledgeEntry:
     def test_creates_entry_with_publication_date(self, supabase):
         result = tools.upsert_knowledge_entry(**VALID, snippet_id="snip", tool_context=_tool_context(OBSERVED))
@@ -84,6 +107,12 @@ class TestUpsertKnowledgeEntry:
     def test_rejects_undated_source(self, supabase):
         result = tools.upsert_knowledge_entry(**{**VALID, "publication_date": None}, tool_context=_tool_context(OBSERVED))
         assert result["status"] == "error" and "publication_date" in result["error_message"]
+        supabase.insert_kb_entry.assert_not_called()
+
+    def test_rejects_current_time_sensitive_fact_on_a_stale_source(self, supabase):
+        stale = {**VALID, "is_time_sensitive": True, "valid_until": "2029-01-03", "publication_date": "2022-11-08"}
+        result = tools.upsert_knowledge_entry(**stale, tool_context=_tool_context(OBSERVED))
+        assert result["status"] == "error" and "still true" in result["error_message"]
         supabase.insert_kb_entry.assert_not_called()
 
     def test_rejects_low_confidence_before_touching_db(self, supabase):
