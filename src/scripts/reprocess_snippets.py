@@ -19,9 +19,9 @@ Usage:
 
 Selection semantics: the "reason" criteria (--fabricated-label, --disliked, --commented, --ids-file,
 --quarantine-batch, --error-keyerror, --stale-verdict, --deactivated-kb) are OR-ed; the filters (--since,
---min-confidence, --not-hidden, --limit) are AND-ed on top of that set. Candidates are ordered newest recorded_at first (the order the Stage 3 poller uses), so
---limit takes the newest ones. Snippets currently in flight (status Processing or Reviewing) are always skipped so
-a worker mid-run is never flipped underneath.
+--min-confidence, --not-hidden, --limit) are AND-ed on top of that set. Candidates are ordered newest recorded_at
+first (the order the Stage 3 poller uses), so --limit takes the newest ones. Snippets currently in flight (status
+Processing or Reviewing) are always skipped so a worker mid-run is never flipped underneath.
 
 --quarantine-batch reads snippet_quarantine_log (batch = NAME, restored_at IS NULL), the table the 2026-09 cleanup
 wrote (created by PR #81's cleanup_2026_09/02_create_snippet_quarantine_log.sql, not yet in this tree). The cleanup
@@ -33,16 +33,16 @@ the selection to log rows whose reason column is one of the given values, so a b
 at a time; the reason list is recorded in the audit file's selected_by entries and in the printed SQL.
 --error-keyerror selects status = 'Error' with error_message starting 'KeyError:' (VER-363 backfill).
 
-Stale verdicts. A prompt or evidence-gate fix only changes verdicts written after it is active; every label
-written before it stays as it was. --stale-verdict TIMESTAMP selects Processed snippets labelled verified_false
-whose last verdict was written before TIMESTAMP: reviewed_at, or for a snippet Stage 4 never reviewed updated_at
-(Stage 2 inserts the row, so created_at is clip time; updated_at is at or after Stage 3's write, which can only
-under-select). Pass the activation time of the fix (prompt_versions.created_at of the version that addressed the
+Stale verdicts. A prompt or evidence-gate fix only changes verdicts written after it is active; every label written
+before it stays as it was. --stale-verdict TIMESTAMP selects Processed snippets labelled verified_false whose last
+verdict was written before TIMESTAMP: reviewed_at, or updated_at for a snippet Stage 4 never reviewed (created_at is
+Stage 2's insert time; updated_at is never earlier than Stage 3's write, so the fallback can miss rows but never
+adds one). Pass the activation time of the fix (prompt_versions.created_at of the version that addressed the
 failure). Stage 3 does not clear reviewed_at, so a snippet re-run through Stage 3 alone keeps its old review time:
 exclude ids from earlier runs' audit files. --deactivated-kb selects the snippets whose Stage 4 review wrote a
 knowledge-base entry later deactivated as wrong (kb_entry_snippet_usage usage_type triggered_creation /
-triggered_update), leaving out entries switched off only by the VER-413 reset of every pipeline-written entry:
-the review that produced a wrong KB fact is the likeliest to have used it in its own verdict. Neither knows which
+triggered_update), leaving out entries switched off only by the VER-413 reset of every pipeline-written entry: the
+review that produced a wrong KB fact is the likeliest to have used it in its own verdict. Neither knows which
 snippets merely *read* a bad entry; kb_entry_snippet_usage does not record retrievals yet.
 """
 
@@ -394,7 +394,7 @@ def fetch_stale_verdict_snippet_ids(client, before: datetime, since: date | None
 
 
 def fetch_deactivated_kb_snippet_ids(client) -> set:
-    """Snippets whose review created or superseded a KB entry deactivated as wrong (not only by the VER-413 reset)."""
+    """Snippets whose review created or superseded a KB entry deactivated for a reason other than the VER-413 reset."""
     entries = fetch_all(lambda: client.table("kb_entries").select("id").eq("status", "deactivated"))
     reset = fetch_all(
         lambda: client.table("kb_deactivation_log")

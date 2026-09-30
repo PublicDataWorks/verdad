@@ -9,10 +9,12 @@ that adds it changes.
 
 - **Pipeline KB writes are off** (VER-412, `KB_UPDATER_ENABLED = False`): `kb_updater` is not in the Stage 4
   pipeline, so the currency gate and kb_updater 1.1.0 below change nothing at runtime until writes are re-enabled.
-  They stay as the guard for that day. Merging still activates kb_updater 1.1.0 in `prompt_versions` (unused).
+  They stay as the guard for that day. Merging still activates kb_updater 1.1.0 in `prompt_versions` (loaded,
+  never run).
 - **VER-413 deactivated every pipeline-written KB entry** (batch `ver-403-reset-2026-09`, 7,583 entries; 18
   analyst entries remain), so the "59 active pipeline entries" in finding 3 are now 0. `--deactivated-kb` leaves
-  out entries switched off only by that reset; it selects 147 visible 95+ snippets today, all also in the stale set.
+  out entries switched off only by that reset; with the runbook filters it selects 147 today, all also in the
+  stale set.
 - `--stale-verdict 2026-09-22T04:07:30Z` with the runbook filters still selects 1,722 (1,954 visible 95+ in total).
 
 ## What the audit found
@@ -84,7 +86,8 @@ python src/scripts/reprocess_snippets.py --stale-verdict 2026-09-22T04:07:30Z --
 # then in batches sized to the Gemini quota, newest first
 python src/scripts/reprocess_snippets.py --stale-verdict 2026-09-22T04:07:30Z --since 2026-08-01 \
     --min-confidence 95 --not-hidden --stage 4 --limit 100 --execute
-python src/scripts/reprocess_snippets.py --deactivated-kb --min-confidence 95 --stage 4 --limit 100
+python src/scripts/reprocess_snippets.py --deactivated-kb --since 2026-08-01 --min-confidence 95 --not-hidden \
+    --stage 4 --limit 100
 ```
 
 Stage 4 re-runs the web researcher, so a re-review is a fresh check, not a re-read of the frozen Stage 3 evidence.
@@ -94,8 +97,6 @@ Before any `--execute`: dump `id, confidence_scores, reviewed_at, title, summary
 Stage 4 backs up only the Stage 3 analysis (`previous_analysis`), so the verdict being re-checked is otherwise gone.
 A requeued snippet leaves the feed (status is no longer `Processed`) until its review lands. Stage 3 does not clear
 `reviewed_at`, so a snippet re-run through Stage 3 alone can be selected again: exclude ids from earlier audit files.
-Snippets analysed before Stage 3 1.5.0 have no `claims[].event_date`, so the evidence caps see `event_date = None`
-on a re-review; do not over-read a "still 95".
 
 ## Follow-ups not in this PR
 
