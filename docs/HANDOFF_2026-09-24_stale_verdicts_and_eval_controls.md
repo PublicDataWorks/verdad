@@ -97,6 +97,8 @@ Before any `--execute`: dump `id, confidence_scores, reviewed_at, title, summary
 Stage 4 backs up only the Stage 3 analysis (`previous_analysis`), so the verdict being re-checked is otherwise gone.
 A requeued snippet leaves the feed (status is no longer `Processed`) until its review lands. Stage 3 does not clear
 `reviewed_at`, so a snippet re-run through Stage 3 alone can be selected again: exclude ids from earlier audit files.
+A `--stage 4` re-review of a snippet analysed before Stage 3 1.5.0 runs the evidence caps with no claim
+`event_date`, so read a "still 95" on those with care.
 
 ## Follow-ups not in this PR
 
