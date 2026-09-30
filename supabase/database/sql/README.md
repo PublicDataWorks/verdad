@@ -9,7 +9,7 @@ The live definitions of everything in here are in
 generated from the production database. Read the baseline, not these files, when you need to know what runs
 in production.
 
-## Five files no longer match production
+## Four files no longer match production
 
 The body in the file is not the body in the database:
 
@@ -19,7 +19,6 @@ The body in the file is not the body in the database:
 | `update_snippet_comment_count.sql` | Production also filters `AND deleted_at IS NULL`. |
 | `get_public_snippet.sql` (`get_public_snippet_function.sql`) | Production reads `title ->> 'english'` / `summary ->> 'english'` after the `alter_title_jsonb` migration. |
 | `dismiss_welcome_card.sql` | Production returns `{'status', 'message'}`; the file returns `metadata`. The file has not changed since 2024-11-19, so production was hand-edited. |
-| `fetch_a_snippet_that_has_no_embedding.sql` | Production uses `id NOT IN (SELECT snippet FROM snippet_embeddings)`; the file uses a CTE with `NOT EXISTS`. The file's plan is the better one - fixing production forward is a follow-up. |
 
 (`update_snippet_hidden_status.sql` also differs, cosmetically only.)
 

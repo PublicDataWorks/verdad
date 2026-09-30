@@ -1,25 +1,22 @@
-CREATE
-OR REPLACE FUNCTION fetch_a_snippet_that_has_no_embedding() RETURNS jsonb SECURITY INVOKER AS $$
+-- Live version: supabase/migrations/20260930120000_embedding_fetch_not_exists.sql (VER-324).
+CREATE OR REPLACE FUNCTION public.fetch_a_snippet_that_has_no_embedding()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public, extensions, pg_temp
+AS $function$
 BEGIN
-    -- Return a single snippet that:
-    -- 1. Has status 'Processed'
-    -- 2. Has no corresponding embedding
-    -- 3. Is the most recently recorded
     RETURN (
-        WITH unembedded_snippet AS (
-            SELECT s.*
-            FROM public.snippets s
-            WHERE s.status = 'Processed'
-            AND NOT EXISTS (
-                SELECT 1
-                FROM public.snippet_embeddings se
-                WHERE se.snippet = s.id
-            )
-            ORDER BY s.recorded_at DESC
+        SELECT row_to_json(s.*)::jsonb
+        FROM public.snippets s
+        WHERE s.id = (
+            SELECT c.id
+            FROM public.snippets c
+            WHERE c.status = 'Processed'
+            AND NOT EXISTS (SELECT 1 FROM public.snippet_embeddings se WHERE se.snippet = c.id)
+            ORDER BY c.recorded_at DESC
             LIMIT 1
         )
-        SELECT row_to_json(unembedded_snippet.*)::jsonb
-        FROM unembedded_snippet
     );
 END;
-$$ LANGUAGE plpgsql;
+$function$;
