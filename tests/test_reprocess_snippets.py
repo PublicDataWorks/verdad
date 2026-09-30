@@ -334,6 +334,16 @@ class _FakeClient:
         return _FakeBuilder(self.rows, self.calls)
 
 
+class _TablesFakeClient(_FakeClient):
+    def __init__(self, rows_by_table):
+        super().__init__([])
+        self.rows_by_table = rows_by_table
+
+    def table(self, name):
+        self.calls.append(("table", (name,)))
+        return _FakeBuilder(self.rows_by_table[name], self.calls)
+
+
 class TestFetchSelectors:
     def test_quarantine_batch_filters_by_batch_and_unrestored(self):
         client = _FakeClient([{"snippet": "s1"}, {"snippet": "s2"}])
@@ -414,27 +424,40 @@ class TestStaleVerdictSelectors:
             ("select", ("id",)),
             ("eq", ("status", "Processed")),
             ("eq", ("confidence_scores->>verification_status", "verified_false")),
-            ("or_", (f"reviewed_at.lt.{ts},and(reviewed_at.is.null,created_at.lt.{ts})",)),
+            ("or_", (f"reviewed_at.lt.{ts},and(reviewed_at.is.null,updated_at.lt.{ts})",)),
             ("gte", ("recorded_at", "2026-08-01")),
         ]
 
-    def test_deactivated_kb_follows_write_usage_of_deactivated_entries(self):
-        client = _FakeClient([{"id": "k1", "snippet": "s1"}, {"id": "k2", "snippet": None}])
+    def test_deactivated_kb_follows_write_usage_of_entries_deactivated_other_than_by_the_reset(self):
+        client = _TablesFakeClient(
+            {
+                "kb_entries": [{"id": "k1"}, {"id": "k2"}],
+                "kb_deactivation_log": [{"id": "l2", "kb_entry": "k2"}],
+                "kb_entry_snippet_usage": [{"id": "u1", "snippet": "s1"}],
+            }
+        )
         assert rs.fetch_deactivated_kb_snippet_ids(client) == {"s1"}
         assert client.calls[:3] == [
             ("table", ("kb_entries",)),
             ("select", ("id",)),
             ("eq", ("status", "deactivated")),
         ]
+        log_calls = client.calls[client.calls.index(("table", ("kb_deactivation_log",))):]
+        assert log_calls[1:4] == [
+            ("select", ("id, kb_entry",)),
+            ("eq", ("batch", "ver-403-reset-2026-09")),
+            ("is_", ("restored_at", "null")),
+        ]
         usage_calls = client.calls[client.calls.index(("table", ("kb_entry_snippet_usage",))):]
-        assert ("in_", ("kb_entry", ["k1", "k2"])) in usage_calls
+        assert ("in_", ("kb_entry", ["k1"])) in usage_calls
         assert ("in_", ("usage_type", ["triggered_creation", "triggered_update"])) in usage_calls
 
     def test_sql_names_both_selectors(self):
         sql = rs.build_sql(_args(stale_verdict=self.BEFORE, deactivated_kb=True), "Ready for review")
-        assert "COALESCE(s.reviewed_at, s.created_at) < '2026-09-22T04:07:30+00:00'" in sql
+        assert "COALESCE(s.reviewed_at, s.updated_at) < '2026-09-22T04:07:30+00:00'" in sql
         assert "verification_status' = 'verified_false'" in sql
         assert "k.status = 'deactivated' AND u.usage_type IN ('triggered_creation', 'triggered_update')" in sql
+        assert "batch = 'ver-403-reset-2026-09' AND restored_at IS NULL" in sql
 
 
 class TestRequeue:

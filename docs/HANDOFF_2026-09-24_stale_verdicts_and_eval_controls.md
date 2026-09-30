@@ -5,6 +5,16 @@ routine over snippets recorded 2026-09-16 to 22. Every claim in the brief was re
 so the run doubled as an audit of VERDAD's own labels. This file records what the audit found and what the PR
 that adds it changes.
 
+## State on 2026-09-30 (after VER-412 and VER-413)
+
+- **Pipeline KB writes are off** (VER-412, `KB_UPDATER_ENABLED = False`): `kb_updater` is not in the Stage 4
+  pipeline, so the currency gate and kb_updater 1.1.0 below change nothing at runtime until writes are re-enabled.
+  They stay as the guard for that day. Merging still activates kb_updater 1.1.0 in `prompt_versions` (unused).
+- **VER-413 deactivated every pipeline-written KB entry** (batch `ver-403-reset-2026-09`, 7,583 entries; 18
+  analyst entries remain), so the "59 active pipeline entries" in finding 3 are now 0. `--deactivated-kb` leaves
+  out entries switched off only by that reset; it selects 147 visible 95+ snippets today, all also in the stale set.
+- `--stale-verdict 2026-09-22T04:07:30Z` with the runbook filters still selects 1,722 (1,954 visible 95+ in total).
+
 ## What the audit found
 
 1. **High-confidence "false" labels on true events.** Five visible or recently written verdicts, all verified
@@ -58,11 +68,12 @@ that adds it changes.
   no denial entries unless a retrieved source states the denial.
 - **Stale-verdict requeue** (`src/scripts/reprocess_snippets.py`):
   - `--stale-verdict TIMESTAMP`: Processed verified_false snippets whose last verdict (`reviewed_at`, else
-    `created_at`) predates TIMESTAMP.
-  - `--deactivated-kb`: snippets whose review wrote a KB entry that is now deactivated.
+    `updated_at`, since Stage 2 inserts the row and `created_at` is clip time) predates TIMESTAMP.
+  - `--deactivated-kb`: snippets whose review wrote a KB entry later deactivated as wrong (the VER-413 reset batch
+    excluded).
 
-  With the runbook filters below, `--stale-verdict` selects 1,722 snippets and `--deactivated-kb` 909 (visible, 95+,
-  counted by SQL on 2026-09-24; the sets overlap).
+  With the runbook filters below, `--stale-verdict` selects 1,722 snippets and `--deactivated-kb` 147 (visible, 95+,
+  counted by SQL on 2026-09-30; every one of the 147 is also stale).
 
 ## Runbook (not run; needs a human go-ahead, it spends Gemini quota)
 
@@ -78,6 +89,13 @@ python src/scripts/reprocess_snippets.py --deactivated-kb --min-confidence 95 --
 
 Stage 4 re-runs the web researcher, so a re-review is a fresh check, not a re-read of the frozen Stage 3 evidence.
 Measure a first batch of 100 before the rest: how many drop below 95, and spot-check 10 of those and 10 that stay.
+
+Before any `--execute`: dump `id, confidence_scores, reviewed_at, title, summary, explanation` for the selected ids.
+Stage 4 backs up only the Stage 3 analysis (`previous_analysis`), so the verdict being re-checked is otherwise gone.
+A requeued snippet leaves the feed (status is no longer `Processed`) until its review lands. Stage 3 does not clear
+`reviewed_at`, so a snippet re-run through Stage 3 alone can be selected again: exclude ids from earlier audit files.
+Snippets analysed before Stage 3 1.5.0 have no `claims[].event_date`, so the evidence caps see `event_date = None`
+on a re-review; do not over-read a "still 95".
 
 ## Follow-ups not in this PR
 

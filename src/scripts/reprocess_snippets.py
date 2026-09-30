@@ -18,8 +18,8 @@ Usage:
     python src/scripts/reprocess_snippets.py --deactivated-kb --stage 4
 
 Selection semantics: the "reason" criteria (--fabricated-label, --disliked, --commented, --ids-file,
---quarantine-batch, --error-keyerror) are OR-ed; the filters (--since, --min-confidence, --not-hidden, --limit) are
-AND-ed on top of that set. Candidates are ordered newest recorded_at first (the order the Stage 3 poller uses), so
+--quarantine-batch, --error-keyerror, --stale-verdict, --deactivated-kb) are OR-ed; the filters (--since,
+--min-confidence, --not-hidden, --limit) are AND-ed on top of that set. Candidates are ordered newest recorded_at first (the order the Stage 3 poller uses), so
 --limit takes the newest ones. Snippets currently in flight (status Processing or Reviewing) are always skipped so
 a worker mid-run is never flipped underneath.
 
@@ -35,12 +35,15 @@ at a time; the reason list is recorded in the audit file's selected_by entries a
 
 Stale verdicts. A prompt or evidence-gate fix only changes verdicts written after it is active; every label
 written before it stays as it was. --stale-verdict TIMESTAMP selects Processed snippets labelled verified_false
-whose last verdict was written before TIMESTAMP (reviewed_at, or created_at for a snippet Stage 4 never
-reviewed). Pass the activation time of the fix (prompt_versions.created_at of the version that addressed the
-failure). --deactivated-kb selects the snippets whose Stage 4 review wrote a knowledge-base entry that has since
-been deactivated (kb_entry_snippet_usage usage_type triggered_creation / triggered_update): the review that
-produced a wrong KB fact is the likeliest to have used it in its own verdict. Neither knows which snippets merely
-*read* a bad entry; kb_entry_snippet_usage does not record retrievals yet.
+whose last verdict was written before TIMESTAMP: reviewed_at, or for a snippet Stage 4 never reviewed updated_at
+(Stage 2 inserts the row, so created_at is clip time; updated_at is at or after Stage 3's write, which can only
+under-select). Pass the activation time of the fix (prompt_versions.created_at of the version that addressed the
+failure). Stage 3 does not clear reviewed_at, so a snippet re-run through Stage 3 alone keeps its old review time:
+exclude ids from earlier runs' audit files. --deactivated-kb selects the snippets whose Stage 4 review wrote a
+knowledge-base entry later deactivated as wrong (kb_entry_snippet_usage usage_type triggered_creation /
+triggered_update), leaving out entries switched off only by the VER-413 reset of every pipeline-written entry:
+the review that produced a wrong KB fact is the likeliest to have used it in its own verdict. Neither knows which
+snippets merely *read* a bad entry; kb_entry_snippet_usage does not record retrievals yet.
 """
 
 import argparse
@@ -76,6 +79,7 @@ REASON_FLAGS = (
 )
 KEYERROR_PREFIX = "KeyError:"
 KB_WRITE_USAGE_TYPES = ("triggered_creation", "triggered_update")
+KB_RESET_BATCH = "ver-403-reset-2026-09"  # VER-413 deactivated every pipeline-written entry, right or wrong
 
 
 def parse_utc_timestamp(value: str) -> datetime:
@@ -113,12 +117,12 @@ def parse_args(argv=None):
         "--stale-verdict",
         type=parse_utc_timestamp,
         metavar="TIMESTAMP",
-        help="Processed verified_false snippets whose last verdict (reviewed_at, else created_at) predates TIMESTAMP",
+        help="Processed verified_false snippets whose last verdict (reviewed_at, else updated_at) predates TIMESTAMP",
     )
     parser.add_argument(
         "--deactivated-kb",
         action="store_true",
-        help="snippets whose Stage 4 review wrote a KB entry that is now deactivated",
+        help=f"snippets whose Stage 4 review wrote a KB entry deactivated other than by {KB_RESET_BATCH}",
     )
     parser.add_argument("--since", type=date.fromisoformat, metavar="YYYY-MM-DD", help="recorded_at on/after this date")
     parser.add_argument("--min-confidence", type=int, metavar="N", help="confidence_scores.overall >= N")
@@ -263,13 +267,15 @@ def build_sql(args, target_status: str, selected: list | None = None) -> str:
         ts = args.stale_verdict.isoformat()
         reasons.append(
             "(s.status = 'Processed' AND s.confidence_scores->>'verification_status' = 'verified_false'"
-            f" AND COALESCE(s.reviewed_at, s.created_at) < '{ts}')"
+            f" AND COALESCE(s.reviewed_at, s.updated_at) < '{ts}')"
         )
     if args.deactivated_kb:
         usage = ", ".join(f"'{u}'" for u in KB_WRITE_USAGE_TYPES)
         reasons.append(
             "s.id IN (SELECT u.snippet FROM kb_entry_snippet_usage u JOIN kb_entries k ON k.id = u.kb_entry"
-            f" WHERE k.status = 'deactivated' AND u.usage_type IN ({usage}))"
+            f" WHERE k.status = 'deactivated' AND u.usage_type IN ({usage})"
+            " AND k.id NOT IN (SELECT kb_entry FROM kb_deactivation_log"
+            f" WHERE batch = '{KB_RESET_BATCH}' AND restored_at IS NULL))"
         )
 
     filters = []
@@ -369,8 +375,8 @@ def fetch_keyerror_snippet_ids(client, since: date | None = None) -> set:
 def fetch_stale_verdict_snippet_ids(client, before: datetime, since: date | None = None) -> set:
     """Processed verified_false snippets whose last verdict was written before ``before``.
 
-    The last verdict is Stage 4's (reviewed_at) when there is one, else Stage 3's (created_at, since Stage 3 writes
-    the analysis when it creates the row). --since goes into the query: the verified_false set is large.
+    The last verdict is Stage 4's (reviewed_at) when there is one, else bounded by updated_at (Stage 3 only updates
+    the row Stage 2 inserted). --since goes into the query: the verified_false set is large.
     """
     ts = before.isoformat()
 
@@ -380,7 +386,7 @@ def fetch_stale_verdict_snippet_ids(client, before: datetime, since: date | None
             .select("id")
             .eq("status", "Processed")
             .eq("confidence_scores->>verification_status", "verified_false")
-            .or_(f"reviewed_at.lt.{ts},and(reviewed_at.is.null,created_at.lt.{ts})")
+            .or_(f"reviewed_at.lt.{ts},and(reviewed_at.is.null,updated_at.lt.{ts})")
         )
         return query.gte("recorded_at", since.isoformat()) if since else query
 
@@ -388,9 +394,16 @@ def fetch_stale_verdict_snippet_ids(client, before: datetime, since: date | None
 
 
 def fetch_deactivated_kb_snippet_ids(client) -> set:
-    """Snippets whose review created or superseded a KB entry that is now deactivated."""
+    """Snippets whose review created or superseded a KB entry deactivated as wrong (not only by the VER-413 reset)."""
     entries = fetch_all(lambda: client.table("kb_entries").select("id").eq("status", "deactivated"))
-    entry_ids = [entry["id"] for entry in entries]
+    reset = fetch_all(
+        lambda: client.table("kb_deactivation_log")
+        .select("id, kb_entry")
+        .eq("batch", KB_RESET_BATCH)
+        .is_("restored_at", "null")
+    )
+    reset_ids = {row["kb_entry"] for row in reset}
+    entry_ids = [entry["id"] for entry in entries if entry["id"] not in reset_ids]
     ids = set()
     for batch in chunked(entry_ids, BATCH_SIZE):
         rows = fetch_all(
@@ -399,7 +412,7 @@ def fetch_deactivated_kb_snippet_ids(client) -> set:
             .in_("kb_entry", batch)
             .in_("usage_type", list(KB_WRITE_USAGE_TYPES))
         )
-        ids.update(row["snippet"] for row in rows if row.get("snippet"))
+        ids.update(row["snippet"] for row in rows)
     return ids
 
 
