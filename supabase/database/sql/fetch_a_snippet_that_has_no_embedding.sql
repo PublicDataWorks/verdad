@@ -1,4 +1,3 @@
--- Live version: supabase/migrations/20260930120000_embedding_fetch_not_exists.sql (VER-324).
 CREATE OR REPLACE FUNCTION public.fetch_a_snippet_that_has_no_embedding()
  RETURNS jsonb
  LANGUAGE plpgsql
