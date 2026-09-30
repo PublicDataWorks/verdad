@@ -133,6 +133,13 @@ Learn this before writing SQL, because the obvious guesses are wrong:
   **`snippet_id`**. They differ.
 - `confidence_scores` holds `overall`, `verification_status`, `categories`, `analysis`.
 - `confidence_scores.analysis` holds `claims`, `score_adjustments`, `validation_checklist`.
+- **Categories live in two places.** The `disinformation_categories` array column *and*
+  `confidence_scores.categories`, a jsonb array copy. Correct both or the restored row carries
+  contradictory verdict data — and if you are dropping a fabrication-asserting category because the
+  verdict rests on nothing retrieved, leaving the copy behind defeats the point. Verify they agree
+  afterwards.
+- `score_adjustments` goes stale silently. When the claims change, `adjustment_reason` still describes
+  the old verdict. Refresh it in the same `UPDATE`.
 - `confidence_scores.analysis.explanation` is **empty** on production rows. The prose lives in the
   top-level `explanation` jsonb, as `explanation->>'english'` and `->>'spanish'`. Edit that one.
 - `claims[]` items are `{quote, evidence, score}` with no status field. Per
@@ -163,19 +170,34 @@ It cannot sit in `claims[]` (nothing contradicts it) and it is not untested. Put
 Use `templates/correct_and_unhide.sql` as the starting point. The shape, in order:
 
 1. **Snapshot first.** Insert the current row into `snippet_analysis_snapshot` under a `batch` label
-   like `manual-<YYYY-MM-DD>-<short-uuid>`. That table carries `status`, `title`, `summary`,
-   `explanation`, `disinformation_categories`, `confidence_scores`, `grounding_metadata`,
-   `thought_summaries`, `analyzed_by`, `reviewed_by`, `reviewed_at`, `stage_3_prompt_version_id`,
-   `labels`. It is your rollback.
-2. **Rewrite the analysis.** Correct claims, evidence, scores, categories, `verification_status`,
-   `overall`, and the `explanation` prose. Annotate each hand-touched claim so it is auditable, for
-   example opening the evidence with `CORRECTED <date> (manual review):` or `GENUINE (manual review).`
-3. **Stamp provenance.** Set `reviewed_by` to a marker such as `manual-consistency-pass-<YYYY-MM-DD>`
+   like `manual-<YYYY-MM-DD>-<short-uuid>`. It carries `status`, `title`, `summary`, `explanation`,
+   `disinformation_categories`, `confidence_scores`, `grounding_metadata`, `thought_summaries`,
+   `analyzed_by`, `reviewed_by`, `reviewed_at`, `stage_3_prompt_version_id`. It is your rollback.
+   **Omit `labels`.** It is `NOT NULL DEFAULT '[]'::jsonb`, and an explicit `NULL` violates the
+   constraint rather than falling back to the default, so passing `null` aborts the whole
+   transaction. Omitting it takes the default. The consequence to know: label associations are not
+   captured, so if a correction also changes labels, snapshot those separately.
+2. **Assert the snapshot landed, and that the snippet really was hidden.** Both, before any write.
+   Note that `psql` does not interpolate `:'var'` inside a dollar-quoted body, so a `DO $$ ... $$`
+   guard receives the literal token and fails to parse. Publish the values with `set_config(...,
+   true)` inside the transaction and read them with `current_setting()` in the guard.
+3. **Rewrite the analysis.** Correct claims, evidence, scores, `verification_status`, `overall`, the
+   `explanation` prose, **both** category fields, and `score_adjustments`. Annotate each hand-touched
+   claim so it is auditable, for example opening the evidence with `CORRECTED <date> (manual review):`
+   or `GENUINE (manual review).`
+4. **Stamp provenance.** Set `reviewed_by` to a marker such as `manual-consistency-pass-<YYYY-MM-DD>`
    and `reviewed_at = now()`. Never leave a hand edit wearing a model's name.
-4. **Delete the hide row**, scoped to the one snippet.
-5. **Close the queue row**: `status = 'completed'`, `processed_at = now()`.
-6. **Record the verdict** in `snippet_hide_review` (`snippet`, `batch`, `verdict`, `why`,
+5. **Delete the hide row**, scoped to the one snippet.
+6. **Close the queue row**: `status = 'completed'`, `processed_at = now()`.
+7. **Record the verdict** in `snippet_hide_review` (`snippet`, `batch`, `verdict`, `why`,
    `reviewed_at`) so the reason survives.
+
+**The rollback must restore visibility, not just the analysis.** Restoring the snapshot alone leaves
+the hide row deleted and the queue `completed`, so the analysis you just rejected becomes publicly
+readable — the hide row was the only thing keeping it out of `get_snippet` and `get_public_snippet`.
+A correct revert also re-inserts the NULL-user hide row, sets the queue back to `pending`, and logs a
+`reverted` verdict. This is why step 2 asserts the snippet was hidden: it makes re-inserting one hide
+row a faithful restoration rather than a guess.
 
 Guardrails while writing it:
 
