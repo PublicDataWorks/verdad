@@ -235,8 +235,13 @@ readable — the hide row was the only thing keeping it out of `get_snippet` and
 A correct revert also re-inserts the NULL-user hide row, puts `restored_at` back to `NULL` on the
 quarantine rows this run stamped, sets the queue back to `pending`, drops the embedding again, and
 flips the verdict row to `reverted`. This is why step 2 asserts the snippet was hidden: it makes
-re-inserting one hide row a faithful restoration rather than a guess. Key the quarantine revert on the
-snapshot's own `snapshot_at` so a row restored before this run keeps its timestamp.
+re-inserting one hide row a faithful restoration rather than a guess.
+
+Key the quarantine revert on the snapshot's `snapshot_at` with **exact equality**, never `>=`. Because
+`now()` is `transaction_timestamp()`, the snapshot and the forward quarantine stamp are the identical
+value, so equality matches precisely the rows this run touched. A `>=` would also catch any row a
+*later* restoration stamped after this correction committed, and clearing that would hand an unrelated
+snippet back to quarantine reprocessing.
 
 **Write the file so it runs through either path.** Avoid psql meta-commands entirely: `\set` and
 `:'var'` work in `psql` but fail on line 1 through the Supabase MCP `execute_sql` tool, which is how

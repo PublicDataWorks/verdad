@@ -279,12 +279,15 @@ where s.id = '<snippet-uuid>'::uuid;
 -- values (current_setting('verdad.snippet_id')::uuid)
 -- on conflict (snippet) do nothing;
 --
--- -- c. re-quarantine ONLY the rows this run stamped. Keyed on the snapshot's
--- --    own timestamp, so a row restored before this run keeps its timestamp.
+-- -- c. re-quarantine ONLY the rows this run stamped. Exact equality, not >=:
+-- --    now() is transaction_timestamp(), so step 1's snapshot_at and step 6's
+-- --    restored_at are the identical value. A >= would also sweep up any row a
+-- --    LATER restoration stamped after this correction committed, and clearing
+-- --    that would hand someone else's snippet back to quarantine reprocessing.
 -- update snippet_quarantine_log q
 -- set restored_at = null
 -- where q.snippet = current_setting('verdad.snippet_id')::uuid
---   and q.restored_at >= (
+--   and q.restored_at = (
 --         select p.snapshot_at from snippet_analysis_snapshot p
 --         where p.snippet = current_setting('verdad.snippet_id')::uuid
 --           and p.batch   = current_setting('verdad.batch'));
