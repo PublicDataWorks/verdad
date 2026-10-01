@@ -281,9 +281,11 @@ where s.id = '<snippet-uuid>'::uuid;
 --
 -- -- c. re-quarantine ONLY the rows this run stamped. Exact equality, not >=:
 -- --    now() is transaction_timestamp(), so step 1's snapshot_at and step 6's
--- --    restored_at are the identical value. A >= would also sweep up any row a
--- --    LATER restoration stamped after this correction committed, and clearing
--- --    that would hand someone else's snippet back to quarantine reprocessing.
+-- --    restored_at are the identical value. The q.snippet filter already keeps
+-- --    this to one snippet, so the risk a >= adds is a LATER correction cycle on
+-- --    THIS snippet: reverting the earlier run would clear the later run's
+-- --    restored_at and put the clip back in the --quarantine-batch selector,
+-- --    undoing a correction nobody asked to undo.
 -- update snippet_quarantine_log q
 -- set restored_at = null
 -- where q.snippet = current_setting('verdad.snippet_id')::uuid
