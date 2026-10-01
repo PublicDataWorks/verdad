@@ -58,3 +58,4 @@
 20260928100000	drop_unused_pgroonga_indexes
 20260930120000	embedding_fetch_not_exists
 20261001100000	sweep_retryable_audio_errors
+20261001160000	sweep_audio_nonetype_once
