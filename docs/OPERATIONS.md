@@ -189,9 +189,10 @@ refuses the production project unless `--allow-production` is passed.
   $$SELECT public.sweep_retryable_errors(200)$$)`, pause with `cron.unschedule`, and run one batch by hand with
   `SELECT public.sweep_retryable_errors(50)`, which returns counts by destination.
 - **Stage 1 audio `Error`s retry from pg_cron.** `public.sweep_retryable_audio_errors(p_batch, p_max_attempts)`
-  (migration `20261001100000`, VER-417; job `sweep_retryable_audio_errors` at :25 and :55, batch 20) moves audio
-  files that failed Stage 1 on a Gemini 503/429/empty reply or a statement timeout back to `New`: recorded in the
-  last 7 days, failed over an hour ago, no `stage_1_llm_responses` row, at most 3 times (`audio_files.retry_attempts`).
+  (migrations `20261001100000` + `20261001160000`, VER-417; job `sweep_retryable_audio_errors` at :25 and :55, batch
+  20) moves audio files that failed Stage 1 on a Gemini 503/429/empty reply or a statement timeout back to `New`:
+  recorded in the last 7 days, failed over an hour ago, no `stage_1_llm_responses` row, at most 3 times
+  (`audio_files.retry_attempts`); `'NoneType' object is not subscriptable` only once, since repeats never recovered.
   "Too long" and segment-mismatch errors are deterministic and stay. Pause with
   `SELECT cron.unschedule('sweep_retryable_audio_errors')`; effect: 7-day audio `Error` count by `error_message`
   and `cron.job_run_details` for the job.
