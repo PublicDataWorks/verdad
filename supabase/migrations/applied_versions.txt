@@ -1,4 +1,4 @@
-# supabase_migrations.schema_migrations in production, fetched 2026-09-30; regenerate with `make migrations-manifest`.
+# supabase_migrations.schema_migrations in production, fetched 2026-10-01; regenerate with `make migrations-manifest`.
 # version<TAB>name
 20241029135243	remote_schema
 20241029135348	remote_schema
@@ -57,3 +57,4 @@
 20260925100000	drop_stage1_tsv_and_prune_cron
 20260928100000	drop_unused_pgroonga_indexes
 20260930120000	embedding_fetch_not_exists
+20261001100000	sweep_retryable_audio_errors
