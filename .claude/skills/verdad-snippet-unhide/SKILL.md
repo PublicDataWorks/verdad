@@ -58,6 +58,23 @@ Read the result against the three causes:
 | `overall < 95` | below the feed's confidence gate | not hidden; it is unranked. Only the analysis can change it |
 | `status <> 'Processed'` | never finished the pipeline | a requeue, not an unhide |
 
+**Then check the quarantine log, because that is where most hides came from.** A
+dislike is the memorable cause, not the common one. The 2026-09 cleanup batches
+account for the bulk of NULL-user hides:
+
+```sql
+select batch, previous_status, reason,
+       to_char(quarantined_at,'YYYY-MM-DD HH24:MI') as quarantined_at,
+       restored_at
+from snippet_quarantine_log where snippet = '<uuid>';
+```
+
+`restored_at IS NULL` here is live state, not history. `reprocess_snippets.py
+--quarantine-batch` selects exactly `batch IN (...) AND restored_at IS NULL`, so a
+row left NULL means the snippet is still queued for re-analysis. Unhide it without
+stamping `restored_at` and a later batch re-run silently overwrites your
+correction. Step 3 stamps it.
+
 **The gate, read from the live functions.** `get_snippets` (the feed) requires
 `s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95` and left-joins
 `user_hide_snippets`. `get_snippet` and `get_public_snippet` (the direct link) require only
@@ -71,7 +88,19 @@ That `EXISTS` **is not scoped to the calling user**. So one hide row hides the c
 non-admin viewer, including through its direct URL. A clip can pass the feed gate and still return an
 empty record to a journalist holding the link.
 
-### How the hide row usually got there
+### Where the hide row came from
+
+Two sources, and they need different handling. Check the quarantine log first, because it is the
+larger one by orders of magnitude.
+
+**A cleanup batch.** `snippet_quarantine_log` holds the 2026-09 bulk hides. As of 2026-09-30 that is
+24,306 rows across five batches, about 20,800 still unrestored, the largest being
+`hide-2026-09-15-heuristics` at 17,855. A hide from here is not a reader objecting; it is a sweep. The
+log row is also live state feeding `reprocess_snippets.py`, so clearing it is part of the unhide.
+
+**A dislike.** Covered below. Memorable, and much rarer.
+
+### How a dislike creates a hide row
 
 Two triggers on `user_like_snippets` both write `user_hide_snippets (snippet)` with a **NULL user**:
 
@@ -188,16 +217,33 @@ Use `templates/correct_and_unhide.sql` as the starting point. The shape, in orde
 4. **Stamp provenance.** Set `reviewed_by` to a marker such as `manual-consistency-pass-<YYYY-MM-DD>`
    and `reviewed_at = now()`. Never leave a hand edit wearing a model's name.
 5. **Delete the hide row**, scoped to the one snippet.
-6. **Close the queue row**: `status = 'completed'`, `processed_at = now()`.
-7. **Record the verdict** in `snippet_hide_review` (`snippet`, `batch`, `verdict`, `why`,
-   `reviewed_at`) so the reason survives.
+6. **Stamp `restored_at` on any `snippet_quarantine_log` row still `NULL`**, or a later
+   `--quarantine-batch` re-run overwrites the correction. Touch only the NULL ones, so a row an
+   earlier restore already stamped keeps its timestamp and the rollback can tell yours apart.
+7. **Close the queue row**: `status = 'completed'`, `processed_at = now()`.
+8. **Delete the `snippet_embeddings` row** so Stage 5 re-embeds. The vector was built from the old
+   explanation, so leaving it makes the clip retrievable by its withdrawn wording and not by its
+   corrected wording.
+9. **Record the verdict** in `snippet_hide_review` (`snippet`, `batch`, `verdict`, `why`,
+   `reviewed_at`) so the reason survives. That table is `PRIMARY KEY (snippet, batch)`, so **upsert**:
+   `on conflict (snippet, batch) do update`. A plain insert is what lets the rollback flip the same
+   row to `reverted` instead of aborting on the key.
 
 **The rollback must restore visibility, not just the analysis.** Restoring the snapshot alone leaves
 the hide row deleted and the queue `completed`, so the analysis you just rejected becomes publicly
 readable — the hide row was the only thing keeping it out of `get_snippet` and `get_public_snippet`.
-A correct revert also re-inserts the NULL-user hide row, sets the queue back to `pending`, and logs a
-`reverted` verdict. This is why step 2 asserts the snippet was hidden: it makes re-inserting one hide
-row a faithful restoration rather than a guess.
+A correct revert also re-inserts the NULL-user hide row, puts `restored_at` back to `NULL` on the
+quarantine rows this run stamped, sets the queue back to `pending`, drops the embedding again, and
+flips the verdict row to `reverted`. This is why step 2 asserts the snippet was hidden: it makes
+re-inserting one hide row a faithful restoration rather than a guess. Key the quarantine revert on the
+snapshot's own `snapshot_at` so a row restored before this run keeps its timestamp.
+
+**Write the file so it runs through either path.** Avoid psql meta-commands entirely: `\set` and
+`:'var'` work in `psql` but fail on line 1 through the Supabase MCP `execute_sql` tool, which is how
+most of this work actually gets run. Publish the snippet id and batch once with
+`set_config(..., true)` and read them back with `current_setting()` everywhere else. Send the file as
+one unit either way, since transaction-local settings do not survive being run statement by statement
+— and neither does the atomicity the template exists for.
 
 Guardrails while writing it:
 
