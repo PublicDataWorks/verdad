@@ -300,6 +300,8 @@ class SupabaseClient:
                     "thought_summaries": thought_summaries,
                     "analyzed_by": analyzed_by,
                     "previous_analysis": None,
+                    "reviewed_at": None,
+                    "reviewed_by": None,
                     "status": status,
                     "error_message": error_message,
                     "stage_3_prompt_version_id": stage_3_prompt_version_id,
