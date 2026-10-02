@@ -35,11 +35,11 @@ at a time; the reason list is recorded in the audit file's selected_by entries a
 
 Stale verdicts. A prompt or evidence-gate fix only changes verdicts written after it is active; every label written
 before it stays as it was. --stale-verdict TIMESTAMP selects Processed snippets labelled verified_false whose last
-verdict was written before TIMESTAMP: reviewed_at, or updated_at for a snippet Stage 4 never reviewed (created_at is
-Stage 2's insert time; updated_at is never earlier than Stage 3's write, so the fallback can miss rows but never
-adds one). Pass the activation time of the fix (prompt_versions.created_at of the version that addressed the
-failure). Stage 3 does not clear reviewed_at, so a snippet re-run through Stage 3 alone keeps its old review time:
-exclude ids from earlier runs' audit files. --deactivated-kb selects the snippets whose Stage 4 review wrote a
+verdict was written before TIMESTAMP: reviewed_at, or updated_at when the current analysis has no Stage 4 review
+(created_at is Stage 2's insert time; updated_at is never earlier than Stage 3's write, so the fallback can miss rows
+but never adds one). Pass the activation time of the fix (prompt_versions.created_at of the version that addressed
+the failure). Snippets re-run through Stage 3 alone before VER-418 kept their old review time: exclude ids from
+earlier runs' audit files. --deactivated-kb selects the snippets whose Stage 4 review wrote a
 knowledge-base entry later deactivated as wrong (kb_entry_snippet_usage usage_type triggered_creation /
 triggered_update), leaving out entries switched off only by the VER-413 reset of every pipeline-written entry: the
 review that produced a wrong KB fact is the likeliest to have used it in its own verdict. Neither knows which

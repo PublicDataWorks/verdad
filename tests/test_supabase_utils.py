@@ -285,6 +285,10 @@ class TestSupabaseClient:
 
         mock_supabase.table.assert_called_once_with("snippets")
         mock_supabase.table.return_value.update.assert_called_once()
+        payload = mock_supabase.table.return_value.update.call_args.args[0]
+        assert payload["previous_analysis"] is None
+        assert payload["reviewed_at"] is None
+        assert payload["reviewed_by"] is None
         assert response == expected_response
 
     def test_reset_snippet(self, supabase_client, mock_supabase):
