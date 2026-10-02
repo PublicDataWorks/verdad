@@ -38,12 +38,13 @@ before it stays as it was. --stale-verdict TIMESTAMP selects Processed snippets 
 verdict was written before TIMESTAMP: reviewed_at, or updated_at when the current analysis has no Stage 4 review
 (created_at is Stage 2's insert time; updated_at is never earlier than Stage 3's write, so the fallback can miss rows
 but never adds one). Pass the activation time of the fix (prompt_versions.created_at of the version that addressed
-the failure). Snippets re-run through Stage 3 alone before VER-418 kept their old review time: exclude ids from
-earlier runs' audit files. --deactivated-kb selects the snippets whose Stage 4 review wrote a
-knowledge-base entry later deactivated as wrong (kb_entry_snippet_usage usage_type triggered_creation /
-triggered_update), leaving out entries switched off only by the VER-413 reset of every pipeline-written entry: the
-review that produced a wrong KB fact is the likeliest to have used it in its own verdict. Neither knows which
-snippets merely *read* a bad entry; kb_entry_snippet_usage does not record retrievals yet.
+the failure). Snippets re-run through Stage 3 alone before VER-418 kept their old review time: drop the ids in
+earlier runs' audit files from the selection by hand (there is no exclude option; --ids-file adds ids).
+--deactivated-kb selects the snippets whose Stage 4 review wrote a knowledge-base entry later deactivated as wrong
+(kb_entry_snippet_usage usage_type triggered_creation / triggered_update), leaving out entries switched off only by
+the VER-413 reset of every pipeline-written entry: the review that produced a wrong KB fact is the likeliest to have
+used it in its own verdict. Neither knows which snippets merely *read* a bad entry; kb_entry_snippet_usage does not
+record retrievals yet.
 """
 
 import argparse
