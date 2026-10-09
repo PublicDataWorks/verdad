@@ -4,9 +4,12 @@ FROM prefecthq/prefect:3.4.24-python3.11
 # Set the working directory in the container
 WORKDIR /app
 
-# Install curl for downloading supercronic
+# Install curl for downloading supercronic. util-linux provides flock(1), shared by restart_all.sh and
+# the recording watchdog cron entry; the Debian base image already has it (Essential: yes), listed
+# here so that never silently changes.
 RUN apt-get update && apt-get install -y \
     curl \
+    util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 # Install supercronic
@@ -26,7 +29,8 @@ RUN curl -L https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
 # Install required Python packages
 RUN pip install --no-cache-dir \
     "asyncpg==0.30.0" \
-    "sqlalchemy==2.0.36"
+    "sqlalchemy==2.0.36" \
+    "sentry-sdk==2.14.0"
 
 # Set environment variables
 ENV PREFECT_SERVER_API_HOST=0.0.0.0
@@ -37,7 +41,7 @@ ENV PREFECT_API_URL="https://prefect.fly.dev/api"
 # which is everything src/stations.py needs.
 
 # Copy the station list and its loader: start_recording.sh derives the deployments to trigger
-# from config/stations.yaml via `python -m stations prefect-runs`.
+# from config/stations.yaml via `python -m stations prefect-runs`; ensure_recording_runs.py imports it.
 COPY config/stations.yaml /app/config/stations.yaml
 COPY src/stations.py /app/src/stations.py
 
@@ -49,6 +53,8 @@ COPY scripts/restart_all.sh /app
 COPY scripts/start_cron.sh /app
 COPY src/scripts/cancel_all_flows.py /app
 COPY src/scripts/delete_flow_runs.py /app
+COPY src/scripts/ensure_recording_runs.py /app
+COPY src/scripts/check_recording_coverage.py /app
 
 # Make all scripts executable
 RUN chmod +x /app/*.sh /app/*.py

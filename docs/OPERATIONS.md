@@ -56,19 +56,69 @@ cd server && fly deploy -c fly.server.toml    # the server app builds from serve
 `scripts/start_cron.sh` writes this crontab and runs it with supercronic:
 
 ```
-0 */6 * * * /app/restart_all.sh            # every 6 hours
-0 1 * * *   python3 /app/delete_flow_runs.py   # daily 01:00 UTC
+0 */6 * * *        /app/restart_all.sh                         # every 6 hours
+0 1 * * *          python3 /app/delete_flow_runs.py            # daily 01:00 UTC
+7,22,37,52 * * * * flock -n -E 0 /tmp/verdad-recording.lock python3 /app/ensure_recording_runs.py   # watchdog
+15 * * * *         python3 /app/check_recording_coverage.py    # hourly recording coverage monitor
 ```
 
-`scripts/restart_all.sh` does, in order:
+`start_cron.sh` exports `PYTHONPATH=/app/src` (for `stations.py`) and refuses to start without `flock`.
 
-1. `src/scripts/cancel_all_flows.py`: sets every RUNNING/PENDING flow run to Cancelling via the Prefect API.
+`scripts/restart_all.sh` takes `/tmp/verdad-recording.lock` (waits up to `RESTART_LOCK_WAIT_SECONDS`, default
+300, then proceeds anyway) and holds it for the whole run, then does, in order:
+
+1. `src/scripts/cancel_all_flows.py`: sets every RUNNING/PENDING flow run (paginated) to Cancelling, then polls
+   until those runs leave Cancelling/Running, at most `CANCEL_WAIT_SECONDS` (default 90). Runs still Cancelling
+   after that belong to dead workers and are forced to Cancelled. Before VER-424 the machines were restarted 2 s
+   after the Cancelling write, so live runs got SIGTERM mid-cancellation, Prefect marked them Crashed ("Crash
+   detected! Execution was aborted...") and Sentry reported each one every 6 hours.
 2. `fly machine restart <id>` for each id in `$FLY_MACHINE_IDS` (comma-separated Fly secret on the `prefect` app;
    values **unknown**). Needs flyctl auth on that machine (`FLY_API_TOKEN`, **unknown** how it is provided).
 3. Waits 30 s, runs `start_recording.sh` (one `prefect deployment run` per station, 59 stations), waits 10 s,
    runs `start_processing.sh` (N runs per stage: `STAGE_{1..5}_FLOW_RUNS`, defaults 2/1/2/1/1).
 
 `delete_flow_runs.py` deletes old cancelled flow runs in batches (`BATCH_SIZE`, `DELAY_BETWEEN_BATCHES`).
+
+### Dead workers leave zombie and stuck runs
+
+When a worker machine dies, Prefect does not notice. On 2026-10-09 08:11 UTC every recorder worker exited
+with code 1; Fly restarted the machines, but their max/lite flow runs stayed **Running** (only the six generic
+runs became Crashed) and nothing recorded until the 12:00 restart created new runs. So "the deployment has an
+active run" says nothing about liveness. Likewise a run set to Cancelling whose worker is gone never finishes
+cancelling: about 2050 such runs had piled up in Cancelling, which `delete_flow_runs.py` also could not clear.
+
+The liveness signal that works is task activity: a healthy recording run starts a `capture_audio_stream` task
+(then `upload_to_r2_and_clean_up`, `insert_recorded_audio_file_into_database`) at least every ~30 min, one per
+1800 s chunk.
+
+### Recording watchdog (`ensure_recording_runs.py`, VER-421)
+
+`src/scripts/ensure_recording_runs.py` runs at :07/:22/:37/:52 under `flock -n` on the same lock as
+`restart_all.sh`, so it skips any tick during a restart. It reads the station list from `stations.py` (the
+same `"<flow name>/<code>"` list `start_recording.sh` triggers) and for each deployment:
+
+- Scheduled (including Late) or Pending run present: healthy, no action. One older than 30 min is logged as a
+  warning (no worker is picking it up; another run would only queue behind it).
+- Running run that started, or whose newest task run started, within 45 min: healthy. Any other Running run
+  is a zombie and is forced to Crashed with `watchdog: no task activity for N min`.
+- Cancelling run older than 10 min: forced to Cancelled with `watchdog: stale cancellation`. A younger one
+  defers the decision to the next tick.
+- No healthy run left: creates one with `create_flow_run_from_deployment` (does not wait for it).
+
+A normal run (no `--codes`) first sweeps **every** deployment, processing ones included, for Cancelling runs
+older than 10 min and forces them to Cancelled, so the backlog drains and `delete_flow_runs.py` can delete it.
+It prints one summary line (`checked= healthy= started= zombies_crashed= stale_cancels_closed= deferred=
+missing= errors=`) and exits non-zero only when the Prefect API is unreachable.
+
+```bash
+python3 /app/ensure_recording_runs.py --dry-run                 # on the cron machine: log only, no writes
+python3 /app/ensure_recording_runs.py --codes "WLEL - 94.3 FM"  # just these stations (codes as in stations.yaml; skips the global sweep)
+python3 /app/ensure_recording_runs.py --close-stale-cancelling  # only the global stale-Cancelling sweep
+PYTHONPATH=src python src/scripts/ensure_recording_runs.py --dry-run   # from a checkout (needs PREFECT_API_*)
+```
+
+Thresholds are env vars: `WATCHDOG_SCHEDULED_STALE_MINUTES` (30), `WATCHDOG_RUNNING_IDLE_MINUTES` (45),
+`WATCHDOG_CANCELLING_STALE_MINUTES` (10), `WATCHDOG_CONCURRENCY` (8). Cron output is in `fly logs -a prefect`.
 
 Why the full restart exists is **not documented** in the repo. Observable facts: every flow loops forever
 (`repeat=True`, or `limit` for stage 1) and sleeps 60 s when idle; the stage workers `serve(..., limit=100)`; the restart is the only thing that
@@ -155,9 +205,10 @@ refuses the production project unless `--allow-production` is passed.
 
 ## Gotchas learned in production (September 2026)
 
-- **Workers idle after any deploy or `prefect` app restart.** Flow runs are created only by the 6-hourly cron
-  (00:10/06:10/12:10/18:10 UTC); a freshly deployed `serve()` has nothing to serve until then. Either wait for the
-  tick or create the runs yourself:
+- **Workers idle after any deploy or `prefect` app restart.** Processing flow runs are created only by the
+  6-hourly cron (00:10/06:10/12:10/18:10 UTC); a freshly deployed `serve()` has nothing to serve until then.
+  Recording runs are also re-created by the watchdog within ~15 min (see "Recording watchdog" above). Either wait
+  for the tick or create the runs yourself:
 
   ```bash
   API=https://prefect.fly.dev/api   # every call needs -u "$PREFECT_API_AUTH_STRING" (basic auth, VER-384)
