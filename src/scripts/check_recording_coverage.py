@@ -9,8 +9,13 @@ reports recording gaps to Sentry:
 2. Per station: the newest ``recorded_at`` (chunk start) of every enabled station in ``config/stations.yaml`` is
    older than ``STATION_STALE_MIN`` minutes, or the station has no row in the lookback window -> one alert each.
 
-Each alert's fingerprint carries the UTC date the gap began, so a new outage opens a new Sentry issue while an
-ongoing one keeps adding events to the same issue.
+Each alert's fingerprint carries the UTC timestamp the gap began (for a station: its last chunk start plus 30 min;
+for the fleet: the last ``created_at``). That value does not move while one outage lasts, so its hourly runs keep
+adding events to one Sentry issue, and a later outage, even on the same day, opens a new issue.
+
+When ``SENTRY_DSN`` is set (and not ``--dry-run``) the run is also wrapped in a Sentry Crons check-in, monitor
+slug ``recording-coverage`` (``15 * * * *``, 10 min margin, 10 min max runtime), so Sentry notices when the monitor
+itself stops running, for example because the cron machine is down.
 
 Query plan (PostgREST over httpx; supabase-py is not installed in the prefect image):
 
@@ -39,6 +44,7 @@ from typing import Optional
 
 import httpx
 import sentry_sdk
+import sentry_sdk.crons
 
 
 def _add_stations_to_path() -> None:
@@ -63,11 +69,25 @@ CHUNK_MINUTES = 30
 PAGE_SIZE = 1000  # Supabase PostgREST max-rows default
 MAX_PAGES = 50
 UNKNOWN_GAP_START = "unknown"
+MONITOR_SLUG = "recording-coverage"
+MONITOR_CONFIG = {
+    "schedule": {"type": "crontab", "value": "15 * * * *"},
+    "timezone": "UTC",
+    "checkin_margin": 10,
+    "max_runtime": 10,
+}
+FLUSH_TIMEOUT_SECONDS = 30
 
 
 def _env_int(name: str, default: int) -> int:
     value = os.getenv(name)
-    return int(value) if value not in (None, "") else default
+    if value in (None, ""):
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        print(f"warning: {name}={value!r} is not an integer; using the default {default}", file=sys.stderr)
+        return default
 
 
 @dataclass
@@ -205,7 +225,7 @@ def evaluate(client: PostgrestClient, stations, thresholds: Thresholds, now: dat
 
 
 def _gap_key(dt: Optional[datetime]) -> str:
-    return dt.astimezone(timezone.utc).date().isoformat() if dt else UNKNOWN_GAP_START
+    return _iso(dt) if dt else UNKNOWN_GAP_START
 
 
 def build_events(report: Report, thresholds: Thresholds, now: datetime) -> list[dict]:
@@ -262,22 +282,27 @@ def summary_line(report: Report) -> str:
 
 
 def _send(events: list[dict]) -> None:
+    """Queue events on the Sentry client main() initialised; main() flushes once at the end."""
     for event in events:
         sentry_sdk.capture_event(event)
-    sentry_sdk.flush()
 
 
-def _config_error(message: str, dsn: Optional[str], dry_run: bool) -> int:
+def _config_error(message: str, dsn: Optional[str], dry_run: bool, now: datetime) -> int:
     print(f"error: {message}", file=sys.stderr)
     if dsn and not dry_run:
-        sentry_sdk.init(dsn=dsn)
         _send(
             [
                 {
                     "message": f"Recording coverage monitor failed: {message}",
                     "level": "error",
                     "tags": {"check": CHECK_TAG, "station": "monitor"},
-                    "fingerprint": [FINGERPRINT_ROOT, "monitor-error"],
+                    # One issue per UTC hour: a persistent failure stays grouped across the hourly runs of
+                    # one day without merging into last week's issue.
+                    "fingerprint": [
+                        FINGERPRINT_ROOT,
+                        "monitor-error",
+                        now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"),
+                    ],
                 }
             ]
         )
@@ -294,15 +319,37 @@ def parse_args(argv=None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+class _CheckinFailed(Exception):
+    """Raised inside the Crons context so a failed run checks in as an error."""
+
+
 def main(argv=None, http: Optional[httpx.Client] = None, now: Optional[datetime] = None) -> int:
     args = parse_args(argv)
+    dsn = os.getenv("SENTRY_DSN") or None
+    if not dsn or args.dry_run:
+        return _run(args, http, now, dsn)
+
+    sentry_sdk.init(dsn=dsn)
+    code = 1
+    try:
+        with sentry_sdk.crons.monitor(monitor_slug=MONITOR_SLUG, monitor_config=MONITOR_CONFIG):
+            code = _run(args, http, now, dsn)
+            if code != 0:
+                raise _CheckinFailed(code)
+    except _CheckinFailed:
+        pass
+    finally:
+        sentry_sdk.flush(timeout=FLUSH_TIMEOUT_SECONDS)
+    return code
+
+
+def _run(args, http: Optional[httpx.Client], now: Optional[datetime], dsn: Optional[str]) -> int:
     thresholds = Thresholds(args.fleet_window_min, args.station_stale_min, args.lookback_hours, args.history_days)
     now = now or datetime.now(timezone.utc)
-    dsn = os.getenv("SENTRY_DSN") or None
     supabase_url, supabase_key = os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY")
 
     if not supabase_url or not supabase_key:
-        return _config_error("SUPABASE_URL and SUPABASE_KEY must be set", dsn, args.dry_run)
+        return _config_error("SUPABASE_URL and SUPABASE_KEY must be set", dsn, args.dry_run, now)
 
     stations = [s for s in load_stations() if s.enabled]
     own_http = http is None
@@ -310,7 +357,7 @@ def main(argv=None, http: Optional[httpx.Client] = None, now: Optional[datetime]
     try:
         report = evaluate(PostgrestClient(http, supabase_url, supabase_key), stations, thresholds, now)
     except (httpx.HTTPError, ValueError) as e:
-        return _config_error(f"audio_files query failed: {e}", dsn, args.dry_run)
+        return _config_error(f"audio_files query failed: {e}", dsn, args.dry_run, now)
     finally:
         if own_http:
             http.close()
@@ -326,9 +373,7 @@ def main(argv=None, http: Optional[httpx.Client] = None, now: Optional[datetime]
     if not dsn:
         print(f"error: SENTRY_DSN is not set; {len(events)} alert(s) not sent", file=sys.stderr)
         return 2
-    if events:
-        sentry_sdk.init(dsn=dsn)
-        _send(events)
+    _send(events)
     return 0
 
 

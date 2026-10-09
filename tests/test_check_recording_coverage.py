@@ -159,19 +159,31 @@ def test_one_stale_station_alerts_with_tags_extra_and_fingerprint(supabase_env, 
     assert event["extra"]["last_recorded_at"] == "2026-10-08T06:02:00Z"
     assert event["extra"]["gap_began"] == "2026-10-08T06:32:00Z"
     assert event["extra"]["minutes_stale"] == 313
-    assert event["fingerprint"] == ["recording-coverage", "KBBB - 2.2 AM", "2026-10-08"]
+    assert event["fingerprint"] == ["recording-coverage", "KBBB - 2.2 AM", "2026-10-08T06:32:00Z"]
     sentry.init.assert_called_once_with(dsn="https://key@sentry.example/1")
-    sentry.flush.assert_called_once()
+    sentry.flush.assert_called_once_with(timeout=30)
     assert "1 stale: KBBB - 2.2 AM (5h13m)" in capsys.readouterr().out
 
 
-def test_fingerprint_uses_utc_date_the_gap_began(supabase_env, sentry):
+def test_fingerprint_uses_utc_time_the_gap_began(supabase_env, sentry):
     # Last chunk starts 23:45 on the 7th, so the gap begins 00:15 on the 8th.
     rows = [r for r in healthy_rows() if r["radio_station_code"] != "KAAA - 1.1 FM"]
     rows += chunk_rows("KAAA - 1.1 FM", datetime(2026, 10, 7, 23, 45, tzinfo=timezone.utc))
     run(rows)
     [event] = sent_events(sentry)
-    assert event["fingerprint"] == ["recording-coverage", "KAAA - 1.1 FM", "2026-10-08"]
+    assert event["fingerprint"] == ["recording-coverage", "KAAA - 1.1 FM", "2026-10-08T00:15:00Z"]
+
+
+def test_second_outage_on_the_same_day_gets_a_new_fingerprint(supabase_env, sentry):
+    others = [r for r in healthy_rows() if r["radio_station_code"] != "KAAA - 1.1 FM"]
+    first = others + chunk_rows("KAAA - 1.1 FM", datetime(2026, 10, 8, 2, 0, tzinfo=timezone.utc), count=1)
+    # The station came back at 05:00 and stopped again after its 07:00 chunk.
+    second = others + chunk_rows("KAAA - 1.1 FM", datetime(2026, 10, 8, 7, 0, tzinfo=timezone.utc), count=5)
+    run(first)
+    run(second)
+    a, b = sent_events(sentry)
+    assert a["fingerprint"] == ["recording-coverage", "KAAA - 1.1 FM", "2026-10-08T02:30:00Z"]
+    assert b["fingerprint"] == ["recording-coverage", "KAAA - 1.1 FM", "2026-10-08T07:30:00Z"]
 
 
 def test_fingerprint_is_stable_across_hourly_runs_of_one_outage(supabase_env, sentry):
@@ -188,7 +200,9 @@ def test_fingerprint_is_stable_across_hourly_runs_of_one_outage(supabase_env, se
     run(rows)
     run(later_rows, now=later)
     first, second = sent_events(sentry)
-    assert first["fingerprint"] == second["fingerprint"] == ["recording-coverage", "KAAA - 1.1 FM", "2026-10-07"]
+    assert (
+        first["fingerprint"] == second["fingerprint"] == ["recording-coverage", "KAAA - 1.1 FM", "2026-10-07T20:30:00Z"]
+    )
 
 
 def test_station_with_no_rows_at_all(supabase_env, sentry):
@@ -211,7 +225,7 @@ def test_station_older_than_lookback_reports_true_last_recording(supabase_env, s
     run(rows)
     [event] = sent_events(sentry)
     assert event["message"].startswith("Recording gap: KCCC - 3.3 FM has no audio since 2026-10-05T12:00Z (")
-    assert event["fingerprint"] == ["recording-coverage", "KCCC - 3.3 FM", "2026-10-05"]
+    assert event["fingerprint"] == ["recording-coverage", "KCCC - 3.3 FM", "2026-10-05T12:30:00Z"]
 
 
 def test_fleet_outage_sends_one_alert_and_suppresses_per_station(supabase_env, sentry, capsys):
@@ -226,8 +240,36 @@ def test_fleet_outage_sends_one_alert_and_suppresses_per_station(supabase_env, s
     assert event["message"] == "Recording gap: fleet-wide, no audio_files row created since 2026-10-08T07:31Z (3h44m)"
     assert sorted(event["extra"]["stale_stations"]) == sorted(ENABLED)
     assert event["extra"]["last_created_at"] == "2026-10-08T07:31:00Z"
-    assert event["fingerprint"] == ["recording-coverage", "fleet", "2026-10-08"]
+    assert event["fingerprint"] == ["recording-coverage", "fleet", "2026-10-08T07:31:00Z"]
     assert "fleet DOWN" in capsys.readouterr().out
+
+
+def test_fleet_fingerprint_is_stable_across_hourly_runs(supabase_env, sentry):
+    rows = []
+    for code in ENABLED:
+        rows += chunk_rows(code, datetime(2026, 10, 8, 7, 0, tzinfo=timezone.utc))
+    run(rows)
+    run(rows, now=NOW + timedelta(hours=1))
+    first, second = sent_events(sentry)
+    assert first["fingerprint"] == second["fingerprint"] == ["recording-coverage", "fleet", "2026-10-08T07:31:00Z"]
+
+
+@pytest.mark.parametrize("minutes_ago, fleet_down", [(59, False), (61, True)])
+def test_fleet_window_boundary(supabase_env, sentry, minutes_ago, fleet_down):
+    # Newest chunks started 20 min before their insert, so every station is well inside STATION_STALE_MIN and
+    # only the fleet check can fire.
+    rows = []
+    for code in ENABLED:
+        rows += chunk_rows(code, NOW - timedelta(minutes=minutes_ago + 20), insert_delay_min=20)
+    run(rows)
+    events = sent_events(sentry)
+    if fleet_down:
+        [event] = events
+        assert event["tags"]["station"] == "fleet"
+        assert event["extra"]["minutes_stale"] == 61
+        assert event["extra"]["stale_stations"] == []
+    else:
+        assert events == []
 
 
 def test_fleet_with_no_rows_in_lookback_skips_per_station_history(supabase_env, sentry):
@@ -235,7 +277,7 @@ def test_fleet_with_no_rows_in_lookback_skips_per_station_history(supabase_env, 
     code, fake = run(rows)
     assert code == 0
     [event] = sent_events(sentry)
-    assert event["fingerprint"] == ["recording-coverage", "fleet", "2026-10-01"]
+    assert event["fingerprint"] == ["recording-coverage", "fleet", "2026-10-01T07:31:00Z"]
     assert sorted(event["extra"]["stale_stations"]) == sorted(ENABLED)
     # The recent-rows page plus one global newest-row lookup; no per-station queries.
     assert len(fake.requests) == 2
@@ -321,9 +363,69 @@ def test_missing_supabase_env_alerts_and_exits_1(supabase_env, sentry, monkeypat
     code = monitor.main([], http=MagicMock(), now=NOW)
     assert code == 1
     [event] = sent_events(sentry)
-    assert event["fingerprint"] == ["recording-coverage", "monitor-error"]
-    sentry.flush.assert_called_once()
+    assert event["fingerprint"] == ["recording-coverage", "monitor-error", "2026-10-08T11"]
+    sentry.flush.assert_called_once_with(timeout=30)
     assert "SUPABASE_URL and SUPABASE_KEY must be set" in capsys.readouterr().err
+
+
+def test_fleet_window_from_env(supabase_env, sentry, monkeypatch):
+    rows = []
+    for code in ENABLED:
+        rows += chunk_rows(code, NOW - timedelta(minutes=45 + 31))  # last insert 45 min ago
+    run(rows)
+    sentry.capture_event.assert_not_called()
+    monkeypatch.setenv("FLEET_WINDOW_MIN", "30")
+    run(rows)
+    [event] = sent_events(sentry)
+    assert event["tags"]["station"] == "fleet"
+    assert event["extra"]["fleet_window_min"] == 30
+
+
+def test_lookback_hours_from_env(supabase_env, sentry, monkeypatch):
+    _, fake = run(healthy_rows())
+    assert fake.requests[0].url.params["recorded_at"] == "gte.2026-10-07T11:15:00Z"
+    monkeypatch.setenv("COVERAGE_LOOKBACK_HOURS", "6")
+    _, fake = run(healthy_rows())
+    assert fake.requests[0].url.params["recorded_at"] == "gte.2026-10-08T05:15:00Z"
+
+
+def test_bad_env_value_warns_and_uses_default(supabase_env, sentry, monkeypatch, capsys):
+    monkeypatch.setenv("COVERAGE_LOOKBACK_HOURS", "six")
+    _, fake = run(healthy_rows())
+    assert fake.requests[0].url.params["recorded_at"] == "gte.2026-10-07T11:15:00Z"
+    assert "COVERAGE_LOOKBACK_HOURS='six' is not an integer; using the default 24" in capsys.readouterr().err
+
+
+def test_crons_check_in_wraps_the_run(supabase_env, sentry):
+    run(healthy_rows())
+    sentry.crons.monitor.assert_called_once_with(
+        monitor_slug="recording-coverage",
+        monitor_config={
+            "schedule": {"type": "crontab", "value": "15 * * * *"},
+            "timezone": "UTC",
+            "checkin_margin": 10,
+            "max_runtime": 10,
+        },
+    )
+    checkin = sentry.crons.monitor.return_value
+    checkin.__enter__.assert_called_once()
+    assert checkin.__exit__.call_args.args[0] is None  # a clean run checks in OK
+
+
+def test_failed_run_checks_in_as_error(supabase_env, sentry):
+    http = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(500, json={"message": "boom"})))
+    assert monitor.main([], http=http, now=NOW) == 1
+    exc_type = sentry.crons.monitor.return_value.__exit__.call_args.args[0]
+    assert exc_type is monitor._CheckinFailed
+    sentry.flush.assert_called_once_with(timeout=30)
+
+
+def test_no_check_in_without_dsn_or_on_dry_run(supabase_env, sentry, monkeypatch):
+    run(healthy_rows(), argv=["--dry-run"])
+    monkeypatch.delenv("SENTRY_DSN")
+    run(healthy_rows())
+    sentry.crons.monitor.assert_not_called()
+    sentry.init.assert_not_called()
 
 
 def test_missing_supabase_env_without_dsn_exits_1(supabase_env, sentry, monkeypatch):
