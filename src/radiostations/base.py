@@ -130,16 +130,20 @@ class RadioStation:
         except Exception:
             print("Video element was not found.")
         else:
-            is_playing = self.driver.execute_script(
-                "return !arguments[0].paused && !arguments[0].ended && arguments[0].currentTime > 0;", video_element
-            )
-            current_time = self.driver.execute_script("return arguments[0].currentTime;", video_element)
-            duration = self.driver.execute_script("return arguments[0].duration;", video_element)
-            is_muted = self.driver.execute_script("return arguments[0].muted;", video_element)
-            volume = self.driver.execute_script("return arguments[0].volume;", video_element)
-            print(
-                f"Video element playing: {is_playing}. Current time: {current_time}. Duration: {duration}. Volume: {volume}. Muted: {is_muted}"
-            )
+            try:
+                is_playing = self.driver.execute_script(
+                    "return !arguments[0].paused && !arguments[0].ended && arguments[0].currentTime > 0;", video_element
+                )
+                current_time = self.driver.execute_script("return arguments[0].currentTime;", video_element)
+                duration = self.driver.execute_script("return arguments[0].duration;", video_element)
+                is_muted = self.driver.execute_script("return arguments[0].muted;", video_element)
+                volume = self.driver.execute_script("return arguments[0].volume;", video_element)
+                print(
+                    f"Video element playing: {is_playing}. Current time: {current_time}. Duration: {duration}. Volume: {volume}. Muted: {is_muted}"
+                )
+            except Exception as e:
+                # A hung page can time out the script (Selenium "script timeout"); the sink check below still decides.
+                print(f"Video element diagnostics failed ({type(e).__name__}): {e}")
 
         if not self.is_audio_playing():
             raise Exception(f"Failed to start audio for {self.url}")

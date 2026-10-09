@@ -2,6 +2,7 @@ import os
 import subprocess
 import pytest
 from unittest.mock import Mock, patch, call
+from selenium.common.exceptions import TimeoutException
 
 # Set environment variable before importing RadioStation
 os.environ["ENABLE_PREFECT_DECORATOR"] = "false"
@@ -179,6 +180,27 @@ class TestRadioStation:
 
         with patch.object(radio_station, "is_audio_playing", return_value=True):
             radio_station.start_playing()
+
+    @patch("time.sleep")
+    def test_start_playing_survives_diagnostic_script_timeout(self, mock_sleep, radio_station, mock_webdriver):
+        radio_station.driver = mock_webdriver["driver"]
+        mock_webdriver["driver"].execute_script.side_effect = TimeoutException("script timeout")
+
+        with patch.object(radio_station, "is_audio_playing", return_value=True) as mock_sink:
+            radio_station.start_playing()
+
+        assert mock_sink.called
+
+    @patch("time.sleep")
+    def test_start_playing_still_fails_when_sink_is_idle_after_script_timeout(
+        self, mock_sleep, radio_station, mock_webdriver
+    ):
+        radio_station.driver = mock_webdriver["driver"]
+        mock_webdriver["driver"].execute_script.side_effect = TimeoutException("script timeout")
+
+        with patch.object(radio_station, "is_audio_playing", return_value=False):
+            with pytest.raises(Exception, match=f"Failed to start audio for {radio_station.url}"):
+                radio_station.start_playing()
 
     @patch("time.sleep")
     def test_start_playing_failure(self, mock_sleep, radio_station, mock_webdriver):
