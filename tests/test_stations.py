@@ -29,7 +29,8 @@ from stations import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config" / "stations.yaml"
 
-# The 39 stations the max recorder served as radio_stations[:39], in order.
+# The 39 stations the max recorder served as radio_stations[:39], in order, minus the five disabled on
+# 2026-10-09 (KENO, KNNR, WURN, KFUE, WDJA).
 MAX_CODES = [
     "WLEL - 94.3 FM",
     "WPHE - 690 AM",
@@ -43,8 +44,6 @@ MAX_CODES = [
     "KABA - 90.3 FM",
     "WAXY - 790 AM",
     "WLAZ - 89.1 FM",
-    "KENO - 1460 AM",
-    "KNNR - 1400 AM",
     "KCKO - 107.9 FM",
     "KZLZ - 105.3 FM",
     "KCMT - 92.1 FM",
@@ -52,16 +51,13 @@ MAX_CODES = [
     "KNOG - 91.7 FM",
     "KWST - 1430 AM",
     "WLMV - 1480 AM",
-    "WDJA - 1420 AM",
     "WACC - 830 AM",
     "WSUA - 1260 AM",
-    "WURN - 1040 AM",
     "WNMA - 1210 AM",
     "WSRF - 99.5 FM",
     "SPMN",
     "WZHF",
     "K229DB - 93.7 FM",
-    "KFUE - 106.7 FM",
     "KMMA - 97.1 FM",
     "RUMBA 4451",
     "WBZW - 96.7 FM",
@@ -122,10 +118,7 @@ PREFECT_RUNS = {
     "Audio Recording: Max Recorder/KBNL - 89.9 FM",
     "Audio Recording: Max Recorder/KCKO - 107.9 FM",
     "Audio Recording: Max Recorder/KCMT - 92.1 FM",
-    "Audio Recording: Max Recorder/KENO - 1460 AM",
-    "Audio Recording: Max Recorder/KFUE - 106.7 FM",
     "Audio Recording: Max Recorder/KMMA - 97.1 FM",
-    "Audio Recording: Max Recorder/KNNR - 1400 AM",
     "Audio Recording: Max Recorder/KNOG - 91.7 FM",
     "Audio Recording: Max Recorder/KRMC - 91.7 FM",
     "Audio Recording: Max Recorder/KWST - 1430 AM",
@@ -137,7 +130,6 @@ PREFECT_RUNS = {
     "Audio Recording: Max Recorder/WAXY - 790 AM",
     "Audio Recording: Max Recorder/WBZW - 96.7 FM",
     "Audio Recording: Max Recorder/WBZY - 105.7 FM",
-    "Audio Recording: Max Recorder/WDJA - 1420 AM",
     "Audio Recording: Max Recorder/WDTW - 1310 AM",
     "Audio Recording: Max Recorder/WLAZ - 89.1 FM",
     "Audio Recording: Max Recorder/WLCH - 91.3 FM",
@@ -152,7 +144,6 @@ PREFECT_RUNS = {
     "Audio Recording: Max Recorder/WSRF - 99.5 FM",
     "Audio Recording: Max Recorder/WSUA - 1260 AM",
     "Audio Recording: Max Recorder/WUMR - 106.1 FM",
-    "Audio Recording: Max Recorder/WURN - 1040 AM",
     "Audio Recording: Max Recorder/WZHF",
     "Audio Recording: Max Recorder/WZTU - 94.9 FM",
     "Generic Audio Recording/KHOT - 105.9 FM",
@@ -196,7 +187,7 @@ class TestSnapshots:
 
     def test_max_recorder_stations(self):
         assert [s.code for s in stations_for("max")] == MAX_CODES
-        assert len(MAX_CODES) == 39
+        assert len(MAX_CODES) == 34
 
     def test_lite_recorder_stations(self):
         assert [s.code for s in stations_for("lite")] == LITE_CODES
@@ -208,7 +199,7 @@ class TestSnapshots:
 
     def test_station_dicts_match_the_legacy_shape_and_order(self):
         dicts = station_dicts()
-        assert len(dicts) == 53
+        assert len(dicts) == 48
         assert [d["code"] for d in dicts] == MAX_CODES + LITE_CODES
         assert all(set(d) == {"code", "url", "state", "name"} for d in dicts)
 
@@ -218,7 +209,7 @@ class TestSnapshots:
 
     def test_prefect_run_targets_match_the_old_arrays(self):
         assert set(prefect_run_targets()) == PREFECT_RUNS
-        assert len(prefect_run_targets()) == 59
+        assert len(prefect_run_targets()) == 54
 
     def test_flow_names_are_unchanged(self):
         assert FLOW_NAMES == {
@@ -246,7 +237,18 @@ class TestSnapshots:
 
     def test_disabled_stations_in_this_revision(self):
         disabled = {s.code for s in load_stations() if not s.enabled}
-        assert disabled == {"WNZK - 680 AM", "WOLS", "KMRO", "WGSP", "WYMY"}
+        assert disabled == {
+            "WNZK - 680 AM",
+            "WOLS",
+            "KMRO",
+            "WGSP",
+            "WYMY",
+            "KENO - 1460 AM",
+            "KNNR - 1400 AM",
+            "WURN - 1040 AM",
+            "KFUE - 106.7 FM",
+            "WDJA - 1420 AM",
+        }
 
 
 class TestLookups:

@@ -9,7 +9,7 @@ Items marked **unknown** are not recorded anywhere in the repo; ask a maintainer
 |---|---|---|---|
 | `prefect` (`fly.prefect.toml`) | `Dockerfile.prefect` (prefecthq/prefect:3.4.24-python3.11 + supercronic + flyctl) | `server`: `scripts/start_prefect_server.sh` (port 4200, health `/api/health`); `cron`: `scripts/start_cron.sh` | `server`, `cron` |
 | `processing-worker` (`fly.processing_worker.toml`) | `Dockerfile.processing_worker` (python3.12 + node22 + ffmpeg + `@google/gemini-cli@0.20.0`) | `scripts/trigger_processing_worker.sh` -> waits for `https://prefect.fly.dev/api/health` -> `python src/processing_pipeline/main.py` | `initial_disinformation_detection`, `initial_disinformation_detection_2`, `audio_clipping`, `in_depth_analysis`, `regenerate_timestamped_transcript`, `redo_main_detection`, `undo_disinformation_detection`, `undo_audio_clipping`, `analysis_review`, `analysis_review_2`, `embedding` |
-| `recording-worker` (`fly.recording_worker.toml`) | `Dockerfile.recording_worker` (python:3.12-slim + ffmpeg) | `scripts/recording.sh` -> `python src/recording.py` | `max_recorder` (`recorder: max` stations, currently 39, 8 GB), `lite_recorder` (`recorder: lite`, currently 14 enabled, 6 GB) |
+| `recording-worker` (`fly.recording_worker.toml`) | `Dockerfile.recording_worker` (python:3.12-slim + ffmpeg) | `scripts/recording.sh` -> `python src/recording.py` | `max_recorder` (`recorder: max` stations, currently 34 enabled, 8 GB), `lite_recorder` (`recorder: lite`, currently 14 enabled, 6 GB) |
 | `generic-recording-worker` (`fly.generic_recording_worker.toml`) | `Dockerfile.generic_recording_worker` (ubuntu + Chrome + pulseaudio) | `scripts/generic_recording.sh` -> `python src/generic_recording.py` | `radio_khot`, `radio_kisf`, `radio_krgt`, `radio_wkaq`, `radio_wado`, `radio_waqi` (one machine each; the `process_group` of each `recorder: generic` station in `config/stations.yaml`) |
 | `verdad-searxng` (`fly.searxng.toml`) | `Dockerfile.searxng` (searxng/searxng:2026.9.20 + `searxng/config/settings.yml`) | image default | none; serves `https://verdad-searxng.fly.dev` used via `SEARXNG_URL` (stage 3 tools, stage 4 MCP) |
 | `verdad-dev` (`fly.dev.toml`) | `Dockerfile.generic_recording_worker` | same as generic recorder | none defined. Purpose **unknown** (looks like a scratch app) |
@@ -74,7 +74,7 @@ cd server && fly deploy -c fly.server.toml    # the server app builds from serve
    detected! Execution was aborted...") and Sentry reported each one every 6 hours.
 2. `fly machine restart <id>` for each id in `$FLY_MACHINE_IDS` (comma-separated Fly secret on the `prefect` app;
    values **unknown**). Needs flyctl auth on that machine (`FLY_API_TOKEN`, **unknown** how it is provided).
-3. Waits 30 s, runs `start_recording.sh` (one `prefect deployment run` per station, 59 stations), waits 10 s,
+3. Waits 30 s, runs `start_recording.sh` (one `prefect deployment run` per station, 54 stations), waits 10 s,
    runs `start_processing.sh` (N runs per stage: `STAGE_{1..5}_FLOW_RUNS`, defaults 2/1/2/1/1).
 
 `delete_flow_runs.py` deletes old cancelled flow runs in batches (`BATCH_SIZE`, `DELAY_BETWEEN_BATCHES`).
@@ -220,9 +220,9 @@ station data: both recorders, `scripts/start_recording.sh` and the generic recor
 No Supabase schema change is involved: `audio_files` stores `radio_station_name`/`radio_station_code`/
 `location_state` per recording, denormalized by the recorder.
 
-The five dead `lite` stations (WOLS, WNZK, WGSP, WYMY, KMRO) were disabled on 2026-09-24. Follow-up, not done
-yet: five `max` stations have also produced no audio for months (KENO, KNNR, WURN, KFUE, WDJA) and still hold a
-recorder slot each.
+The five dead `lite` stations (WOLS, WNZK, WGSP, WYMY, KMRO) were disabled on 2026-09-24, and five `max`
+stations with no audio for months (KENO, KNNR, WURN, KFUE, WDJA) on 2026-10-09 (VER-425). Both take effect only
+after a deploy.
 
 ## Triggering one stage run against production
 
