@@ -124,6 +124,48 @@ Why the full restart exists is **not documented** in the repo. Observable facts:
 (`repeat=True`, or `limit` for stage 1) and sleeps 60 s when idle; the stage workers `serve(..., limit=100)`; the restart is the only thing that
 re-creates flow runs after a worker machine dies. Treat it as load-bearing until someone confirms otherwise.
 
+## Recording coverage monitor (`prefect` app, `cron` process; VER-422)
+
+`src/scripts/check_recording_coverage.py` (copied to `/app/check_recording_coverage.py` in the image) runs hourly
+from the same crontab (`15 * * * * python3 /app/check_recording_coverage.py`) and sends a Sentry event, level
+`error`, for each recording gap it finds in `audio_files`:
+
+- **Fleet**: no row with `created_at` in the last `FLEET_WINDOW_MIN` minutes (default 60). One event
+  (`station=fleet`); per-station alerts are suppressed while it fires and the event's `stale_stations` extra lists
+  them instead.
+- **Per station**: for every `enabled` station in `config/stations.yaml` (all recorders; `enabled: false` is
+  ignored), the newest `recorded_at` is older than `STATION_STALE_MIN` minutes (default 90) or there is no row in
+  the lookback (`COVERAGE_LOOKBACK_HOURS`, default 24). `recorded_at` is the chunk *start*, chunks are 30 minutes,
+  and the 6-hourly restart drops the partial chunk, so a healthy station is up to ~75 minutes stale at :15 after a
+  restart; 90 leaves ~15 minutes of slack.
+
+Events carry tags `check=recording_coverage`, `station`, `recorder` and extras `last_recorded_at`, `gap_began`
+(last chunk start + 30 min), `minutes_stale`. The fingerprint is `["recording-coverage", <station code or
+"fleet">, <UTC date the gap began>]`: a new outage opens a new Sentry issue (and its new-issue alert), an ongoing
+one adds events to the same issue. A station with nothing in the lookback gets one extra `limit=1` query for its
+last row within `COVERAGE_HISTORY_DAYS` (default 30) so the date stays stable once the outage is older than the
+lookback; with nothing in that window the date is `unknown`.
+
+Cost per run: one PostgREST page of `audio_files` (`recorded_at >= now - 24h`, newest first, on
+`idx_audio_files_recorded_at`) when every station is healthy, since paging stops once all enabled stations have
+been seen; up to ~3 pages of 1000 when a station is dead. The fleet check reads `created_at` from those rows rather
+than filtering on it, because `created_at` has no index.
+
+Secrets on the `prefect` app: `SUPABASE_URL`, `SUPABASE_KEY` (service key; the script only issues GETs, sent as `apikey` and
+`Authorization: Bearer`) and `SENTRY_DSN` (the recording-worker Sentry project's DSN). Thresholds come from the env
+vars above or the matching flags (`--fleet-window-min`, `--station-stale-min`, `--lookback-hours`,
+`--history-days`). Every run prints one summary line to the cron log (`fly logs -a prefect`). Exit codes: 0 = checks
+ran, 1 = `SUPABASE_*` missing or the query failed (also sent to Sentry as `monitor-error` when the DSN is set),
+2 = `SENTRY_DSN` missing (checks still run and print, nothing is sent).
+
+Run it by hand without sending anything:
+
+```bash
+fly ssh console -a prefect --machine <cron machine id> -C "python3 /app/check_recording_coverage.py --dry-run"
+# from a checkout, with SUPABASE_URL/SUPABASE_KEY exported (the script does not read .env):
+python src/scripts/check_recording_coverage.py --dry-run --station-stale-min 60
+```
+
 ## Adding or disabling a station
 
 The station list is `config/stations.yaml` (loaded and validated by `src/stations.py`). Nothing else holds
