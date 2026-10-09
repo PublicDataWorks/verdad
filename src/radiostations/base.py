@@ -90,10 +90,9 @@ class RadioStation:
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
 
-        print(f"Launching url {self.url}")
-        self.driver.get(self.url)
-
         try:
+            print(f"Launching url {self.url}")
+            self.driver.get(self.url)
             self.start_playing()
         except Exception as e:
             print(f"{e}. Restarting browser and trying again...")
@@ -131,22 +130,34 @@ class RadioStation:
             print("Video element was not found.")
         else:
             try:
-                is_playing = self.driver.execute_script(
-                    "return !arguments[0].paused && !arguments[0].ended && arguments[0].currentTime > 0;", video_element
-                )
-                current_time = self.driver.execute_script("return arguments[0].currentTime;", video_element)
-                duration = self.driver.execute_script("return arguments[0].duration;", video_element)
-                is_muted = self.driver.execute_script("return arguments[0].muted;", video_element)
-                volume = self.driver.execute_script("return arguments[0].volume;", video_element)
-                print(
-                    f"Video element playing: {is_playing}. Current time: {current_time}. Duration: {duration}. Volume: {volume}. Muted: {is_muted}"
-                )
+                self._log_video_diagnostics(video_element)
             except Exception as e:
-                # A hung page can time out the script (Selenium "script timeout"); the sink check below still decides.
-                print(f"Video element diagnostics failed ({type(e).__name__}): {e}")
+                # A frozen page times the script out (Selenium "script timeout") while its sink may still say
+                # RUNNING and record silence, so one failure gets a retry and a second one fails start_browser,
+                # which quits this driver and retries with a fresh browser.
+                print(f"Video element diagnostics failed ({type(e).__name__}): {e}; retrying in 5 s")
+                time.sleep(5)
+                try:
+                    self._log_video_diagnostics(video_element)
+                except Exception as e2:
+                    raise Exception(
+                        f"Video element diagnostics failed twice ({type(e2).__name__}): page may be hung"
+                    ) from e2
 
         if not self.is_audio_playing():
             raise Exception(f"Failed to start audio for {self.url}")
+
+    def _log_video_diagnostics(self, video_element):
+        is_playing = self.driver.execute_script(
+            "return !arguments[0].paused && !arguments[0].ended && arguments[0].currentTime > 0;", video_element
+        )
+        current_time = self.driver.execute_script("return arguments[0].currentTime;", video_element)
+        duration = self.driver.execute_script("return arguments[0].duration;", video_element)
+        is_muted = self.driver.execute_script("return arguments[0].muted;", video_element)
+        volume = self.driver.execute_script("return arguments[0].volume;", video_element)
+        print(
+            f"Video element playing: {is_playing}. Current time: {current_time}. Duration: {duration}. Volume: {volume}. Muted: {is_muted}"
+        )
 
     def execute_command(self, command):
         try:
