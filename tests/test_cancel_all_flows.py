@@ -8,6 +8,13 @@ from types import SimpleNamespace
 
 import pytest
 from prefect.client.schemas.objects import StateType
+from prefect.client.schemas.responses import (
+    OrchestrationResult,
+    SetStateStatus,
+    StateAcceptDetails,
+    StateRejectDetails,
+)
+from prefect.states import Cancelled, State
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "src", "scripts"))
@@ -19,16 +26,29 @@ def make_run(state_type):
     return SimpleNamespace(id=uuid.uuid4(), name=f"run-{uuid.uuid4().hex[:6]}", state_type=state_type)
 
 
+def accepted(state):
+    return OrchestrationResult(state=state, status=SetStateStatus.ACCEPT, details=StateAcceptDetails())
+
+
+def rejected(state, reason):
+    return OrchestrationResult(state=state, status=SetStateStatus.REJECT, details=StateRejectDetails(reason=reason))
+
+
 class FakeClient:
     """Runs whose id is in `live` finish cancelling after `finish_after_polls` reads of their state;
-    every other run touched stays Cancelling (its worker is dead)."""
+    every other run touched stays Cancelling (its worker is dead).
 
-    def __init__(self, runs, live=(), finish_after_polls=1, fail_cancel=(), fail_force=()):
+    set_flow_run_state answers like the server: ACCEPT normally; Scheduled -> Cancelling is REJECTed with a
+    Cancelled state (BypassCancellingFlowRunsWithNoInfra); ids in reject_cancel / reject_force get a plain
+    REJECT that leaves the run where it was; ids in raise_cancel raise (an HTTP error)."""
+
+    def __init__(self, runs, live=(), finish_after_polls=1, reject_cancel=(), reject_force=(), raise_cancel=()):
         self.runs = runs
         self.live = set(live)
         self.finish_after_polls = finish_after_polls
-        self.fail_cancel = set(fail_cancel)
-        self.fail_force = set(fail_force)
+        self.reject_cancel = set(reject_cancel)
+        self.reject_force = set(reject_force)
+        self.raise_cancel = set(raise_cancel)
         self.polls = 0
         self.writes = []
         self.read_calls = []
@@ -54,14 +74,19 @@ class FakeClient:
         return matching[offset : offset + limit]
 
     async def set_flow_run_state(self, run_id, state, force=False):
-        if state.type == StateType.CANCELLING and run_id in self.fail_cancel:
-            raise RuntimeError("409")
-        if state.type == StateType.CANCELLED and run_id in self.fail_force:
-            raise RuntimeError("rejected")
+        run = next(r for r in self.runs if r.id == run_id)
+        if state.type == StateType.CANCELLING and run_id in self.raise_cancel:
+            raise RuntimeError("500 Internal Server Error")
+        if (state.type == StateType.CANCELLING and run_id in self.reject_cancel) or (
+            state.type == StateType.CANCELLED and run_id in self.reject_force
+        ):
+            return rejected(State(type=run.state_type), "This run cannot transition to the proposed state.")
         self.writes.append((run_id, state.type, force))
-        for r in self.runs:
-            if r.id == run_id:
-                r.state_type = state.type
+        if state.type == StateType.CANCELLING and run.state_type == StateType.SCHEDULED:
+            run.state_type = StateType.CANCELLED
+            return rejected(Cancelled(), "Scheduled flow run has no infrastructure to terminate.")
+        run.state_type = state.type
+        return accepted(state)
 
 
 @pytest.fixture
@@ -119,23 +144,62 @@ def test_no_runs_skips_the_wait(monkeypatch, no_wait, capsys):
     client = FakeClient([])
     run_with(monkeypatch, client)
     assert no_wait == []
-    assert "No running flow runs found" in capsys.readouterr().out
+    assert "No running, pending or scheduled flow runs found" in capsys.readouterr().out
 
 
-def test_failed_cancel_and_failed_force_are_reported(monkeypatch, no_wait, capsys):
+def test_rejected_cancel_and_rejected_force_are_not_counted_as_done(monkeypatch, no_wait, capsys):
     a, b, c = (make_run(StateType.RUNNING) for _ in range(3))
-    client = FakeClient([a, b, c], fail_cancel=[a.id], fail_force=[b.id])
+    client = FakeClient([a, b, c], reject_cancel=[a.id], reject_force=[b.id])
+    run_with(monkeypatch, client)
+    out = capsys.readouterr().out
+    assert f"Cancel NOT applied to {a.name} ({a.id}): REJECT" in out
+    assert "2 flow runs set to Cancelling, 0 cancelled directly, 1 rejected" in out
+    assert f"Force to Cancelled NOT applied to {b.name} ({b.id}): REJECT" in out
+    assert "0 finished, 1 forced to Cancelled, 0 still running, 1 failed to force" in out
+    # The rejected run was never Cancelling, so it is neither waited on nor forced.
+    assert a.state_type == StateType.RUNNING
+    assert not any(w[0] == a.id for w in client.writes)
+
+
+def test_cancel_exception_is_reported(monkeypatch, no_wait, capsys):
+    a, b = make_run(StateType.RUNNING), make_run(StateType.RUNNING)
+    client = FakeClient([a, b], live=[b.id], raise_cancel=[a.id])
     run_with(monkeypatch, client)
     out = capsys.readouterr().out
     assert "Failed to cancel 1 flow runs" in out
-    assert "0 finished, 1 forced to Cancelled, 0 still running, 1 failed to force" in out
+    assert "1 finished, 0 forced" in out
 
 
-def test_all_cancels_failing_skips_the_wait(monkeypatch, no_wait):
+def test_all_cancels_rejected_skips_the_wait(monkeypatch, no_wait):
     a = make_run(StateType.RUNNING)
-    client = FakeClient([a], fail_cancel=[a.id])
+    client = FakeClient([a], reject_cancel=[a.id])
     run_with(monkeypatch, client)
     assert no_wait == []
+
+
+def test_scheduled_runs_are_cancelled_directly_and_not_waited_on(monkeypatch, no_wait, capsys):
+    # A Late run the watchdog left alone during an outage must not survive the restart.
+    late = make_run(StateType.SCHEDULED)
+    live = make_run(StateType.RUNNING)
+    client = FakeClient([late, live], live=[live.id], finish_after_polls=0)
+    run_with(monkeypatch, client)
+    assert late.state_type == StateType.CANCELLED
+    out = capsys.readouterr().out
+    assert f"Cancelled (no infrastructure): {late.name}" in out
+    assert "1 flow runs set to Cancelling, 1 cancelled directly, 0 rejected" in out
+    assert "1 finished, 0 forced to Cancelled" in out
+    assert not any(w[1] == StateType.CANCELLED for w in client.writes)
+
+
+def test_only_scheduled_runs_skip_the_wait(monkeypatch, no_wait):
+    client = FakeClient([make_run(StateType.SCHEDULED) for _ in range(3)])
+    run_with(monkeypatch, client)
+    assert no_wait == []
+    assert all(r.state_type == StateType.CANCELLED for r in client.runs)
+
+
+def test_cancel_filter_includes_scheduled():
+    assert set(caf.CANCEL_STATES) == {StateType.RUNNING, StateType.PENDING, StateType.SCHEDULED}
 
 
 def test_runs_still_running_are_left_alone(monkeypatch, no_wait, capsys):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cancel every Running/Pending flow run before restart_all.sh restarts the worker machines.
+"""Cancel every Running/Pending/Scheduled flow run before restart_all.sh restarts the worker machines.
 
 Setting a run to Cancelling only asks its runner to stop; the runner polls about every 10 s and then
 moves the run to Cancelled. restart_all.sh used to restart the machines 2 s later, so live runs got
@@ -7,6 +7,14 @@ SIGTERM mid-cancellation, Prefect marked them Crashed ("Crash detected! Executio
 and Sentry reported every one (VER-424). This script now waits, up to CANCEL_WAIT_SECONDS, for the
 runs it touched to leave Cancelling/Running. Whatever is still Cancelling after that belongs to a dead
 worker that will never finish the cancellation, so it is forced to Cancelled.
+
+Scheduled runs (including Late ones the recording watchdog leaves alone while no worker picks them up) are
+cancelled too; otherwise one would survive the restart and start_recording.sh would add a second run next to
+it. A Scheduled run has no infrastructure, so the server's BypassCancellingFlowRunsWithNoInfra rule REJECTs
+Scheduled -> Cancelling and sets Cancelled directly; that result counts as cancelled and is not waited on.
+
+Every write checks the OrchestrationResult it gets back: ACCEPT is done, anything else (REJECT, ABORT, WAIT)
+is reported as not applied.
 
 Exit status: 1 when the Prefect API cannot be reached, 0 otherwise.
 """
@@ -23,6 +31,7 @@ from prefect.client.schemas.filters import (
     FlowRunFilterStateType,
 )
 from prefect.client.schemas.objects import StateType
+from prefect.client.schemas.responses import SetStateStatus
 from prefect.client.schemas.sorting import FlowRunSort
 from prefect.states import Cancelled, Cancelling
 
@@ -30,6 +39,21 @@ CANCEL_WAIT_SECONDS = float(os.getenv("CANCEL_WAIT_SECONDS", "90"))
 POLL_INTERVAL_SECONDS = float(os.getenv("CANCEL_POLL_INTERVAL_SECONDS", "5"))
 # The Prefect server rejects /flow_runs/filter with limit > 200.
 PAGE_SIZE = 200
+CANCEL_STATES = [StateType.RUNNING, StateType.PENDING, StateType.SCHEDULED]
+
+
+def _status(result):
+    status = getattr(result, "status", None)
+    return getattr(status, "value", status)
+
+
+def _reason(result) -> str:
+    return getattr(getattr(result, "details", None), "reason", None) or "no reason"
+
+
+def _result_type(result):
+    state = getattr(result, "state", None)
+    return getattr(state, "type", None)
 
 
 async def read_all_flow_runs(client, flow_run_filter: FlowRunFilter) -> list:
@@ -81,33 +105,45 @@ async def cancel_all_runs():
         async with get_client() as client:
             runs = await read_all_flow_runs(
                 client,
-                FlowRunFilter(
-                    state=FlowRunFilterState(type=FlowRunFilterStateType(any_=[StateType.RUNNING, StateType.PENDING]))
-                ),
+                FlowRunFilter(state=FlowRunFilterState(type=FlowRunFilterStateType(any_=CANCEL_STATES))),
             )
 
             cancelled_count = 0
+            direct_count = 0
+            rejected_count = 0
             failed_count = 0
             touched = []
 
             for run in runs:
                 try:
-                    await client.set_flow_run_state(
+                    result = await client.set_flow_run_state(
                         run.id,
                         state=Cancelling(message="Cancelled by scheduled restart"),
                     )
-                    print(f"- Cancelled: {run.name} ({run.id})")
-                    cancelled_count += 1
-                    touched.append(run.id)
                 except Exception as e:
                     print(f"- Failed to cancel {run.name} ({run.id}): {e}")
                     failed_count += 1
+                    continue
+                if result.status == SetStateStatus.ACCEPT:
+                    print(f"- Cancelling: {run.name} ({run.id})")
+                    cancelled_count += 1
+                    touched.append(run.id)
+                elif result.status == SetStateStatus.REJECT and _result_type(result) == StateType.CANCELLED:
+                    # Scheduled run with no infrastructure: the server went straight to Cancelled.
+                    print(f"- Cancelled (no infrastructure): {run.name} ({run.id})")
+                    direct_count += 1
+                else:
+                    print(f"- Cancel NOT applied to {run.name} ({run.id}): {_status(result)}: {_reason(result)}")
+                    rejected_count += 1
 
-            print(f"\nSummary: Successfully cancelled {cancelled_count} flow runs")
+            print(
+                f"\nSummary: {cancelled_count} flow runs set to Cancelling, {direct_count} cancelled directly, "
+                f"{rejected_count} rejected"
+            )
             if failed_count > 0:
                 print(f"Failed to cancel {failed_count} flow runs")
             if len(runs) == 0:
-                print("No running flow runs found")
+                print("No running, pending or scheduled flow runs found")
                 return
 
             if not touched:
@@ -127,14 +163,21 @@ async def cancel_all_runs():
                     still_running += 1
                     continue
                 try:
-                    await client.set_flow_run_state(
+                    result = await client.set_flow_run_state(
                         run.id,
                         state=Cancelled(message="Forced by scheduled restart: worker did not finish cancelling"),
                         force=True,
                     )
-                    forced += 1
                 except Exception as e:
                     print(f"- Failed to force {run.name} ({run.id}) to Cancelled: {e}")
+                    force_failed += 1
+                    continue
+                if result.status == SetStateStatus.ACCEPT:
+                    forced += 1
+                else:
+                    print(
+                        f"- Force to Cancelled NOT applied to {run.name} ({run.id}): {_status(result)}: {_reason(result)}"
+                    )
                     force_failed += 1
 
             print(
