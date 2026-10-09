@@ -63,10 +63,12 @@ validates them up front, so a missing key surfaces as an error inside the flow. 
   Each `[processes]` entry becomes a machine whose `FLY_PROCESS_GROUP` selects the Prefect deployment to serve.
 - The `prefect` app runs the Prefect server plus a `cron` machine (supercronic): `scripts/restart_all.sh` every 6 hours
   cancels all flow runs, `fly machine restart`s `$FLY_MACHINE_IDS`, then re-triggers `start_recording.sh` and
-  `start_processing.sh`; `src/scripts/delete_flow_runs.py` runs daily; `src/scripts/ensure_recording_runs.py`
-  (recording watchdog: crashes zombie runs, re-creates missing ones) runs at :07/:22/:37/:52 under a `flock` it
-  shares with `restart_all.sh`; `check_recording_coverage.py` runs hourly at :15. The rationale for the 6-hourly restart is
-  undocumented in the repo.
+  `start_processing.sh` (at 00:00/06:00/12:00/18:00 UTC); `src/scripts/delete_flow_runs.py` runs daily;
+  `src/scripts/ensure_recording_runs.py` (recording watchdog: sets zombie and stuck-Pending runs to Cancelling,
+  re-creates missing ones; about 15 min to recover a station with no run, up to about 70 min for a zombie) runs at
+  :07/:22/:37/:52 and skips the tick while `restart_all.sh` holds `$RECORDING_LOCK_FILE`;
+  `check_recording_coverage.py` runs hourly at :15. Both scripts check in with Sentry Crons (`recording-watchdog`,
+  `recording-coverage`). The rationale for the 6-hourly restart is undocumented in the repo.
 - Details, deployment names and how to trigger a single stage run: `docs/OPERATIONS.md`.
 
 ## Gotchas
