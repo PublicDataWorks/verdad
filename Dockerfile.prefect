@@ -4,9 +4,9 @@ FROM prefecthq/prefect:3.4.24-python3.11
 # Set the working directory in the container
 WORKDIR /app
 
-# Install curl for downloading supercronic. util-linux provides flock(1), shared by restart_all.sh and
-# the recording watchdog cron entry; the Debian base image already has it (Essential: yes), listed
-# here so that never silently changes.
+# Install curl for downloading supercronic. util-linux provides flock(1), which restart_all.sh uses to
+# hold the recording lock the watchdog checks; the Debian base image already has it (Essential: yes),
+# listed here so that never silently changes. timeout(1) comes from coreutils (also Essential).
 RUN apt-get update && apt-get install -y \
     curl \
     util-linux \
