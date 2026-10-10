@@ -34,23 +34,52 @@ session while it is set, so remove it afterwards). `VERDAD_SKIP_PROBES=1` skips 
 Paste into the environment's **Setup script** field:
 
 ```bash
-cd "$CLAUDE_PROJECT_DIR" 2>/dev/null || cd /home/user/verdad 2>/dev/null || true
-bash scripts/cloud/setup.sh || true
+# Find the VERDAD clone: $CLAUDE_PROJECT_DIR, the git toplevel of the cwd, /home/user/verdad, /home/user/*/.
+VERDAD_REPO=""
+for d in "${CLAUDE_PROJECT_DIR:-}" "$(git rev-parse --show-toplevel 2>/dev/null)" /home/user/verdad /home/user/*/; do
+  d="${d%/}"
+  if [ -n "$d" ] && [ -f "$d/scripts/cloud/setup.sh" ]; then VERDAD_REPO="$d"; break; fi
+done
+if [ -n "$VERDAD_REPO" ]; then
+  bash "$VERDAD_REPO/scripts/cloud/setup.sh" || true
+else
+  echo "[setup] ERROR: VERDAD repo not found (pwd: $(pwd)); skipped scripts/cloud/setup.sh." \
+       "The SessionStart hook will provision the core on the first session instead."
+fi
+true
 ```
 
-*(unverified)* The working directory and clone path the setup script runs in are not documented; the first
-line is a guard. If the repo is not found the script cannot run, and the SessionStart hook provisions on the
-first session instead, which is slower but still works (the hook timeout is 600 s by default).
+It always exits 0, so a missing repo or a failed install never blocks the session.
+
+**Where things land.** The venv is created outside the clone, at `/opt/verdad/venv` (falling back to
+`$HOME/.cache/verdad/venv` when `/opt` is not writable; `VERDAD_VENV` overrides both), and `<repo>/.venv` is a
+symlink to it. When the venv is under `/opt/verdad`, uv-managed interpreters go to `/opt/verdad/python`. Both
+`setup.sh` and the SessionStart hook re-create the symlink (`ln -sfn`) if it is missing; neither replaces a real
+`.venv` directory on Python 3.11 or a `.venv` symlink that points somewhere else and resolves. Logs of the last
+run are in `/tmp/verdad-setup/<task>.log`.
+
+**Caching assumptions (unverified).** The docs say the setup script runs before Claude Code launches and that
+the filesystem is snapshotted when it finishes in about 5 minutes, and that sessions start from a fresh clone of
+the repository. They do not say where the clone is when the setup script runs, or whether the clone directory
+in a later session is the one from the snapshot. Keeping the venv outside the clone means it survives either way,
+and the symlink is cheap to restore. None of this has been observed in a real cloud session yet. To check it:
+start a session in the environment, then start a **second** session. The second session's hook output should
+begin with `[session-start] core tooling ready (Python 3.11.x, ffmpeg present)`. If it says
+`core tooling missing or stale; running scripts/cloud/setup.sh --quiet --core` instead, the snapshot did not
+carry the venv (or the setup script did not find the repo; its output is in the first session's setup log).
 
 What it installs and how, in order of preference (every route avoids being GitHub-release-only where an
-alternative exists):
+alternative exists). apt packages (including Node and gh when missing) go first because they share the apt
+lock; then four independent tasks run in parallel (`&` + `wait`), each logging to its own file:
+`python` (uv, Python 3.11, venv), `server` (`npm ci`), `flyctl`, and `clis` (supabase, then sentry-cli). The
+summary table and per-task times come at the end. `--core` runs only apt, `python` and `server`.
 
 | Tool | Route | Fallback when it fails |
 |---|---|---|
 | ffmpeg, postgresql-client, jq, curl, unzip, git, build-essential, libpq-dev | apt (only the missing ones) | per-package retry |
 | uv | preinstalled in the cloud image; else `pip install uv` from PyPI | `python -m venv` |
-| Python 3.11 | existing `python3.11` / pyenv / `uv python find` > apt > deadsnakes PPA > `uv python install 3.11` | none: venv step reports FAILED |
-| `.venv` | `uv pip install -r requirements.txt pre-commit` (rebuilt if `.venv` is not 3.11; stamp = hash of requirements) | pip |
+| Python 3.11 | existing `python3.11` / pyenv / `uv python find` > `uv python install 3.11` > apt `python3.11` > deadsnakes PPA | none: venv step reports FAILED |
+| venv (`.venv` -> `/opt/verdad/venv`) | `uv venv --seed` (so the venv has pip and `pip install` from AGENTS.md works), then `uv pip install -r requirements.txt pre-commit pip` (rebuilt if it is not 3.11; stamp = hash of requirements) | `python -m venv` + pip |
 | Node | image's Node 22; else apt `nodejs npm` (18 on Ubuntu 24.04: `tsc` works, vitest's vite needs >= 20) | server step skipped |
 | `server/node_modules` | `npm ci` (stamp = hash of `package-lock.json`) | reported FAILED |
 | flyctl | pinned GitHub release `v0.4.103`, checksum-verified against the release `checksums.txt` | Machines API with curl (CLAUDE.md, "Cloud environment") |

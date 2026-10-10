@@ -2,6 +2,8 @@
 # SessionStart hook for Claude Code on the web (verdad backend). Runs only in remote sessions
 # (CLAUDE_CODE_REMOTE=true); a local session exits immediately.
 #
+# 0. Re-points <repo>/.venv at the venv setup.sh keeps outside the clone (/opt/verdad/venv or
+#    ~/.cache/verdad/venv), since a fresh clone has no .venv.
 # 1. Provisioning is scripts/cloud/setup.sh. The claude.ai environment's setup script normally ran it already
 #    (and the result is snapshotted), so this hook only calls it when `setup.sh --check` says the core
 #    (Python 3.11 .venv, ffmpeg, server/node_modules) is missing or stale. That fallback is bounded: it runs
@@ -28,6 +30,15 @@ log() { echo "[session-start] $*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 cd "$ROOT" || exit 0
+
+# --- 0. .venv symlink ------------------------------------------------------------------------------
+# setup.sh keeps the venv outside the clone (/opt/verdad/venv, else ~/.cache/verdad/venv) so a fresh clone
+# has no .venv; point it at the venv again. A real .venv directory or a live symlink elsewhere is left alone.
+for d in "${VERDAD_VENV:-}" /opt/verdad/venv "${HOME:-/root}/.cache/verdad/venv"; do
+  { [ -n "$d" ] && [ -x "$d/bin/python" ]; } || continue
+  if [ ! -e .venv ] || { [ -L .venv ] && [ "$(readlink .venv)" = "$d" ]; }; then ln -sfn "$d" .venv; fi
+  break
+done
 
 # --- 1. Provisioning -------------------------------------------------------------------------------
 STAMP=/tmp/verdad-setup-attempted
