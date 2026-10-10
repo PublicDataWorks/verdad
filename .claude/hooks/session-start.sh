@@ -82,36 +82,51 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
 fi
 
 # --- 3. Credentials present? (names only, never values) --------------------------------------------
-VARS=(FLY_API_TOKEN SUPABASE_ACCESS_TOKEN SUPABASE_DB_URL PREFECT_API_AUTH_STRING SENTRY_AUTH_TOKEN
-      SUPABASE_URL SUPABASE_KEY GOOGLE_GEMINI_KEY OPENAI_API_KEY R2_ENDPOINT_URL R2_ACCESS_KEY_ID
-      R2_SECRET_ACCESS_KEY R2_BUCKET_NAME SEARXNG_URL JINA_API_KEY)
+VARS=(FLY_API_TOKEN SUPABASE_ACCESS_TOKEN SUPABASE_DB_URL PREFECT_API_AUTH_STRING PREFECT_API_URL
+      SENTRY_AUTH_TOKEN GH_TOKEN SUPABASE_URL SUPABASE_KEY SUPABASE_ANON_KEY GOOGLE_GEMINI_KEY OPENAI_API_KEY
+      R2_ENDPOINT_URL R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET_NAME SEARXNG_URL JINA_API_KEY)
 set_vars=() unset_vars=()
 for v in "${VARS[@]}"; do
-  if [ -n "${!v:-}" ]; then set_vars+=("$v"); else unset_vars+=("$v"); fi
+  if [ "$v" = GH_TOKEN ] && [ "${GH_TOKEN:-}" = "proxy-injected" ]; then
+    set_vars+=("GH_TOKEN(proxy-injected)")   # the GitHub proxy's placeholder, not a real token
+  elif [ -n "${!v:-}" ]; then set_vars+=("$v"); else unset_vars+=("$v"); fi
 done
 log "env set:   ${set_vars[*]:-(none)}"
 log "env unset: ${unset_vars[*]:-(none)}  (all optional; see docs/CLOUD_ENVIRONMENT.md)"
+if [ -n "${PREFECT_API_URL:-}" ]; then
+  log "PREFECT_API_URL is set: every prefect CLI command in this session talks to that server (production)."
+fi
 
 # --- 4. Read-only auth probes ----------------------------------------------------------------------
+# Every probe reads /dev/null as stdin (so nothing can wait for input) except curl, whose credential arrives
+# on stdin as a curl config (-K -) so it never appears in the process list.
 [ "${VERDAD_SKIP_PROBES:-}" = "1" ] && exit 0
 
 T=12   # seconds per probe
 ROWS=()
 row() { ROWS+=("$(printf '%-14s %-8s %s' "$1" "$2" "${3:-}")"); }
 
-# HTTP probe: prints "<code>" or "blocked" (proxy CONNECT refusal = network policy, not an outage).
+# Quote a value for a curl config file: backslash and double quote are escaped.
+cfg_quote() { printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
+
+# http_probe CONFIG_LINE CURL_ARGS...: prints "<code>", "blocked" (proxy CONNECT refusal = network policy, not
+# an outage) or "missing" (no curl).
 http_probe() {
-  local err code
+  local cfg="$1" err code
+  shift
+  have curl || { echo missing; return; }
   err="$(mktemp)"
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time "$T" "$@" 2>"$err")"
+  code="$(printf '%s\n' "$cfg" | curl -K - -sS -o /dev/null -w '%{http_code}' --max-time "$T" "$@" 2>"$err")"
   if grep -qi 'CONNECT tunnel failed\|Received HTTP code 403 from proxy' "$err"; then code="blocked"; fi
   rm -f "$err"
   echo "${code:-000}"
 }
+bearer() { echo "header = $(cfg_quote "Authorization: Bearer $1")"; }
 http_row() {   # name code
   case "$2" in
     2??)     row "$1" OK "HTTP $2" ;;
     blocked) row "$1" BLOCKED "proxy refused CONNECT: host not in the environment's network allowlist" ;;
+    missing) row "$1" MISSING "curl not installed" ;;
     401|403) row "$1" DENIED "HTTP $2 (credential rejected or lacks scope)" ;;
     *)       row "$1" FAILED "HTTP $2" ;;
   esac
@@ -119,9 +134,9 @@ http_row() {   # name code
 
 # Fly: the Machines API works with or without flyctl, and with org-scoped tokens.
 if [ -n "${FLY_API_TOKEN:-}" ]; then
-  http_row fly-api "$(http_probe -H "Authorization: Bearer $FLY_API_TOKEN" "https://api.machines.dev/v1/apps?org_slug=verdad")"
+  http_row fly-api "$(http_probe "$(bearer "$FLY_API_TOKEN")" "https://api.machines.dev/v1/apps?org_slug=verdad")"
   if have fly; then
-    if timeout "$T" fly auth whoami >/dev/null 2>&1; then row flyctl OK "fly auth whoami"; else row flyctl FAILED "fly auth whoami (org tokens may not support whoami; fly-api row is authoritative)"; fi
+    if timeout "$T" fly auth whoami </dev/null >/dev/null 2>&1; then row flyctl OK "fly auth whoami"; else row flyctl FAILED "fly auth whoami (org tokens may not support whoami; fly-api row is authoritative)"; fi
   else
     row flyctl MISSING "use the Machines API (CLAUDE.md)"
   fi
@@ -132,19 +147,20 @@ fi
 # Supabase management API / CLI.
 if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ]; then
   if have supabase; then
-    if timeout "$T" supabase projects list >/dev/null 2>&1; then row supabase-cli OK "supabase projects list"; else row supabase-cli FAILED "supabase projects list"; fi
+    if timeout "$T" supabase projects list </dev/null >/dev/null 2>&1; then row supabase-cli OK "supabase projects list"; else row supabase-cli FAILED "supabase projects list"; fi
   else
-    http_row supabase-api "$(http_probe -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" https://api.supabase.com/v1/projects)"
+    http_row supabase-api "$(http_probe "$(bearer "$SUPABASE_ACCESS_TOKEN")" https://api.supabase.com/v1/projects)"
   fi
 else
   row supabase SKIP "SUPABASE_ACCESS_TOKEN unset"
 fi
 
 # Postgres (raw TCP; may not traverse the sandbox's HTTP proxy, in which case use the Management API).
+# -w: never prompt for a password. The URL stays in argv here: psql has no stdin form for it.
 if [ -n "${SUPABASE_DB_URL:-}" ]; then
   if ! have psql; then
     row psql MISSING "postgresql-client not installed"
-  elif PGCONNECT_TIMEOUT="$T" timeout "$T" psql "$SUPABASE_DB_URL" -tAc 'select 1' >/dev/null 2>&1; then
+  elif PGCONNECT_TIMEOUT="$T" timeout "$T" psql -w "$SUPABASE_DB_URL" -tAc 'select 1' </dev/null >/dev/null 2>&1; then
     row psql OK "select 1"
   else
     row psql FAILED "select 1 (TCP egress or credential; fall back to POST /v1/projects/<ref>/database/query)"
@@ -155,18 +171,19 @@ fi
 
 # Prefect API (basic auth, VER-384). POST /deployments/filter is a read.
 if [ -n "${PREFECT_API_AUTH_STRING:-}" ]; then
-  http_row prefect "$(http_probe -u "$PREFECT_API_AUTH_STRING" -X POST https://prefect.fly.dev/api/deployments/filter \
-    -H 'content-type: application/json' -d '{"limit":1}')"
+  http_row prefect "$(http_probe "user = $(cfg_quote "$PREFECT_API_AUTH_STRING")" -X POST \
+    https://prefect.fly.dev/api/deployments/filter -H 'content-type: application/json' -d '{"limit":1}')"
 else
   row prefect SKIP "PREFECT_API_AUTH_STRING unset"
 fi
 
-# Sentry: the org endpoint needs org:read, so it checks token and org slug together.
+# Sentry: the org endpoint needs org:read, so it checks token type, scope and org slug together (an org auth
+# token, which only has org:ci, gets 403 here).
 if [ -n "${SENTRY_AUTH_TOKEN:-}" ]; then
-  http_row sentry-api "$(http_probe -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+  http_row sentry-api "$(http_probe "$(bearer "$SENTRY_AUTH_TOKEN")" \
     "${SENTRY_URL:-https://sentry.io}/api/0/organizations/${SENTRY_ORG:-verdad-nk}/")"
   if have sentry-cli; then
-    if SENTRY_ORG="${SENTRY_ORG:-verdad-nk}" timeout "$T" sentry-cli info >/dev/null 2>&1; then row sentry-cli OK "sentry-cli info"; else row sentry-cli FAILED "sentry-cli info"; fi
+    if SENTRY_ORG="${SENTRY_ORG:-verdad-nk}" timeout "$T" sentry-cli info </dev/null >/dev/null 2>&1; then row sentry-cli OK "sentry-cli info"; else row sentry-cli FAILED "sentry-cli info"; fi
   else
     row sentry-cli MISSING "run scripts/cloud/setup.sh"
   fi
@@ -174,8 +191,13 @@ else
   row sentry SKIP "SENTRY_AUTH_TOKEN unset"
 fi
 
+# GitHub: REST through the session's GitHub proxy. gh pr / gh issue use GraphQL, which the proxy rejects.
 if have gh; then
-  if timeout "$T" gh auth status >/dev/null 2>&1; then row gh OK "gh auth status"; else row gh NOAUTH "gh not authenticated (git still works through the GitHub proxy)"; fi
+  if timeout "$T" gh api repos/PublicDataWorks/verdad --jq .full_name </dev/null >/dev/null 2>&1; then
+    row gh-api OK "gh api (REST); gh pr / gh issue use GraphQL, which the proxy 403s"
+  else
+    row gh-api FAILED "gh api repos/PublicDataWorks/verdad (repo not attached to this session?)"
+  fi
 fi
 
 log "auth probes (read-only, ${T}s timeout each):"
