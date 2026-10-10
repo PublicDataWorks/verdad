@@ -140,6 +140,8 @@ phase_system() {
     dpkg -s "$p" >/dev/null 2>&1 || apt_missing+=("$p")
   done
   if [ "$(node_major)" -lt 18 ]; then apt_missing+=(nodejs npm); fi
+  # Ubuntu's python3 has no pip; the python task needs it to get uv from PyPI when the image lacks uv.
+  if ! have uv && ! python3 -m pip --version >/dev/null 2>&1; then apt_missing+=(python3-pip); fi
   if [ "$CORE" = 0 ] && ! have gh; then apt_missing+=(gh); fi
   if [ ${#apt_missing[@]} -eq 0 ]; then
     record apt OK "all present"
