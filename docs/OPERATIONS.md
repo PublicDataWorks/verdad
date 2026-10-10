@@ -9,7 +9,7 @@ Items marked **unknown** are not recorded anywhere in the repo; ask a maintainer
 |---|---|---|---|
 | `prefect` (`fly.prefect.toml`) | `Dockerfile.prefect` (prefecthq/prefect:3.4.24-python3.11 + supercronic + flyctl) | `server`: `scripts/start_prefect_server.sh` (port 4200, health `/api/health`); `cron`: `scripts/start_cron.sh` | `server`, `cron` |
 | `processing-worker` (`fly.processing_worker.toml`) | `Dockerfile.processing_worker` (python3.12 + node22 + ffmpeg + `@google/gemini-cli@0.20.0`) | `scripts/trigger_processing_worker.sh` -> waits for `https://prefect.fly.dev/api/health` -> `python src/processing_pipeline/main.py` | `initial_disinformation_detection`, `initial_disinformation_detection_2`, `audio_clipping`, `in_depth_analysis`, `regenerate_timestamped_transcript`, `redo_main_detection`, `undo_disinformation_detection`, `undo_audio_clipping`, `analysis_review`, `analysis_review_2`, `embedding` |
-| `recording-worker` (`fly.recording_worker.toml`) | `Dockerfile.recording_worker` (python:3.12-slim + ffmpeg) | `scripts/recording.sh` -> `python src/recording.py` | `max_recorder` (`recorder: max` stations, currently 39, 8 GB), `lite_recorder` (`recorder: lite`, currently 14 enabled, 6 GB) |
+| `recording-worker` (`fly.recording_worker.toml`) | `Dockerfile.recording_worker` (python:3.12-slim + ffmpeg) | `scripts/recording.sh` -> `python src/recording.py` | `max_recorder` (`recorder: max` stations, currently 34 enabled, 8 GB), `lite_recorder` (`recorder: lite`, currently 14 enabled, 6 GB) |
 | `generic-recording-worker` (`fly.generic_recording_worker.toml`) | `Dockerfile.generic_recording_worker` (ubuntu + Chrome + pulseaudio) | `scripts/generic_recording.sh` -> `python src/generic_recording.py` | `radio_khot`, `radio_kisf`, `radio_krgt`, `radio_wkaq`, `radio_wado`, `radio_waqi` (one machine each; the `process_group` of each `recorder: generic` station in `config/stations.yaml`) |
 | `verdad-searxng` (`fly.searxng.toml`) | `Dockerfile.searxng` (searxng/searxng:2026.9.20 + `searxng/config/settings.yml`) | image default | none; serves `https://verdad-searxng.fly.dev` used via `SEARXNG_URL` (stage 3 tools, stage 4 MCP) |
 | `verdad-dev` (`fly.dev.toml`) | `Dockerfile.generic_recording_worker` | same as generic recorder | none defined. Purpose **unknown** (looks like a scratch app) |
@@ -56,23 +56,180 @@ cd server && fly deploy -c fly.server.toml    # the server app builds from serve
 `scripts/start_cron.sh` writes this crontab and runs it with supercronic:
 
 ```
-0 */6 * * * /app/restart_all.sh            # every 6 hours
-0 1 * * *   python3 /app/delete_flow_runs.py   # daily 01:00 UTC
+0 */6 * * *        /app/restart_all.sh                         # every 6 hours
+0 1 * * *          python3 /app/delete_flow_runs.py            # daily 01:00 UTC
+7,22,37,52 * * * * python3 /app/ensure_recording_runs.py      # recording watchdog (takes the lock itself)
+15 * * * *         python3 /app/check_recording_coverage.py    # hourly recording coverage monitor
 ```
 
-`scripts/restart_all.sh` does, in order:
+So the restart runs at 00:00/06:00/12:00/18:00 UTC. `start_cron.sh` exports `PYTHONPATH=/app/src` (for
+`stations.py`) and `RECORDING_LOCK_FILE` (default `/tmp/verdad-recording.lock`), and refuses to start without
+`flock`.
 
-1. `src/scripts/cancel_all_flows.py`: sets every RUNNING/PENDING flow run to Cancelling via the Prefect API.
-2. `fly machine restart <id>` for each id in `$FLY_MACHINE_IDS` (comma-separated Fly secret on the `prefect` app;
-   values **unknown**). Needs flyctl auth on that machine (`FLY_API_TOKEN`, **unknown** how it is provided).
-3. Waits 30 s, runs `start_recording.sh` (one `prefect deployment run` per station, 59 stations), waits 10 s,
-   runs `start_processing.sh` (N runs per stage: `STAGE_{1..5}_FLOW_RUNS`, defaults 2/1/2/1/1).
+### The recording lock
+
+`restart_all.sh` and the watchdog must never overlap: the watchdog would see the runs the restart just cancelled
+and start replacements while `start_recording.sh` is starting its own. Both use one lock file,
+`$RECORDING_LOCK_FILE`, exported once by `start_cron.sh`; `restart_all.sh` and `ensure_recording_runs.py` fall back
+to the same `/tmp/verdad-recording.lock` when it is unset (manual runs).
+
+- `restart_all.sh` takes it with `flock(1)` (`exec 9>...; flock -w`), waiting up to `RESTART_LOCK_WAIT_SECONDS`
+  (default 300) for a watchdog tick to finish, then proceeds anyway. It holds it for the whole restart and runs
+  every child with fd 9 closed (`9>&-`), so a daemon left behind by flyctl cannot inherit the lock and outlive the
+  script.
+- `ensure_recording_runs.py` takes it itself with a non-blocking `flock(2)`. If it is held it prints
+  `watchdog: restart in progress, skipping tick` and exits 0 (and still checks in OK with Sentry Crons). This
+  covers a manual run during a restart too.
+
+`scripts/restart_all.sh` does, in order (each slow step bounded with `timeout(1)` so a hung API call cannot hold
+the lock forever):
+
+1. `src/scripts/cancel_all_flows.py` (timeout 300 s): sets every Running/Pending/Scheduled flow run (paginated) to
+   Cancelling, then polls until those runs leave Cancelling/Running, at most `CANCEL_WAIT_SECONDS` (default 90,
+   polling every `CANCEL_POLL_INTERVAL_SECONDS`, default 5). Runs still Cancelling after that belong to dead workers
+   and are forced to Cancelled. Scheduled runs are included so a Late run left behind during an outage cannot
+   survive the restart next to the one `start_recording.sh` creates; the server turns Scheduled -> Cancelling
+   straight into Cancelled for a run with no infrastructure (`BypassCancellingFlowRunsWithNoInfra`, reported as a
+   REJECT with a Cancelled state). Every write checks the returned `OrchestrationResult`; rejected writes are
+   reported, not counted as done. Before VER-424 the machines were restarted 2 s after the Cancelling write, so
+   live runs got SIGTERM mid-cancellation, Prefect marked them Crashed ("Crash detected! Execution was
+   aborted...") and Sentry reported each one every 6 hours.
+2. `fly machine restart <id>` (timeout 120 s each) for each id in `$FLY_MACHINE_IDS` (comma-separated Fly secret
+   on the `prefect` app; values **unknown**). Needs flyctl auth on that machine (`FLY_API_TOKEN`, **unknown** how it
+   is provided).
+3. Waits 30 s, runs `start_recording.sh` (timeout 600 s; one `prefect deployment run` per station, 54 stations),
+   waits 10 s, runs `start_processing.sh` (timeout 600 s; N runs per stage: `STAGE_{1..5}_FLOW_RUNS`, defaults
+   2/1/2/1/1).
 
 `delete_flow_runs.py` deletes old cancelled flow runs in batches (`BATCH_SIZE`, `DELAY_BETWEEN_BATCHES`).
+
+### Dead workers leave zombie and stuck runs
+
+When a worker machine dies, Prefect does not notice. On 2026-10-09 08:11 UTC every recorder worker exited
+with code 1; Fly restarted the machines, but their max/lite flow runs stayed **Running** (only the six generic
+runs became Crashed) and nothing recorded until the 12:00 restart created new runs. So "the deployment has an
+active run" says nothing about liveness. Likewise a run set to Cancelling whose worker is gone never finishes
+cancelling: about 2050 such runs had piled up in Cancelling, which `delete_flow_runs.py` also could not clear.
+
+The liveness signal that works is task activity: a healthy recording run starts a `capture_audio_stream` task
+(then `upload_to_r2_and_clean_up`, `insert_recorded_audio_file_into_database`) at least every ~30 min, one per
+1800 s chunk.
+
+### Recording watchdog (`ensure_recording_runs.py`, VER-421)
+
+`src/scripts/ensure_recording_runs.py` runs at :07/:22/:37/:52 and skips any tick while `restart_all.sh` holds the
+recording lock (above). It reads the station list from `stations.py` (the same `"<flow name>/<code>"` list
+`start_recording.sh` triggers) and for each deployment:
+
+- Scheduled (including Late) run present: healthy, no action. One older than 30 min is logged as a warning (no
+  worker is picking it up; another run would only queue behind it).
+- Pending run: healthy while it has been Pending for under 10 min (by its Pending state timestamp). An older one
+  is stuck (the runner that took it is gone) and is set to Cancelling with `watchdog: stuck in Pending for N min`.
+- Running run that started, or whose newest task run started, within 45 min: healthy. Any other Running run is a
+  zombie and is set to **Cancelling** (not forced to Crashed) with `watchdog: no task activity for N min`. The
+  serve() Runner kills a flow's process only when it sees Cancelling, so if the watchdog misjudged a live run,
+  Cancelling stops it; a forced Crashed state would leave it recording next to its replacement (two recorders,
+  duplicate `audio_files` rows).
+- Cancelling run older than 10 min: forced to Cancelled with `watchdog: stale cancellation`.
+- No healthy run left: creates one with `create_flow_run_from_deployment` (does not wait for it), unless a run is
+  on its way out: a zombie or stuck Pending run set to Cancelling this tick, or a Cancelling run younger than
+  10 min, defers the new run to a later tick.
+
+Recovery time follows from that: about 15 min (one tick) when a station has no run at all, and up to about 70 min
+when its run is left Running as a zombie (45 min of no task activity before it is called a zombie, then one tick
+in which it sits in Cancelling for the 10-min close, then the tick that closes it and starts the replacement).
+
+After the per-station checks, a normal run (no `--codes`) sweeps **every** deployment, processing ones included,
+for Cancelling runs older than 10 min and forces them to Cancelled, so the backlog drains and
+`delete_flow_runs.py` can delete it. A sweep failure is logged and counted, never fatal.
+
+Every state write checks the `OrchestrationResult` it gets back: only ACCEPT counts as done, REJECT/ABORT/WAIT is
+logged with the server's reason and counted as `rejected`. Every per-station failure (including a 5xx
+`PrefectHTTPStatusError` after the client's own retries) is caught, logged and counted in `errors`; one station
+never stops the others. The run prints one summary line (`checked= healthy= started= zombies_cancelled=
+stale_pending_cancelled= stale_cancels_closed= deferred= missing= rejected= errors=`). Exit codes: 0 = clean (or
+skipped for the lock), 1 = Prefect API unreachable at the start (health check), 2 = finished with errors or
+rejected writes.
+
+With `SENTRY_DSN` set (and not `--dry-run`), an unreachable API or any errors/rejections send a Sentry error event
+(`check=recording_watchdog`, fingerprint `["recording-watchdog", "errors", <UTC date-hour>]`), flushed with a 30 s
+timeout. Full ticks (no `--codes` / `--close-stale-cancelling`) also check in with Sentry Crons (see below).
+
+```bash
+python3 /app/ensure_recording_runs.py --dry-run                 # on the cron machine: log only, no writes
+python3 /app/ensure_recording_runs.py --codes "WLEL - 94.3 FM"  # just these stations (codes as in stations.yaml; skips the global sweep)
+python3 /app/ensure_recording_runs.py --close-stale-cancelling  # only the global stale-Cancelling sweep
+PYTHONPATH=src python src/scripts/ensure_recording_runs.py --dry-run   # from a checkout (needs PREFECT_API_*)
+```
+
+Thresholds are env vars: `WATCHDOG_SCHEDULED_STALE_MINUTES` (30), `WATCHDOG_PENDING_STALE_MINUTES` (10),
+`WATCHDOG_RUNNING_IDLE_MINUTES` (45), `WATCHDOG_CANCELLING_STALE_MINUTES` (10), `WATCHDOG_CONCURRENCY` (8). Cron
+output is in `fly logs -a prefect`.
+
+### Sentry Crons monitors
+
+Both cron scripts check in with Sentry Crons when `SENTRY_DSN` is set, so Sentry alerts when a script stops
+running at all (for example because the `cron` machine is down), not only when a run reports a problem. Each run
+sends an in-progress check-in on start and OK or ERROR (non-zero exit) on finish; the monitors are created from
+the config the check-ins carry (`sentry_sdk.crons.monitor`), all in UTC:
+
+| Slug | Script | Schedule | Check-in margin | Max runtime |
+|---|---|---|---|---|
+| `recording-watchdog` | `ensure_recording_runs.py` (full ticks only) | `7,22,37,52 * * * *` | 5 min | 10 min |
+| `recording-coverage` | `check_recording_coverage.py` (not `--dry-run`) | `15 * * * *` | 10 min | 10 min |
 
 Why the full restart exists is **not documented** in the repo. Observable facts: every flow loops forever
 (`repeat=True`, or `limit` for stage 1) and sleeps 60 s when idle; the stage workers `serve(..., limit=100)`; the restart is the only thing that
 re-creates flow runs after a worker machine dies. Treat it as load-bearing until someone confirms otherwise.
+
+## Recording coverage monitor (`prefect` app, `cron` process; VER-422)
+
+`src/scripts/check_recording_coverage.py` (copied to `/app/check_recording_coverage.py` in the image) runs hourly
+from the same crontab (`15 * * * * python3 /app/check_recording_coverage.py`) and sends a Sentry event, level
+`error`, for each recording gap it finds in `audio_files`:
+
+- **Fleet**: no row with `created_at` in the last `FLEET_WINDOW_MIN` minutes (default 60). One event
+  (`station=fleet`); per-station alerts are suppressed while it fires and the event's `stale_stations` extra lists
+  them instead.
+- **Per station**: for every `enabled` station in `config/stations.yaml` (all recorders; `enabled: false` is
+  ignored), the newest `recorded_at` is older than `STATION_STALE_MIN` minutes (default 90) or there is no row in
+  the lookback (`COVERAGE_LOOKBACK_HOURS`, default 24). `recorded_at` is the chunk *start*, chunks are 30 minutes,
+  and the 6-hourly restart drops the partial chunk, so a healthy station can be up to ~75 minutes stale at the :15
+  check right after a restart, plus the couple of minutes the restart itself takes: the 90-minute threshold has
+  only about 13 minutes of margin there. A station the watchdog recovers mid-cycle (a zombie can take up to ~70
+  min) has a real gap, so it can raise a short per-station alert that clears on its own: the next hourly run
+  finds fresh chunks and sends nothing more for it (the Sentry issue itself stays open until resolved).
+
+Events carry tags `check=recording_coverage`, `station`, `recorder` and extras `last_recorded_at`, `gap_began`
+(last chunk start + 30 min), `minutes_stale`. The fingerprint is `["recording-coverage", <station code or
+"fleet">, <UTC timestamp the gap began>]`: for a station, its last chunk start + 30 min (`gap_began`); for the
+fleet, the last `created_at`. That value does not move during one outage, so its hourly runs add events to the same
+issue, while a new outage, even a second one on the same day, opens a new Sentry issue (and its new-issue alert). A
+station with nothing in the lookback gets one extra `limit=1` query for its last row within
+`COVERAGE_HISTORY_DAYS` (default 30) so the timestamp stays stable once the outage is older than the lookback; with
+nothing in that window it is `unknown`.
+
+Cost per run: one PostgREST page of `audio_files` (`recorded_at >= now - 24h`, newest first, on
+`idx_audio_files_recorded_at`) when every station is healthy, since paging stops once all enabled stations have
+been seen; up to ~3 pages of 1000 when a station is dead. The fleet check reads `created_at` from those rows rather
+than filtering on it, because `created_at` has no index.
+
+Secrets on the `prefect` app: `SUPABASE_URL`, `SUPABASE_KEY` (service key; the script only issues GETs, sent as `apikey` and
+`Authorization: Bearer`) and `SENTRY_DSN` (the recording-worker Sentry project's DSN). Thresholds come from the env
+vars above or the matching flags (`--fleet-window-min`, `--station-stale-min`, `--lookback-hours`,
+`--history-days`); a non-integer env value prints a warning and uses the default. Every run prints one summary
+line to the cron log (`fly logs -a prefect`) and flushes Sentry with a 30 s timeout. Exit codes: 0 = checks ran,
+1 = `SUPABASE_*` missing or the query failed (also sent to Sentry when the DSN is set, fingerprint
+`["recording-coverage", "monitor-error", <UTC date-hour>]`, and the Crons check-in is ERROR), 2 = `SENTRY_DSN`
+missing (checks still run and print, nothing is sent).
+
+Run it by hand without sending anything:
+
+```bash
+fly ssh console -a prefect --machine <cron machine id> -C "python3 /app/check_recording_coverage.py --dry-run"
+# from a checkout, with SUPABASE_URL/SUPABASE_KEY exported (the script does not read .env):
+python src/scripts/check_recording_coverage.py --dry-run --station-stale-min 60
+```
 
 ## Adding or disabling a station
 
@@ -128,9 +285,9 @@ station data: both recorders, `scripts/start_recording.sh` and the generic recor
 No Supabase schema change is involved: `audio_files` stores `radio_station_name`/`radio_station_code`/
 `location_state` per recording, denormalized by the recorder.
 
-The five dead `lite` stations (WOLS, WNZK, WGSP, WYMY, KMRO) were disabled on 2026-09-24. Follow-up, not done
-yet: five `max` stations have also produced no audio for months (KENO, KNNR, WURN, KFUE, WDJA) and still hold a
-recorder slot each.
+The five dead `lite` stations (WOLS, WNZK, WGSP, WYMY, KMRO) were disabled on 2026-09-24, and five `max`
+stations with no audio for months (KENO, KNNR, WURN, KFUE, WDJA) on 2026-10-09 (VER-425). Both take effect only
+after a deploy.
 
 ## Triggering one stage run against production
 
@@ -155,9 +312,11 @@ refuses the production project unless `--allow-production` is passed.
 
 ## Gotchas learned in production (September 2026)
 
-- **Workers idle after any deploy or `prefect` app restart.** Flow runs are created only by the 6-hourly cron
-  (00:10/06:10/12:10/18:10 UTC); a freshly deployed `serve()` has nothing to serve until then. Either wait for the
-  tick or create the runs yourself:
+- **Workers idle after any deploy or `prefect` app restart.** Processing flow runs are created only by the
+  6-hourly cron (00:00/06:00/12:00/18:00 UTC); a freshly deployed `serve()` has nothing to serve until then.
+  Recording runs are also re-created by the watchdog within ~15 min when none exist (see "Recording watchdog"
+  above). Either wait
+  for the tick or create the runs yourself:
 
   ```bash
   API=https://prefect.fly.dev/api   # every call needs -u "$PREFECT_API_AUTH_STRING" (basic auth, VER-384)

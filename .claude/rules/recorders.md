@@ -39,7 +39,7 @@ YAML entry plus its snapshot in `tests/test_stations.py`; see docs/OPERATIONS.md
 
 `code` is the Prefect deployment name and `get_url_hash(url)` (last 6 hex of sha256) is the R2 prefix
 `radio_<hash>/`, so renaming a code orphans a deployment and editing a url moves that station's audio.
-`tests/test_stations.py` snapshots the per-recorder code lists, the 59 Prefect run strings and a few url
+`tests/test_stations.py` snapshots the per-recorder code lists, the 54 Prefect run strings and a few url
 hashes for exactly that reason - a diff there means a real production change, not a test to relax.
 
 ## ffmpeg recorders vs Selenium recorders

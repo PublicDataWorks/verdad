@@ -2,6 +2,7 @@ import os
 import subprocess
 import pytest
 from unittest.mock import Mock, patch, call
+from selenium.common.exceptions import TimeoutException
 
 # Set environment variable before importing RadioStation
 os.environ["ENABLE_PREFECT_DECORATOR"] = "false"
@@ -179,6 +180,45 @@ class TestRadioStation:
 
         with patch.object(radio_station, "is_audio_playing", return_value=True):
             radio_station.start_playing()
+
+    @patch("time.sleep")
+    def test_start_playing_retries_diagnostics_after_one_script_timeout(
+        self, mock_sleep, radio_station, mock_webdriver
+    ):
+        radio_station.driver = mock_webdriver["driver"]
+        # First attempt times out on its first script; the retry's five scripts succeed.
+        mock_webdriver["driver"].execute_script.side_effect = [TimeoutException("script timeout"), True, 12.0, 0, False, 1]
+
+        with patch.object(radio_station, "is_audio_playing", return_value=True) as mock_sink:
+            radio_station.start_playing()
+
+        assert mock_sink.called
+        assert mock_webdriver["driver"].execute_script.call_count == 6
+        mock_sleep.assert_any_call(5)
+
+    @patch("time.sleep")
+    def test_start_playing_raises_when_diagnostics_fail_twice(self, mock_sleep, radio_station, mock_webdriver):
+        radio_station.driver = mock_webdriver["driver"]
+        mock_webdriver["driver"].execute_script.side_effect = TimeoutException("script timeout")
+
+        # A RUNNING sink must not hide a frozen page: two diagnostic failures fail the start.
+        with patch.object(radio_station, "is_audio_playing", return_value=True) as mock_sink:
+            with pytest.raises(Exception, match=r"diagnostics failed twice \(TimeoutException\): page may be hung"):
+                radio_station.start_playing()
+
+        assert mock_webdriver["driver"].execute_script.call_count == 2
+        mock_sink.assert_not_called()
+
+    @patch("time.sleep")
+    def test_start_browser_quits_driver_when_page_load_fails(self, mock_sleep, radio_station, mock_webdriver):
+        driver = mock_webdriver["driver"]
+        driver.get.side_effect = TimeoutException("page load timeout")
+
+        with pytest.raises(TimeoutException):
+            radio_station.start_browser()
+
+        driver.quit.assert_called_once_with()
+        assert radio_station.driver is None
 
     @patch("time.sleep")
     def test_start_playing_failure(self, mock_sleep, radio_station, mock_webdriver):
