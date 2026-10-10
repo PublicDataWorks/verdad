@@ -4,8 +4,11 @@
 #
 # 1. Provisioning is scripts/cloud/setup.sh. The claude.ai environment's setup script normally ran it already
 #    (and the result is snapshotted), so this hook only calls it when `setup.sh --check` says the core
-#    (Python 3.11 .venv, ffmpeg, server/node_modules) is missing or stale. Optional CLIs that failed to install
-#    are not retried every session; run `bash scripts/cloud/setup.sh` by hand for that.
+#    (Python 3.11 .venv, ffmpeg, server/node_modules) is missing or stale. That fallback is bounded: it runs
+#    `setup.sh --quiet --core` (no flyctl / supabase / sentry-cli / gh) under `timeout 240`, at most once per VM
+#    (stamp: /tmp/verdad-setup-attempted, keyed to the kernel boot id). Later sessions and resumes on the same VM
+#    report the failure instead of re-running it. `bash scripts/cloud/setup.sh` by hand retries everything;
+#    VERDAD_SETUP_FORCE=1 clears the stamp for one session.
 # 2. Exports PATH (.venv/bin first), PYTHONPATH=src and ENABLE_PREFECT_DECORATOR=false via $CLAUDE_ENV_FILE.
 # 3. Reports which credentials are set (names only, never values) and runs read-only auth probes with short
 #    timeouts. VERDAD_SKIP_PROBES=1 skips the probes. Stdout of this hook lands in Claude's context.
@@ -27,22 +30,44 @@ have() { command -v "$1" >/dev/null 2>&1; }
 cd "$ROOT" || exit 0
 
 # --- 1. Provisioning -------------------------------------------------------------------------------
-if [ "${VERDAD_SETUP_FORCE:-}" = "1" ] || ! bash "$SETUP" --check; then
-  log "core tooling missing or stale; running scripts/cloud/setup.sh --quiet"
-  bash "$SETUP" --quiet
+STAMP=/tmp/verdad-setup-attempted
+SETUP_LOG=/tmp/verdad-setup-hook.log
+BOOT_ID="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo unknown)"
+attempted() { [ -f "$STAMP" ] && [ "$(head -1 "$STAMP" 2>/dev/null)" = "$BOOT_ID" ]; }
+core_ready() { bash "$SETUP" --check </dev/null >/dev/null 2>&1; }
+
+[ "${VERDAD_SETUP_FORCE:-}" = "1" ] && rm -f "$STAMP"
+if [ "${VERDAD_SETUP_FORCE:-}" != "1" ] && core_ready; then
+  log "core tooling ready ($(.venv/bin/python --version 2>&1), ffmpeg $(have ffmpeg && echo present || echo MISSING))"
+elif attempted; then
+  log "core tooling NOT ready; setup already attempted on this VM at $(sed -n 2p "$STAMP"), not retrying."
+  log "  last attempt's output: $SETUP_LOG. Retry by hand: bash scripts/cloud/setup.sh"
 else
-  log "core tooling ready ($(.venv/bin/python --version 2>&1), ffmpeg $(have ffmpeg && echo present))"
+  printf '%s\n%s\n' "$BOOT_ID" "$(date -u +%FT%TZ)" > "$STAMP"
+  log "core tooling missing or stale; running scripts/cloud/setup.sh --quiet --core (timeout 240s, once per VM)"
+  start=$SECONDS
+  timeout 240 bash "$SETUP" --quiet --core </dev/null >"$SETUP_LOG" 2>&1
+  rc=$?
+  cat "$SETUP_LOG"
+  if [ "$rc" = 124 ]; then
+    log "setup.sh timed out after 240s; not retrying on this VM. Run bash scripts/cloud/setup.sh by hand."
+  elif core_ready; then
+    log "core tooling ready after $((SECONDS - start))s"
+  else
+    log "core tooling still NOT ready after $((SECONDS - start))s (see the table above); not retrying on this VM."
+  fi
 fi
 
 # --- 2. Session environment ------------------------------------------------------------------------
+# One line per variable, appended only if that exact line is not already there (resumes re-run the hook,
+# and the docs do not say whether CLAUDE_ENV_FILE is fresh per session).
+env_line() { grep -qxF -- "$1" "$CLAUDE_ENV_FILE" 2>/dev/null || printf '%s\n' "$1" >> "$CLAUDE_ENV_FILE"; }
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  NPM_BIN="$(npm prefix -g 2>/dev/null)/bin"
-  {
-    echo "export PATH=\"$ROOT/.venv/bin:$BIN:$NPM_BIN:\$PATH\""
-    echo "export PYTHONPATH=\"$ROOT/src\${PYTHONPATH:+:\$PYTHONPATH}\""
-    echo "export ENABLE_PREFECT_DECORATOR=false"   # run flows/tasks as plain functions locally
-    echo "export SENTRY_ORG=\"\${SENTRY_ORG:-verdad-nk}\""
-  } >> "$CLAUDE_ENV_FILE"
+  NPM_BIN="$(npm prefix -g 2>/dev/null </dev/null)/bin"
+  env_line "export PATH=\"$ROOT/.venv/bin:$BIN:$NPM_BIN:\$PATH\""
+  env_line "export PYTHONPATH=\"$ROOT/src\${PYTHONPATH:+:\$PYTHONPATH}\""
+  env_line "export ENABLE_PREFECT_DECORATOR=false"   # run flows/tasks as plain functions locally
+  env_line "export SENTRY_ORG=\"\${SENTRY_ORG:-verdad-nk}\""
 fi
 
 # --- 3. Credentials present? (names only, never values) --------------------------------------------

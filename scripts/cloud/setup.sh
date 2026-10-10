@@ -4,6 +4,8 @@
 #   bash scripts/cloud/setup.sh            # full output
 #   bash scripts/cloud/setup.sh --quiet    # only the summary table (what the SessionStart hook uses)
 #   bash scripts/cloud/setup.sh --check    # exit 0 if the core (Python 3.11 venv, ffmpeg, server deps) is ready
+#   bash scripts/cloud/setup.sh --core     # core only: apt basics, Python venv, server deps; skips flyctl,
+#                                          # supabase, sentry-cli and gh (what the SessionStart hook uses)
 #
 # Paste `bash scripts/cloud/setup.sh || true` into the claude.ai environment "Setup script" field (see
 # docs/CLOUD_ENVIRONMENT.md). The script is idempotent: every step checks before it installs, the venv and
@@ -14,11 +16,15 @@
 # Nothing here reads, prints or needs a secret, and nothing talks to production.
 set -uo pipefail
 
-QUIET=0 CHECK=0
-case "${1:-}" in
-  --quiet) QUIET=1 ;;
-  --check) CHECK=1 ;;
-esac
+QUIET=0 CHECK=0 CORE=0
+for arg in "$@"; do
+  case "$arg" in
+    --quiet) QUIET=1 ;;
+    --check) CHECK=1 ;;
+    --core)  CORE=1 ;;
+    *) echo "[setup] ignoring unknown option: $arg" ;;
+  esac
+done
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BIN="${HOME:-/root}/.local/bin"
@@ -202,6 +208,9 @@ else
   record server-npm SKIP "no server/package-lock.json or npm"
 fi
 
+if [ "$CORE" = 1 ]; then
+  for t in flyctl supabase sentry-cli gh; do record "$t" SKIP "--core"; done
+else
 # --- 6. flyctl ------------------------------------------------------------------------------------
 # Pinned release + checksums.txt instead of `curl install.sh | sh`, so a tampered download is refused.
 # Both routes need GitHub release assets (on the Trusted allowlist, but observed blocked in some sessions);
@@ -260,6 +269,7 @@ elif have apt-get && [ "$SUDO" != "__none__" ] && run as_root apt-get install -y
 else
   record gh FAILED "apt install gh failed"
 fi
+fi   # --core
 
 # --- Summary --------------------------------------------------------------------------------------
 ver() { "$@" 2>/dev/null | head -1 || true; }

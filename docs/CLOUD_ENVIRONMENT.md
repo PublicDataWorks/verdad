@@ -15,12 +15,19 @@ cloud session.
 | Piece | Runs | Does |
 |---|---|---|
 | Environment setup script (`bash scripts/cloud/setup.sh \|\| true`) | As root on Ubuntu 24.04, before Claude Code starts, on the first session of the environment. If it finishes in roughly 5 minutes the filesystem is snapshotted and later sessions skip it. The snapshot is rebuilt when the script or the allowed hosts change, or after about 7 days. | apt packages, Python 3.11 `.venv` with `requirements.txt` + pre-commit, `npm ci` in `server/`, flyctl, supabase CLI, sentry-cli, gh. Always exits 0 and prints an OK / FAILED / SKIP table plus versions. |
-| SessionStart hook (`.claude/hooks/session-start.sh`) | Every web session (`CLAUDE_CODE_REMOTE=true`); a no-op locally. Repo hooks only load when the session has a single repository. | Runs `setup.sh --check` and only re-provisions when the core (Python 3.11 venv, ffmpeg, server deps) is missing or stale. Writes `PATH`, `PYTHONPATH=src`, `ENABLE_PREFECT_DECORATOR=false` and `SENTRY_ORG` (default `verdad-nk`) to `$CLAUDE_ENV_FILE`. Lists which credentials are set (names only) and runs read-only auth probes. |
+| SessionStart hook (`.claude/hooks/session-start.sh`) | On `startup` and `resume` (matcher `startup\|resume`) in web sessions (`CLAUDE_CODE_REMOTE=true`); a no-op locally. Repo hooks only load when the session has a single repository. | Runs `setup.sh --check`; only when the core (Python 3.11 venv, ffmpeg, server deps) is missing or stale does it run `setup.sh --quiet --core` under `timeout 240`, at most once per VM. Writes `PATH`, `PYTHONPATH=src`, `ENABLE_PREFECT_DECORATOR=false` and `SENTRY_ORG` (default `verdad-nk`) to `$CLAUDE_ENV_FILE`. Lists which credentials are set (names only) and runs read-only auth probes. |
 
 A non-zero setup script fails the session, which is why `setup.sh` never exits non-zero and the pasted line
-still ends in `|| true`. Optional CLIs that failed are not retried by the hook each session (a blocked
-download would cost minutes); run `bash scripts/cloud/setup.sh` by hand to retry, or set
-`VERDAD_SETUP_FORCE=1` for one session. `VERDAD_SKIP_PROBES=1` skips the auth probes.
+still ends in `|| true`.
+
+Retries are bounded. The hook never installs the optional CLIs (flyctl, supabase, sentry-cli, gh): `--core`
+skips them. Its core fallback runs at most once per VM: before running it the hook writes
+`/tmp/verdad-setup-attempted` (holding the kernel boot id and a timestamp), and while that stamp matches the
+current boot, later sessions and resumes on the same VM print "setup already attempted on this VM" and the
+path of the last attempt's output (`/tmp/verdad-setup-hook.log`) instead of running it again. A fresh VM has no
+stamp, so it gets one attempt. To retry: `bash scripts/cloud/setup.sh` by hand (everything, no timeout), or
+`VERDAD_SETUP_FORCE=1` in the environment variables (clears the stamp and re-runs the core step on every
+session while it is set, so remove it afterwards). `VERDAD_SKIP_PROBES=1` skips the auth probes.
 
 ## 1. Setup script
 

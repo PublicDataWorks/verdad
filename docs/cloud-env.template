@@ -39,7 +39,7 @@ SENTRY_ORG=verdad-nk
 # JINA_API_KEY=
 
 # ---- Session switches (not secrets) -----------------------------------------------------------
-# 1 = skip the SessionStart auth probes; 1 = re-run scripts/cloud/setup.sh every session.
+# 1 = skip the SessionStart auth probes; 1 = clear the once-per-VM stamp and re-run the hook's core setup.
 # VERDAD_SKIP_PROBES=1
 # VERDAD_SETUP_FORCE=1
 # Do NOT set SENTRY_DSN here: local runs would report into production Sentry.
