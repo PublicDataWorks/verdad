@@ -15,7 +15,7 @@ cloud session.
 | Piece | Runs | Does |
 |---|---|---|
 | Environment setup script (`bash scripts/cloud/setup.sh \|\| true`) | As root on Ubuntu 24.04, before Claude Code starts, on the first session of the environment. If it finishes in roughly 5 minutes the filesystem is snapshotted and later sessions skip it. The snapshot is rebuilt when the script or the allowed hosts change, or after about 7 days. | apt packages, Python 3.11 `.venv` with `requirements.txt` + pre-commit, `npm ci` in `server/`, flyctl, supabase CLI, sentry-cli, gh. Always exits 0 and prints an OK / FAILED / SKIP table plus versions. |
-| SessionStart hook (`.claude/hooks/session-start.sh`) | On `startup` and `resume` (matcher `startup\|resume`) in web sessions (`CLAUDE_CODE_REMOTE=true`); a no-op locally. Repo hooks only load when the session has a single repository. | Runs `setup.sh --check`; only when the core (Python 3.11 venv, ffmpeg, server deps) is missing or stale does it run `setup.sh --quiet --core` under `timeout 240`, at most once per VM. Writes `PATH`, `PYTHONPATH=src`, `ENABLE_PREFECT_DECORATOR=false` and `SENTRY_ORG` (default `verdad-nk`) to `$CLAUDE_ENV_FILE`. Lists which credentials are set (names only) and runs read-only auth probes. |
+| SessionStart hook (`.claude/hooks/session-start.sh`) | On `startup`, `resume` and `fork` (matcher `startup\|resume\|fork`, hook timeout 420 s) in web sessions (`CLAUDE_CODE_REMOTE=true`); a no-op locally. Repo hooks only load when the session has a single repository. | Runs `setup.sh --check`; only when the core (Python 3.11 venv, ffmpeg, server deps) is missing or stale does it run `setup.sh --quiet --core` under `timeout 240`, at most once per VM. Writes `PATH`, `PYTHONPATH=src`, `ENABLE_PREFECT_DECORATOR=false` and `SENTRY_ORG` (default `verdad-nk`) to `$CLAUDE_ENV_FILE`. Lists which credentials are set (names only) and runs read-only auth probes. |
 
 A non-zero setup script fails the session, which is why `setup.sh` never exits non-zero and the pasted line
 still ends in `|| true`.
@@ -41,7 +41,7 @@ for d in "${CLAUDE_PROJECT_DIR:-}" "$(git rev-parse --show-toplevel 2>/dev/null)
   if [ -n "$d" ] && [ -f "$d/scripts/cloud/setup.sh" ]; then VERDAD_REPO="$d"; break; fi
 done
 if [ -n "$VERDAD_REPO" ]; then
-  bash "$VERDAD_REPO/scripts/cloud/setup.sh" || true
+  timeout 900 bash "$VERDAD_REPO/scripts/cloud/setup.sh" || true
 else
   echo "[setup] ERROR: VERDAD repo not found (pwd: $(pwd)); skipped scripts/cloud/setup.sh." \
        "The SessionStart hook will provision the core on the first session instead."
@@ -55,7 +55,8 @@ It always exits 0, so a missing repo or a failed install never blocks the sessio
 `$HOME/.cache/verdad/venv` when `/opt` is not writable; `VERDAD_VENV` overrides both), and `<repo>/.venv` is a
 symlink to it. When the venv is under `/opt/verdad`, uv-managed interpreters go to `/opt/verdad/python`. Both
 `setup.sh` and the SessionStart hook re-create the symlink (`ln -sfn`) if it is missing; neither replaces a real
-`.venv` directory on Python 3.11 or a `.venv` symlink that points somewhere else and resolves. Logs of the last
+`.venv` directory on Python 3.11, a directory without `pyvenv.cfg`, or a `.venv` symlink that points somewhere else
+and resolves. A real `.venv` on another Python is moved aside to `.venv.replaced-<epoch>`, never deleted. Logs of the last
 run are in `/tmp/verdad-setup/<task>.log`.
 
 **Caching assumptions (unverified).** The docs say the setup script runs before Claude Code launches and that

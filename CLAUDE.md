@@ -2,7 +2,7 @@
 
 ## Claude-specific notes
 
-- `.claude/settings.json` runs `.claude/hooks/session-start.sh` on SessionStart (`startup|resume`) in web
+- `.claude/settings.json` runs `.claude/hooks/session-start.sh` on SessionStart (`startup|resume|fork`) in web
   sessions only: it re-links `.venv` to the venv outside the clone (`/opt/verdad/venv`), runs
   `scripts/cloud/setup.sh --core` (timeout 240 s, at most once per VM) only when the Python 3.11 venv, ffmpeg or
   `server/node_modules` is missing or stale, exports `PYTHONPATH=src` and `ENABLE_PREFECT_DECORATOR=false` (and

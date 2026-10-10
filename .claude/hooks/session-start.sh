@@ -107,7 +107,8 @@ ROWS=()
 row() { ROWS+=("$(printf '%-14s %-8s %s' "$1" "$2" "${3:-}")"); }
 
 # Quote a value for a curl config file: backslash and double quote are escaped.
-cfg_quote() { printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
+# CR/LF are stripped: a newline in a credential would otherwise start a new curl config line.
+cfg_quote() { printf '"%s"' "$(printf '%s' "$1" | tr -d '\r\n' | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
 
 # http_probe CONFIG_LINE CURL_ARGS...: prints "<code>", "blocked" (proxy CONNECT refusal = network policy, not
 # an outage) or "missing" (no curl).

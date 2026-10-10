@@ -117,8 +117,15 @@ link_venv() {
       warn ".venv is a real directory inside the clone; using it instead of $VENV"
       VENV="$ROOT/.venv"; return 0
     fi
-    log "replacing in-clone .venv (Python $(venv_minor || echo '?'), need $PY_MINOR) with a symlink to $VENV"
-    rm -rf -- "$ROOT/.venv"
+    # Never delete it: this script also runs on dev machines, where .venv may be someone's working venv.
+    if [ ! -f .venv/pyvenv.cfg ]; then
+      warn ".venv is a directory but not a venv (no pyvenv.cfg); leaving it alone. Move it aside to use $VENV"
+      VENV="$ROOT/.venv"; return 0
+    fi
+    local aside
+    aside=".venv.replaced-$(date +%s)"
+    log "moving in-clone .venv (Python $(venv_minor || echo '?'), need $PY_MINOR) to $aside; .venv now links to $VENV"
+    mv -- "$ROOT/.venv" "$ROOT/$aside"
     ln -sfn "$VENV" .venv
   else
     ln -sfn "$VENV" .venv
@@ -238,9 +245,9 @@ task_python() {
 
   # Venv: create at $VENV (seeded with pip), then requirements.txt + dev tools.
   if [ -n "$PY311" ]; then
-    if [ -x "$VENV/bin/python" ] && [ "$(venv_minor)" != "$PY_MINOR" ] && [ "$VENV" != "$ROOT/.venv" ]; then
-      echo "replacing $VENV (Python $(venv_minor || echo '?'), need $PY_MINOR)"
-      rm -rf -- "$VENV"
+    if [ -x "$VENV/bin/python" ] && [ -f "$VENV/pyvenv.cfg" ] && [ "$(venv_minor)" != "$PY_MINOR" ] && [ "$VENV" != "$ROOT/.venv" ]; then
+      echo "moving $VENV (Python $(venv_minor || echo '?'), need $PY_MINOR) to $VENV.replaced-$(date +%s)"
+      mv -- "$VENV" "$VENV.replaced-$(date +%s)"
     fi
     if [ ! -x "$VENV/bin/python" ]; then
       if have uv; then uv venv -q --seed --python "$PY311" "$VENV"; else "$PY311" -m venv "$VENV"; fi
