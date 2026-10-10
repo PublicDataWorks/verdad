@@ -16,13 +16,15 @@
 # PREFECT_API_AUTH_STRING=
 # Uncomment only when the prefect CLI should drive production.
 # PREFECT_API_URL=https://prefect.fly.dev/api
-# Sentry token with org:read project:read event:read.
+# Sentry PERSONAL token (or internal integration token) with org:read project:read event:read
+# (+ alerts:read for alert rules). Org auth tokens only have org:ci and cannot read issues.
 # SENTRY_AUTH_TOKEN=
 SENTRY_ORG=verdad-nk
 # Optional; default https://sentry.io.
 # SENTRY_URL=
-# Optional fine-grained GitHub token for gh, scoped to PublicDataWorks/verdad.
-# GH_TOKEN=
+# No GH_TOKEN: the GitHub proxy handles git and REST `gh api` for attached repos, and it rejects GraphQL
+# (`gh pr`, `gh issue`) with 403 whatever token is set. A token adds nothing documented for this repo
+# and, like every variable here, is readable by everyone who can use the environment.
 
 # ---- Pipeline access (run_stage.py, prompt import/diff/eval); leave commented otherwise-----------
 # SUPABASE_URL=
@@ -38,8 +40,15 @@ SENTRY_ORG=verdad-nk
 # SEARXNG_URL=https://verdad-searxng.fly.dev
 # JINA_API_KEY=
 
+# ---- Optional overrides (not secrets; defaults are production's values, see the doc) -----------
+# SUPABASE_PROJECT_REF=
+# SUPABASE_MANAGEMENT_API_URL=
+# SUPABASE_BASELINE_SCHEMAS=
+# STATIONS_CONFIG=
+
 # ---- Session switches (not secrets) -----------------------------------------------------------
 # 1 = skip the SessionStart auth probes; 1 = clear the once-per-VM stamp and re-run the hook's core setup.
 # VERDAD_SKIP_PROBES=1
 # VERDAD_SETUP_FORCE=1
-# Do NOT set SENTRY_DSN here: local runs would report into production Sentry.
+# Do NOT set SENTRY_DSN here: it is pipeline-only, and local runs would report into production Sentry.
+# WATCHDOG_* / COVERAGE_* (PR #155) belong to the prefect app's monitors: see docs/OPERATIONS.md.

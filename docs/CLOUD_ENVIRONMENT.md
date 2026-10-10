@@ -83,7 +83,7 @@ summary table and per-task times come at the end. `--core` runs only apt, `pytho
 | Node | image's Node 22; else apt `nodejs npm` (18 on Ubuntu 24.04: `tsc` works, vitest's vite needs >= 20) | server step skipped |
 | `server/node_modules` | `npm ci` (stamp = hash of `package-lock.json`) | reported FAILED |
 | flyctl | pinned GitHub release `v0.4.103`, checksum-verified against the release `checksums.txt` | Machines API with curl (CLAUDE.md, "Cloud environment") |
-| supabase CLI | npm `supabase@2.117.0` (its postinstall downloads the binary from GitHub releases) | `psql "$SUPABASE_DB_URL"`, or the Management API `POST /v1/projects/<ref>/database/query` |
+| supabase CLI | npm `supabase@2.117.0`. The package has no install script; the binary is its optional dependency `@supabase/cli-linux-x64`, fetched from the npm registry (installed with `--include=optional`, then checked with `supabase --version`) | `psql "$SUPABASE_DB_URL"`, or the Management API `POST /v1/projects/<ref>/database/query` |
 | sentry-cli | npm `@sentry/cli@2` (binary ships as an npm optional dependency) | PyPI `sentry-cli` via `uv tool install` |
 | gh | image's gh; else apt | none |
 | prefect CLI | comes with the venv (`.venv/bin/prefect`) | - |
@@ -136,7 +136,7 @@ Notes:
 - *(unverified)* `psql` speaks raw TCP to port 5432/6543 and may not traverse the HTTP proxy even when the
   host is allowlisted. If the `psql` probe fails while `supabase-api` passes, use the Management API
   `POST /v1/projects/dzujjhzgzguciwryzwlx/database/query` with `SUPABASE_ACCESS_TOKEN`.
-- GitHub release downloads (flyctl, the supabase CLI binary) have been observed failing in earlier VERDAD web
+- GitHub release downloads (flyctl, and `uv python install`'s python-build-standalone) have been observed failing in earlier VERDAD web
   sessions even though the release hosts are on the default list; GitHub traffic goes through a separate
   GitHub proxy. The fallbacks above cover it.
 - Linear and Slack are used through MCP connectors, not from inside the VM, so they need no entry here
@@ -151,6 +151,21 @@ keep comments on their own lines. **Everyone who can use the environment can rea
 session runs against production: prefer read-only, narrowly scoped tokens, and leave a variable empty when the
 work does not need it. The hook lists which names are set at session start; it never prints values.
 
+**Who can read them.** The docs are explicit: anyone who uses the environment can read its environment variables
+and its setup script. An organization-shared environment exposes them to every member of the organization. These
+values are production credentials, so keep this environment personal (do not share it from the "Who can use it"
+row, and do not recreate it as an organization-shared environment) unless everyone who can use it should hold
+production access to Fly, Supabase, Prefect and Sentry.
+
+**Network secrets.** On Pro and Max plans an environment can also hold *network secrets*: the agent proxy
+attaches the key to requests for hosts you list, after the request leaves the VM, so the session never sees the
+value. They are not available on Team or Enterprise plans yet; on those plans every credential here stays an
+environment variable. Where they are available they suit header-style API keys (Fly Machines API, Sentry,
+Supabase Management API). They cannot replace `SUPABASE_DB_URL` (psql is not an HTTP request), the CLIs that read a
+token from the environment (`fly`, `supabase` and `sentry-cli` expect the variable before they send anything;
+not tested with a network secret), or anything the setup
+script does (the proxy connects after setup). GitHub never gets a network secret: the GitHub proxy handles it.
+
 ### Ops access (what most cloud sessions need)
 
 | Variable | Needed for | Where to get it | Risk / scope |
@@ -160,10 +175,18 @@ work does not need it. The hook lists which names are set at session start; it n
 | `SUPABASE_DB_URL` | `psql` against production | Supabase dashboard > project `dzujjhzgzguciwryzwlx` > Connect > Session pooler URI (IPv4) | With the `postgres` user this is full read/write. Prefer a dedicated read-only role (creating one is a production change; get approval first). |
 | `PREFECT_API_AUTH_STRING` | Prefect API and UI basic auth (`user:password`, VER-384), `prefect` CLI | The value set as the Fly secret on `prefect`, `processing-worker`, `recording-worker`, `generic-recording-worker`. `fly secrets list` shows only a digest; get the value from whoever holds it. | Full control of the Prefect server: can cancel runs and trigger deployments against production. |
 | `PREFECT_API_URL` | Points the `prefect` CLI at production: `https://prefect.fly.dev/api` | constant | Leave empty unless the task drives Prefect; with it set, any `prefect` command talks to production. |
-| `SENTRY_AUTH_TOKEN` | sentry-cli and the Sentry API (issues, events for `recording-worker`, `generic-recording-worker` and the other projects) | Sentry > Settings > Account > Personal Tokens (or an org auth token / internal integration) with scopes `org:read`, `project:read`, `event:read` | Read-only with those scopes. Add `event:write` only to resolve issues. |
+| `SENTRY_AUTH_TOKEN` | sentry-cli and the Sentry API (issues, events for `recording-worker`, `generic-recording-worker` and the other projects in org `verdad-nk`) | A **personal** token (Sentry > Settings > Account > Personal Tokens) or an internal integration's token (Settings > Developer Settings > Custom Integrations), with scopes `org:read`, `project:read`, `event:read`, plus `alerts:read` to inspect alert rules. **Not** an org auth token: those only carry `org:ci` (releases, source maps) and get 403 on issues and events; the hook's `sentry-api` probe shows that as `DENIED`. | Read-only with those scopes. Add `event:write` only to resolve issues. A personal token acts as that user across every org they belong to. |
 | `SENTRY_ORG` | sentry-cli default org | `verdad-nk` (the hook defaults it) | none |
 | `SENTRY_URL` | sentry-cli / API base URL | optional; default `https://sentry.io`. Set `https://us.sentry.io` if API calls ask for the region URL. | none |
-| `GH_TOKEN` | `gh` CLI beyond what the GitHub proxy provides (PR comments, workflow runs) | GitHub > Settings > Developer settings > fine-grained token, repository `PublicDataWorks/verdad` only | Optional. git push/pull already works through the session's GitHub proxy. |
+
+**GitHub needs no variable.** All GitHub traffic goes through the session's GitHub proxy, which swaps in the
+credentials of the person who started the session: `git` push/pull and REST `gh api repos/PublicDataWorks/verdad/...`
+work for the repositories attached to the session, and `GH_TOKEN` reads as the placeholder `proxy-injected`. The
+proxy rejects GitHub's GraphQL endpoint with a 403 **whatever token is set**, so `gh pr ...` and `gh issue ...`
+fail with or without a `GH_TOKEN`; use the built-in GitHub tools (PRs, diffs, comments) or `gh api` REST calls
+such as `gh api repos/PublicDataWorks/verdad/pulls/156`. A `GH_TOKEN` set here would pass into the VM unchanged and
+be readable by everyone who uses the environment; the docs do not say it lifts the proxy's attached-repository
+scope, so it adds nothing documented for this repo. Leave it unset.
 
 ### Pipeline access (only for running stages, prompt import/diff/eval)
 
@@ -183,7 +206,26 @@ importer writes the `prompt_versions` table, which CI normally does on merge.
 | `SEARXNG_URL` | stage 3 tools, stage 4 web researcher | `https://verdad-searxng.fly.dev` | none |
 | `JINA_API_KEY` | optional stage 3 Jina fallback (VER-415) | Jina dashboard | spends prepaid tokens |
 
-Do **not** set `SENTRY_DSN` in the cloud environment: local runs would report into production Sentry.
+### Optional overrides (not secrets)
+
+| Variable | Read by | Default |
+|---|---|---|
+| `SUPABASE_PROJECT_REF` | `scripts/dump_schema_baseline.py` (`make migrations-manifest`, `make baseline-check`) | `dzujjhzgzguciwryzwlx` |
+| `SUPABASE_MANAGEMENT_API_URL` | `scripts/dump_schema_baseline.py` | `https://api.supabase.com` |
+| `SUPABASE_BASELINE_SCHEMAS` | `scripts/dump_schema_baseline.py`: comma-separated schemas to dump | `public,profiles` |
+| `STATIONS_CONFIG` | `src/stations.py` `load_stations()`: path to an alternative station list | `config/stations.yaml` |
+
+Set none of these unless the task is about them; the defaults are production's values.
+
+### Not for the cloud environment
+
+`SENTRY_DSN` is read by the pipeline and the recorders (and, from PR #155, by the recording watchdog and the
+coverage monitor for error events and Sentry Crons check-ins). It is a Fly secret on the workers and the
+`prefect` app. Do **not** set it in the cloud environment: local runs would report into production Sentry and could
+send Crons check-ins for monitors that production owns. The watchdog's `WATCHDOG_*` thresholds and the coverage
+monitor's `COVERAGE_*` settings (PR #155) only matter to those scripts on the `prefect` app; their names, defaults
+and meaning are in `docs/OPERATIONS.md` (sections "Recording watchdog" and "Recording coverage monitor"), not
+here. A cloud session needs them only to reproduce a monitor run, and then only on the command line.
 `FLY_PROCESS_GROUP` and `ENABLE_PREFECT_DECORATOR` are not credentials; the hook sets
 `ENABLE_PREFECT_DECORATOR=false`. `GOOGLE_API_KEY` is derived from `GOOGLE_GEMINI_KEY` by stage 4.
 
@@ -204,7 +246,7 @@ CI (GitHub Actions secrets, not the cloud environment): `FLY_API_TOKEN` (deploy 
 
 ## 4. Checking a session
 
-The hook's output appears at the top of every web session:
+The hook's output lands in Claude's context at the start of every web session and on resume:
 
 ```
 [session-start] core tooling ready (Python 3.11.x, ffmpeg present)
@@ -216,12 +258,17 @@ The hook's output appears at the top of every web session:
   psql           FAILED   select 1 (TCP egress or credential; ...)
   prefect        BLOCKED  proxy refused CONNECT: host not in the environment's network allowlist
   sentry-api     OK       HTTP 200
+  gh-api         OK       gh api (REST); gh pr / gh issue use GraphQL, which the proxy 403s
 ```
 
 Probes: Machines API `GET /v1/apps?org_slug=verdad` (and `fly auth whoami` if flyctl is installed; org tokens
 may not support whoami, so the API row decides), `supabase projects list` (or `GET api.supabase.com/v1/projects`),
-`psql -c 'select 1'`, Prefect `POST /api/deployments/filter` with `-u`, Sentry
-`GET /api/0/organizations/verdad-nk/` plus `sentry-cli info`, and `gh auth status`. All are reads.
+`psql -w -c 'select 1'`, Prefect `POST /api/deployments/filter` with basic auth, Sentry
+`GET /api/0/organizations/verdad-nk/` plus `sentry-cli info`, and `gh api repos/PublicDataWorks/verdad` (REST
+through the GitHub proxy). All are reads. curl gets its credential as a config on stdin (`curl -K -`), so tokens
+do not appear in the process list; every other probe reads `/dev/null` as stdin. If
+`PREFECT_API_URL` is set the hook also says that the `prefect` CLI is pointed at production.
 
-`BLOCKED` means add the host to the network allowlist; `DENIED` means the token is wrong or lacks scope;
-`SKIP` means the variable is not set. To re-provision by hand: `bash scripts/cloud/setup.sh`.
+`BLOCKED` means add the host to the network allowlist; `DENIED` means the token is wrong or lacks scope (for
+Sentry, often an org auth token); `MISSING` means the tool (or curl) is not installed; `SKIP` means the variable
+is not set. To re-provision by hand: `bash scripts/cloud/setup.sh`.

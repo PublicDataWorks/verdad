@@ -2,10 +2,11 @@
 
 ## Claude-specific notes
 
-- `.claude/settings.json` runs `.claude/hooks/session-start.sh` on SessionStart in web sessions only: it runs
-  `scripts/cloud/setup.sh` when the Python 3.11 `.venv`, ffmpeg or `server/node_modules` is missing or stale,
-  exports `PYTHONPATH=src` and `ENABLE_PREFECT_DECORATOR=false` (and `.venv/bin` on `PATH`), lists which
-  credentials are set and prints a read-only auth probe table.
+- `.claude/settings.json` runs `.claude/hooks/session-start.sh` on SessionStart (`startup|resume`) in web
+  sessions only: it re-links `.venv` to the venv outside the clone (`/opt/verdad/venv`), runs
+  `scripts/cloud/setup.sh --core` (timeout 240 s, at most once per VM) only when the Python 3.11 venv, ffmpeg or
+  `server/node_modules` is missing or stale, exports `PYTHONPATH=src` and `ENABLE_PREFECT_DECORATOR=false` (and
+  `.venv/bin` on `PATH`), lists which credentials are set and prints a read-only auth probe table.
 - `.claude/skills/verdad-heuristics-updater/`: use this skill for any change to disinformation categories,
   heuristics or detection prompts (`prompts/`); it knows the bilingual format and the Supabase import step.
 - Use plan mode before touching `src/processing_pipeline/*/flows.py`, `supabase/migrations/`, `fly.*.toml`
@@ -24,9 +25,13 @@ Env vars the environment may provide (all optional; the hook reports which are s
 - `SUPABASE_DB_URL` - Postgres connection string for `psql` (session pooler)
 - `PREFECT_API_AUTH_STRING` - `user:password` basic auth for the Prefect API and UI at `https://prefect.fly.dev`
   (VER-384); usage and the unauthenticated endpoints are in `docs/OPERATIONS.md`.
-- `SENTRY_AUTH_TOKEN` (`org:read project:read event:read`), `SENTRY_ORG=verdad-nk` (hook default), optional
-  `SENTRY_URL` - sentry-cli and the Sentry API (projects include `recording-worker`, `generic-recording-worker`)
-- `GH_TOKEN` - optional, for `gh` beyond what the GitHub proxy provides
+- `SENTRY_AUTH_TOKEN` - a personal token (or internal integration token) with `org:read project:read event:read`,
+  plus `alerts:read` to inspect alert rules; org auth tokens only carry `org:ci` and cannot read issues.
+  `SENTRY_ORG=verdad-nk` (hook default), optional `SENTRY_URL`. Projects include `recording-worker`,
+  `generic-recording-worker`.
+- No `GH_TOKEN` needed: the session's GitHub proxy authenticates `git` and REST `gh api repos/PublicDataWorks/verdad/...`
+  (the variable reads `proxy-injected`). `gh pr` / `gh issue` use GraphQL, which the proxy rejects with 403
+  whatever token is set; use the built-in GitHub tools or `gh api` REST calls instead.
 - Pipeline only: `SUPABASE_URL`, `SUPABASE_KEY` (service role), `R2_*`, `GOOGLE_GEMINI_KEY`, `OPENAI_API_KEY`,
   `SEARXNG_URL`, `JINA_API_KEY` (see `.env.sample`). Never `SENTRY_DSN`.
 
