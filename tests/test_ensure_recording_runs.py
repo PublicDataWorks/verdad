@@ -126,6 +126,17 @@ def lock_file(tmp_path, monkeypatch):
     return path
 
 
+@pytest.fixture(autouse=True)
+def no_fly(monkeypatch):
+    """No test reaches real flyctl: the machine check is off unless a test sets FLY_MACHINE_IDS and fakes `_fly`."""
+    monkeypatch.delenv("FLY_MACHINE_IDS", raising=False)
+
+    def refuse(*args):
+        raise AssertionError(f"unexpected flyctl call: {args}")
+
+    monkeypatch.setattr(ere, "_fly", refuse)
+
+
 @pytest.fixture
 def setup(monkeypatch):
     def _setup(client, targets=(f"{MAX}/WAAA",), now=NOW):
@@ -251,6 +262,26 @@ def test_old_late_run_warns_but_does_not_pile_on(setup, capsys):
     ere.main(["--codes", "WAAA"])
     assert client.created == [] and client.state_writes == []
     assert "WARNING Late run" in capsys.readouterr().out
+
+
+def test_old_late_run_is_a_failure_that_reaches_sentry(setup, sentry):
+    d = dep_id()
+    late = make_run(StateType.SCHEDULED, deployment_id=d, created=ago(31))
+    late.state.name = "Late"
+    client = setup(FakeClient({f"{MAX}/WAAA": d}, [late]))
+    assert ere.main([]) == ere.EXIT_ERRORS
+    assert client.created == [] and client.state_writes == []
+    [call] = sentry.capture_event.call_args_list
+    assert "1 runs stuck in Scheduled" in call.args[0]["message"]
+    assert "stuck_scheduled=1" in call.args[0]["extra"]["summary"]
+    assert sentry.crons.monitor.return_value.__exit__.call_args.args[0] is ere._CheckinFailed
+
+
+@pytest.mark.parametrize("minutes,stuck", [(29, False), (30, True)])
+def test_scheduled_stale_boundary_is_30_minutes(setup, minutes, stuck):
+    d = dep_id()
+    setup(FakeClient({f"{MAX}/WAAA": d}, [make_run(StateType.SCHEDULED, deployment_id=d, created=ago(minutes))]))
+    assert ere.main(["--codes", "WAAA"]) == (ere.EXIT_ERRORS if stuck else ere.EXIT_OK)
 
 
 def test_stale_pending_run_is_set_to_cancelling(setup, capsys):
@@ -637,3 +668,265 @@ def test_lock_path_defaults_to_the_shared_file(monkeypatch):
 def test_naive_timestamps_are_treated_as_utc():
     assert ere._age_minutes(datetime(2026, 10, 9, 11, 30), NOW) == 30
     assert ere._age_minutes(None, NOW) is None
+
+
+# --- Worker machines (VER-429) -------------------------------------------------------------------------------
+
+
+class FakeFly:
+    """Stands in for flyctl: `machine list -a APP --json` answers from `apps`, `machine start` is recorded."""
+
+    def __init__(self, apps, fail_list=(), fail_start=()):
+        self.apps = apps
+        self.fail_list = set(fail_list)
+        self.fail_start = set(fail_start)
+        self.calls = []
+        self.started = []
+
+    def __call__(self, *args):
+        self.calls.append(args)
+        if args[:2] == ("machine", "list"):
+            app = args[3]
+            if app in self.fail_list:
+                raise RuntimeError(f"fly machine list -a {app} exited 1: timeout")
+            return ere.json.dumps(self.apps.get(app, []))
+        if args[:2] == ("machine", "start"):
+            if args[2] in self.fail_start:
+                raise RuntimeError("fly machine start exited 1: host unavailable")
+            self.started.append((args[4], args[2]))
+            return ""
+        raise AssertionError(f"unexpected flyctl call: {args}")
+
+
+def machine(machine_id, state, minutes_ago=60, name="m", events=True):
+    """A `fly machine list --json` entry whose newest event (the stop) is `minutes_ago` old."""
+    m = {"id": machine_id, "name": name, "state": state, "updated_at": ago(600).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    if events:
+        m["events"] = [
+            {"type": "exit", "status": "stopped", "timestamp": int(ago(minutes_ago).timestamp() * 1000)},
+            {"type": "start", "status": "started", "timestamp": int(ago(minutes_ago + 30).timestamp() * 1000)},
+        ]
+    else:
+        m["updated_at"] = ago(minutes_ago).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return m
+
+
+@pytest.fixture
+def fly(monkeypatch):
+    def _fly(apps, ids, **kw):
+        fake = FakeFly(apps, **kw)
+        monkeypatch.setenv("FLY_MACHINE_IDS", ids)
+        monkeypatch.setattr(ere, "_fly", fake)
+        monkeypatch.setattr(ere.shutil, "which", lambda name: "/usr/local/bin/fly")
+        return fake
+
+    return _fly
+
+
+def healthy_client(setup):
+    d = dep_id()
+    return setup(FakeClient({f"{MAX}/WAAA": d}, [make_run(StateType.SCHEDULED, deployment_id=d)]))
+
+
+def test_stopped_worker_machine_is_started(setup, fly, sentry, capsys):
+    healthy_client(setup)
+    fake = fly(
+        {"recording-worker": [machine("max1", "stopped", 180, "max"), machine("lite1", "started")]},
+        "max1, lite1",
+    )
+    assert ere.main([]) == ere.EXIT_OK
+    assert fake.started == [("recording-worker", "max1")]
+    out = capsys.readouterr().out
+    assert "started recording-worker/max1 (max), which was stopped for 180 min" in out
+    assert "machines_started=1" in out
+    [call] = sentry.capture_event.call_args_list
+    assert call.args[0]["level"] == "warning"
+    assert call.args[0]["fingerprint"] == ["recording-watchdog", "machines", "2026-10-09T12"]
+    assert sentry.crons.monitor.return_value.__exit__.call_args.args[0] is None
+
+
+@pytest.mark.parametrize("minutes,starts", [(4, False), (5, True)])
+def test_stop_time_falls_back_to_updated_at_without_events(setup, fly, minutes, starts):
+    healthy_client(setup)
+    fake = fly({"recording-worker": [machine("max1", "stopped", minutes, events=False)]}, "max1")
+    assert ere.main([]) == ere.EXIT_OK
+    assert fake.started == ([("recording-worker", "max1")] if starts else [])
+
+
+def test_suspended_machine_is_started_too(setup, fly):
+    healthy_client(setup)
+    fake = fly({"processing-worker": [machine("emb1", "suspended")]}, "emb1")
+    assert ere.main([]) == ere.EXIT_OK
+    assert fake.started == [("processing-worker", "emb1")]
+
+
+@pytest.mark.parametrize("minutes,starts", [(4, False), (5, True)])
+def test_recently_stopped_machine_waits_for_a_later_tick(setup, fly, minutes, starts):
+    healthy_client(setup)
+    fake = fly({"recording-worker": [machine("max1", "stopped", minutes)]}, "max1")
+    assert ere.main([]) == ere.EXIT_OK
+    assert fake.started == ([("recording-worker", "max1")] if starts else [])
+
+
+def test_machines_outside_the_list_and_running_machines_are_left_alone(setup, fly, sentry):
+    healthy_client(setup)
+    fake = fly(
+        {
+            "recording-worker": [machine("max1", "started"), machine("lite1", "replacing")],
+            "processing-worker": [machine("undo1", "stopped")],
+        },
+        "max1,lite1",
+    )
+    assert ere.main([]) == ere.EXIT_OK
+    assert fake.started == []
+    sentry.capture_event.assert_not_called()
+
+
+def test_listing_failure_is_counted_and_the_prefect_checks_still_run(setup, fly, capsys):
+    d = dep_id()
+    client = setup(FakeClient({f"{MAX}/WAAA": d}, []))
+    fake = fly(
+        {"generic-recording-worker": [machine("waqi1", "stopped")]}, "waqi1", fail_list=["recording-worker"]
+    )
+    assert ere.main([]) == ere.EXIT_ERRORS
+    assert fake.started == [("generic-recording-worker", "waqi1")]
+    assert client.created == [d]
+    out = capsys.readouterr().out
+    assert "listing recording-worker failed" in out and "errors=1" in out
+
+
+def test_start_failure_is_counted(setup, fly, capsys):
+    healthy_client(setup)
+    fly({"recording-worker": [machine("max1", "stopped")]}, "max1", fail_start=["max1"])
+    assert ere.main([]) == ere.EXIT_ERRORS
+    assert "starting recording-worker/max1 (m) failed" in capsys.readouterr().out
+
+
+def test_machine_check_runs_even_when_the_prefect_api_is_down(setup, fly):
+    setup(FakeClient(health_error=httpx.ConnectError("refused")))
+    fake = fly({"recording-worker": [machine("max1", "stopped")]}, "max1")
+    assert ere.main([]) == ere.EXIT_UNREACHABLE
+    assert fake.started == [("recording-worker", "max1")]
+
+
+def test_dry_run_starts_no_machine(setup, fly, capsys):
+    healthy_client(setup)
+    fake = fly({"recording-worker": [machine("max1", "stopped")]}, "max1")
+    assert ere.main(["--dry-run"]) == ere.EXIT_OK
+    assert fake.started == []
+    assert "[dry-run] would start recording-worker/max1" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("argv", [["--codes", "WAAA"], ["--close-stale-cancelling"]])
+def test_manual_runs_do_not_touch_machines(setup, fly, argv):
+    healthy_client(setup)
+    fake = fly({"recording-worker": [machine("max1", "stopped")]}, "max1")
+    ere.main(argv)
+    assert fake.calls == []
+
+
+def test_machine_check_is_skipped_while_a_restart_holds_the_lock(setup, fly, lock_file):
+    healthy_client(setup)
+    fake = fly({"recording-worker": [machine("max1", "stopped")]}, "max1")
+    fd = ere.acquire_lock(str(lock_file))
+    try:
+        assert ere.main([]) == ere.EXIT_OK
+    finally:
+        os.close(fd)
+    assert fake.calls == []
+
+
+def test_unknown_machine_id_is_warned_about(setup, fly, capsys):
+    healthy_client(setup)
+    fly({"recording-worker": [machine("max1", "started")]}, "max1,gone1")
+    assert ere.main([]) == ere.EXIT_OK
+    assert "WARNING gone1 from FLY_MACHINE_IDS is not in" in capsys.readouterr().out
+
+
+def test_missing_flyctl_is_an_error_when_machine_ids_are_set(setup, monkeypatch, capsys):
+    healthy_client(setup)
+    monkeypatch.setenv("FLY_MACHINE_IDS", "max1")
+    monkeypatch.setattr(ere.shutil, "which", lambda name: None)
+    assert ere.main([]) == ere.EXIT_ERRORS
+    assert "fly is not on PATH" in capsys.readouterr().out
+
+
+def test_fly_helper_raises_on_non_zero_exit(monkeypatch):
+    monkeypatch.undo()  # the real _fly, with subprocess faked
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append((cmd, kw))
+        return SimpleNamespace(returncode=1, stdout="", stderr="Error: machine not found")
+
+    monkeypatch.setattr(ere.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match="machine not found"):
+        ere._fly("machine", "start", "x", "-a", "recording-worker")
+    assert calls[0][0] == ["fly", "machine", "start", "x", "-a", "recording-worker"]
+    assert calls[0][1]["timeout"] == ere.FLY_TIMEOUT_SECONDS
+
+
+def test_stuck_runs_are_not_a_failure_on_the_tick_that_starts_their_machine(setup, fly, sentry, capsys):
+    d = dep_id()
+    late = make_run(StateType.SCHEDULED, deployment_id=d, created=ago(120))
+    setup(FakeClient({f"{MAX}/WAAA": d}, [late]))
+    fly({"recording-worker": [machine("max1", "stopped", 120)]}, "max1")
+    assert ere.main([]) == ere.EXIT_OK
+    assert "stuck_scheduled=1 machines_started=1" in capsys.readouterr().out
+    [call] = sentry.capture_event.call_args_list
+    assert call.args[0]["level"] == "warning"
+
+
+def test_scheduled_run_due_later_is_not_stuck(setup):
+    d = dep_id()
+    run = make_run(StateType.SCHEDULED, deployment_id=d, created=ago(120))
+    run.expected_start_time = ago(10)
+    setup(FakeClient({f"{MAX}/WAAA": d}, [run]))
+    assert ere.main(["--codes", "WAAA"]) == ere.EXIT_OK
+
+
+def test_non_list_listing_is_an_error_for_that_app_only(setup, fly, monkeypatch, capsys):
+    healthy_client(setup)
+    fake = fly({"generic-recording-worker": [machine("waqi1", "stopped")]}, "waqi1")
+    real = fake.__call__
+
+    def odd(*args):
+        if args[:4] == ("machine", "list", "-a", "recording-worker"):
+            return '{"error": "unauthorized"}'
+        return real(*args)
+
+    monkeypatch.setattr(ere, "_fly", odd)
+    assert ere.main([]) == ere.EXIT_ERRORS
+    assert fake.started == [("generic-recording-worker", "waqi1")]
+    assert "expected a JSON list, got dict" in capsys.readouterr().out
+
+
+def test_flyctl_timeout_is_an_error_for_that_app_only(setup, fly, monkeypatch, capsys):
+    healthy_client(setup)
+    fake = fly({"processing-worker": [machine("emb1", "stopped")]}, "emb1")
+    real = fake.__call__
+
+    def slow(*args):
+        if args[:4] == ("machine", "list", "-a", "recording-worker"):
+            raise ere.subprocess.TimeoutExpired(cmd="fly", timeout=ere.FLY_TIMEOUT_SECONDS)
+        return real(*args)
+
+    monkeypatch.setattr(ere, "_fly", slow)
+    assert ere.main([]) == ere.EXIT_ERRORS
+    assert fake.started == [("processing-worker", "emb1")]
+    assert "TimeoutExpired" in capsys.readouterr().out
+
+
+def test_spent_budget_skips_the_rest_and_counts_one_error(setup, fly, monkeypatch, capsys):
+    healthy_client(setup)
+    fake = fly(
+        {"recording-worker": [machine("max1", "stopped")], "processing-worker": [machine("emb1", "stopped")]},
+        "max1,emb1,gone1",
+    )
+    clock = iter([0, 0, 0, 500, 500, 500, 500, 500])
+    monkeypatch.setattr(ere.time, "monotonic", lambda: next(clock, 500))
+    assert ere.main([]) == ere.EXIT_ERRORS
+    out = capsys.readouterr().out
+    assert out.count("budget spent") == 1 and "errors=1" in out
+    assert len(fake.started) <= 1
+    assert "gone1" not in out

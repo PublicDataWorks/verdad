@@ -121,8 +121,11 @@ The liveness signal that works is task activity: a healthy recording run starts 
 recording lock (above). It reads the station list from `stations.py` (the same `"<flow name>/<code>"` list
 `start_recording.sh` triggers) and for each deployment:
 
-- Scheduled (including Late) run present: healthy, no action. One older than 30 min is logged as a warning (no
-  worker is picking it up; another run would only queue behind it).
+- Scheduled (including Late) run present: no new run is created (it would only queue behind it). One older than
+  30 min means no worker is picking it up: it is logged as a warning and counted as `stuck_scheduled`, which
+  fails the tick (exit 2, Sentry error event and ERROR check-in), except on a tick that just started a stopped
+  worker machine. Age is counted from the run's expected start time. Before VER-429 it only logged, so on 2026-10-16
+  runs sat Late for over two hours behind stopped recorder machines while every tick said `healthy=54`.
 - Pending run: healthy while it has been Pending for under 10 min (by its Pending state timestamp). An older one
   is stuck (the runner that took it is gone) and is set to Cancelling with `watchdog: stuck in Pending for N min`.
 - Running run that started, or whose newest task run started, within 45 min: healthy. Any other Running run is a
@@ -139,6 +142,19 @@ Recovery time follows from that: about 15 min (one tick) when a station has no r
 when its run is left Running as a zombie (45 min of no task activity before it is called a zombie, then one tick
 in which it sits in Cancelling for the 10-min close, then the tick that closes it and starts the replacement).
 
+Before the Prefect checks, a full tick (no `--codes` / `--close-stale-cancelling`) checks the worker **machines**
+(VER-429): it lists the machines of `WATCHDOG_WORKER_APPS` (default `recording-worker,generic-recording-worker,
+processing-worker`) with `fly machine list --json` and runs `fly machine start` for every machine in
+`$FLY_MACHINE_IDS` (the list `restart_all.sh` restarts) that is `stopped` or `suspended` and has been for at least
+`WATCHDOG_MACHINE_STOPPED_MINUTES` (default 5; a younger stop may be a deploy or a host reboot in progress; the
+stop time is the machine's newest event, else `updated_at`). Each flyctl call times out after 30 s and the whole
+check after 120 s (one error), so a degraded Fly API cannot hold the lock past `restart_all.sh`'s wait. A
+started machine is logged, counted as `machines_started` and sent to Sentry as a **warning** (fingerprint
+`["recording-watchdog", "machines", <UTC date-hour>]`); a flyctl failure is counted in `errors`; an id that is in
+no listed app is logged as a warning. The check runs under the recording lock like everything else, and it runs
+even when the Prefect API is unreachable. **To keep a worker machine stopped on purpose, remove its id from the
+`FLY_MACHINE_IDS` secret first**, or the next tick starts it again.
+
 After the per-station checks, a normal run (no `--codes`) sweeps **every** deployment, processing ones included,
 for Cancelling runs older than 10 min and forces them to Cancelled, so the backlog drains and
 `delete_flow_runs.py` can delete it. A sweep failure is logged and counted, never fatal.
@@ -147,9 +163,9 @@ Every state write checks the `OrchestrationResult` it gets back: only ACCEPT cou
 logged with the server's reason and counted as `rejected`. Every per-station failure (including a 5xx
 `PrefectHTTPStatusError` after the client's own retries) is caught, logged and counted in `errors`; one station
 never stops the others. The run prints one summary line (`checked= healthy= started= zombies_cancelled=
-stale_pending_cancelled= stale_cancels_closed= deferred= missing= rejected= errors=`). Exit codes: 0 = clean (or
-skipped for the lock), 1 = Prefect API unreachable at the start (health check), 2 = finished with errors or
-rejected writes.
+stale_pending_cancelled= stale_cancels_closed= deferred= missing= stuck_scheduled= machines_started= rejected=
+errors=`). Exit codes: 0 = clean (or skipped for the lock), 1 = Prefect API unreachable at the start (health
+check), 2 = finished with errors, rejected writes or runs stuck in Scheduled.
 
 With `SENTRY_DSN` set (and not `--dry-run`), an unreachable API or any errors/rejections send a Sentry error event
 (`check=recording_watchdog`, fingerprint `["recording-watchdog", "errors", <UTC date-hour>]`), flushed with a 30 s
@@ -163,8 +179,30 @@ PYTHONPATH=src python src/scripts/ensure_recording_runs.py --dry-run   # from a 
 ```
 
 Thresholds are env vars: `WATCHDOG_SCHEDULED_STALE_MINUTES` (30), `WATCHDOG_PENDING_STALE_MINUTES` (10),
-`WATCHDOG_RUNNING_IDLE_MINUTES` (45), `WATCHDOG_CANCELLING_STALE_MINUTES` (10), `WATCHDOG_CONCURRENCY` (8). Cron
-output is in `fly logs -a prefect`.
+`WATCHDOG_RUNNING_IDLE_MINUTES` (45), `WATCHDOG_CANCELLING_STALE_MINUTES` (10), `WATCHDOG_CONCURRENCY` (8),
+`WATCHDOG_MACHINE_STOPPED_MINUTES` (5), `WATCHDOG_WORKER_APPS`. Cron output is in `fly logs -a prefect`.
+
+### Fly restart policy and host reboots (VER-429)
+
+The machines that must always run use `[[restart]] policy = "always"`: both recorder machines, the six
+generic recorders, the five always-on processing groups (the ones in `FLY_MACHINE_IDS`) and the prefect `cron`
+machine. The on-demand processing groups (`*_2`, `redo_*`, `undo_*`, `regenerate_timestamped_transcript`) and the
+Prefect server (woken by the proxy's autostart) keep Fly's default. Per Fly staff, the policy only governs
+automatic recovery: `fly machine stop` still leaves a machine stopped. Fly's default is `on-failure` with 10 retries, and
+on 2026-10-16 that default cost about 3 hours of recording: Fly rebooted every host ("Platform Wide Rolling Host
+Reboots", 16:22 to 05:15 UTC). While the prefect-postgres host was down (20:55 to 21:10) both recorder machines and
+the processing workers went down and stayed **stopped** until `restart_all.sh` restarted them at 00:05. Their
+start scripts wait only for `/api/health`, which answers without the database, so `serve()` most likely failed
+and exited repeatedly until the retries ran out (the machine event logs that would show it had been overwritten).
+`always` restarts on every exit with no cap. The watchdog's machine check (above) is the second line of defence.
+A `fly deploy` from a toml without the `[[restart]]` section would put machines back on the default, so keep it.
+The `[[restart]]` block takes effect only on `fly deploy`, and the cron machine is normally shipped with
+`fly machine update --image`, so a machine's live policy can differ from the toml. Check it with
+`fly machine list -a <app> --json | jq '.[] | {id, restart: .config.restart}'` and set it with
+`fly machine update <id> --restart always -y` (VER-429 did this for the 13 `FLY_MACHINE_IDS` machines and cron
+on 2026-10-18). Under `always` a machine that can never start (a bad image, or a generic recorder whose station
+was disabled in `stations.yaml` while its process group still exists) crash-loops instead of stopping after 10
+tries, so disable a generic station's process group in the toml along with the yaml entry.
 
 ### Sentry Crons monitors
 
