@@ -123,7 +123,8 @@ recording lock (above). It reads the station list from `stations.py` (the same `
 
 - Scheduled (including Late) run present: no new run is created (it would only queue behind it). One older than
   30 min means no worker is picking it up: it is logged as a warning and counted as `stuck_scheduled`, which
-  fails the tick (exit 2, Sentry error event and ERROR check-in). Before VER-429 it only logged, so on 2026-10-16
+  fails the tick (exit 2, Sentry error event and ERROR check-in), except on a tick that just started a stopped
+  worker machine. Age is counted from the run's expected start time. Before VER-429 it only logged, so on 2026-10-16
   runs sat Late for over two hours behind stopped recorder machines while every tick said `healthy=54`.
 - Pending run: healthy while it has been Pending for under 10 min (by its Pending state timestamp). An older one
   is stuck (the runner that took it is gone) and is set to Cancelling with `watchdog: stuck in Pending for N min`.
@@ -145,7 +146,9 @@ Before the Prefect checks, a full tick (no `--codes` / `--close-stale-cancelling
 (VER-429): it lists the machines of `WATCHDOG_WORKER_APPS` (default `recording-worker,generic-recording-worker,
 processing-worker`) with `fly machine list --json` and runs `fly machine start` for every machine in
 `$FLY_MACHINE_IDS` (the list `restart_all.sh` restarts) that is `stopped` or `suspended` and has been for at least
-`WATCHDOG_MACHINE_STOPPED_MINUTES` (default 5; a younger stop may be a deploy or a host reboot in progress). A
+`WATCHDOG_MACHINE_STOPPED_MINUTES` (default 5; a younger stop may be a deploy or a host reboot in progress; the
+stop time is the machine's newest event, else `updated_at`). Each flyctl call times out after 30 s and the whole
+check after 120 s (one error), so a degraded Fly API cannot hold the lock past `restart_all.sh`'s wait. A
 started machine is logged, counted as `machines_started` and sent to Sentry as a **warning** (fingerprint
 `["recording-watchdog", "machines", <UTC date-hour>]`); a flyctl failure is counted in `errors`; an id that is in
 no listed app is logged as a warning. The check runs under the recording lock like everything else, and it runs
@@ -193,7 +196,13 @@ start scripts wait only for `/api/health`, which answers without the database, s
 and exited repeatedly until the retries ran out (the machine event logs that would show it had been overwritten).
 `always` restarts on every exit with no cap. The watchdog's machine check (above) is the second line of defence.
 A `fly deploy` from a toml without the `[[restart]]` section would put machines back on the default, so keep it.
-The live machines were switched with `fly machine update <id> --restart always -y`.
+The `[[restart]]` block takes effect only on `fly deploy`, and the cron machine is normally shipped with
+`fly machine update --image`, so a machine's live policy can differ from the toml. Check it with
+`fly machine list -a <app> --json | jq '.[] | {id, restart: .config.restart}'` and set it with
+`fly machine update <id> --restart always -y` (VER-429 did this for the 13 `FLY_MACHINE_IDS` machines and cron
+on 2026-10-18). Under `always` a machine that can never start (a bad image, or a generic recorder whose station
+was disabled in `stations.yaml` while its process group still exists) crash-loops instead of stopping after 10
+tries, so disable a generic station's process group in the toml along with the yaml entry.
 
 ### Sentry Crons monitors
 

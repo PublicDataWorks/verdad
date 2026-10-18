@@ -67,6 +67,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -120,7 +121,11 @@ WORKER_APPS = tuple(
     if a.strip()
 )
 STOPPED_MACHINE_STATES = ("stopped", "suspended")
-FLY_TIMEOUT_SECONDS = 90
+# A degraded Fly API (exactly the host-reboot case) must not hold the recording lock past restart_all.sh's
+# 300 s wait or push a tick past the Crons max_runtime: each flyctl call gets FLY_TIMEOUT_SECONDS and the
+# whole machine check MACHINE_CHECK_BUDGET_SECONDS.
+FLY_TIMEOUT_SECONDS = 30
+MACHINE_CHECK_BUDGET_SECONDS = 120
 DEFAULT_LOCK_FILE = "/tmp/verdad-recording.lock"
 # The Prefect server rejects /flow_runs/filter with limit > 200.
 PAGE_SIZE = 200
@@ -164,7 +169,10 @@ class Summary:
 
     @property
     def failures(self) -> int:
-        return self.errors + self.rejected + self.stuck_scheduled
+        # A tick that just started a stopped worker machine has already acted on why runs are stuck; a later
+        # tick reports them if they still are.
+        stuck = 0 if self.machines_started else self.stuck_scheduled
+        return self.errors + self.rejected + stuck
 
     def line(self) -> str:
         return (
@@ -275,7 +283,8 @@ async def check_station(client, target: str, summary: Summary, dry_run: bool, no
     in_transition = False
 
     for run in scheduled:
-        age = _age_minutes(run.created, now)
+        # Due time, not creation time: a run created to start later is not stuck before it is due.
+        age = _age_minutes(getattr(run, "expected_start_time", None) or run.created, now)
         if age is not None and age >= SCHEDULED_STALE_MINUTES:
             state_name = run.state.name if run.state else run.state_type.value
             log(
@@ -400,7 +409,8 @@ async def close_stale_cancelling(client, summary: Summary, dry_run: bool, now: d
 
 def _fly(*args: str) -> str:
     """Run flyctl and return its stdout; raise RuntimeError when it exits non-zero."""
-    proc = subprocess.run(["fly", *args], capture_output=True, text=True, timeout=FLY_TIMEOUT_SECONDS)
+    env = {**os.environ, "FLY_NO_UPDATE_CHECK": "1"}
+    proc = subprocess.run(["fly", *args], capture_output=True, text=True, timeout=FLY_TIMEOUT_SECONDS, env=env)
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip()[-300:]
         raise RuntimeError(f"fly {' '.join(args)} exited {proc.returncode}: {detail}")
@@ -431,14 +441,32 @@ def ensure_machines_started(summary: Summary, dry_run: bool, now: datetime) -> l
         summary.errors += 1
         return []
     started, seen = [], set()
+    deadline = time.monotonic() + MACHINE_CHECK_BUDGET_SECONDS
+    spent = []
+
+    def out_of_time(what: str) -> bool:
+        if not spent and time.monotonic() < deadline:
+            return False
+        if not spent:  # count the overrun once, however many steps it skips
+            log(f"Machine check: {MACHINE_CHECK_BUDGET_SECONDS} s budget spent; skipping {what}")
+            summary.errors += 1
+            spent.append(True)
+        return True
+
     for app in WORKER_APPS:
+        if out_of_time(f"{app} and later apps"):
+            break
         try:
             machines = json.loads(_fly("machine", "list", "-a", app, "--json") or "[]")
+            if not isinstance(machines, list):
+                raise ValueError(f"expected a JSON list, got {type(machines).__name__}")
         except Exception as e:  # noqa: BLE001 - one app's listing failing must not skip the others or the tick
             log(f"Machine check: listing {app} failed: {type(e).__name__}: {e}")
             summary.errors += 1
             continue
         for machine in machines:
+            if not isinstance(machine, dict):
+                continue
             machine_id = machine.get("id")
             if machine_id not in wanted:
                 continue
@@ -455,6 +483,8 @@ def ensure_machines_started(summary: Summary, dry_run: bool, now: datetime) -> l
             if dry_run:
                 log(f"Machine check: [dry-run] would start {label}, {state} for {age_text}")
                 continue
+            if out_of_time(f"starting {label}"):
+                break
             try:
                 _fly("machine", "start", machine_id, "-a", app)
             except Exception as e:  # noqa: BLE001
@@ -464,6 +494,8 @@ def ensure_machines_started(summary: Summary, dry_run: bool, now: datetime) -> l
             log(f"Machine check: started {label}, which was {state} for {age_text}")
             summary.machines_started += 1
             started.append(label)
+    if spent:  # the listing is incomplete, so "missing" ids would be guesses
+        return started
     for machine_id in sorted(wanted - seen):
         log(f"Machine check: WARNING {machine_id} from FLY_MACHINE_IDS is not in {', '.join(WORKER_APPS)}")
     return started
