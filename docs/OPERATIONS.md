@@ -181,7 +181,11 @@ Thresholds are env vars: `WATCHDOG_SCHEDULED_STALE_MINUTES` (30), `WATCHDOG_PEND
 
 ### Fly restart policy and host reboots (VER-429)
 
-Every app's `fly.*.toml` sets `[[restart]] policy = "always"`. Fly's default is `on-failure` with 10 retries, and
+The machines that must always run use `[[restart]] policy = "always"`: both recorder machines, the six
+generic recorders, the five always-on processing groups (the ones in `FLY_MACHINE_IDS`) and the prefect `cron`
+machine. The on-demand processing groups (`*_2`, `redo_*`, `undo_*`, `regenerate_timestamped_transcript`) and the
+Prefect server (woken by the proxy's autostart) keep Fly's default. Per Fly staff, the policy only governs
+automatic recovery: `fly machine stop` still leaves a machine stopped. Fly's default is `on-failure` with 10 retries, and
 on 2026-10-16 that default cost about 3 hours of recording: Fly rebooted every host ("Platform Wide Rolling Host
 Reboots", 16:22 to 05:15 UTC). While the prefect-postgres host was down (20:55 to 21:10) both recorder machines and
 the processing workers went down and stayed **stopped** until `restart_all.sh` restarted them at 00:05. Their

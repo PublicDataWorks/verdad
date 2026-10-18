@@ -61,5 +61,8 @@ primary_region = 'sea'
 # Restart on every exit, without a retry cap (VER-429). The default (on-failure, max 10 retries) used up
 # its retries while Postgres was down during Fly's host reboots on 2026-10-16 and left the machines
 # stopped for 3 hours, until restart_all.sh restarted them.
+# Only the always-on groups (the ones in the FLY_MACHINE_IDS secret). The others are on-demand machines that
+# are started by hand and stay stopped otherwise; they keep Fly's default.
 [[restart]]
   policy = "always"
+  processes = ["initial_disinformation_detection", "audio_clipping", "in_depth_analysis", "analysis_review", "embedding"]

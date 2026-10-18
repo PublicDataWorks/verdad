@@ -48,5 +48,7 @@ primary_region = "sea"
 # Restart on every exit, without a retry cap (VER-429). The default (on-failure, max 10 retries) used up
 # its retries while Postgres was down during Fly's host reboots on 2026-10-16 and left the machines
 # stopped for 3 hours, until restart_all.sh restarted them.
+# Only cron: the server sits behind http_service, whose proxy autostart already wakes it on a request.
 [[restart]]
   policy = "always"
+  processes = ["cron"]
