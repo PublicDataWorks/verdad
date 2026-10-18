@@ -12,8 +12,10 @@ For each ``"<flow name>/<code>"`` from ``stations.prefect_run_targets()`` (the s
 start_recording.sh uses) this script:
 
 - leaves the deployment alone if it has a Scheduled (including Late) run; one older than
-  ``SCHEDULED_STALE_MINUTES`` is logged as a warning, because it means no worker is picking it up and
-  another run would only queue behind it;
+  ``SCHEDULED_STALE_MINUTES`` is logged as a warning and counted as ``stuck_scheduled``, a failure
+  (exit 2, Sentry event), because it means no worker is picking it up and another run would only
+  queue behind it (VER-429: on 2026-10-16 such runs sat Late for over two hours behind stopped
+  recorder machines while every tick reported the station healthy);
 - treats a Pending run as on its way up, unless it has been Pending for ``PENDING_STALE_MINUTES``
   (the runner that took it is gone): then it is set to Cancelling;
 - treats a Running run as healthy if it started, or its newest task run started, within
@@ -28,6 +30,14 @@ start_recording.sh uses) this script:
   ``CANCELLING_STALE_MINUTES``, defers the new run: a later tick closes the cancellation and starts
   the replacement. Recovery is therefore about one tick (15 min) when no run exists and up to about
   70 min when a zombie is left Running (45 min idle + one 10-min Cancelling close + one tick).
+
+Before the Prefect checks, a full tick (no ``--codes``/``--close-stale-cancelling``) makes sure every
+worker machine in ``$FLY_MACHINE_IDS`` (the list restart_all.sh restarts) is running: it lists the
+machines of ``WATCHDOG_WORKER_APPS`` with flyctl and starts any that has been stopped or suspended for
+``WATCHDOG_MACHINE_STOPPED_MINUTES`` (default 5; younger stops may be a deploy or a host reboot in
+progress). Without this, runs for a stopped recorder machine stay Late until the next 6-hourly restart
+(VER-429). A flyctl failure is logged and counted as an error, never fatal; a started machine sends a
+Sentry warning.
 
 After the per-station checks, a normal run (no ``--codes``) sweeps every deployment, processing ones
 included, for stale Cancelling runs so ``delete_flow_runs.py`` can delete them; a failure there is
@@ -52,7 +62,10 @@ Exit status: 0 = ran cleanly (or skipped for the lock), 1 = Prefect API unreacha
 import argparse
 import asyncio
 import fcntl
+import json
 import os
+import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -100,6 +113,14 @@ PENDING_STALE_MINUTES = _env_float("WATCHDOG_PENDING_STALE_MINUTES", 10)
 RUNNING_IDLE_MINUTES = _env_float("WATCHDOG_RUNNING_IDLE_MINUTES", 45)
 CANCELLING_STALE_MINUTES = _env_float("WATCHDOG_CANCELLING_STALE_MINUTES", 10)
 CONCURRENCY = max(1, int(_env_float("WATCHDOG_CONCURRENCY", 8)))
+MACHINE_STOPPED_MINUTES = _env_float("WATCHDOG_MACHINE_STOPPED_MINUTES", 5)
+WORKER_APPS = tuple(
+    a.strip()
+    for a in os.getenv("WATCHDOG_WORKER_APPS", "recording-worker,generic-recording-worker,processing-worker").split(",")
+    if a.strip()
+)
+STOPPED_MACHINE_STATES = ("stopped", "suspended")
+FLY_TIMEOUT_SECONDS = 90
 DEFAULT_LOCK_FILE = "/tmp/verdad-recording.lock"
 # The Prefect server rejects /flow_runs/filter with limit > 200.
 PAGE_SIZE = 200
@@ -134,6 +155,8 @@ class Summary:
     stale_cancels_closed: int = 0
     deferred: int = 0
     missing: int = 0
+    stuck_scheduled: int = 0
+    machines_started: int = 0
     rejected: int = 0
     errors: int = 0
     # Runs already closed this tick, so the sweep after the station checks does not count them twice.
@@ -141,13 +164,14 @@ class Summary:
 
     @property
     def failures(self) -> int:
-        return self.errors + self.rejected
+        return self.errors + self.rejected + self.stuck_scheduled
 
     def line(self) -> str:
         return (
             f"checked={self.checked} healthy={self.healthy} started={self.started} "
             f"zombies_cancelled={self.zombies_cancelled} stale_pending_cancelled={self.stale_pending_cancelled} "
             f"stale_cancels_closed={self.stale_cancels_closed} deferred={self.deferred} missing={self.missing} "
+            f"stuck_scheduled={self.stuck_scheduled} machines_started={self.machines_started} "
             f"rejected={self.rejected} errors={self.errors}"
         )
 
@@ -257,6 +281,7 @@ async def check_station(client, target: str, summary: Summary, dry_run: bool, no
             log(
                 f"{target}: WARNING {state_name} run {run.name} ({run.id}) is {age:.0f} min old; no worker is picking it up"
             )
+            summary.stuck_scheduled += 1
         healthy = True
 
     for run in pending:
@@ -373,6 +398,77 @@ async def close_stale_cancelling(client, summary: Summary, dry_run: bool, now: d
     await asyncio.gather(*(close(r) for r in stale))
 
 
+def _fly(*args: str) -> str:
+    """Run flyctl and return its stdout; raise RuntimeError when it exits non-zero."""
+    proc = subprocess.run(["fly", *args], capture_output=True, text=True, timeout=FLY_TIMEOUT_SECONDS)
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()[-300:]
+        raise RuntimeError(f"fly {' '.join(args)} exited {proc.returncode}: {detail}")
+    return proc.stdout
+
+
+def _machine_state_since(machine: dict):
+    """When the machine entered its current state: its newest event (ms epoch), else ``updated_at``."""
+    stamps = [e.get("timestamp") for e in machine.get("events") or [] if isinstance(e.get("timestamp"), (int, float))]
+    if stamps:
+        return datetime.fromtimestamp(max(stamps) / 1000, timezone.utc)
+    since = machine.get("updated_at")
+    return datetime.fromisoformat(since.replace("Z", "+00:00")) if since else None
+
+
+def worker_machine_ids() -> set[str]:
+    return {i.strip() for i in os.getenv("FLY_MACHINE_IDS", "").split(",") if i.strip()}
+
+
+def ensure_machines_started(summary: Summary, dry_run: bool, now: datetime) -> list[str]:
+    """Start every machine in $FLY_MACHINE_IDS stopped for MACHINE_STOPPED_MINUTES. Returns the ids started."""
+    wanted = worker_machine_ids()
+    if not wanted:
+        log("Machine check: FLY_MACHINE_IDS is not set, skipping")
+        return []
+    if shutil.which("fly") is None:
+        log("Machine check: fly is not on PATH")
+        summary.errors += 1
+        return []
+    started, seen = [], set()
+    for app in WORKER_APPS:
+        try:
+            machines = json.loads(_fly("machine", "list", "-a", app, "--json") or "[]")
+        except Exception as e:  # noqa: BLE001 - one app's listing failing must not skip the others or the tick
+            log(f"Machine check: listing {app} failed: {type(e).__name__}: {e}")
+            summary.errors += 1
+            continue
+        for machine in machines:
+            machine_id = machine.get("id")
+            if machine_id not in wanted:
+                continue
+            seen.add(machine_id)
+            state = machine.get("state")
+            if state not in STOPPED_MACHINE_STATES:
+                continue
+            label = f"{app}/{machine_id} ({machine.get('name')})"
+            age = _age_minutes(_machine_state_since(machine), now)
+            if age is not None and age < MACHINE_STOPPED_MINUTES:
+                log(f"Machine check: {label} is {state} for {age:.0f} min; leaving it to a later tick")
+                continue
+            age_text = f"{age:.0f} min" if age is not None else "an unknown time"
+            if dry_run:
+                log(f"Machine check: [dry-run] would start {label}, {state} for {age_text}")
+                continue
+            try:
+                _fly("machine", "start", machine_id, "-a", app)
+            except Exception as e:  # noqa: BLE001
+                log(f"Machine check: starting {label} failed: {type(e).__name__}: {e}")
+                summary.errors += 1
+                continue
+            log(f"Machine check: started {label}, which was {state} for {age_text}")
+            summary.machines_started += 1
+            started.append(label)
+    for machine_id in sorted(wanted - seen):
+        log(f"Machine check: WARNING {machine_id} from FLY_MACHINE_IDS is not in {', '.join(WORKER_APPS)}")
+    return started
+
+
 def select_targets(codes) -> list[str]:
     targets = stations.prefect_run_targets()
     if not codes:
@@ -385,8 +481,8 @@ def select_targets(codes) -> list[str]:
     return selected
 
 
-async def run(args) -> Summary:
-    summary = Summary()
+async def run(args, summary: Summary | None = None) -> Summary:
+    summary = summary if summary is not None else Summary()
     now = _now()
     reached = False
     try:
@@ -455,14 +551,14 @@ def _hour_key(now: datetime) -> str:
     return now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H")
 
 
-def _report_to_sentry(message: str, extra: dict) -> None:
+def _report_to_sentry(message: str, extra: dict, level: str = "error", kind: str = "errors") -> None:
     sentry_sdk.capture_event(
         {
             "message": f"Recording watchdog: {message}",
-            "level": "error",
+            "level": level,
             "tags": {"check": "recording_watchdog"},
             "extra": extra,
-            "fingerprint": [MONITOR_SLUG, "errors", _hour_key(_now())],
+            "fingerprint": [MONITOR_SLUG, kind, _hour_key(_now())],
         }
     )
 
@@ -474,9 +570,24 @@ def _watch(args, sentry_on: bool) -> int:
     if fd is None:
         log("watchdog: restart in progress, skipping tick")
         return EXIT_OK
+    summary = Summary()
     try:
+        if not args.codes and not args.close_stale_cancelling:
+            try:
+                started = ensure_machines_started(summary, args.dry_run, _now())
+            except Exception as e:  # noqa: BLE001 - the machine check must never stop the Prefect checks
+                log(f"Machine check failed: {type(e).__name__}: {e}")
+                summary.errors += 1
+                started = []
+            if started and sentry_on:
+                _report_to_sentry(
+                    f"started stopped worker machines: {', '.join(started)}",
+                    {"machines": started},
+                    level="warning",
+                    kind="machines",
+                )
         try:
-            summary = asyncio.run(run(args))
+            summary = asyncio.run(run(args, summary))
         except ApiUnreachable as e:
             log(f"Error connecting to Prefect API: {e}")
             if sentry_on:
@@ -490,7 +601,8 @@ def _watch(args, sentry_on: bool) -> int:
     if summary.failures:
         if sentry_on:
             _report_to_sentry(
-                f"{summary.errors} errors, {summary.rejected} rejected state changes",
+                f"{summary.errors} errors, {summary.rejected} rejected state changes, "
+                f"{summary.stuck_scheduled} runs stuck in Scheduled",
                 {"summary": summary.line()},
             )
         return EXIT_ERRORS

@@ -57,3 +57,9 @@ primary_region = 'sea'
   memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1
+
+# Restart on every exit, without a retry cap (VER-429). The default (on-failure, max 10 retries) used up
+# its retries while Postgres was down during Fly's host reboots on 2026-10-16 and left the machines
+# stopped for 3 hours, until restart_all.sh restarted them.
+[[restart]]
+  policy = "always"
