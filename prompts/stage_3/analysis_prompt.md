@@ -79,6 +79,11 @@ Perform the following steps:
 - **Assign Subcategories:**
   - If applicable, assign more specific subcategories to enhance granularity.
 
+- **Speaker Stance:**
+  - Analyze and score what the station's own speakers assert: hosts, preachers, guests, and callers whose claims the host does not challenge.
+  - A clip, quote or claim that is played or repeated in order to criticize, fact-check, debunk or neutrally report on it is NOT the station's claim. Do not score it as disinformation; say in the explanation that the station is reporting on or debunking the claim, and score only what the station's own speakers add. Example: a news program plays a recording of someone alleging election fraud and then explains, with sources, that the allegation is false. That segment is a fact-check and scores 0 unless the station's own commentary contains a false claim.
+  - If the station speaker endorses the quoted claim ("tiene toda la razón", "eso es exactamente así", "معه حق تماماً"), treat it as the station's claim.
+
 ##### **C. Content Verification**
 
 - **Ensure Transcription and Translation Accuracy:**
@@ -336,6 +341,16 @@ Based on your verification results, apply the appropriate maximum confidence sco
 
 **Enforced by the pipeline, not only by you:** after your analysis, deterministic code applies these caps. A `verified_false` or "fabricated" verdict is capped at 40 unless at least one `contradicts_claim` result carries the URL of a specific article that the search tool actually returned (front pages, search-result pages and WHOIS lookups never count, and neither does a URL you did not get from a tool). Inside the 72-hour window the verdict is further capped at 30 (20 inside 24 hours) unless that contradicting article carries a `publication_date`. A contradicting source dated before the claim's `event_date` is ignored. Write the evidence so that these checks can pass when the claim really is false: cite the article URL exactly as returned, fill `publication_date` and `event_date`.
 
+##### **H.2 Harmful Rhetoric Without a Checkable Claim (Category 22 and Category 1 Electioneering)**
+
+Some harmful content has no single checkable claim: rhetoric that demeans women or restricts their rights or safety (Category 22, Gender-Based Harmful Rhetoric and Misogyny), and pulpit or host electioneering that tells listeners a vote for a party is a vote for the devil or against God (Category 1, subcategory 1.6). For this content:
+
+- Assign the category whenever the station's own speaker delivers the rhetoric, even if the score will be low. The category label is how analysts find this content.
+- In the explanation, quote the rhetoric and describe accurately what it does (e.g., prescribes wives' obedience under threat, blurs marital consent, calls feminism satanic, demonizes a party's voters).
+- Do not describe opinion, doctrine or moral judgment as "false" or "fabricated", and do not set `verification_status` to `verified_false` for it.
+- Verify the factual premises the rhetoric rests on (statistics, legal claims, health claims, what a party or person actually said) with web search, document them in `verification_evidence`, and score those premises under Section H like any other claim.
+- Never invent falsity, fabricate sources, or cite a source you did not retrieve with a tool in order to raise the score. If nothing checkable is false, the score stays low under the rules above. The pipeline caps analyses whose status is `uncertain` or `insufficient_evidence` at 40, so a rhetoric-only segment will score 40 or less even when it is correctly labeled; that is expected, and the label still records it.
+
 ##### **I. Required Self-Review Process**
 
 After completing your initial analysis, perform this structured review:
@@ -356,6 +371,8 @@ After completing your initial analysis, perform this structured review:
    - [ ] Would these scores be defensible to fact-checkers?
    - [ ] Are my explanations consistent with my scores?
    - [ ] For uncertain claims: Did I score them 0-40 maximum?
+   - [ ] Is every scored claim the station speaker's own, not a clip quoted in order to criticize or debunk it?
+   - [ ] For Category 22 or pulpit electioneering: did I describe the rhetoric accurately, without calling opinion false, and verify only its factual premises (Section H.2)?
 
 3. **Score Adjustment Protocol**
    If any validation fails:
@@ -372,6 +389,8 @@ After completing your initial analysis, perform this structured review:
    - Scoring opinions as if they were facts
    - Confusing controversial content with false content
    - Treating bias as equivalent to disinformation
+   - Treating a claim the station plays or quotes in order to criticize or debunk it as the station's own claim
+   - Dropping Category 22 because the rhetoric has no checkable claim, or inventing falsity to raise its score
    - Scoring based on disagreement rather than falsity
    - Treating "no search results" as evidence of falsity (it is uncertainty)
    - **Dismissing web search results that conflict with your pre-training knowledge** (post-cutoff events are real even if unfamiliar to you)
@@ -1054,42 +1073,217 @@ Below are detailed heuristics for each disinformation category, including nuance
 
 Disinformation that casts doubt on the legitimacy and fairness of electoral systems. This includes allegations of widespread voter fraud, manipulation of results, or external interference. Such narratives aim to undermine public trust in democratic institutions.
 
+The category also covers content that misleads voters about how, when or whether they can vote, or that steers their vote with false or dehumanizing premises: wrong election dates, places or requirements; claims that an election will be cancelled or suspended; telling listeners not to vote by mail because ballots are destroyed; claims that noncitizens or "illegals" vote in meaningful numbers; and pulpit or host electioneering that tells listeners a vote for a party or candidate is a vote for the devil or against God, built on false or dehumanizing claims about that party or its voters.
+
 **Important Note About 2024 Election**:
 Donald Trump won the 2024 Presidential Election with 312 electoral votes and approximately 77.16 million individual votes, compared to Kamala Harris's 74.73 million votes. Claims accurately reporting these results are NOT disinformation. However, false claims about other aspects of the election process may still constitute disinformation. Before the count was finalized, Trump was declared as the winner with 292 electoral votes the morning after the election, but the final count was announced days later to be 312 electoral votes. In a decisive sweep of the 2024 presidential election, Donald Trump secured victory in all seven battleground states: Arizona, Georgia, Michigan, Nevada, North Carolina, Pennsylvania, Wisconsin
+
+**Important Context**: Pulpit and host electioneering often contains no single checkable claim ("a vote for them is a vote for the devil"). Verify the factual premises it rests on (e.g., what a party platform actually says, how common a procedure is) and score those under Section H; describe the demonizing framing accurately in the explanation without calling opinion "false" (see Section H.2). Attacks on named politicians also fit Category 18 (Political Figures and Movements); gendered attacks on women candidates also fit Category 22. A news or fact-check segment that plays a fraud claim in order to debunk it is not the station's claim (see the speaker-stance rule in Section B).
 
 **Common Narratives That May Constitute Disinformation**:
 - Claims about elections prior to 2024 being "rigged" without evidence
 - Allegations of non-citizens or deceased individuals voting
 - Unsubstantiated claims about voting machine tampering
 - False claims about the 2024 election results that contradict the official tallies
+- **"Wrong Date, Wrong Place"**: Wrong Election Day, polling hours, places, ID or eligibility rules, or false voting methods (phone, text) aired to listeners, even when hedged
+- **"The Election Is Off"**: Claims that an upcoming election will be cancelled, suspended or postponed, or that votes will not count
+- **"Don't Mail It"**: Advice not to vote by mail because ballots are shredded, lost or never counted
+- **"Illegals Decide Elections"**: Claims that noncitizens vote in outcome-changing numbers, that IDs for noncitizens let them vote, or that a party wants immigration to harvest votes
+- **"A Vote for the Devil"**: Preachers or hosts telling listeners that voting for a party is voting for Satan, against God, or complicity in murder, on false premises or with dehumanizing language about its voters
+
+**Disinformation Tactics (Detection Signals)**:
+- "Yo trabajé adentro y me dijeron..." - Insider anecdote offered as proof of mass ballot destruction
+- "Creo que las elecciones son el..." - Hedged but wrong procedural information
+- "No soy profeta, pero le digo..." - Prophetic framing of what will happen if a party wins
+- "Ningún cristiano puede votar por..." - Religious litmus test for a party
+- "Todo el mundo sabe que si hay voto por correo, hacen trampa" - Common-knowledge framing in place of evidence
 
 **Cultural/Regional Variations**:
 
 - **Spanish-Speaking Communities**:
   - References to electoral issues in countries of origin, leading to skepticism about U.S. elections.
   - Use of expressions like **"elección amañada"** (rigged election).
+  - Christian radio pastors are trusted voices; voting instructions given from the pulpit ("hermano, no vote por...") carry religious authority.
+  - First-time and naturalized voters, and mixed-status households, are especially exposed to wrong dates, ID rules and fear about mail ballots.
 - **Arabic-Speaking Communities**:
   - Distrust stemming from experiences with corrupt elections in home countries.
   - Phrases like **"انتخابات مزورة"** (fake elections) may be used.
+  - Religious leaders' guidance on voting (**"لا يجوز التصويت لهم"**, it is not permissible to vote for them) can carry weight similar to pulpit electioneering.
+  - Fear of government records can make claims about mail ballots and ID checks especially discouraging.
 
 **Potential Legitimate Discussions**:
 
 - Investigations into specific incidents of electoral irregularities.
 - Debates on voter ID laws and their impact.
 - Discussions about election security measures.
+- Endorsements, policy arguments and moral or religious arguments about how to vote that make no false claims about a party or its voters.
+- Get-out-the-vote reminders with correct dates, places and requirements.
+- Accurate reporting on candidates, primaries, runoffs and results, including post-cutoff events (verify with search before calling them fabricated).
+- News or fact-check segments that play or quote a false election claim in order to debunk or report on it.
+- Accurate statements that some municipalities allow noncitizens to vote in local elections.
+
+**Keywords/Phrases for Detection**:
+
+**Spanish**:
+- "elección amañada", "fraude electoral", "votos robados", "manipulación de máquinas de votación"
+- "no mande su voto por correo", "las boletas por correo las trituran", "nunca llegan a contarse"
+- "votan los ilegales", "votos de no ciudadanos", "votan los muertos", "crear boletas", "recolección de boletas"
+- "van a cancelar las elecciones", "no va a haber elecciones", "suspender las elecciones"
+- "puede votar por teléfono", "las elecciones son el miércoles"
+- "votar por los demócratas es votar por el diablo", "ningún cristiano puede votar por", "usted será cómplice", "se roban las elecciones"
+
+**Arabic**:
+- "انتخابات مزورة" (rigged elections), "تزوير الأصوات" (vote tampering), "سرقة الانتخابات" (election theft)
+- "لا ترسل صوتك بالبريد" (don't send your vote by mail), "بطاقات الاقتراع البريدية تُمزق" (mail ballots are shredded)
+- "غير المواطنين يصوتون" (noncitizens vote), "المهاجرون غير الشرعيين يصوتون" (illegal immigrants vote), "الموتى يصوتون" (the dead vote)
+- "سيتم إلغاء الانتخابات" (the elections will be cancelled), "تأجيل الانتخابات" (postponing the elections)
+- "يمكنك التصويت عبر الهاتف" (you can vote by phone)
+- "التصويت لهم تصويت للشيطان" (a vote for them is a vote for the devil), "لا يمكن للمؤمن أن يصوت لهم" (no believer can vote for them)
 
 **Examples**:
 
 - _Spanish_: "No confíes en el sistema; hubo 'fraude electoral' en las últimas elecciones."
 - _Arabic_: "لا تثقوا بالنظام؛ حدث 'تزوير في الأصوات' في الانتخابات الأخيرة."
+- _Spanish_: "Bueno, si usted vota por los demócratas, está votando por el diablo. ¿Por qué? Porque está votando para que a los niños los operen y los conviertan en niñas."
+- _Arabic_: "حسناً، إذا صوّتّ للديمقراطيين فأنت تصوّت للشيطان. لماذا؟ لأنك تصوّت لإجراء عمليات للأطفال وتحويلهم إلى بنات."
+- _Spanish_: "Yo fui cartero y le digo: no ponga su voto en el correo. Las máquinas los trituran y la mitad nunca llega a los que cuentan."
+- _Arabic_: "كنت ساعي بريد وأقول لك: لا تضع صوتك في البريد. الآلات تمزقها ونصفها لا يصل أبداً إلى من يعدّون الأصوات."
 
 **Examples of What IS Disinformation**:
 - _Spanish_: "Las elecciones de 2020 fueron robadas" (The 2020 election was stolen)
 - _Arabic_: "تم تزوير انتخابات 2020" (The 2020 election was rigged)
+- _Spanish_: "Van a cancelar las elecciones de noviembre, así que no se moleste en votar" (They will cancel the November elections, so don't bother voting)
+- _Arabic_: "سيلغون انتخابات نوفمبر، فلا تتعب نفسك بالتصويت" (They will cancel the November elections, so don't bother voting)
 
 **Examples of What is NOT Disinformation**:
 - _Spanish_: "Trump ganó las elecciones de 2024 con 292 votos electorales"
 - _Arabic_: "فاز ترامب في انتخابات 2024 ب 292 صوتًا انتخابيًا"
+- _Spanish_: "Como cristiano, yo voy a votar por el candidato que defiende la vida; ustedes oren y decidan." (moral argument with no false claim)
+- _Arabic_: "كمؤمن، سأصوّت للمرشح الذي يدافع عن الحياة؛ صلّوا وقرّروا بأنفسكم." (moral argument with no false claim)
+- _Spanish_: "Escuchamos el audio que circula sobre un supuesto fraude en el condado; los funcionarios electorales explicaron que esa afirmación es falsa." (fact-check that quotes the claim)
+- _Arabic_: "استمعنا إلى التسجيل المتداول حول تزوير مزعوم في المقاطعة؛ وأوضح مسؤولو الانتخابات أن هذا الادعاء كاذب." (fact-check that quotes the claim)
+
+**Red Flags for High-Confidence Disinformation**:
+
+Immediate high-confidence signals:
+- A wrong date or false method of voting stated to listeners as fact
+- Claims that an upcoming federal election is cancelled or postponed
+- Telling listeners not to vote by mail because ballots are destroyed
+
+Requires careful analysis:
+- Pulpit electioneering (score only the verified false premises; describe the rest)
+- Claims about noncitizen voting that cite a real but small number of cases
+- Hedged procedural statements a host corrects later in the same segment
+- Callers whose claims the host challenges or corrects on air
+
+#### **1.1 Fraud and Rigging Claims**
+
+**Description**:
+
+Unfounded claims that elections are rigged or stolen, that machines flip votes, or that ballots are fabricated.
+
+**Narratives**:
+- "Las elecciones de 2020 fueron robadas" (The 2020 election was stolen)
+- "A los que recogen boletas les pagan, tienen incentivo para crear boletas" (Ballot collectors are paid, they have an incentive to create ballots)
+- "Las máquinas cambian los votos" (The machines change the votes)
+
+**Evidence**: Courts, recounts and audits, including those run by Republican officials, found no fraud that changed the 2020 result; documented fraud cases are rare and are prosecuted individually.
+
+**Examples**:
+
+- *Spanish*: "A los que recogen boletas les pagan, así que tienen incentivo para crear boletas. Así se roban las elecciones."
+- *Arabic*: "الذين يجمعون بطاقات الاقتراع يتقاضون أجراً، لذلك لديهم حافز لاختلاق بطاقات. هكذا تُسرق الانتخابات."
+
+#### **1.2 Voter Confusion: Dates, Places and Requirements**
+
+**Description**:
+
+Wrong information about when, where or how to vote, or about eligibility and ID requirements, aired to listeners.
+
+**Narratives**:
+- "Las elecciones son el miércoles" / a wrong date for Election Day (The election is on Wednesday)
+- "Puede votar por teléfono o por mensaje de texto" (You can vote by phone or text)
+- "La Real ID con la estrellita es la que prueba que usted es ciudadano" (The Real ID with the star is what proves you are a citizen)
+
+**Evidence**: Federal Election Day is set by law as the Tuesday after the first Monday in November; no U.S. jurisdiction accepts votes by phone or text; Real ID does not prove citizenship (lawfully present noncitizens can hold one); ID and registration rules are set by each state and published by its election office. Check the date against the calendar for the recording year.
+
+**Examples**:
+
+- *Spanish*: "Recuerden, las elecciones son el miércoles, y si no tiene la Real ID no lo dejan votar."
+- *Arabic*: "تذكروا، الانتخابات يوم الأربعاء، وإذا لم تكن لديك بطاقة Real ID فلن يسمحوا لك بالتصويت."
+
+#### **1.3 Cancelled or Suspended Elections**
+
+**Description**:
+
+Claims that an upcoming election will be cancelled, suspended or postponed, or that votes will not count.
+
+**Narratives**:
+- "Van a cancelar las elecciones" (They are going to cancel the elections)
+- "No va a haber elecciones este año" (There won't be elections this year)
+- "Su voto no va a contar" (Your vote won't count)
+
+**Evidence**: The date of federal elections is fixed by Congress; a president or governor cannot cancel or postpone a federal general election, and federal elections were held on schedule through the Civil War, both World Wars and the 2020 pandemic.
+
+**Examples**:
+
+- *Spanish*: "No pierdan su tiempo, van a suspender las elecciones con cualquier pretexto."
+- *Arabic*: "لا تضيعوا وقتكم، سيؤجلون الانتخابات بأي ذريعة."
+
+#### **1.4 Mail-Ballot Discouragement**
+
+**Description**:
+
+Telling listeners not to vote by mail because ballots are shredded, lost, stolen or never counted.
+
+**Narratives**:
+- "No mande su voto por correo" (Don't send your vote by mail)
+- "Las máquinas del correo trituran las boletas" (The mail machines shred the ballots)
+- "La mitad de los votos por correo nunca se cuentan" (Half of mailed votes are never counted)
+- "Somos uno de los pocos países que tienen voto por correo" (We are one of the few countries with mail voting)
+
+**Evidence**: Official election administration data show that only a small share of returned mail ballots are rejected (about 1 percent in 2024), mostly for signature or deadline problems; most states offer ballot tracking; dozens of countries, including Germany, the UK, Canada and Switzerland, allow postal voting. There is no evidence of mass shredding.
+
+**Examples**:
+
+- *Spanish*: "Yo trabajé en el correo y le digo: no mande su voto por correo, ahí los trituran."
+- *Arabic*: "عملت في البريد وأقول لك: لا ترسل صوتك بالبريد، هناك يمزقونها."
+
+#### **1.5 Noncitizen and "Illegal" Voting Claims**
+
+**Description**:
+
+Claims that noncitizens, undocumented immigrants or the dead vote in outcome-changing numbers, or that a party encourages immigration to gain votes.
+
+**Narratives**:
+- "Los ilegales votan y por eso no quieren la identificación" (Illegals vote, which is why they don't want ID)
+- "Dejan entrar a los inmigrantes para que voten por ellos" (They let immigrants in so they will vote for them)
+- "Con la licencia para indocumentados ya pueden votar" (With the license for the undocumented they can now vote)
+
+**Evidence**: Voting by noncitizens in federal elections is a federal crime; state audits and studies find it extremely rare; a driver's license does not register anyone to vote, and registration requires an attestation of citizenship under penalty of perjury. Undocumented immigrants cannot vote in federal elections.
+
+**Examples**:
+
+- *Spanish*: "Abrieron la frontera porque saben que la gran mayoría de los ilegales van a votar por ellos."
+- *Arabic*: "فتحوا الحدود لأنهم يعلمون أن الغالبية العظمى من المهاجرين غير الشرعيين سيصوتون لهم."
+
+#### **1.6 Pulpit and Host Electioneering on False or Dehumanizing Premises**
+
+**Description**:
+
+Preachers or hosts telling listeners that a vote for a party or candidate is a vote for the devil, against God, or complicity in murder, built on false claims about that party or demonizing its voters.
+
+**Narratives**:
+- "Votar por los demócratas es votar por el diablo" (Voting for the Democrats is voting for the devil)
+- "No se puede ser cristiano y demócrata, porque aman matar bebés" (You cannot be a Christian and a Democrat, because they love killing babies)
+- "Si ganan o se roban las elecciones, va a empezar la persecución contra la iglesia" (If they win or steal the elections, persecution of the church will begin)
+
+**Evidence**: The demonizing framing is opinion and is not scored as false by itself. The premises usually are checkable: no major party platform calls for "castrating children" (genital surgery on minors is rare), infanticide is illegal in every state, and abortions at or after 21 weeks are about 1 percent of the total. Verify and score those premises; describe the framing accurately.
+
+**Examples**:
+
+- *Spanish*: "Hermano, aquí hay dos opciones: si usted está a favor de matar bebés y castrar niños, vote por los demócratas."
+- *Arabic*: "يا أخي، هناك خياران: إذا كنت مع قتل الأطفال وإخصاء الأولاد، فصوّت للديمقراطيين."
 
 ---
 
@@ -2414,6 +2608,223 @@ These categories may overlap with:
 
 ---
 
+### **22. Gender-Based Harmful Rhetoric and Misogyny**
+
+**Description**:
+
+Rhetoric aired by the station's own speakers (hosts, preachers, guests, and callers the host does not challenge) that demeans women, prescribes their subordination, restricts their rights or safety, or minimizes violence against them. It includes teaching that binds wives to obedience under threat, sweeping claims that women by nature cause disorder or sin, blurring of marital consent, victim blaming, framing feminism or women's rights as satanic, occult or a deadly plot, gendered attacks on women in public life, and shaming of women's reproductive decisions. Unlike most categories, Category 22 applies even when the segment contains no single checkable false fact: the harm is in the rhetoric itself.
+
+**Important Context**: This category is distinct from Category 20 (Women's Health and Reproductive Care), which covers false medical claims, and Category 6 (Abortion and Reproductive Rights), which covers political and ethical framing of abortion. Assign Category 22 alongside them when a health or abortion claim also demeans women (e.g., "the mother must be possessed", "they abort for their figure") or steers them away from care. Content about transgender and LGBTQ+ people belongs to Category 5. Gendered attacks on a woman candidate can also fit Category 18.
+
+**How to score Category 22 content**: Most of it has nothing to verify. Include Category 22, quote the rhetoric and explain accurately why it demeans women or restricts their rights or safety. Do not call opinion or doctrine "false" or "fabricated", do not invent falsity, and do not cite or describe sources you did not retrieve with a tool. Verify any embedded factual claims (statistics, legal claims, health claims) as usual and score those under Section H. Scores follow Section H and Section H.2; a segment with rhetoric but no verified false claim will score low, and that is expected. The category label is how analysts find this content, so keep it even when the score is low.
+
+**Common Narratives**:
+
+- **"Submission as Command"**: Wives must obey husbands "in everything", stay silent, or lose authority and blessing; women who cite their rights are fools or rebels against God
+- **"Women Cause the Trouble"**: Women as the source of disorder, sin or men's crimes; essentialist claims that women are vain, dissatisfied or unfit to lead
+- **"No Doesn't Mean No"**: A wife's refusal is coyness; rape is promiscuity; survivors are liars or "asked for it"
+- **"Feminism Is Satanic"**: Feminism as a false religion, occult practice, communist plot or "the deadliest ideology in history", a deception that strips men of authority
+- **"Her Body, Her Name, Her Womb"**: Attacks on women in public life through their bodies, sexuality, childlessness or name rather than their record
+- **"Possessed Mothers"**: Women who have abortions or use contraception called possessed, vain or murderers, often paired with false health claims
+
+**Disinformation Tactics (Detection Signals)**:
+- "La Biblia dice..." followed by a rule applied to all women today with a threat - Doctrine used to restrict rights, not only taught
+- "Las mujeres de hoy dicen 'conozco mis derechos'..." - Women's rights cast as the problem
+- "Es un rasgo femenino..." / "las mujeres siempre..." - Essentialist generalization
+- "No discutas conmigo, discute con Dios" - Divine authority closing off dissent
+- Jokes or laughter about a wife's silence, a "vieja loca" or a woman's body - Humor that normalizes contempt
+- Unsourced statistics about women ("80 por ciento de los presos...", "la mitad de los embarazos...") - Fabricated numbers lending weight to a stereotype
+
+**Cultural/Regional Variations**:
+
+- **Spanish-Speaking Communities**:
+  - Christian and Catholic radio pastors and hosts are trusted authorities; sermon series on **"la sujeción de la esposa"** (the wife's submission) reach women listening at home.
+  - **Machismo** and **marianismo** norms can make prescriptions of silence and endurance sound natural rather than harmful.
+  - Women in mixed-status households may already fear reporting domestic violence; rhetoric that blurs consent or tells women to endure raises that barrier.
+  - Call-in formats amplify callers when the host agrees ("tiene toda la razón").
+- **Arabic-Speaking Communities**:
+  - Religious concepts such as **"القوامة"** (male guardianship) and **"الطاعة"** (obedience) are taught legitimately; the harm arises when they are used to deny women's rights, excuse violence or demand obedience under threat.
+  - Phrases such as **"ناقصات عقل ودين"** (deficient in intellect and religion) are sometimes quoted to argue women are unfit to lead or testify.
+  - **"الشرف"** (honor) framings can shift blame for violence onto women.
+  - Sermons and lectures circulate on satellite TV, YouTube and WhatsApp with strong religious authority.
+
+**Potential Legitimate Discussions**:
+
+- Ordinary religious teaching on marriage, headship or ordination that does not demean women or restrict their rights or safety (including complementarian teaching that condemns abuse)
+- Neutral news about women officials, candidates and leaders, and criticism of a woman politician's record or policies
+- Emotional-support, counseling and suicide-prevention segments addressed to women
+- Song lyrics and dramatized content
+- Sin lists or moral exhortations addressed to men and women alike
+- Pro-life advocacy or prayer with no false claim and no statement about women's roles
+- Personal testimony about marriage, motherhood or faith
+- Segments that report on, quote or criticize misogyny
+
+**Keywords/Phrases for Detection**:
+
+**Spanish**:
+- "la esposa debe someterse en todo", "sujetas a sus maridos", "gánatelo sin hablar", "no hables mucho"
+- "conozco mis derechos", "el que habla de derechos es un necio", "en rebelión contra Dios"
+- "la mujer no puede enseñar ni dirigir al hombre", "calladas en la iglesia", "tropiezo", "no existen pastoras"
+- "las mujeres son las que causan problemas", "por culpa de una mujer", "rasgo femenino"
+- "no significa no", "el deber conyugal", "la violación es una forma de promiscuidad", "ella se lo buscó"
+- "el feminismo es satánico", "religión falsa", "ocultismo", "la ideología más mortífera", "les quitan la autoridad a los varones"
+- "la mamá tiene que estar endemoniada", "abortan por su figura o su carrera"
+- "su nombre lo dice, es mala", "nunca ha tenido hijos"
+
+**Arabic**:
+- "يجب على الزوجة أن تخضع لزوجها في كل شيء" (the wife must submit to her husband in everything), "الطاعة واجبة" (obedience is obligatory)
+- "المرأة التي تطالب بحقوقها متمردة على الله" (a woman who demands her rights is rebelling against God)
+- "لا يجوز للمرأة أن تعلّم الرجال أو تقودهم" (a woman may not teach or lead men), "ناقصات عقل ودين" (deficient in intellect and religion)
+- "النساء سبب المشاكل" (women are the cause of problems), "بسبب امرأة" (because of a woman)
+- "عندما تقول الزوجة لا فهي لا تعني لا" (when the wife says no she does not mean no), "حق الزوج في الفراش" (the husband's right in bed)
+- "هي التي جلبت ذلك لنفسها" (she brought it on herself)
+- "النسوية شيطانية" (feminism is satanic), "النسوية مؤامرة" (feminism is a conspiracy), "تمكين المرأة خدعة" (women's empowerment is a deception)
+- "الأم التي تجهض ممسوسة" (a mother who aborts is possessed)
+
+**Examples**:
+
+- *Spanish*: "Las mujeres dicen: 'yo no me voy a someter a mi marido, conozco mis derechos'. Mi amigo, el que habla de derechos es un necio. La que no se somete no discute conmigo, discute con Dios, y le va a costar muy caro."
+- *Arabic*: "تقول النساء: 'لن أخضع لزوجي، أعرف حقوقي'. يا صديقي، من يتحدث عن الحقوق أحمق. التي لا تخضع لا تجادلني أنا، بل تجادل الله، وسيكلفها ذلك غالياً."
+- *Spanish*: "Ellas dicen que el feminismo las liberó, pero es una religión falsa, algo malvado. Toda feminista tiene que despreciar a los hombres y meterse en el ocultismo."
+- *Arabic*: "يقلن إن النسوية حررتهن، لكنها دين باطل، شيء شرير. كل نسوية يجب أن تحتقر الرجال وتنخرط في السحر."
+
+**Red Flags for High-Confidence Disinformation**:
+
+Immediate high-confidence signals (assign Category 22; scoring still follows Section H):
+- A wife's "no" framed as not meaning no, or a husband's entitlement to sex
+- Rape described as promiscuity or as the victim's fault
+- Women who claim their rights called fools or rebels against God, with threats for disobedience
+- Feminism described as satanic, occult or deadlier than genocides
+- Women who have abortions called possessed
+
+Requires careful analysis:
+- Complementarian sermons on submission that include caveats ("submission is not inferiority", "husbands must not abuse")
+- Doctrine on ordination presented as church teaching rather than as a judgment on women generally
+- Hedged or garbled statements whose meaning depends on the audio
+- Callers whose statements the host challenges or corrects
+- Segments that quote such rhetoric in order to criticize it (not the station's claim)
+
+#### **22.1 Women's Subordination and Prescribed Roles**
+
+**Description**:
+
+Teaching that binds women to obedience, silence or a subordinate role as a requirement for listeners today, often with threats, or that dismisses women's rights as foolishness or rebellion.
+
+**Narratives**:
+- "La esposa debe seguir el liderazgo de su marido en todo" (The wife must follow her husband's leadership in everything)
+- "El que habla de derechos es un necio; los creyentes no tenemos derechos" (Whoever speaks of rights is a fool; believers have no rights)
+- "Respétalo y no hables mucho" (Respect him and don't talk much)
+- "El esposo debería poder vetar el aborto de su esposa" (The husband should be able to veto his wife's abortion)
+
+**Evidence**: Women in the U.S. hold equal legal rights in marriage, property and medical decisions; the Supreme Court struck down spousal-consent (1976) and spousal-notification (1992) requirements for abortion, citing the risk to women in abusive marriages. Teaching about marriage is doctrine, not a factual claim; flag it under Category 22 when it denies women's rights or demands obedience under threat.
+
+**Examples**:
+
+- *Spanish*: "Si usted no se somete a su marido, Dios nunca le dará autoridad en su hogar y sus hijos serán rebeldes."
+- *Arabic*: "إذا لم تخضعي لزوجك، فلن يعطيك الله سلطة في بيتك أبداً وسيصبح أولادك متمردين."
+
+#### **22.2 Demeaning or Sexualizing Women**
+
+**Description**:
+
+Sweeping, essentialist or sexualized statements about women as a group, including unsourced statistics that blame women for men's behavior.
+
+**Narratives**:
+- "Las mujeres son las que siempre causan desorden" (Women are the ones who always cause disorder)
+- "El 80 por ciento de los presos están ahí por culpa de una mujer" (80 percent of prisoners are there because of a woman)
+- "Es un rasgo femenino estar siempre insatisfecha" (It is a feminine trait to always be dissatisfied)
+- "Más de la mitad de los embarazos terminan en aborto por conveniencia" (More than half of pregnancies end in abortion for convenience)
+
+**Evidence**: No research supports claims that women are by nature disruptive or that most men are imprisoned "because of a woman"; about one in five U.S. pregnancies ends in abortion, and surveys of patients find cost, timing, partner and responsibility to existing children as the main reasons, not vanity or career.
+
+**Examples**:
+
+- *Spanish*: "Las mujeres de hoy abortan porque les importa más su figura o su carrera que su bebé."
+- *Arabic*: "نساء اليوم يجهضن لأنهن يهتممن بقوامهن أو بمهنتهن أكثر من أطفالهن."
+
+#### **22.3 Minimizing Violence Against Women, Victim Blaming and Marital Consent**
+
+**Description**:
+
+Rhetoric that blurs consent, excuses sexual or domestic violence, or blames and discredits survivors.
+
+**Narratives**:
+- "Cuando la esposa dice no, a veces no significa no" (When the wife says no, sometimes it does not mean no)
+- "La violación es una forma de promiscuidad" (Rape is a form of promiscuity)
+- "Esa señora no tiene ninguna prueba" (said of a survivor whose case was decided in court) (That lady has no proof)
+
+**Evidence**: Rape is a nonconsensual act of sexual violence, not a form of promiscuity; marital rape is a crime in all 50 states; claims that discredit a named survivor should be checked against court records and reporting.
+
+**Examples**:
+
+- *Spanish*: "Hermanos, cuando su esposa le dice que no, no siempre es no. Ella quiere que usted insista."
+- *Arabic*: "يا إخوة، عندما تقول لكم زوجاتكم لا، فليس دائماً تعني لا. إنها تريدك أن تُلحّ."
+
+#### **22.4 Anti-Feminism as Satanic, Occult or Conspiracy**
+
+**Description**:
+
+Framing feminism or women's rights as satanic, occult, communist, a false religion or a mass-murder plot, or as a deception designed to strip men of authority.
+
+**Narratives**:
+- "El feminismo es una religión falsa, algo malvado" (Feminism is a false religion, something wicked)
+- "Toda feminista tiene que despreciar a los hombres, ser promiscua y practicar el ocultismo" (Every feminist must despise men, be promiscuous and practice the occult)
+- "El feminismo es la ideología más mortífera de la historia" (Feminism is the deadliest ideology in history)
+- "El empoderamiento de la mujer nos engañó" (Women's empowerment deceived us)
+
+**Evidence**: Feminism is a broad political and social movement (suffrage, property rights, equal pay, protection from violence) with no occult or satanic doctrine; comparisons equating it with genocides rest on counting abortions as killings by an ideology and are not a factual death toll.
+
+**Examples**:
+
+- *Spanish*: "El feminismo viene del comunismo y del ocultismo; quieren sacar a la mujer del hogar y meter a sus hijos en guarderías del gobierno."
+- *Arabic*: "النسوية جاءت من الشيوعية والسحر؛ يريدون إخراج المرأة من بيتها ووضع أطفالها في حضانات الحكومة."
+
+#### **22.5 Gendered Attacks on Women in Public Life**
+
+**Description**:
+
+Attacks on women politicians, officials, artists or public figures through their bodies, sexuality, motherhood or name rather than their record, or blame placed on women as a group for public harms.
+
+**Narratives**:
+- "Kamala, su nombre lo dice, es mala" (Kamala, her name says it, she is bad)
+- "Apoya el aborto porque nunca ha dado a luz" (She supports abortion because she has never given birth)
+- "Por culpa de una mujer quitaron la oración de las escuelas" (Because of a woman they removed prayer from schools)
+- "Las cantantes besan mujeres en sus conciertos y vuelven lesbianas a las niñas" (Singers kiss women at concerts and turn girls into lesbians)
+
+**Evidence**: Criticism of a woman's record or policies is legitimate; attacks on her body, sexuality or childbearing are not evidence about her record. Verify any factual claim about a named woman (e.g., what she did at a concert, what she said) before scoring it.
+
+**Examples**:
+
+- *Spanish*: "La típica mujer que vota por ella es una muchacha de veinte años que nunca ha tenido hijos; cuando tienen hijos, todas cambian."
+- *Arabic*: "المرأة النموذجية التي تصوت لها فتاة في العشرين لم تنجب قط؛ عندما ينجبن يتغيرن جميعاً."
+
+#### **22.6 Women's Health and Pregnancy Claims That Steer Women Away From Care**
+
+**Description**:
+
+Claims that shame women for reproductive decisions or steer them away from medical care. The false health claim belongs to Category 20 (see 20.1 Contraception, 20.7 Medication Abortion, 20.8 Menopause) and abortion-policy framing to Category 6; add Category 22 when the claim also demeans women.
+
+**Narratives**:
+- "La mamá que aborta tiene que estar endemoniada" (A mother who aborts must be possessed)
+- "La píldora mata a un ser humano; no le haga caso a su médico" (The pill kills a human being; don't listen to your doctor)
+- "Deje los antidepresivos, lo suyo es la menopausia" (Stop the antidepressants, yours is menopause)
+
+**Evidence**: Hormonal contraceptives work mainly by preventing ovulation; stopping antidepressants abruptly can cause withdrawal and should be done with a doctor; major reviews (e.g., the U.S. National Academies, 2018) find that abortion does not cause mental illness.
+
+**Examples**:
+
+- *Spanish*: "La mamá tiene que estar endemoniada para dejar que le saquen a su bebé en pedazos."
+- *Arabic*: "يجب أن تكون الأم ممسوسة لتسمح بأن يُخرجوا طفلها قطعاً."
+
+**Cross-Category Considerations**:
+
+Category 22 may overlap with:
+- Category 1 (Election Integrity): gendered attacks used to steer votes
+- Category 5 (LGBTQ+ Rights and Gender Issues): content about transgender and LGBTQ+ people belongs there
+- Category 6 (Abortion and Reproductive Rights): political framing of abortion; add Category 22 when it demeans women
+- Category 18 (Political Figures and Movements): attacks on named women politicians
+- Category 20 (Women's Health and Reproductive Care): false medical claims; add Category 22 when they demean women or steer them away from care
+
 ---
 
 ### **Additional Instructions**
@@ -2687,6 +3098,8 @@ Please proceed to analyze the provided audio content following these guidelines:
 8. Each non-zero score requires specific evidence.
 9. Complete the self-review process for every analysis.
 10. When in doubt, score conservatively (0-40 for uncertain claims).
+11. Score only the station speakers' own claims; a clip quoted in order to criticize or debunk it is not the station's claim (Section B).
+12. Label Category 22 and pulpit electioneering rhetoric even when nothing checkable is false (Section H.2).
 
 # Important Note
 

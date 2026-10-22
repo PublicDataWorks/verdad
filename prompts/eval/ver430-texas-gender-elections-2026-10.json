@@ -1,0 +1,52 @@
+{
+  "description": "VER-430 Texas research, Oct 2026 (VER-431). control: 22 confirmed findings the pipeline missed or underlabeled (Category 22 gender rhetoric, Category 1 pulpit electioneering, mail-ballot discouragement, noncitizen-voting claims); the candidate should keep or add Category 22 / Category 1 on them. Rhetoric-only clips are capped at 40 by the evidence gate, so read majority categories and label churn, not only the flag count at 70. reported: the 13 true post-cutoff events from post-cutoff-true-events-2026-09 (accurately reported real events must not become flagged under the expanded Category 1 or the stance rule). pending_reported lists known false positives whose snippet ids still need a read-only lookup before they can join reported.",
+  "reported": [
+    "0f4d87ac-03ad-45c9-be28-40f8ea6af8cc",
+    "64c426bf-e1ac-4c69-aa33-bbd5e2f4f117",
+    "69606e07-4af2-4827-8e88-b24a2625594f",
+    "b67ff726-1127-4a7a-96d1-5a9f552bfb2a",
+    "a750f33e-6fb8-4187-9019-1e2f45fd435c",
+    "2728a873-7ecb-4d4c-9f01-010896cb7ce6",
+    "a5b32626-546d-4f82-87e5-a0969ebe6f19",
+    "2950d78e-eda1-419f-a045-d8cb73a4728d",
+    "69fc4d65-e6f4-4f0a-a793-9a974aa0cfd8",
+    "6621b71f-d097-4c47-99c6-a1e4da16efe4",
+    "f280ca46-061a-4f6f-bc6b-8313153f7efd",
+    "1ca79347-60e6-4d39-8ac9-2e579037c24f",
+    "ef2070d3-db33-4273-9439-ae9598648e7c"
+  ],
+  "control": [
+    "48e1a4e9-c4c6-4fd0-8c83-e84e0182c6ac",
+    "9a13583a-5553-42d7-8f30-c333a6c3b587",
+    "e3d2a2c3-f17f-4ad9-9bff-8f92f51189de",
+    "0b0a16f2-d415-4ba0-9cde-246130977004",
+    "97444759-e88b-4344-a413-d7dea87f4721",
+    "c7ca710f-577b-4a22-a123-6e92429636d0",
+    "1f4787ad-32db-4309-9560-412db0002ce2",
+    "b8c848e6-733a-461c-a0dd-a7e092670d57",
+    "4ed79f70-695d-4cd7-bb69-084c8130b83f",
+    "1352971e-fb54-4f68-b650-f3fe6a9b0199",
+    "7de239b1-4720-4f92-9e4b-6a070341925d",
+    "f3e332e2-add2-4169-b2b1-7683c286d4bf",
+    "c0329829-ad4a-49d9-963d-bb4d6a2c3a1c",
+    "d7071b0f-0512-45eb-b308-1957efc7acbf",
+    "6950df38-4af7-4632-b38d-072bc09c3326",
+    "14a19ede-49b7-41e1-b822-50bca33aa7b6",
+    "5ef8db75-0a38-4c1f-ac3c-cd5503e52088",
+    "3d64613f-fa6c-4227-8fdd-b092a6505d32",
+    "096e4757-0cce-4f5b-91ab-02f44e76946e",
+    "e2324cf0-9fea-4a1d-9ca7-76b4896e4819",
+    "3eb26ba5-1b92-40ee-b53c-38bfbe0bdea9",
+    "c7a9a27f-521d-4106-82b3-bf5fb774af60"
+  ],
+  "pending_reported": [
+    {
+      "stage_1_llm_response": "c8de3534-2e8b-4e66-a428-2837c3793250",
+      "note": "Spanish-language public radio fact-check of a California ballot measure that quotes election-fraud claims in order to debunk them (speaker-stance negative)"
+    },
+    {
+      "stage_1_llm_response": "43c9a99f-b542-459d-9972-37f417d94cc3",
+      "note": "Accurate report of a real 2026 Kansas Republican governor primary result, previously labeled fabricated (real-event negative)"
+    }
+  ]
+}
