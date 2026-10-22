@@ -1653,7 +1653,7 @@ Teaching that binds women to obedience, silence or a subordinate role as a requi
 - "Respétalo y no hables mucho" (Respect him and don't talk much)
 - "El esposo debería poder vetar el aborto de su esposa" (The husband should be able to veto his wife's abortion)
 
-**Evidence**: Women in the U.S. hold equal legal rights in marriage, property and medical decisions; the Supreme Court struck down spousal-consent (1976) and spousal-notification (1992) requirements for abortion, citing the risk to women in abusive marriages. Teaching about marriage is doctrine, not a factual claim; flag it under Category 22 when it denies women's rights or demands obedience under threat.
+**Evidence**: Women in the U.S. hold equal legal rights in marriage, property and medical decisions; historically the Supreme Court struck down spousal-consent (Planned Parenthood v. Danforth, 1976) and spousal-notification (Planned Parenthood v. Casey, 1992) requirements for abortion, citing the risk to women in abusive marriages. Dobbs v. Jackson (2022) overruled Casey, so verify current state law before stating what is legal today; do not present the 1976 and 1992 rulings as the current nationwide rule. Teaching about marriage is doctrine, not a factual claim; flag it under Category 22 when it denies women's rights or demands obedience under threat.
 
 **Examples**:
 
