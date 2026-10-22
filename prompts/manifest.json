@@ -1,7 +1,7 @@
 {
   "stage_1/disinformation_detection": {
-    "version": "2.1.0",
-    "description": "Active version seeded from the database on 2026-09-14",
+    "version": "2.2.0",
+    "description": "Category 22 Gender-Based Harmful Rhetoric and Misogyny, expanded Category 1, speaker-stance rule, rhetoric exception to the false-claims checklist (VER-431)",
     "files": {
       "system_instruction": "prompts/stage_1/main/detection_system_instruction.md",
       "user_prompt": "prompts/stage_1/main/detection_user_prompt.md",
@@ -18,8 +18,8 @@
     }
   },
   "stage_1/initial_detection": {
-    "version": "2.0.0",
-    "description": "Active version seeded from the database on 2026-09-14",
+    "version": "2.1.0",
+    "description": "First pass flags Category 22 gender rhetoric and expanded Category 1 (voter confusion, mail-ballot, pulpit electioneering); speaker-stance rule (VER-431)",
     "files": {
       "system_instruction": "prompts/stage_1/preprocess/initial_detection_system_instruction.md",
       "user_prompt": "prompts/stage_1/preprocess/initial_detection_user_prompt.md",
@@ -36,8 +36,8 @@
     }
   },
   "stage_3": {
-    "version": "1.5.0",
-    "description": "claims[].event_date for date precedence and the code-enforced breaking-news cap; document the deterministic evidence gate (VER-369)",
+    "version": "1.6.0",
+    "description": "Category 22 and expanded Category 1 with subcategories; speaker-stance rule (B) and H.2 scoring guidance for rhetoric without a checkable claim (VER-431)",
     "files": {
       "system_instruction": "prompts/stage_3/system_instruction.md",
       "user_prompt": "prompts/stage_3/analysis_prompt.md",
