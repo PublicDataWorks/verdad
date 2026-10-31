@@ -302,6 +302,9 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 | `STAGE1_DETECTION_MODEL` | Stage 1 initial and main detection, also in `redo_main_detection` / `regenerate_timestamped_transcript` | `gemini-2.5-flash` | not stored |
 | `STAGE1_TRANSCRIPTION_METHOD` | Stage 1 timestamped transcription: `segments` or `transcribe` | `segments` | (see `transcriptor`) |
 | `STAGE1_TIMESTAMP_MODEL` | Stage 1 timestamped transcription | `gemini-2.5-flash` with `segments`, `gemini-3.5-transcribe` with `transcribe` | `stage_1_llm_responses.transcriptor` |
+| `STAGE1_TRANSCRIBE_FIRST` | Stage 1 flow shape: one Transcribe call per recording supplies every transcript (needs `STAGE1_TRANSCRIPTION_METHOD=transcribe`) | `false` | `transcriptor` on every row |
+| `STAGE1_DETECTION_PASSES` | Stage 1 detection: `two` (initial, then main when flagged) or `one` (main only, every recording; needs `STAGE1_TRANSCRIBE_FIRST=true`) | `two` | `initial_detection_result` is null with `one` |
+| `STAGE1_ANCHOR_TIMESTAMPS` | Stage 1 main detection: flagged snippet times from word timestamps where the row has them | `false` | per snippet in `detection_result` |
 | `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop) | `gemini-2.5-pro` | `snippets.analyzed_by` |
 | `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-2.5-flash` | `snippets.analyzed_by` |
 | `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
@@ -339,6 +342,34 @@ empty window being `[MM:SS] ` as before, so main detection, Stage 2 clipping and
 word timestamps past the end of the audio go into the last window. The timestamped-transcription prompt in
 `prompt_versions` is not used by this method. 429/5xx and dropped connections are retried after 30, 60 and 120 s,
 then the task's own Prefect retries apply; any other HTTP error fails the audio file with the response text.
+
+**Streamlined Stage 1** (`STAGE1_TRANSCRIBE_FIRST`, `STAGE1_DETECTION_PASSES`, `STAGE1_ANCHOR_TIMESTAMPS`; all off by
+default). With `STAGE1_TRANSCRIBE_FIRST=true`, `process_audio_file` calls Transcribe once at the start and derives
+every transcript from that one response (`TranscribeResult`): its plain text is `initial_transcription` (KB retrieval
+and initial detection read it), and its `[MM:SS]` view feeds main detection. Skipped: the whole-file upload to
+`STAGE1_TRANSCRIPTION_MODEL` (the untimed pass) and, for flagged recordings, the second audio call. Stored:
+`transcriptor` = the Transcribe model on every row (today it is null when nothing is flagged);
+`timestamped_transcription` = `{"timestamped_transcription": "[MM:SS] ...", "words": [{"text", "start", "end",
+"speaker"}]}` on rows that ran main detection (null otherwise, as today; about 3,400 words per 30 min file);
+`transcription_prompt_version_id` = null, since Transcribe takes no prompt. `STAGE1_DETECTION_PASSES=one` drops initial
+detection and runs main detection on every recording (`initial_detection_result` null), one text call per file
+instead of one or two; note that `redo_main_detection` still skips rows whose `initial_detection_result` has no
+flags, so it does not redo single-pass rows. `STAGE1_ANCHOR_TIMESTAMPS=true` matches each flagged snippet's
+`transcription` against the stored words (`stage_1/anchor.py`; normalized tokens, `difflib`, accepted at a match
+score of 0.6 or more and within 60 s of the model's window) and writes `start_time`/`end_time` as whole-second MM:SS
+(start rounded down, end up), plus `start_s`, `end_s`, `anchor_score`, `anchor_status` and the model's originals in
+`llm_start_time`/`llm_end_time`; a rejected match keeps the model's times. Stage 2 is unchanged except that it now
+clamps an end past the audio (word ends can land at 1800 s on a file trimmed to 1799 s) instead of failing the
+response, so the 90 s / 60 s padding and the "position inside the clip" meaning of `snippets.start_time` hold. The
+flow checks the combination at start: `STAGE1_TRANSCRIBE_FIRST=true` without the `transcribe` method, or
+`STAGE1_DETECTION_PASSES=one` without transcribe-first, fails the run with a `ValueError`. Transcribe is 100
+requests/day on Tier 1, against about 2,400 recordings/day: do not turn transcribe-first on in production before the
+quota is raised. Fully streamlined:
+
+```bash
+fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_METHOD=transcribe STAGE1_TRANSCRIBE_FIRST=true \
+    STAGE1_DETECTION_PASSES=one STAGE1_ANCHOR_TIMESTAMPS=true
+```
 
 ## Triggering one stage run against production
 
