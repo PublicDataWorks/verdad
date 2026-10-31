@@ -56,6 +56,30 @@ def convert_formatted_time_str_to_seconds(time_str):
     return int(round(total_seconds))
 
 
+def clamp_to_audio(start_time, end_time, duration):
+    """``(start, end)`` in whole seconds clamped to ``[0, duration]``.
+
+    Word timestamps (and the model) can put an end a little past the audio, e.g. 1800 s on a recording that decodes
+    to 1799.9 s or was trimmed to 1799 s for Transcribe; that is clamped with a warning instead of failing the whole
+    response. A snippet that ends before it starts, or starts past the end of the audio, still raises.
+    """
+    if start_time > end_time:
+        raise ValueError("start_time must be less than or equal to end_time.")
+
+    clamped_start = max(0, start_time)
+    clamped_end = min(duration, end_time)
+    if clamped_start > clamped_end:
+        raise ValueError(
+            f"start_time ({start_time} s) must be within the audio duration of {duration} seconds."
+        )
+    if (clamped_start, clamped_end) != (start_time, end_time):
+        print(
+            f"Warning: snippet {start_time}-{end_time} s is outside the audio (0-{duration} s); "
+            f"clamped to {clamped_start}-{clamped_end} s"
+        )
+    return clamped_start, clamped_end
+
+
 @optional_task(log_prints=True)
 def extract_snippet_clip(
     audio,
@@ -70,12 +94,9 @@ def extract_snippet_clip(
     start_time = convert_formatted_time_str_to_seconds(formatted_start_time)
     end_time = convert_formatted_time_str_to_seconds(formatted_end_time)
 
-    # Ensure start_time and end_time are within the audio duration
+    # Clamp start_time and end_time to the audio duration
     duration = int(len(audio) / 1000)  # Duration in seconds
-    if start_time < 0 or end_time > duration:
-        raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
-    if start_time > end_time:
-        raise ValueError("start_time must be less than or equal to end_time.")
+    start_time, end_time = clamp_to_audio(start_time, end_time, duration)
 
     # Include surrounding context to the snippet
     new_start_time = max(0, start_time - context_before_seconds)
@@ -160,12 +181,8 @@ def ensure_correct_timestamps(audio, snippets):
         start_time = convert_formatted_time_str_to_seconds(start_time)
         end_time = convert_formatted_time_str_to_seconds(end_time)
 
-        if start_time > end_time:
-            raise ValueError("start_time must be less than or equal to end_time.")
-
-        # Ensure start_time and end_time are within the audio duration
-        if start_time < 0 or end_time > duration:
-            raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
+        # Raises on start > end or a start past the end of the audio; an end past it is clamped when clipping
+        clamp_to_audio(start_time, end_time, duration)
 
 
 @optional_task(log_prints=True)

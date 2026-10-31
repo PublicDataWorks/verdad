@@ -1,6 +1,7 @@
 import os
 from unittest.mock import Mock, call, patch
 import pytest
+from processing_pipeline.stage_2.tasks import clamp_to_audio
 from processing_pipeline.stage_2 import (
     fetch_a_new_stage_1_llm_response_from_supabase,
     fetch_stage_1_llm_response_from_supabase,
@@ -362,3 +363,54 @@ class TestStage2:
         assert mock_s3_client.delete_object.call_count == 2
         assert mock_supabase_client.delete_snippet.call_count == 2
         mock_supabase_client.reset_stage_1_llm_response_status.assert_called_once_with(1)
+
+
+class TestClampToAudio:
+    """Word-anchored ends can land just past the audio (1800 s on a 1799 s file); clamp instead of failing."""
+
+    def test_end_past_the_audio_is_clamped_with_a_warning(self, capsys):
+        assert clamp_to_audio(1790, 1800, 1799) == (1790, 1799)
+        assert "clamped to 1790-1799" in capsys.readouterr().out
+
+    def test_negative_start_is_clamped(self):
+        assert clamp_to_audio(-3, 10, 30) == (0, 10)
+
+    def test_inside_the_audio_is_unchanged(self, capsys):
+        assert clamp_to_audio(0, 30, 30) == (0, 30)
+        assert capsys.readouterr().out == ""
+
+    def test_start_after_end_still_raises(self):
+        with pytest.raises(ValueError, match="less than or equal"):
+            clamp_to_audio(20, 10, 30)
+
+    def test_start_past_the_audio_still_raises(self):
+        with pytest.raises(ValueError, match="within the audio duration of 30 seconds"):
+            clamp_to_audio(40, 50, 30)
+
+    def test_ensure_correct_timestamps_accepts_an_end_past_the_audio(self):
+        audio = AudioSegment.silent(duration=30000)
+        ensure_correct_timestamps(audio, [{"start_time": "00:20", "end_time": "00:31"}])
+
+    def test_ensure_correct_timestamps_still_rejects_start_after_end(self):
+        audio = AudioSegment.silent(duration=30000)
+        with pytest.raises(ValueError):
+            ensure_correct_timestamps(audio, [{"start_time": "00:20", "end_time": "00:10"}])
+
+    def test_extract_snippet_clip_clamps_the_end(self, test_data_dir):
+        audio = AudioSegment.silent(duration=30000)
+        output_file = os.path.join(test_data_dir, "clamped.mp3")
+
+        duration, start, end, recorded_at = extract_snippet_clip(
+            audio=audio,
+            output_file=output_file,
+            formatted_start_time="00:20",
+            formatted_end_time="00:45",
+            context_before_seconds=5,
+            context_after_seconds=5,
+            formatted_recorded_at="2024-01-01T00:00:00Z",
+        )
+
+        # clip 15-30 s: the snippet starts 5 s in and runs to the end of the audio
+        assert (duration, start, end) == ("00:15", "00:05", "00:15")
+        assert recorded_at == "2024-01-01T00:00:15+00:00"
+        assert os.path.exists(output_file)
