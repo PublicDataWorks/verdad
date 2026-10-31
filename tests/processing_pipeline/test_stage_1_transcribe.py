@@ -9,6 +9,8 @@ import requests
 from pydub import AudioSegment
 
 from processing_pipeline.constants import GeminiModel
+from processing_pipeline.model_config import TranscriptionMethod
+from processing_pipeline.stage_1 import transcribe_audio_file_with_timestamp_with_gemini
 from processing_pipeline.stage_1.executors import GeminiTimestampTranscriptionGenerator
 from processing_pipeline.stage_1.transcribe_executor import (
     INTERACTIONS_URL,
@@ -321,3 +323,39 @@ class TestRun:
         post.assert_not_called()
         gemini_client.files.delete.assert_called_once_with(name="files/abc")
 
+
+class TestTaskDispatch:
+    PROMPT_VERSION = {"id": "pv-1", "user_prompt": "p", "system_instruction": "s", "output_schema": {}}
+
+    def test_transcribe_method_from_env(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "transcribe")
+        client = Mock()
+        with patch(
+            "processing_pipeline.stage_1.tasks.GeminiTranscribeTimestampGenerator.run", return_value="[00:00] hola\n"
+        ) as run, patch("processing_pipeline.stage_1.tasks.GeminiTimestampTranscriptionGenerator.run") as segments:
+            result = transcribe_audio_file_with_timestamp_with_gemini(
+                client, "a.mp3", self.PROMPT_VERSION, GeminiModel.GEMINI_3_5_TRANSCRIBE
+            )
+
+        assert result == {"timestamped_transcription": "[00:00] hola\n"}
+        run.assert_called_once_with(
+            gemini_client=client, audio_file="a.mp3", model_name=GeminiModel.GEMINI_3_5_TRANSCRIBE, segment_length=20
+        )
+        segments.assert_not_called()
+
+    def test_explicit_method_wins_over_env(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "transcribe")
+        with patch("processing_pipeline.stage_1.tasks.GeminiTranscribeTimestampGenerator.run") as run, patch(
+            "processing_pipeline.stage_1.tasks.GeminiTimestampTranscriptionGenerator.run", return_value="[00:00] x\n"
+        ) as segments:
+            transcribe_audio_file_with_timestamp_with_gemini(
+                Mock(), "a.mp3", self.PROMPT_VERSION, GeminiModel.GEMINI_2_5_FLASH, method=TranscriptionMethod.SEGMENTS
+            )
+        run.assert_not_called()
+        assert segments.call_args.kwargs["prompt_version"] == self.PROMPT_VERSION
+
+    def test_transcribe_method_needs_a_client(self):
+        with pytest.raises(ValueError, match="Gemini client is not provided"):
+            transcribe_audio_file_with_timestamp_with_gemini(
+                None, "a.mp3", self.PROMPT_VERSION, "gemini-3.5-transcribe", method=TranscriptionMethod.TRANSCRIBE
+            )

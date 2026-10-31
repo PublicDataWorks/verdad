@@ -224,6 +224,17 @@ class TestStage4:
         )
         mock_supabase_client.set_snippet_status.assert_not_called()
 
+    def test_process_snippet_reviewer_model_from_env(self, mock_supabase_client, sample_snippet, review_result, monkeypatch):
+        monkeypatch.setenv("STAGE4_REVIEWER_MODEL", "gemini-3.8-flash")
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(review_result, json.dumps({"kb_research": "kb findings"}))),
+        ) as mock_run, patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet)
+
+        assert mock_run.await_args.kwargs["reviewer_model"] is GeminiModel.GEMINI_3_8_FLASH
+        assert mock_supabase_client.submit_snippet_review.call_args.kwargs["reviewed_by"] == "gemini-3.8-flash"
+
     def test_process_snippet_reuses_previous_analysis(self, mock_supabase_client, sample_snippet, review_result):
         """A re-review is always based on the original stage-3 analysis, not the last review"""
         sample_snippet["previous_analysis"] = {**sample_snippet, "transcription": "Original transcription"}
@@ -677,6 +688,22 @@ class TestBuildReviewPipeline:
             "web_researcher": "gemini-2.5-flash",
             "analysis_reviewer": "gemini-2.5-pro",
             "kb_updater": "gemini-2.5-flash",
+        }
+
+    def test_agent_models_come_from_env(self, kb_updater_enabled, monkeypatch):
+        from processing_pipeline.stage_4.agents import build_review_pipeline
+
+        monkeypatch.setenv("STAGE4_RESEARCHER_MODEL", "gemini-3.5-flash")
+        monkeypatch.setenv("STAGE4_KB_WRITER_MODEL", "gemma-4-31b-it")
+
+        pipeline, _ = build_review_pipeline(PROMPT_VERSIONS, "gemini-3.8-flash")
+        research, reviewer, kb_updater = pipeline.sub_agents
+
+        assert {a.name: a.model.model for a in [*research.sub_agents, reviewer, kb_updater]} == {
+            "kb_researcher": "gemini-3.5-flash",
+            "web_researcher": "gemini-3.5-flash",
+            "analysis_reviewer": "gemini-3.8-flash",
+            "kb_updater": "gemma-4-31b-it",
         }
 
     def test_only_the_web_researcher_forces_its_first_search_ver_406(self, kb_updater_enabled):

@@ -4,6 +4,7 @@ from .executors import (
     Stage1PreprocessDetectionExecutor,
     Stage1PreprocessTranscriptionExecutor,
 )
+from .transcribe_executor import GeminiTranscribeTimestampGenerator
 from .flows import (
     initial_disinformation_detection,
     redo_main_detection,
@@ -35,6 +36,7 @@ from .tasks import (
 
 __all__ = [
     "GeminiTimestampTranscriptionGenerator",
+    "GeminiTranscribeTimestampGenerator",
     "Stage1Executor",
     "Stage1PreprocessDetectionExecutor",
     "Stage1PreprocessTranscriptionExecutor",

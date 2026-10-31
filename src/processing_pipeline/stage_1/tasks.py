@@ -6,7 +6,15 @@ import uuid
 from google import genai
 from openai import OpenAI
 
-from processing_pipeline.constants import GeminiModel, ProcessingStatus
+from processing_pipeline.constants import ProcessingStatus
+from processing_pipeline.model_config import (
+    ModelName,
+    TranscriptionMethod,
+    stage1_detection_model,
+    stage1_timestamp_model,
+    stage1_transcription_method,
+    stage1_transcription_model,
+)
 from processing_pipeline.stage_1.executors import (
     GeminiTimestampTranscriptionGenerator,
     Stage1Executor,
@@ -14,6 +22,7 @@ from processing_pipeline.stage_1.executors import (
     Stage1PreprocessTranscriptionExecutor,
 )
 from processing_pipeline.stage_1.kb_context import retrieve_kb_context
+from processing_pipeline.stage_1.transcribe_executor import GeminiTranscribeTimestampGenerator
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.temporal_context import build_temporal_context
 from utils import optional_task
@@ -134,14 +143,15 @@ def initial_transcription_with_gemini(
     audio_file: str,
     prompt_version: dict,
 ) -> str:
-    print(f"Initial transcription for audio file {audio_file} using Gemini")
+    model_name = stage1_transcription_model()
+    print(f"Initial transcription for audio file {audio_file} using {model_name}")
     if not gemini_client:
         raise ValueError("Gemini client is not provided")
 
     response = Stage1PreprocessTranscriptionExecutor.run(
         gemini_client=gemini_client,
         audio_file=audio_file,
-        model_name=GeminiModel.GEMINI_2_5_FLASH,
+        model_name=model_name,
         prompt_version=prompt_version,
     )
     return response["transcription"]
@@ -165,13 +175,14 @@ def initial_disinformation_detection_with_gemini(
     prompt_version: dict,
     kb_context: str | None,
 ):
-    print("Processing initial transcription with Gemini for disinformation detection")
+    model_name = stage1_detection_model()
+    print(f"Processing initial transcription with {model_name} for disinformation detection")
     if not gemini_client:
         raise ValueError("Gemini client is not provided")
 
     response = Stage1PreprocessDetectionExecutor.run(
         gemini_client=gemini_client,
-        model_name=GeminiModel.GEMINI_2_5_FLASH,
+        model_name=model_name,
         transcription=initial_transcription,
         metadata=metadata,
         prompt_version=prompt_version,
@@ -185,20 +196,34 @@ def transcribe_audio_file_with_timestamp_with_gemini(
     gemini_client: genai.Client | None,
     audio_file: str,
     prompt_version: dict,
-    model_name: GeminiModel,
+    model_name: ModelName,
+    method: TranscriptionMethod | None = None,
 ):
-    print(f"Transcribing the audio file {audio_file} using {model_name}")
+    """``[MM:SS] text`` lines at 20 s windows, by STAGE1_TRANSCRIPTION_METHOD unless ``method`` is given.
+
+    ``prompt_version`` drives the segments method only; the transcribe method takes no prompt.
+    """
+    method = method or stage1_transcription_method()
+    print(f"Transcribing the audio file {audio_file} using {model_name} ({method} method)")
     if not gemini_client:
         raise ValueError("Gemini client is not provided")
 
-    timestamped_transcription = GeminiTimestampTranscriptionGenerator.run(
-        gemini_client=gemini_client,
-        audio_file=audio_file,
-        model_name=model_name,
-        prompt_version=prompt_version,
-        segment_length=20,
-        batch_size=30,
-    )
+    if method == TranscriptionMethod.TRANSCRIBE:
+        timestamped_transcription = GeminiTranscribeTimestampGenerator.run(
+            gemini_client=gemini_client,
+            audio_file=audio_file,
+            model_name=model_name,
+            segment_length=20,
+        )
+    else:
+        timestamped_transcription = GeminiTimestampTranscriptionGenerator.run(
+            gemini_client=gemini_client,
+            audio_file=audio_file,
+            model_name=model_name,
+            prompt_version=prompt_version,
+            segment_length=20,
+            batch_size=30,
+        )
     return {"timestamped_transcription": timestamped_transcription}
 
 
@@ -208,7 +233,7 @@ def disinformation_detection_with_gemini(
     timestamped_transcription: str,
     metadata: dict,
     prompt_version: dict,
-    model_name: GeminiModel,
+    model_name: ModelName,
     kb_context: str | None = None,
 ):
     print(f"Processing the timestamped transcription with {model_name}")
@@ -316,13 +341,15 @@ def process_audio_file(
                 transcription_prompt_version_id=None,
             )
         else:
-            # Timestamped transcription
-            transcriptor = GeminiModel.GEMINI_2_5_FLASH
+            # Timestamped transcription; transcriptor (the model id) is stored with the response
+            method = stage1_transcription_method()
+            transcriptor = stage1_timestamp_model(method)
             timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(
                 gemini_client=gemini_client,
                 audio_file=local_file,
                 prompt_version=transcription_prompt_version,
                 model_name=transcriptor,
+                method=method,
             )
 
             # Main detection
@@ -331,7 +358,7 @@ def process_audio_file(
                 timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                 metadata=metadata,
                 prompt_version=detection_prompt_version,
-                model_name=GeminiModel.GEMINI_2_5_FLASH,
+                model_name=stage1_detection_model(),
                 kb_context=kb_context,
             )
             print(f"Main detection result:\n{json.dumps(detection_result, indent=2, ensure_ascii=False)}\n")

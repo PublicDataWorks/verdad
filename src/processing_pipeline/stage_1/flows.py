@@ -10,7 +10,8 @@ from prefect.flows import Flow
 from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 
-from processing_pipeline.constants import GeminiModel, ProcessingStatus, PromptStage
+from processing_pipeline.constants import ProcessingStatus, PromptStage
+from processing_pipeline.model_config import stage1_detection_model, stage1_timestamp_model, stage1_transcription_method
 from processing_pipeline.stage_1.constants import Stage1SubStage
 from processing_pipeline.stage_1.tasks import (
     delete_stage_1_llm_responses,
@@ -186,13 +187,12 @@ def redo_main_detection(stage_1_llm_response_ids):
                 initial_transcription = stage_1_llm_response.get("initial_transcription", "")
                 kb_context = fetch_kb_context(supabase_client, openai_client, initial_transcription)
 
-                print("Processing the timestamped transcription with Gemini Flash Latest")
                 detection_result = disinformation_detection_with_gemini(
                     gemini_client=gemini_client,
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                     prompt_version=detection_prompt_version,
-                    model_name=GeminiModel.GEMINI_2_5_FLASH,
+                    model_name=stage1_detection_model(),
                     kb_context=kb_context,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
@@ -248,12 +248,14 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                 print("No flagged snippets found during the initial detection phase.")
             else:
                 # Timestamped transcription
-                transcriptor = GeminiModel.GEMINI_2_5_FLASH
+                method = stage1_transcription_method()
+                transcriptor = stage1_timestamp_model(method)
                 timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(
                     gemini_client=gemini_client,
                     audio_file=local_file,
                     prompt_version=transcription_prompt_version,
                     model_name=transcriptor,
+                    method=method,
                 )
                 update_stage_1_llm_response_timestamped_transcription(
                     supabase_client, id, timestamped_transcription, transcriptor
@@ -269,7 +271,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                     prompt_version=detection_prompt_version,
-                    model_name=GeminiModel.GEMINI_2_5_FLASH,
+                    model_name=stage1_detection_model(),
                     kb_context=kb_context,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")

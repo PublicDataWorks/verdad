@@ -5,10 +5,11 @@ import uuid
 from unittest.mock import Mock, patch
 
 import pytest
-from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory
+from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory, ThinkingLevel
 from pydub import AudioSegment
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
+from processing_pipeline.model_config import TranscriptionMethod
 from processing_pipeline.stage_1 import (
     GeminiTimestampTranscriptionGenerator,
     Stage1Executor,
@@ -19,6 +20,8 @@ from processing_pipeline.stage_1 import (
     fetch_stage_1_llm_response_by_id,
     get_audio_file_metadata,
     initial_disinformation_detection,
+    initial_disinformation_detection_with_gemini,
+    initial_transcription_with_gemini,
     insert_stage_1_llm_response,
     process_audio_file,
     redo_main_detection,
@@ -477,6 +480,7 @@ class TestProcessAudioFile:
             audio_file="test.mp3",
             prompt_version={**PROMPT_VERSION, "id": "pv-tt"},
             model_name=GeminiModel.GEMINI_2_5_FLASH,
+            method=TranscriptionMethod.SEGMENTS,
         )
         mock_tasks["detect"].assert_called_once_with(
             gemini_client=gemini_client,
@@ -498,6 +502,38 @@ class TestProcessAudioFile:
             transcription_prompt_version_id="pv-tt",
         )
         mock_supabase_client.set_audio_file_status.assert_called_once_with(1, ProcessingStatus.PROCESSED, None)
+
+    def test_transcribe_method_records_the_transcribe_model(self, mock_supabase_client, mock_tasks, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "transcribe")
+        monkeypatch.setenv("STAGE1_DETECTION_MODEL", "gemini-3.5-flash-lite")
+
+        self._run(mock_supabase_client)
+
+        transcribe_kwargs = mock_tasks["transcribe"].call_args.kwargs
+        assert transcribe_kwargs["model_name"] is GeminiModel.GEMINI_3_5_TRANSCRIBE
+        assert transcribe_kwargs["method"] is TranscriptionMethod.TRANSCRIBE
+        assert mock_tasks["detect"].call_args.kwargs["model_name"] is GeminiModel.GEMINI_3_5_FLASH_LITE
+        stored = mock_supabase_client.insert_stage_1_llm_response.call_args.kwargs
+        assert stored["transcriptor"] == "gemini-3.5-transcribe"
+        assert stored["timestamped_transcription"] == {"timestamped_transcription": "[00:00] text"}
+
+    def test_unknown_timestamp_model_is_recorded_verbatim(self, mock_supabase_client, mock_tasks, monkeypatch):
+        monkeypatch.setenv("STAGE1_TIMESTAMP_MODEL", "gemini-4.0-flash-exp")
+
+        self._run(mock_supabase_client)
+
+        assert mock_tasks["transcribe"].call_args.kwargs["method"] is TranscriptionMethod.SEGMENTS
+        assert mock_supabase_client.insert_stage_1_llm_response.call_args.kwargs["transcriptor"] == "gemini-4.0-flash-exp"
+
+    def test_invalid_method_marks_the_audio_file_as_error(self, mock_supabase_client, mock_tasks, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "whisper")
+
+        self._run(mock_supabase_client)
+
+        mock_tasks["transcribe"].assert_not_called()
+        status_args = mock_supabase_client.set_audio_file_status.call_args.args
+        assert status_args[1] == ProcessingStatus.ERROR
+        assert "STAGE1_TRANSCRIPTION_METHOD" in status_args[2]
 
     def test_no_initial_flags_skips_timestamped_transcription(self, mock_supabase_client, mock_tasks):
         mock_tasks["initial_detection"].return_value = {"flagged_snippets": []}
@@ -704,6 +740,7 @@ class TestMaintenanceFlows:
             audio_file="test.mp3",
             prompt_version=PROMPT_VERSION,
             model_name=GeminiModel.GEMINI_2_5_FLASH,
+            method=TranscriptionMethod.SEGMENTS,
         )
         mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_called_once_with(
             1, {"timestamped_transcription": "[00:00] regenerated"}, GeminiModel.GEMINI_2_5_FLASH
@@ -739,3 +776,128 @@ class TestMaintenanceFlows:
 
         mock_supabase_client.set_stage_1_llm_response_status.assert_not_called()
         mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_not_called()
+
+
+class TestModelSelection:
+    """Each Stage 1 call takes its model from model_config and sends the thinking config that model family accepts."""
+
+    def _client(self, parsed):
+        client = Mock()
+        client.models.generate_content.return_value.parsed = parsed
+        client.files.upload.return_value.state.name = "ACTIVE"
+        return client
+
+    def test_initial_transcription_default(self):
+        client = self._client({"transcription": "hola"})
+
+        assert initial_transcription_with_gemini(client, "a.mp3", PROMPT_VERSION) == "hola"
+
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["model"] is GeminiModel.GEMINI_2_5_FLASH
+        assert kwargs["config"].thinking_config.thinking_budget == 1024
+        client.files.delete.assert_called_once()
+
+    def test_initial_transcription_on_gemini_3(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_MODEL", "gemini-3.5-flash-lite")
+        client = self._client({"transcription": "hola"})
+
+        initial_transcription_with_gemini(client, "a.mp3", PROMPT_VERSION)
+
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["model"] is GeminiModel.GEMINI_3_5_FLASH_LITE
+        assert kwargs["config"].thinking_config.thinking_level == ThinkingLevel.LOW
+        assert kwargs["config"].thinking_config.thinking_budget is None
+
+    @pytest.mark.parametrize(
+        "model, budget, level, has_config",
+        [
+            ("gemini-2.5-flash", 2048, None, True),
+            ("gemini-3.8-flash", None, ThinkingLevel.MEDIUM, True),
+            ("gemma-4-31b-it", None, None, False),
+        ],
+    )
+    def test_initial_detection(self, monkeypatch, model, budget, level, has_config):
+        monkeypatch.setenv("STAGE1_DETECTION_MODEL", model)
+        client = self._client({"flagged_snippets": []})
+
+        initial_disinformation_detection_with_gemini(client, "T", {}, PROMPT_VERSION, None)
+
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["model"] == model
+        config = kwargs["config"].thinking_config
+        if has_config:
+            assert config.thinking_budget == budget
+            assert config.thinking_level == level
+        else:
+            assert config is None
+        assert kwargs["config"].system_instruction == "system"
+        assert kwargs["config"].response_mime_type == "application/json"
+
+    @pytest.mark.parametrize(
+        "model, level",
+        [(GeminiModel.GEMINI_3_5_FLASH_LITE, ThinkingLevel.MEDIUM), (GeminiModel.GEMMA_4_26B_A4B_IT, None)],
+    )
+    def test_main_detection_thinking(self, model, level):
+        client = self._client({"flagged_snippets": []})
+
+        Stage1Executor.run(client, model, "T", {}, PROMPT_VERSION)
+
+        config = client.models.generate_content.call_args.kwargs["config"].thinking_config
+        if level is None:
+            assert config is None
+        else:
+            assert config.thinking_level == level
+            assert config.thinking_budget is None
+
+    def test_segments_batch_on_gemini_3_uses_minimal_thinking(self, sample_audio_file):
+        client = Mock()
+        client.models.generate_content.return_value.parsed = {"segments": [{"segment_number": 1, "transcript": "x"}]}
+
+        GeminiTimestampTranscriptionGenerator.transcribe_batch(
+            client, [sample_audio_file], GeminiModel.GEMINI_3_5_FLASH, PROMPT_VERSION
+        )
+
+        config = client.models.generate_content.call_args.kwargs["config"].thinking_config
+        assert config.thinking_level == ThinkingLevel.MINIMAL
+        assert config.thinking_budget is None
+
+    def test_redo_main_detection_uses_the_detection_model(
+        self, mock_environment, mock_supabase_client, mock_gemini_client, mock_openai_client, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE1_DETECTION_MODEL", "gemini-3.6-flash")
+        mock_supabase_client.get_stage_1_llm_response_by_id.return_value = {
+            "id": 1,
+            "initial_transcription": "t",
+            "timestamped_transcription": {"timestamped_transcription": "[00:00] t"},
+            "initial_detection_result": {"flagged_snippets": [{"transcription": "x"}]},
+            "audio_file": {**AUDIO_FILE, "file_path": "test.mp3"},
+        }
+
+        with patch("processing_pipeline.stage_1.flows.fetch_kb_context", return_value=None):
+            redo_main_detection([1])
+
+        assert mock_gemini_client.models.generate_content.call_args.kwargs["model"] is GeminiModel.GEMINI_3_6_FLASH
+
+    def test_regenerate_with_the_transcribe_method(
+        self, mock_environment, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "transcribe")
+        mock_supabase_client.get_stage_1_llm_response_by_id.return_value = {
+            "id": 1,
+            "initial_transcription": "t",
+            "timestamped_transcription": None,
+            "initial_detection_result": {"flagged_snippets": [{"transcription": "x"}]},
+            "audio_file": {**AUDIO_FILE, "file_path": "test.mp3"},
+        }
+
+        with patch("os.remove"), patch(
+            "processing_pipeline.stage_1.flows.transcribe_audio_file_with_timestamp_with_gemini",
+            return_value={"timestamped_transcription": "[00:00] t"},
+        ) as mock_transcribe, patch("processing_pipeline.stage_1.flows.fetch_kb_context", return_value=None):
+            regenerate_timestamped_transcript([1])
+
+        assert mock_transcribe.call_args.kwargs["method"] is TranscriptionMethod.TRANSCRIBE
+        assert mock_transcribe.call_args.kwargs["model_name"] is GeminiModel.GEMINI_3_5_TRANSCRIBE
+        mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_called_once_with(
+            1, {"timestamped_transcription": "[00:00] t"}, GeminiModel.GEMINI_3_5_TRANSCRIBE
+        )

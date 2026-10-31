@@ -9,7 +9,7 @@ from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 
-from processing_pipeline.constants import GeminiModel
+from processing_pipeline.model_config import ModelName
 from processing_pipeline.stage_4.agents import build_review_pipeline
 from processing_pipeline.stage_4.constants import OBSERVED_URLS_STATE_KEY
 from processing_pipeline.stage_4.tool_record import ToolRecordPlugin
@@ -47,7 +47,7 @@ class Stage4Executor:
         recorded_at: str,
         current_time: str,
         prompt_versions: dict[str, dict],
-        reviewer_model: GeminiModel,
+        reviewer_model: ModelName,
     ):
         """Run the agentic review pipeline.
 
@@ -60,7 +60,7 @@ class Stage4Executor:
             prompt_versions: Dict of prompt versions for each agent.
             recorded_at: ISO 8601 recording timestamp.
             current_time: ISO 8601 current UTC time.
-            reviewer_model: GeminiModel enum for the analysis reviewer.
+            reviewer_model: Model id for the analysis reviewer (STAGE4_REVIEWER_MODEL).
 
         Returns:
             tuple: (result_dict, grounding_metadata_str)

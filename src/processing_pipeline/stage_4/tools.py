@@ -21,9 +21,9 @@ from processing_pipeline.stage_1.constants import KB_STAGE1_MIN_CONFIDENCE, STAG
 from processing_pipeline.stage_1.kb_context import is_pipeline_authored, select_trustworthy_entries
 from processing_pipeline.stage_4.constants import (
     KB_CURRENT_FACT_MAX_SOURCE_AGE_DAYS,
-    KB_WRITER_MODEL,
     OBSERVED_URLS_STATE_KEY,
 )
+from processing_pipeline.model_config import stage4_kb_writer_model
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -293,7 +293,7 @@ def upsert_knowledge_entry(
             "disinformation_categories": categories,
             "keywords": keywords,
             "is_time_sensitive": is_time_sensitive,
-            "created_by_model": KB_WRITER_MODEL.value,
+            "created_by_model": str(stage4_kb_writer_model()),
         }
         if related_claim:
             new_entry_data["related_claim"] = related_claim
@@ -318,7 +318,7 @@ def upsert_knowledge_entry(
             valid_from=valid_from,
             valid_until=valid_until,
             created_by_snippet=snippet_id,
-            created_by_model=KB_WRITER_MODEL.value,
+            created_by_model=str(stage4_kb_writer_model()),
         )
         action = "created"
 

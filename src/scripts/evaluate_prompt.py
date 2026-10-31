@@ -45,7 +45,7 @@ from dotenv import load_dotenv
 os.environ["ENABLE_PREFECT_DECORATOR"] = "false"
 
 from processing_pipeline.constants import PromptStage  # noqa: E402
-from processing_pipeline.stage_3.constants import MAIN_MODEL  # noqa: E402
+from processing_pipeline.model_config import stage3_main_model  # noqa: E402
 from processing_pipeline.stage_3.executors import Stage3Executor  # noqa: E402
 from processing_pipeline.stage_3.tasks import fetch_a_specific_snippet_from_supabase, get_metadata  # noqa: E402
 from processing_pipeline.supabase_utils import SupabaseClient  # noqa: E402
@@ -803,7 +803,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--runs", type=int, default=DEFAULT_RUNS, help=f"Runs per prompt per snippet (default {DEFAULT_RUNS})"
     )
-    run.add_argument("--model", default=str(MAIN_MODEL), help=f"Gemini model for both prompts (default {MAIN_MODEL})")
+    main_model = stage3_main_model()
+    run.add_argument(
+        "--model",
+        default=str(main_model),
+        help=f"Gemini model for both prompts (default {main_model}: STAGE3_MAIN_MODEL or the production default)",
+    )
     run.add_argument(
         "--threshold", type=int, default=DEFAULT_THRESHOLD, help=f"Flag threshold (default {DEFAULT_THRESHOLD})"
     )
