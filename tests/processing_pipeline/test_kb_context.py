@@ -55,6 +55,11 @@ class TestIsTrustworthyEntry:
     def test_pipeline_authored_with_date_accepted(self):
         assert is_trustworthy_entry(_entry(created_by_model="gemini-x"))
 
+    @pytest.mark.parametrize("model", ["gemma-4-31b-it", "models/gemini-3.5-flash"])
+    def test_gemma_and_prefixed_ids_are_pipeline_authored(self, model):
+        undated = {**GOOD_SOURCE, "publication_date": None}
+        assert not is_trustworthy_entry(_entry(sources=[undated], created_by_model=model))
+
     def test_human_authored_without_date_accepted(self):
         undated = {**GOOD_SOURCE, "publication_date": None}
         assert is_trustworthy_entry(_entry(sources=[undated], created_by_model=None))
