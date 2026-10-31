@@ -27,3 +27,14 @@ def test_data_dir():
     for file in os.listdir(dir_path):
         os.remove(os.path.join(dir_path, file))
     os.rmdir(dir_path)
+
+
+@pytest.fixture(autouse=True)
+def production_default_models(monkeypatch):
+    """Model choices come from env vars (model_config.py); clear them so a developer's shell or .env cannot change
+    which model a test sees. A test that exercises an override sets the variable itself."""
+    from processing_pipeline import model_config
+
+    for setting in model_config.ALL_SETTINGS:
+        monkeypatch.delenv(setting.env_var, raising=False)
+    monkeypatch.delenv(model_config.STAGE1_TRANSCRIPTION_METHOD_ENV, raising=False)

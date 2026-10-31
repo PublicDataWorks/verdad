@@ -17,6 +17,19 @@ class GeminiModel(StrEnum):
     GEMINI_FLASH_LATEST = "gemini-flash-latest"
     GEMINI_FLASH_LITE_LATEST = "gemini-flash-lite-latest"
 
+    # Gemini 3.x: thinking is set with thinking_level; a thinking_budget is rejected with 400 (see model_config.py)
+    GEMINI_3_1_FLASH_LITE = "gemini-3.1-flash-lite"
+    GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite"
+    GEMINI_3_5_FLASH = "gemini-3.5-flash"
+    GEMINI_3_6_FLASH = "gemini-3.6-flash"
+    GEMINI_3_8_FLASH = "gemini-3.8-flash"
+    # Speech-to-text model; word timestamps only through the interactions endpoint (stage_1/transcribe_executor.py)
+    GEMINI_3_5_TRANSCRIBE = "gemini-3.5-transcribe"
+
+    # Gemma 4: no thinking config and no audio input; text-only call sites only
+    GEMMA_4_31B_IT = "gemma-4-31b-it"
+    GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it"
+
 
 class GeminiCLIEventType(StrEnum):
     """Event types emitted by Gemini CLI stream-json output format."""
