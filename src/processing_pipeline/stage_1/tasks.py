@@ -93,50 +93,6 @@ def __download_audio_file_from_s3(s3_client, file_path):
     return file_name
 
 
-@optional_task(log_prints=True)
-def transcribe_audio_file_with_open_ai_whisper_1(audio_file):
-    print(f"Transcribing the audio file {audio_file} with OpenAI Whisper 1")
-    return __transcribe_audio_file_with_open_ai_whisper_1(audio_file)
-
-
-def __transcribe_audio_file_with_open_ai_whisper_1(audio_file):
-    # TODO: Use "Prompt parameter" to improve the reliability of Whisper
-    # TODO: Post-process the transcription using LLMs
-    # TODO: Ask Whisper to include punctuation and filter words in the transcript
-    # See more: https://platform.openai.com/docs/guides/speech-to-text/improving-reliability
-
-    if not os.getenv("OPENAI_API_KEY"):
-        raise ValueError("OpenAI API key was not set!")
-
-    # Setup Open AI Client
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    # Transcribe the audio file
-    response = client.audio.transcriptions.create(
-        model="whisper-1",
-        file=open(audio_file, "rb"),
-        response_format="verbose_json",
-        timestamp_granularities=["segment"],
-    )
-
-    # Format the transcription ouput
-    timestamped_transcription = ""
-    for segment in response.segments:
-        # Calculate minutes and seconds from segment start time
-        minutes = int(segment.start) // 60
-        seconds = int(segment.start) % 60
-        # Format start time as "MM:SS"
-        start_time = f"{minutes:02d}:{seconds:02d}"
-        timestamped_transcription += f"[{start_time}] {segment.text}\n"
-
-    return {
-        "language": response.language,
-        "duration": int(response.duration),
-        "transcription": response.text,
-        "timestamped_transcription": timestamped_transcription,
-    }
-
-
 @optional_task(log_prints=True, retries=3)
 def initial_transcription_with_gemini(
     gemini_client: genai.Client | None,

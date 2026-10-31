@@ -26,7 +26,6 @@ from processing_pipeline.stage_1 import (
     process_audio_file,
     redo_main_detection,
     regenerate_timestamped_transcript,
-    transcribe_audio_file_with_open_ai_whisper_1,
     transcribe_audio_file_with_timestamp_with_gemini,
     undo_disinformation_detection,
 )
@@ -396,38 +395,6 @@ class TestGeminiTimestampTranscriptionGenerator:
         assert kwargs["config"].thinking_config.thinking_budget == thinking_budget
         assert kwargs["config"].max_output_tokens == 16384
         assert len(kwargs["config"].safety_settings) == 5
-
-
-class TestWhisper:
-    def test_transcribe_audio_file_with_whisper_1(self):
-        mock_file = Mock()
-        with patch("os.getenv", return_value="test-key"), patch("builtins.open", return_value=mock_file) as mock_open, patch(
-            "processing_pipeline.stage_1.tasks.OpenAI"
-        ) as mock_openai_class:
-            mock_client = Mock()
-            mock_openai_class.return_value = mock_client
-            mock_client.audio.transcriptions.create.return_value = Mock(
-                text="Test transcription",
-                language="en",
-                duration=60.0,
-                segments=[Mock(start=0, text="Test segment 1"), Mock(start=30, text="Test segment 2")],
-            )
-
-            result = transcribe_audio_file_with_open_ai_whisper_1("test.mp3")
-
-        mock_open.assert_called_once_with("test.mp3", "rb")
-        mock_openai_class.assert_called_once_with(api_key="test-key")
-        mock_client.audio.transcriptions.create.assert_called_once_with(
-            model="whisper-1", file=mock_file, response_format="verbose_json", timestamp_granularities=["segment"]
-        )
-        assert result["language"] == "en"
-        assert result["duration"] == 60
-        assert result["transcription"] == "Test transcription"
-        assert result["timestamped_transcription"] == "[00:00] Test segment 1\n[00:30] Test segment 2\n"
-
-    def test_transcribe_audio_file_with_whisper_1_no_api_key(self):
-        with patch.dict("os.environ", {}, clear=True), pytest.raises(ValueError, match="OpenAI API key was not set!"):
-            transcribe_audio_file_with_open_ai_whisper_1("test.mp3")
 
 
 class TestProcessAudioFile:
