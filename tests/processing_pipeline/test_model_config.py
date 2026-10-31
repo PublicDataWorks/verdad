@@ -196,3 +196,49 @@ def test_enum_keeps_existing_values():
     assert GeminiModel.GEMINI_2_5_PRO.value == "gemini-2.5-pro"
     assert str(GeminiModel.GEMINI_3_5_TRANSCRIBE) == "gemini-3.5-transcribe"
     assert GeminiModel("gemma-4-26b-a4b-it") is GeminiModel.GEMMA_4_26B_A4B_IT
+
+
+class TestStage1FlowOptions:
+    """STAGE1_TRANSCRIBE_FIRST / STAGE1_DETECTION_PASSES / STAGE1_ANCHOR_TIMESTAMPS; unset is today's flow."""
+
+    def test_defaults_are_todays_flow(self):
+        assert mc.stage1_flow_options() == mc.Stage1FlowOptions(
+            transcribe_first=False, detection_passes=mc.DetectionPasses.TWO, anchor_timestamps=False
+        )
+
+    def test_fully_streamlined(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "transcribe")
+        monkeypatch.setenv("STAGE1_TRANSCRIBE_FIRST", "true")
+        monkeypatch.setenv("STAGE1_DETECTION_PASSES", "ONE")
+        monkeypatch.setenv("STAGE1_ANCHOR_TIMESTAMPS", "1")
+        assert mc.stage1_flow_options() == mc.Stage1FlowOptions(True, mc.DetectionPasses.ONE, True)
+
+    @pytest.mark.parametrize("value, expected", [("", False), ("false", False), ("0", False), ("Off", False), ("YES", True), ("on", True)])
+    def test_flag_spellings(self, monkeypatch, value, expected):
+        monkeypatch.setenv("STAGE1_ANCHOR_TIMESTAMPS", value)
+        assert mc.stage1_anchor_timestamps() is expected
+
+    def test_unknown_flag_value(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_ANCHOR_TIMESTAMPS", "maybe")
+        with pytest.raises(ValueError, match="STAGE1_ANCHOR_TIMESTAMPS='maybe'"):
+            mc.stage1_flow_options()
+
+    def test_transcribe_first_needs_the_transcribe_method(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIBE_FIRST", "true")
+        with pytest.raises(ValueError, match="needs STAGE1_TRANSCRIPTION_METHOD=transcribe"):
+            mc.stage1_flow_options()
+
+    def test_one_pass_needs_transcribe_first(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "transcribe")
+        monkeypatch.setenv("STAGE1_DETECTION_PASSES", "one")
+        with pytest.raises(ValueError, match="STAGE1_DETECTION_PASSES=one needs STAGE1_TRANSCRIBE_FIRST=true"):
+            mc.stage1_flow_options()
+
+    def test_unknown_pass_count(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_DETECTION_PASSES", "three")
+        with pytest.raises(ValueError, match="expected one of: two, one"):
+            mc.stage1_flow_options()
+
+    def test_explicit_two_passes(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_DETECTION_PASSES", "two")
+        assert mc.stage1_flow_options().detection_passes is mc.DetectionPasses.TWO

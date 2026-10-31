@@ -128,6 +128,10 @@ class TestAnchorSnippet:
         words = recording((123.0, CLAIM))
         assert anchor_snippet(CLAIM, words, llm_start_s=140, llm_end_s=120).accepted
 
+    def test_no_shared_word_at_all(self):
+        words = timed("uno dos tres", 10.0)
+        assert anchor_snippet("cuatro cinco", words, 0, 20) == Anchor(None, None, 0.0, False, "low_score")
+
     def test_empty_inputs(self):
         assert anchor_snippet("", recording(), 0, 20).reason == "empty_transcription"
         assert anchor_snippet("¿?", recording(), 0, 20).reason == "empty_transcription"

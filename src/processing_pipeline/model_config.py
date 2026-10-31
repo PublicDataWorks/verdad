@@ -5,6 +5,10 @@ Fly app (``fly secrets set -a <app> STAGE3_MAIN_MODEL=...``) followed by a resta
 empty variable means the current production default. Values that are not ``GeminiModel`` members are accepted as
 plain strings so a new model can be tried before the enum learns about it. See docs/OPERATIONS.md, "Switching
 models".
+
+The Stage 1 flow-shape switches (STAGE1_TRANSCRIBE_FIRST, STAGE1_DETECTION_PASSES, STAGE1_ANCHOR_TIMESTAMPS) are
+read here too, because whether they are valid depends on STAGE1_TRANSCRIPTION_METHOD; ``stage1_flow_options()``
+reads and checks all of them at once.
 """
 
 import os
@@ -30,6 +34,13 @@ class TranscriptionMethod(StrEnum):
     TRANSCRIBE = "transcribe"
 
 
+class DetectionPasses(StrEnum):
+    # Initial detection on the plain transcript; main detection on the [MM:SS] transcript only when that flags
+    TWO = "two"
+    # Main detection on the [MM:SS] transcript for every recording; needs STAGE1_TRANSCRIBE_FIRST
+    ONE = "one"
+
+
 @dataclass(frozen=True)
 class ModelSetting:
     env_var: str
@@ -43,6 +54,9 @@ STAGE1_DETECTION = ModelSetting("STAGE1_DETECTION_MODEL", GeminiModel.GEMINI_2_5
 STAGE1_TIMESTAMP_SEGMENTS = ModelSetting("STAGE1_TIMESTAMP_MODEL", GeminiModel.GEMINI_2_5_FLASH)
 STAGE1_TIMESTAMP_TRANSCRIBE = ModelSetting("STAGE1_TIMESTAMP_MODEL", GeminiModel.GEMINI_3_5_TRANSCRIBE)
 STAGE1_TRANSCRIPTION_METHOD_ENV = "STAGE1_TRANSCRIPTION_METHOD"
+STAGE1_TRANSCRIBE_FIRST_ENV = "STAGE1_TRANSCRIBE_FIRST"
+STAGE1_DETECTION_PASSES_ENV = "STAGE1_DETECTION_PASSES"
+STAGE1_ANCHOR_TIMESTAMPS_ENV = "STAGE1_ANCHOR_TIMESTAMPS"
 
 # Stage 3
 STAGE3_MAIN = ModelSetting("STAGE3_MAIN_MODEL", GeminiModel.GEMINI_2_5_PRO)
@@ -99,6 +113,66 @@ def stage1_transcription_method() -> TranscriptionMethod:
     except ValueError:
         allowed = ", ".join(m.value for m in TranscriptionMethod)
         raise ValueError(f"{STAGE1_TRANSCRIPTION_METHOD_ENV}={value!r}; expected one of: {allowed}") from None
+
+
+_TRUE = ("true", "1", "yes", "on")
+_FALSE = ("false", "0", "no", "off")
+
+
+def _env_flag(name: str) -> bool:
+    value = _env(name)
+    if value is None or value.lower() in _FALSE:
+        return False
+    if value.lower() in _TRUE:
+        return True
+    raise ValueError(f"{name}={value!r}; expected true or false")
+
+
+@dataclass(frozen=True)
+class Stage1FlowOptions:
+    transcribe_first: bool = False
+    detection_passes: DetectionPasses = DetectionPasses.TWO
+    anchor_timestamps: bool = False
+
+
+def stage1_flow_options() -> Stage1FlowOptions:
+    """The Stage 1 flow-shape switches, checked against each other; every default is today's flow.
+
+    - STAGE1_TRANSCRIBE_FIRST=true: one Transcribe call per recording supplies both the untimed and the [MM:SS]
+      transcript. Needs STAGE1_TRANSCRIPTION_METHOD=transcribe.
+    - STAGE1_DETECTION_PASSES=one: main detection only, on every recording. Needs STAGE1_TRANSCRIBE_FIRST=true,
+      the only mode in which every recording has a timestamped transcript before detection.
+    - STAGE1_ANCHOR_TIMESTAMPS=true: flagged snippet times from word timestamps where the recording has them.
+    """
+    transcribe_first = _env_flag(STAGE1_TRANSCRIBE_FIRST_ENV)
+    if transcribe_first and stage1_transcription_method() != TranscriptionMethod.TRANSCRIBE:
+        raise ValueError(
+            f"{STAGE1_TRANSCRIBE_FIRST_ENV}=true needs {STAGE1_TRANSCRIPTION_METHOD_ENV}=transcribe "
+            f"(it is {stage1_transcription_method().value!r})"
+        )
+
+    value = _env(STAGE1_DETECTION_PASSES_ENV)
+    try:
+        passes = DetectionPasses(value.lower()) if value else DetectionPasses.TWO
+    except ValueError:
+        allowed = ", ".join(p.value for p in DetectionPasses)
+        raise ValueError(f"{STAGE1_DETECTION_PASSES_ENV}={value!r}; expected one of: {allowed}") from None
+    if passes == DetectionPasses.ONE and not transcribe_first:
+        raise ValueError(
+            f"{STAGE1_DETECTION_PASSES_ENV}=one needs {STAGE1_TRANSCRIBE_FIRST_ENV}=true: single-pass detection "
+            "reads the timestamped transcript, which only transcribe-first produces for every recording"
+        )
+
+    return Stage1FlowOptions(
+        transcribe_first=transcribe_first,
+        detection_passes=passes,
+        anchor_timestamps=stage1_anchor_timestamps(),
+    )
+
+
+def stage1_anchor_timestamps() -> bool:
+    """STAGE1_ANCHOR_TIMESTAMPS alone, for callers that only anchor (main detection, the redo flow)."""
+    return _env_flag(STAGE1_ANCHOR_TIMESTAMPS_ENV)
 
 
 def stage1_transcription_model() -> ModelName:
