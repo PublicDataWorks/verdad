@@ -17,6 +17,7 @@ from processing_pipeline.stage_1.transcribe_executor import (
     REQUEST_TIMEOUT_SECONDS,
     GeminiTranscribeTimestampGenerator as Transcribe,
     TranscribeAPIError,
+    TranscribeResult,
 )
 
 MODULE = "processing_pipeline.stage_1.transcribe_executor"
@@ -121,6 +122,40 @@ class TestExtractWords:
     def test_unfinished_interaction_fails(self):
         with pytest.raises(ValueError, match="'in_progress'"):
             Transcribe.extract_words(interaction(word("a", 1.0), status="in_progress"))
+
+
+class TestTimedWords:
+    def test_end_and_speaker_are_kept(self):
+        response = interaction({**word("Hola", 0.6, 0.95), "speaker": "A"}, word("mundo", 1.0, 1.4))
+        assert Transcribe.extract_timed_words(response) == [
+            {"text": "Hola", "start": 0.6, "end": 0.95, "speaker": "A"},
+            {"text": "mundo", "start": 1.0, "end": 1.4, "speaker": None},
+        ]
+
+    def test_missing_or_inverted_end_becomes_the_start(self):
+        untimed_end = {"type": "word_info", "text": "a", "start_offset": "2s"}
+        inverted = word("b", 3.0, 2.5)
+        words = Transcribe.extract_timed_words(interaction(untimed_end, inverted))
+        assert [(w["start"], w["end"]) for w in words] == [(2.0, 2.0), (3.0, 3.0)]
+
+    def test_times_are_rounded_to_milliseconds(self):
+        words = Transcribe.extract_timed_words(interaction(word("a", 1.23456, 1.98765)))
+        assert (words[0]["start"], words[0]["end"]) == (1.235, 1.988)
+
+    def test_extract_words_keeps_its_old_shape(self):
+        response = interaction(word("a", 1.0, 1.5))
+        assert Transcribe.extract_words(response) == [{"text": "a", "start": 1.0}]
+
+    def test_text_parts_are_joined_one_per_line(self):
+        response = {
+            "status": "completed",
+            "steps": [
+                {"content": [{"text": " Hola mundo. "}, {"text": ""}]},
+                {"content": [{"text": "Adiós."}]},
+            ],
+        }
+        assert Transcribe.extract_text(response) == "Hola mundo.\nAdiós."
+        assert Transcribe.extract_text({"steps": []}) == ""
 
 
 class TestBucketWords:
@@ -322,6 +357,53 @@ class TestRun:
                 Transcribe.run(gemini_client, sample_audio_file, GeminiModel.GEMINI_3_5_TRANSCRIBE, api_key="k")
         post.assert_not_called()
         gemini_client.files.delete.assert_called_once_with(name="files/abc")
+
+
+class TestTranscribeResult:
+    def test_every_view_comes_from_one_request(self, sample_audio_file, gemini_client, no_sleep):
+        response = interaction(
+            word("Hola", 0.6, 0.9), word("mundo,", 19.4, 19.9), word("adiós.", 41.0, 41.5), text="Hola mundo, adiós."
+        )
+        with patch(f"{MODULE}.requests.post", return_value=http_response(200, response)) as post:
+            result = Transcribe.transcribe(
+                gemini_client, sample_audio_file, GeminiModel.GEMINI_3_5_TRANSCRIBE, api_key="k"
+            )
+
+        post.assert_called_once()
+        gemini_client.files.upload.assert_called_once()
+        assert isinstance(result, TranscribeResult)
+        assert result.text == "Hola mundo, adiós."
+        assert result.windows == {0: "Hola mundo,", 20: "", 40: "adiós."}
+        assert result.timestamped_transcription == "[00:00] Hola mundo,\n[00:20] \n[00:40] adiós.\n"
+        assert result.words == [
+            {"text": "Hola", "start": 0.6, "end": 0.9, "speaker": None},
+            {"text": "mundo,", "start": 19.4, "end": 19.9, "speaker": None},
+            {"text": "adiós.", "start": 41.0, "end": 41.5, "speaker": None},
+        ]
+        assert result.duration_s == pytest.approx(45.0, abs=0.1)
+
+    def test_run_returns_the_timestamped_view(self, sample_audio_file, gemini_client, no_sleep):
+        response = interaction(word("Hola", 0.6), word("adiós", 41.0))
+        with patch(f"{MODULE}.requests.post", return_value=http_response(200, response)):
+            text = Transcribe.run(gemini_client, sample_audio_file, GeminiModel.GEMINI_3_5_TRANSCRIBE, api_key="k")
+        with patch(f"{MODULE}.requests.post", return_value=http_response(200, response)):
+            result = Transcribe.transcribe(
+                gemini_client, sample_audio_file, GeminiModel.GEMINI_3_5_TRANSCRIBE, api_key="k"
+            )
+        assert text == result.timestamped_transcription
+
+    def test_plain_text_falls_back_to_the_words(self, sample_audio_file, gemini_client, no_sleep):
+        response = interaction(word("Hola", 0.6), word("mundo", 1.0), text="")
+        with patch(f"{MODULE}.requests.post", return_value=http_response(200, response)):
+            result = Transcribe.transcribe(
+                gemini_client, sample_audio_file, GeminiModel.GEMINI_3_5_TRANSCRIBE, api_key="k"
+            )
+        assert result.text == "Hola mundo"
+
+    def test_storage_keeps_the_key_stage_2_and_3_read(self):
+        words = [{"text": "a", "start": 0.0, "end": 0.2, "speaker": None}]
+        result = TranscribeResult(text="a", windows={0: "a"}, timestamped_transcription="[00:00] a\n", words=words)
+        assert result.to_storage() == {"timestamped_transcription": "[00:00] a\n", "words": words}
 
 
 class TestTaskDispatch:
