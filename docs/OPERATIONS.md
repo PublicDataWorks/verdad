@@ -289,6 +289,57 @@ The five dead `lite` stations (WOLS, WNZK, WGSP, WYMY, KMRO) were disabled on 20
 stations with no audio for months (KENO, KNNR, WURN, KFUE, WDJA) on 2026-10-09 (VER-425). Both take effect only
 after a deploy.
 
+## Switching models
+
+Every Gemini call resolves its model at call time in `src/processing_pipeline/model_config.py`, from an env var on
+the `processing-worker` app. Unset or empty means today's production model, so nothing changes until a variable is
+set. A value that is not a `GeminiModel` member is passed through as a plain string; a value that is not a single
+model id (spaces, a swallowed `# comment`) raises `ValueError` when the call runs.
+
+| Variable | Call sites | Default | Persisted as |
+|---|---|---|---|
+| `STAGE1_TRANSCRIPTION_MODEL` | Stage 1 initial (untimed) transcription | `gemini-2.5-flash` | not stored |
+| `STAGE1_DETECTION_MODEL` | Stage 1 initial and main detection, also in `redo_main_detection` / `regenerate_timestamped_transcript` | `gemini-2.5-flash` | not stored |
+| `STAGE1_TRANSCRIPTION_METHOD` | Stage 1 timestamped transcription: `segments` or `transcribe` | `segments` | (see `transcriptor`) |
+| `STAGE1_TIMESTAMP_MODEL` | Stage 1 timestamped transcription | `gemini-2.5-flash` with `segments`, `gemini-3.5-transcribe` with `transcribe` | `stage_1_llm_responses.transcriptor` |
+| `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop) | `gemini-2.5-pro` | `snippets.analyzed_by` |
+| `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-2.5-flash` | `snippets.analyzed_by` |
+| `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
+| `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-2.5-flash` | not stored |
+| `STAGE4_REVIEWER_MODEL` | Stage 4 `analysis_reviewer` | `gemini-2.5-pro` | `snippets.reviewed_by` |
+| `STAGE4_KB_WRITER_MODEL` | Stage 4 `kb_updater` (off: `KB_UPDATER_ENABLED = False`) | `gemini-2.5-flash` | `kb_entries.created_by_model` |
+
+```bash
+fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_MODEL=gemini-3.5-flash-lite \
+    STAGE1_DETECTION_MODEL=gemini-3.5-flash-lite STAGE1_TRANSCRIPTION_METHOD=transcribe
+fly secrets unset -a processing-worker STAGE1_TRANSCRIPTION_MODEL STAGE1_DETECTION_MODEL STAGE1_TRANSCRIPTION_METHOD  # back
+```
+
+`fly secrets set` restarts the app's machines, which orphans in-flight runs and leaves the workers idle until runs
+are recreated (see "Workers idle after any deploy" in the gotchas below). The variables apply to every process group of the app, so the second Stage 1 and Stage 4 workers
+switch together with the first.
+
+**Thinking config.** Call sites state a 2.5-style thinking budget and `thinking_config()` sends what the model accepts:
+the budget on Gemini 2.x (2.5 Pro gets at least 128, since it cannot turn thinking off); on Gemini 3.x a
+`thinking_level` instead, because 3.x rejects `thinking_budget` with 400 INVALID_ARGUMENT (budget 0 = `minimal`,
+up to 1024 = `low`, up to 4096 = `medium`, more = `high`); nothing at all on Gemma, which rejects any thinking config.
+
+**Model limits to check before switching.** Gemma 4 rejects audio input, so it can only take the text-only calls
+(`STAGE1_DETECTION_MODEL`, `STAGE3_RESTRUCTURE_MODEL`, the Stage 4 agents), never `STAGE1_TRANSCRIPTION_MODEL`,
+`STAGE1_TIMESTAMP_MODEL` or the Stage 3 analysis. Stage 3 falls back to `STAGE3_FALLBACK_MODEL` on any 4xx other
+than 401/403, so a main model that rejects a request shows up only as `analyzed_by` = the fallback model.
+
+**The `transcribe` method** (`stage_1/transcribe_executor.py`) replaces 90 inline 20 s clips per recording with one
+request: the mp3 goes up through the Files API and `gemini-3.5-transcribe` is called on the interactions endpoint
+(`POST /v1beta/interactions`, verbatim mode, word timestamps; `generate_content` returns no timestamps). The API
+caps a timestamped request at 30 minutes, so a recording longer than 1799.5 s is cut to its first 1799 s with
+`ffmpeg -c copy` (the last second of a 30 min recording is not transcribed). Words are placed in 20 s windows by
+start time and written in the segments method's exact `[MM:SS] text` format, one line per window from `00:00`, an
+empty window being `[MM:SS] ` as before, so main detection, Stage 2 clipping and the detection prompt are unchanged;
+word timestamps past the end of the audio go into the last window. The timestamped-transcription prompt in
+`prompt_versions` is not used by this method. 429/5xx and dropped connections are retried after 30, 60 and 120 s,
+then the task's own Prefect retries apply; any other HTTP error fails the audio file with the response text.
+
 ## Triggering one stage run against production
 
 Deployment names are `"<flow name>/<deployment name>"` (from `main.py`; note stage 3 differs in case):
