@@ -13,12 +13,15 @@ Usage:
     python src/scripts/reprocess_snippets.py --quarantine-batch hide-2026-09-15-heuristics \
         --quarantine-reason no_evidence_no_dated_source --stage 3 --limit 50
     python src/scripts/reprocess_snippets.py --error-keyerror --stage 3 --execute
+    python src/scripts/reprocess_snippets.py --stale-verdict 2026-09-22T04:07:30Z --min-confidence 95 --not-hidden \
+        --stage 4 --limit 200
+    python src/scripts/reprocess_snippets.py --deactivated-kb --stage 4
 
 Selection semantics: the "reason" criteria (--fabricated-label, --disliked, --commented, --ids-file,
---quarantine-batch, --error-keyerror) are OR-ed; the filters (--since, --min-confidence, --not-hidden, --limit) are
-AND-ed on top of that set. Candidates are ordered newest recorded_at first (the order the Stage 3 poller uses), so
---limit takes the newest ones. Snippets currently in flight (status Processing or Reviewing) are always skipped so
-a worker mid-run is never flipped underneath.
+--quarantine-batch, --error-keyerror, --stale-verdict, --deactivated-kb) are OR-ed; the filters (--since,
+--min-confidence, --not-hidden, --limit) are AND-ed on top of that set. Candidates are ordered newest recorded_at
+first (the order the Stage 3 poller uses), so --limit takes the newest ones. Snippets currently in flight (status
+Processing or Reviewing) are always skipped so a worker mid-run is never flipped underneath.
 
 --quarantine-batch reads snippet_quarantine_log (batch = NAME, restored_at IS NULL), the table the 2026-09 cleanup
 wrote (created by PR #81's cleanup_2026_09/02_create_snippet_quarantine_log.sql, not yet in this tree). The cleanup
@@ -29,6 +32,19 @@ snippet is hidden by construction. --quarantine-reason REASON (repeatable, only 
 the selection to log rows whose reason column is one of the given values, so a batch can be re-queued one reason
 at a time; the reason list is recorded in the audit file's selected_by entries and in the printed SQL.
 --error-keyerror selects status = 'Error' with error_message starting 'KeyError:' (VER-363 backfill).
+
+Stale verdicts. A prompt or evidence-gate fix only changes verdicts written after it is active; every label written
+before it stays as it was. --stale-verdict TIMESTAMP selects Processed snippets labelled verified_false whose last
+verdict was written before TIMESTAMP: reviewed_at, or updated_at when the current analysis has no Stage 4 review
+(created_at is Stage 2's insert time; updated_at is never earlier than Stage 3's write, so the fallback can miss rows
+but never adds one). Pass the activation time of the fix (prompt_versions.created_at of the version that addressed
+the failure). Snippets re-run through Stage 3 alone before VER-418 kept their old review time: drop the ids in
+earlier runs' audit files from the selection by hand (there is no exclude option; --ids-file adds ids).
+--deactivated-kb selects the snippets whose Stage 4 review wrote a knowledge-base entry later deactivated as wrong
+(kb_entry_snippet_usage usage_type triggered_creation / triggered_update), leaving out entries switched off only by
+the VER-413 reset of every pipeline-written entry: the review that produced a wrong KB fact is the likeliest to have
+used it in its own verdict. Neither knows which snippets merely *read* a bad entry; kb_entry_snippet_usage does not
+record retrievals yet.
 """
 
 import argparse
@@ -52,8 +68,25 @@ STAGE_TARGET_STATUS = {3: "New", 4: "Ready for review"}
 # A snippet a worker is currently handling must not be flipped mid-run: Stage 3 writes its result and status at the
 # end of the run and would clobber (or be clobbered by) the requeue.
 IN_FLIGHT_STATUSES = ("Processing", "Reviewing")
-REASON_FLAGS = ("fabricated_label", "disliked", "commented", "ids_file", "quarantine_batch", "error_keyerror")
+REASON_FLAGS = (
+    "fabricated_label",
+    "disliked",
+    "commented",
+    "ids_file",
+    "quarantine_batch",
+    "error_keyerror",
+    "stale_verdict",
+    "deactivated_kb",
+)
 KEYERROR_PREFIX = "KeyError:"
+KB_WRITE_USAGE_TYPES = ("triggered_creation", "triggered_update")
+KB_RESET_BATCH = "ver-403-reset-2026-09"  # VER-413 deactivated every pipeline-written entry, right or wrong
+
+
+def parse_utc_timestamp(value: str) -> datetime:
+    """ISO date or datetime; a naive value is taken as UTC."""
+    parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def parse_args(argv=None):
@@ -81,6 +114,17 @@ def parse_args(argv=None):
         action="store_true",
         help=f"snippets with status 'Error' and error_message starting '{KEYERROR_PREFIX}' (VER-363 backfill)",
     )
+    parser.add_argument(
+        "--stale-verdict",
+        type=parse_utc_timestamp,
+        metavar="TIMESTAMP",
+        help="Processed verified_false snippets whose last verdict (reviewed_at, else updated_at) predates TIMESTAMP",
+    )
+    parser.add_argument(
+        "--deactivated-kb",
+        action="store_true",
+        help=f"snippets whose Stage 4 review wrote a KB entry deactivated other than by {KB_RESET_BATCH}",
+    )
     parser.add_argument("--since", type=date.fromisoformat, metavar="YYYY-MM-DD", help="recorded_at on/after this date")
     parser.add_argument("--min-confidence", type=int, metavar="N", help="confidence_scores.overall >= N")
     parser.add_argument("--not-hidden", action="store_true", help="exclude snippets present in user_hide_snippets")
@@ -92,7 +136,7 @@ def parse_args(argv=None):
     if not any(getattr(args, flag) for flag in REASON_FLAGS):
         parser.error(
             "select at least one of --fabricated-label, --disliked, --commented, --ids-file, "
-            "--quarantine-batch, --error-keyerror"
+            "--quarantine-batch, --error-keyerror, --stale-verdict, --deactivated-kb"
         )
     if args.quarantine_reason and not args.quarantine_batch:
         parser.error("--quarantine-reason only narrows --quarantine-batch; pass a batch name too")
@@ -220,6 +264,20 @@ def build_sql(args, target_status: str, selected: list | None = None) -> str:
         )
     if args.error_keyerror:
         reasons.append(f"(s.status = 'Error' AND s.error_message LIKE '{KEYERROR_PREFIX}%')")
+    if args.stale_verdict:
+        ts = args.stale_verdict.isoformat()
+        reasons.append(
+            "(s.status = 'Processed' AND s.confidence_scores->>'verification_status' = 'verified_false'"
+            f" AND COALESCE(s.reviewed_at, s.updated_at) < '{ts}')"
+        )
+    if args.deactivated_kb:
+        usage = ", ".join(f"'{u}'" for u in KB_WRITE_USAGE_TYPES)
+        reasons.append(
+            "s.id IN (SELECT u.snippet FROM kb_entry_snippet_usage u JOIN kb_entries k ON k.id = u.kb_entry"
+            f" WHERE k.status = 'deactivated' AND u.usage_type IN ({usage})"
+            " AND k.id NOT IN (SELECT kb_entry FROM kb_deactivation_log"
+            f" WHERE batch = '{KB_RESET_BATCH}' AND restored_at IS NULL))"
+        )
 
     filters = []
     if args.since:
@@ -250,20 +308,24 @@ def get_supabase_client():
     return create_client(url, key)
 
 
-def fetch_all(build_query):
-    """Read every row of a query, PAGE_SIZE rows at a time.
+def fetch_all(build_query, key: str = "id"):
+    """Read every row of a query, PAGE_SIZE rows at a time, as keyset pages on ``key``.
 
-    ``build_query`` must return a fresh query builder on each call: postgrest builders accumulate params, so
-    calling ``.range()`` twice on one builder sends two ``offset`` values and the same page comes back forever.
+    ``build_query`` must return a fresh query builder on each call (postgrest builders accumulate params) and
+    must select ``key``. Offset paging skips or repeats rows when concurrent writes shift later pages and gets
+    slower with depth; ``key > last`` over an indexed column does neither. A non-unique ``key`` may lose rows
+    that share the boundary value, so only use one when callers need the distinct key values.
     """
-    rows = []
-    start = 0
+    rows, last = [], None
     while True:
-        page = build_query().range(start, start + PAGE_SIZE - 1).execute().data or []
+        query = build_query().order(key).limit(PAGE_SIZE)
+        if last is not None:
+            query = query.gt(key, last)
+        page = query.execute().data or []
         rows.extend(page)
         if len(page) < PAGE_SIZE:
             return rows
-        start += PAGE_SIZE
+        last = page[-1][key]
 
 
 def fetch_fabricated_label_snippet_ids(client) -> set:
@@ -271,13 +333,13 @@ def fetch_fabricated_label_snippet_ids(client) -> set:
     label_ids = [label["id"] for label in labels if label_matches_falsity(label)]
     ids = set()
     for batch in chunked(label_ids, BATCH_SIZE):
-        rows = fetch_all(lambda: client.table("snippet_labels").select("snippet").in_("label", batch))
+        rows = fetch_all(lambda batch=batch: client.table("snippet_labels").select("id, snippet").in_("label", batch))
         ids.update(row["snippet"] for row in rows)
     return ids
 
 
 def fetch_disliked_snippet_ids(client) -> set:
-    rows = fetch_all(lambda: client.table("user_like_snippets").select("snippet").eq("value", -1))
+    rows = fetch_all(lambda: client.table("user_like_snippets").select("id, snippet").eq("value", -1))
     return {row["snippet"] for row in rows}
 
 
@@ -293,7 +355,7 @@ def fetch_quarantine_batch_snippet_ids(client, batches: list, reasons: list | No
     """
 
     def build_query():
-        query = client.table("snippet_quarantine_log").select("snippet").in_("batch", list(batches))
+        query = client.table("snippet_quarantine_log").select("id, snippet").in_("batch", list(batches))
         if reasons:
             query = query.in_("reason", list(reasons))
         return query.is_("restored_at", "null")
@@ -302,15 +364,62 @@ def fetch_quarantine_batch_snippet_ids(client, batches: list, reasons: list | No
     return {row["snippet"] for row in rows}
 
 
-def fetch_keyerror_snippet_ids(client) -> set:
-    rows = fetch_all(
-        lambda: client.table("snippets").select("id").eq("status", "Error").like("error_message", f"{KEYERROR_PREFIX}%")
+def fetch_keyerror_snippet_ids(client, since: date | None = None) -> set:
+    # --since goes into the query: the KeyError set is ~70k rows, too many to filter client-side.
+    def build():
+        query = client.table("snippets").select("id").eq("status", "Error").like("error_message", f"{KEYERROR_PREFIX}%")
+        return query.gte("recorded_at", since.isoformat()) if since else query
+
+    return {row["id"] for row in fetch_all(build)}
+
+
+def fetch_stale_verdict_snippet_ids(client, before: datetime, since: date | None = None) -> set:
+    """Processed verified_false snippets whose last verdict was written before ``before``.
+
+    The last verdict is Stage 4's (reviewed_at) when there is one, else bounded by updated_at (Stage 3 only updates
+    the row Stage 2 inserted). --since goes into the query: the verified_false set is large.
+    """
+    ts = before.isoformat()
+
+    def build():
+        query = (
+            client.table("snippets")
+            .select("id")
+            .eq("status", "Processed")
+            .eq("confidence_scores->>verification_status", "verified_false")
+            .or_(f"reviewed_at.lt.{ts},and(reviewed_at.is.null,updated_at.lt.{ts})")
+        )
+        return query.gte("recorded_at", since.isoformat()) if since else query
+
+    return {row["id"] for row in fetch_all(build)}
+
+
+def fetch_deactivated_kb_snippet_ids(client) -> set:
+    """Snippets whose review created or superseded a KB entry deactivated for a reason other than the VER-413 reset."""
+    entries = fetch_all(lambda: client.table("kb_entries").select("id").eq("status", "deactivated"))
+    reset = fetch_all(
+        lambda: client.table("kb_deactivation_log")
+        .select("id, kb_entry")
+        .eq("batch", KB_RESET_BATCH)
+        .is_("restored_at", "null")
     )
-    return {row["id"] for row in rows}
+    reset_ids = {row["kb_entry"] for row in reset}
+    entry_ids = [entry["id"] for entry in entries if entry["id"] not in reset_ids]
+    ids = set()
+    for batch in chunked(entry_ids, BATCH_SIZE):
+        rows = fetch_all(
+            lambda batch=batch: client.table("kb_entry_snippet_usage")
+            .select("id, snippet")
+            .in_("kb_entry", batch)
+            .in_("usage_type", list(KB_WRITE_USAGE_TYPES))
+        )
+        ids.update(row["snippet"] for row in rows)
+    return ids
 
 
 def fetch_hidden_snippet_ids(client) -> set:
-    rows = fetch_all(lambda: client.table("user_hide_snippets").select("snippet"))
+    # user_hide_snippets has no id column; snippet repeats per user, which the set absorbs.
+    rows = fetch_all(lambda: client.table("user_hide_snippets").select("snippet"), key="snippet")
     return {row["snippet"] for row in rows}
 
 
@@ -318,7 +427,7 @@ def fetch_snippets(client, ids: list) -> dict[str, dict]:
     snippets = {}
     columns = "id, status, recorded_at, confidence_scores"
     for batch in chunked(ids, BATCH_SIZE):
-        rows = fetch_all(lambda: client.table("snippets").select(columns).in_("id", batch))
+        rows = fetch_all(lambda batch=batch: client.table("snippets").select(columns).in_("id", batch))
         snippets.update({row["id"]: row for row in rows})
     return snippets
 
@@ -358,7 +467,11 @@ def main(argv=None):
             client, args.quarantine_batch, args.quarantine_reason
         )
     if args.error_keyerror:
-        reason_ids["error_keyerror"] = fetch_keyerror_snippet_ids(client)
+        reason_ids["error_keyerror"] = fetch_keyerror_snippet_ids(client, args.since)
+    if args.stale_verdict:
+        reason_ids["stale_verdict"] = fetch_stale_verdict_snippet_ids(client, args.stale_verdict, args.since)
+    if args.deactivated_kb:
+        reason_ids["deactivated_kb"] = fetch_deactivated_kb_snippet_ids(client)
 
     candidate_ids = sorted(set().union(*reason_ids.values()))
     snippets_by_id = fetch_snippets(client, candidate_ids)

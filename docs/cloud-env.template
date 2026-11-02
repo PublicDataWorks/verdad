@@ -1,0 +1,54 @@
+# Paste into the claude.ai environment's "Environment variables" field, then uncomment and fill in
+# only what the session needs. Leave unused lines commented: an empty KEY= is still "set", and
+# python-dotenv does not override an existing variable, so it would mask a value from .env.
+# One KEY=value per line; keep comments on their own lines (an unquoted "#" starts a comment).
+# Everyone who can use the environment can read these values. Sources, scopes and risks:
+# docs/CLOUD_ENVIRONMENT.md, section 3. Never commit filled-in values.
+
+# ---- Ops access ----------------------------------------------------------------------------
+# Fly: prefer `fly tokens create readonly verdad`; an org token (`fly tokens create org -o verdad`) can deploy.
+# FLY_API_TOKEN=
+# Supabase personal access token (account-wide management access, including SQL).
+# SUPABASE_ACCESS_TOKEN=
+# Postgres URI, session pooler (IPv4). Prefer a read-only role over `postgres`.
+# SUPABASE_DB_URL=
+# Prefect basic auth "user:password" (VER-384), same value as the Fly secret.
+# PREFECT_API_AUTH_STRING=
+# Uncomment only when the prefect CLI should drive production.
+# PREFECT_API_URL=https://prefect.fly.dev/api
+# Sentry PERSONAL token (or internal integration token) with org:read project:read event:read
+# (+ alerts:read for alert rules). Org auth tokens only have org:ci and cannot read issues.
+# SENTRY_AUTH_TOKEN=
+SENTRY_ORG=verdad-nk
+# Optional; default https://sentry.io.
+# SENTRY_URL=
+# No GH_TOKEN: the GitHub proxy handles git and REST `gh api` for attached repos, and it rejects GraphQL
+# (`gh pr`, `gh issue`) with 403 whatever token is set. A token adds nothing documented for this repo
+# and, like every variable here, is readable by everyone who can use the environment.
+
+# ---- Pipeline access (run_stage.py, prompt import/diff/eval); leave commented otherwise-----------
+# SUPABASE_URL=
+# service_role key: bypasses RLS. Only for tasks that run pipeline code against production.
+# SUPABASE_KEY=
+# SUPABASE_ANON_KEY=
+# GOOGLE_GEMINI_KEY=
+# OPENAI_API_KEY=
+# R2_ENDPOINT_URL=
+# R2_ACCESS_KEY_ID=
+# R2_SECRET_ACCESS_KEY=
+# R2_BUCKET_NAME=
+# SEARXNG_URL=https://verdad-searxng.fly.dev
+# JINA_API_KEY=
+
+# ---- Optional overrides (not secrets; defaults are production's values, see the doc) -----------
+# SUPABASE_PROJECT_REF=
+# SUPABASE_MANAGEMENT_API_URL=
+# SUPABASE_BASELINE_SCHEMAS=
+# STATIONS_CONFIG=
+
+# ---- Session switches (not secrets) -----------------------------------------------------------
+# 1 = skip the SessionStart auth probes; 1 = clear the once-per-VM stamp and re-run the hook's core setup.
+# VERDAD_SKIP_PROBES=1
+# VERDAD_SETUP_FORCE=1
+# Do NOT set SENTRY_DSN here: it is pipeline-only, and local runs would report into production Sentry.
+# WATCHDOG_* / COVERAGE_* (PR #155) belong to the prefect app's monitors: see docs/OPERATIONS.md.

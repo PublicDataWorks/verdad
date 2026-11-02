@@ -211,14 +211,44 @@ class TestGateRecord:
     def test_contradicting_results_reads_the_evidence_gate_fields(self):
         evidence = {
             "searches_performed": [
-                {"results": [{"url": "https://a.com", "relevance_to_claim": "contradicts_claim"}]},
-                {"results": [{"url": "https://b.com", "relevance_to_claim": "supports_claim"}]},
+                {"results": [{"url": "https://a.com/story", "relevance_to_claim": "contradicts_claim"}]},
+                {"results": [{"url": "https://b.com/story", "relevance_to_claim": "supports_claim"}]},
                 {"results": [{"url": "", "relevance_to_claim": "contradicts_claim"}, "junk"]},
                 "junk",
             ]
         }
-        assert [r["url"] for r in contradicting_results(evidence)] == ["https://a.com"]
+        assert [r["url"] for r in contradicting_results(evidence)] == ["https://a.com/story"]
         assert contradicting_results(None) == [] and contradicting_results("x") == []
+
+    def test_contradicting_results_drops_what_the_evidence_gate_would_not_admit(self):
+        evidence = {
+            "searches_performed": [
+                {
+                    "results": [
+                        {"url": "https://apnews.com/", "relevance_to_claim": "contradicts_claim"},
+                        {"url": "https://www.google.com/search?q=x", "relevance_to_claim": "contradicts_claim"},
+                        {
+                            "url": "https://reuters.com/invented",
+                            "relevance_to_claim": "contradicts_claim",
+                            "url_observed_in_tools": False,
+                        },
+                        {
+                            "url": "https://apnews.com/article/real",
+                            "relevance_to_claim": "contradicts_claim",
+                            "url_observed_in_tools": True,
+                        },
+                    ]
+                }
+            ]
+        }
+        assert [r["url"] for r in contradicting_results(evidence)] == ["https://apnews.com/article/real"]
+
+    def test_invented_url_does_not_corroborate(self, credibility):
+        analysis = _analysis(urls=["https://apnews.com/a", "https://reuters.com/b"])
+        analysis["verification_evidence"]["searches_performed"][0]["results"][1]["url_observed_in_tools"] = False
+        gate = apply_credibility_gate(analysis, "SPMN", credibility=credibility)
+        assert gate["credibility_gate"]["capped"]
+        assert gate["confidence_scores"]["overall"] == EVIDENCE_CAP_MAX_SCORE
 
     def test_deep_copy(self, credibility):
         analysis = _analysis(urls=["https://apnews.com/a"])

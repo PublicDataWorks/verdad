@@ -1,6 +1,9 @@
 import os
 
 from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
+from google.adk.agents.callback_context import CallbackContext
+from google.adk.models.google_llm import Gemini
+from google.adk.models.llm_request import LlmRequest
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.mcp_tool.mcp_toolset import StdioConnectionParams
 from google.genai import types
@@ -9,12 +12,32 @@ from processing_pipeline.stage_4.gemini_mcp_toolset import GeminiSafeMcpToolset
 from mcp import StdioServerParameters
 
 from processing_pipeline.constants import GeminiModel
+from processing_pipeline.stage_4 import constants
 from processing_pipeline.stage_4.models import ReviewAnalysisOutput
 from processing_pipeline.stage_4.tools import (
     deactivate_knowledge_entry,
     search_knowledge_base,
     upsert_knowledge_entry,
 )
+
+# The Gemini key sits on the free tier (gemini-2.5-flash: 15 requests/min) and a research agent fires ~20 tool
+# rounds in seconds, so back off per request instead of failing the whole review (outer retries: with_retries)
+RETRY_OPTIONS = types.HttpRetryOptions(attempts=6, initial_delay=10, max_delay=60)
+
+
+def _model(model: GeminiModel) -> Gemini:
+    return Gemini(model=model.value, retry_options=RETRY_OPTIONS)
+
+
+def force_first_search(callback_context: CallbackContext, llm_request: LlmRequest) -> None:
+    """Make the first model turn a search call; Flash otherwise narrates a search report from memory (VER-406)."""
+    if any(part.function_response for content in llm_request.contents for part in content.parts or []):
+        return
+    llm_request.config.tool_config = types.ToolConfig(
+        function_calling_config=types.FunctionCallingConfig(
+            mode=types.FunctionCallingConfigMode.ANY, allowed_function_names=["searxng_web_search"]
+        )
+    )
 
 
 def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: GeminiModel):
@@ -41,13 +64,16 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
             timeout=60,
         ),
         tool_filter=["searxng_web_search", "web_url_read"],
+        # VER-392: time-range queries return nothing while only bing answers, and the model sent one every time
+        hidden_args={"searxng_web_search": {"time_range"}},
     )
 
+    # Research agents and KB updater on Flash: Pro invented citations several times more often (VER-391, PR #122)
     # Agent 1: KB Researcher — searches existing knowledge base
     kb_researcher = LlmAgent(
         name="kb_researcher",
         description="Searches the internal knowledge base for verified facts relevant to the flagged claims.",
-        model=GeminiModel.GEMINI_2_5_PRO,
+        model=_model(GeminiModel.GEMINI_2_5_FLASH),
         instruction=prompt_versions["kb_researcher"]["system_instruction"],
         tools=[FunctionTool(search_knowledge_base)],
         output_key="kb_research",
@@ -57,17 +83,18 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     web_researcher = LlmAgent(
         name="web_researcher",
         description="Performs web-based fact-checking using search engines and source reading.",
-        model=GeminiModel.GEMINI_2_5_PRO,
+        model=_model(GeminiModel.GEMINI_2_5_FLASH),
         instruction=prompt_versions["web_researcher"]["system_instruction"],
         tools=[searxng_toolset],
         output_key="web_research",
+        before_model_callback=force_first_search,
     )
 
     # Agent 3: Analysis Reviewer — produces revised analysis JSON
     analysis_reviewer = LlmAgent(
         name="analysis_reviewer",
         description="Synthesizes research findings to produce a revised disinformation analysis.",
-        model=reviewer_model,
+        model=_model(reviewer_model),
         instruction=prompt_versions["reviewer"]["system_instruction"],
         output_key="revised_analysis",
         output_schema=ReviewAnalysisOutput,
@@ -80,7 +107,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     kb_updater = LlmAgent(
         name="kb_updater",
         description="Updates the knowledge base with newly verified facts from the review.",
-        model=GeminiModel.GEMINI_2_5_PRO,
+        model=_model(constants.KB_WRITER_MODEL),
         instruction=prompt_versions["kb_updater"]["system_instruction"],
         tools=[
             FunctionTool(upsert_knowledge_entry),
@@ -89,7 +116,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
         output_key="kb_update_summary",
     )
 
-    # Orchestration: parallel research -> sequential review -> KB update
+    # Orchestration: parallel research -> sequential review -> KB update (when enabled)
     research_agent = ParallelAgent(
         name="research",
         description="Runs KB and web research in parallel.",
@@ -98,8 +125,8 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
 
     review_pipeline = SequentialAgent(
         name="stage4_review_pipeline",
-        description="Full Stage 4 review: parallel research, analysis revision, and KB update.",
-        sub_agents=[research_agent, analysis_reviewer, kb_updater],
+        description="Full Stage 4 review: parallel research, analysis revision, and KB update when enabled.",
+        sub_agents=[research_agent, analysis_reviewer, *([kb_updater] if constants.KB_UPDATER_ENABLED else [])],
     )
 
     return review_pipeline, searxng_toolset

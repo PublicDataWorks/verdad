@@ -1,0 +1,1 @@
+-- Applied to production out-of-band on 2026-01-29; body in git history (44cb67a, as supabase/migrations/20260129_cleanup_unused_indexes.sql); definition captured in 20260915000000_baseline_public_schema.sql.

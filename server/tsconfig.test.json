@@ -1,0 +1,10 @@
+{
+    /* Same settings as the build, but including the tests: `npm run typecheck` runs both so test
+       files are type-checked while `npm run build` keeps emitting only the application code. */
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true
+    },
+    "include": ["src"],
+    "exclude": ["node_modules", "dist"]
+}

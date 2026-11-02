@@ -1,5 +1,8 @@
 from unittest.mock import ANY, Mock, patch
+
+import httpx
 import pytest
+from postgrest.exceptions import APIError
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.constants import GeminiModel
 
@@ -216,6 +219,8 @@ class TestSupabaseClient:
                 "timestamped_transcription": {"test": "transcription"},
                 "detection_result": {"test": "result"},
                 "status": "New",
+                "detection_prompt_version_id": None,
+                "transcription_prompt_version_id": None,
             }
         )
         assert response == expected_response[0]
@@ -271,12 +276,19 @@ class TestSupabaseClient:
             emotional_tone="neutral",
             context="Test context",
             political_leaning="neutral",
+            grounding_metadata=None,
+            thought_summaries=None,
+            analyzed_by="gemini-2.5-flash",
             status="Processed",
             error_message=None,
         )
 
         mock_supabase.table.assert_called_once_with("snippets")
         mock_supabase.table.return_value.update.assert_called_once()
+        payload = mock_supabase.table.return_value.update.call_args.args[0]
+        assert payload["previous_analysis"] is None
+        assert payload["reviewed_at"] is None
+        assert payload["reviewed_by"] is None
         assert response == expected_response
 
     def test_reset_snippet(self, supabase_client, mock_supabase):
@@ -352,7 +364,8 @@ class TestSupabaseClient:
         response = supabase_client.reset_stage_1_llm_response_status(1)
 
         mock_supabase.table.assert_called_once_with("stage_1_llm_responses")
-        mock_supabase.table.return_value.update.assert_called_once
+        mock_supabase.table.return_value.update.assert_called_once_with({"status": "New", "error_message": None})
+        assert response == expected_response
 
     def test_get_snippet_by_id_not_found(self, supabase_client, mock_supabase):
         """Test getting snippet by ID when not found"""
@@ -469,6 +482,9 @@ class TestSupabaseClient:
             emotional_tone=None,
             context=None,
             political_leaning=None,
+            grounding_metadata=None,
+            thought_summaries=None,
+            analyzed_by=None,
             status="New",
             error_message=None,
         )
@@ -515,7 +531,7 @@ class TestSupabaseClient:
 
     def test_get_snippets_by_ids_empty_list(self, supabase_client, mock_supabase):
         """Test getting snippets with empty ID list"""
-        response = supabase_client.get_snippets_by_ids([])
+        supabase_client.get_snippets_by_ids([])
 
         mock_supabase.table.assert_called_once_with("snippets")
         mock_supabase.table.return_value.select.assert_called_once_with("*")
@@ -523,7 +539,7 @@ class TestSupabaseClient:
 
     def test_reset_audio_file_status_empty_list(self, supabase_client, mock_supabase):
         """Test resetting audio file status with empty ID list"""
-        response = supabase_client.reset_audio_file_status([])
+        supabase_client.reset_audio_file_status([])
 
         mock_supabase.table.assert_called_once_with("audio_files")
         mock_supabase.table.return_value.update.assert_called_once_with({"status": "New", "error_message": None})
@@ -678,6 +694,7 @@ class TestSupabaseClient:
             confidence_scores={"score": 0.9},
             political_leaning="neutral",
             grounding_metadata={"source": "test"},
+            reviewed_by=GeminiModel.GEMINI_2_5_PRO.value,
         )
 
         mock_supabase.table.assert_called_once_with("snippets")
@@ -693,6 +710,7 @@ class TestSupabaseClient:
                 "confidence_scores": {"score": 0.9},
                 "political_leaning": "neutral",
                 "grounding_metadata": {"source": "test"},
+                "thought_summaries": None,
                 "status": "Processed",
                 "error_message": None,
                 "reviewed_at": ANY,
@@ -814,3 +832,67 @@ class TestSupabaseClient:
             )
             mock_supabase.table.return_value.update.return_value.eq.assert_called_once_with("id", case["snippet_id"])
             assert response == case["expected_response"]
+
+
+RESERVE_METHODS = [
+    ("get_a_new_audio_file_and_reserve_it", "fetch_a_new_audio_file_and_reserve_it"),
+    ("get_a_new_stage_1_llm_response_and_reserve_it", "fetch_a_new_stage_1_llm_response_and_reserve_it"),
+    ("get_a_new_snippet_and_reserve_it", "fetch_a_new_snippet_and_reserve_it"),
+    ("get_a_ready_for_review_snippet_and_reserve_it", "fetch_a_ready_for_review_snippet_and_reserve_it"),
+    ("get_a_snippet_that_has_no_embedding", "fetch_a_snippet_that_has_no_embedding"),
+]
+
+
+class TestReserveWorkTransientErrors:
+    @pytest.fixture
+    def supabase_client(self):
+        with patch("processing_pipeline.supabase_utils.create_client") as mock_create:
+            mock_create.return_value = Mock()
+            yield SupabaseClient("https://test.supabase.co", "test-key")
+
+    @pytest.mark.parametrize("method, rpc", RESERVE_METHODS)
+    def test_statement_timeout_reads_as_no_work(self, supabase_client, method, rpc, capsys):
+        supabase_client.client.rpc.return_value.execute.side_effect = APIError(
+            {"code": "57014", "message": "canceling statement due to statement timeout"}
+        )
+
+        assert getattr(supabase_client, method)() is None
+
+        supabase_client.client.rpc.assert_called_once_with(rpc)
+        assert f"{rpc} failed with APIError" in capsys.readouterr().out
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            # PostgREST reports a non-JSON gateway body with the int status as the code.
+            APIError({"code": 502, "message": "JSON could not be generated"}),
+            # Postgres restarting under us (what a Supabase compute change or crash looks like).
+            APIError({"code": "57P01", "message": "terminating connection due to administrator command"}),
+            APIError({"code": "57P03", "message": "the database system is starting up"}),
+            # PostgREST reloading its schema cache after DDL: JSON body, string code, HTTP 503.
+            APIError({"code": "PGRST002", "message": "Could not query the database for the schema cache. Retrying."}),
+            APIError({"code": "PGRST001", "message": "Could not open a connection to the database"}),
+            # Any class-08 connection exception, not only the three listed by hand before.
+            APIError({"code": "08001", "message": "could not connect to server"}),
+            APIError({"code": "08P01", "message": "protocol violation"}),
+            httpx.ConnectError("Connection reset by peer"),
+            httpx.ReadTimeout("timed out"),
+        ],
+    )
+    def test_gateway_and_network_errors_read_as_no_work(self, supabase_client, error):
+        supabase_client.client.rpc.return_value.execute.side_effect = error
+
+        assert supabase_client.get_a_new_snippet_and_reserve_it() is None
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            APIError({"code": "42883", "message": "function fetch_a_new_snippet_and_reserve_it() does not exist"}),
+            httpx.UnsupportedProtocol("Request URL is missing an 'http://' or 'https://' protocol."),
+        ],
+    )
+    def test_other_errors_still_raise(self, supabase_client, error):
+        supabase_client.client.rpc.return_value.execute.side_effect = error
+
+        with pytest.raises(type(error)):
+            supabase_client.get_a_new_snippet_and_reserve_it()

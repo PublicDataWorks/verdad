@@ -3,23 +3,29 @@
 
 import json
 import os
+from datetime import date, datetime, timedelta, timezone
 
 from google.adk.tools.tool_context import ToolContext
 from openai import OpenAI
 from tiktoken import encoding_for_model
 
-from processing_pipeline.constants import KB_DEDUP_SIMILARITY_THRESHOLD, GeminiModel
+from processing_pipeline.constants import KB_DEDUP_SIMILARITY_THRESHOLD
 from processing_pipeline.kb_sources import (
     VALID_SOURCE_TYPES,
     contains_http_url,
     is_http_url,
     parse_iso_date,
-    url_appears_in_text,
+    url_key,
 )
 from processing_pipeline.processing_utils import normalize_embedding
 from processing_pipeline.source_credibility import get_source_credibility
 from processing_pipeline.stage_1.constants import KB_STAGE1_MIN_CONFIDENCE, STAGE_1_KB_MATCH_THRESHOLD
-from processing_pipeline.stage_1.kb_context import select_trustworthy_entries
+from processing_pipeline.stage_1.kb_context import is_pipeline_authored, select_trustworthy_entries
+from processing_pipeline.stage_4.constants import (
+    KB_CURRENT_FACT_MAX_SOURCE_AGE_DAYS,
+    KB_WRITER_MODEL,
+    OBSERVED_URLS_STATE_KEY,
+)
 from processing_pipeline.supabase_utils import SupabaseClient
 
 
@@ -76,14 +82,36 @@ def search_knowledge_base(query: str, categories: list[str] | None = None, refer
         reference_date=reference_date,
         min_confidence=KB_STAGE1_MIN_CONFIDENCE,
     )
-    results = select_trustworthy_entries(matched)
+    results = [annotate_provenance(entry) for entry in select_trustworthy_entries(matched)]
 
     if not results:
         print(f"  [KB Search] Query: '{query}' — 0 trustworthy results ({len(matched)} matched)")
         return {"results": [], "message": "No relevant knowledge base entries found."}
 
     print(f"  [KB Search] Query: '{query}' — {len(results)} results (top similarity: {results[0].get('similarity', 'N/A')})")
-    return {"results": results, "count": len(results)}
+    return {"results": results, "count": len(results), "message": KB_PROVENANCE_NOTE}
+
+
+KB_PROVENANCE_NOTE = (
+    "Entries with provenance 'pipeline' were written by an earlier automated review of another snippet, not by an "
+    "analyst; they are context only and can never be the evidence that a claim is false. Entries with provenance "
+    "'curated' may support an assessment under the reviewer's scoring rules, alongside source URLs returned by this "
+    "session's web research."
+)
+
+
+def annotate_provenance(entry: dict) -> dict:
+    """Tag a KB entry with who wrote it, so the reviewer can weigh it (see ``KB_PROVENANCE_NOTE``).
+
+    ``provenance`` is 'pipeline' for entries the Stage 4 updater wrote from a previous snippet's review and
+    'curated' for analyst- or script-seeded entries; ``evidence_role`` says what the entry may be used for.
+    """
+    pipeline = is_pipeline_authored(entry)
+    return {
+        **entry,
+        "provenance": "pipeline" if pipeline else "curated",
+        "evidence_role": "context_only" if pipeline else "verified_fact",
+    }
 
 def _error(message: str) -> dict:
     return {"status": "error", "error_message": message}
@@ -94,12 +122,13 @@ def validate_kb_source(
     source_name: str,
     source_type: str,
     publication_date: str | None,
-    web_research: str | None,
+    observed_urls: set[str],
 ) -> str | None:
     """Return an error message when the source does not qualify as KB evidence, else None.
 
-    ``web_research`` is the web researcher's output for this session; the URL must appear in it (the model
-    may only cite what it actually found), so without it nothing can be written.
+    ``observed_urls`` holds the ``url_key`` of every URL the session's search and read tools returned; the
+    source must be one of them (the model may only cite what it actually found), so with none nothing can
+    be written.
     """
     if not is_http_url(source_url):
         return "source_url must be an absolute http(s) URL with a host name (e.g. https://apnews.com/article/...)."
@@ -123,22 +152,56 @@ def validate_kb_source(
             f"source_url domain '{rating.domain}' is denylisted (credibility tier 5, {rating.category}) and cannot "
             "be cited as KB evidence. Cite an independent wire service, fact-checker or major outlet instead."
         )
-    if not web_research:
+    if not observed_urls:
         return (
-            "No web research is recorded for this session, so the source cannot be verified as actually found. "
-            "The knowledge base only accepts sources returned by the search or read tools."
+            "No search or read tool returned a URL in this session, so the source cannot be verified as actually "
+            "found. The knowledge base only accepts sources returned by the search or read tools."
         )
-    if not url_appears_in_text(source_url, web_research):
+    if url_key(source_url) not in observed_urls:
         return (
-            f"source_url '{source_url}' does not appear in this session's web research. "
-            "Only cite URLs that were actually returned by the search or read tools."
+            f"source_url '{source_url}' was not returned by any search or read tool in this session. "
+            "Only cite URLs that the tools actually returned."
         )
     return None
 
 
-def _web_research_text(tool_context: ToolContext | None) -> str | None:
-    value = tool_context.state.get("web_research") if tool_context is not None else None
-    return value if isinstance(value, str) and value.strip() else None
+def validate_kb_currency(
+    is_time_sensitive: bool,
+    valid_until: str | None,
+    publication_date: str | None,
+    today: date | None = None,
+) -> str | None:
+    """Return an error when a time-sensitive fact is stated as still true on a source too old to show that.
+
+    "Marco Rubio is a U.S. Senator for Florida" (valid until 2029) was written on 2026-09-16 from a 2022 Senate
+    biography, 20 months after he left the Senate, and then used to mark true reporting about Secretary of State
+    Rubio as false. A fact that can change (office holders, sanctions, laws in force, contracts) and is recorded
+    as current (no valid_until, or one still in the future) needs a source recent enough to show it is current.
+    Facts whose validity window has already closed are history and may cite older sources.
+    """
+    if not is_time_sensitive:
+        return None
+    today = today or datetime.now(timezone.utc).date()
+    until = parse_iso_date(valid_until) if valid_until else None
+    if until is not None and until < today:
+        return None
+    published = parse_iso_date(publication_date)
+    if published is None:
+        return None  # validate_kb_source already rejects an undated source
+    max_age = KB_CURRENT_FACT_MAX_SOURCE_AGE_DAYS
+    if published < today - timedelta(days=max_age):
+        return (
+            f"This time-sensitive fact is recorded as still true (valid_until {valid_until or 'empty'}), but its "
+            f"source was published {published.isoformat()}, more than {max_age} days ago, so it cannot show the fact "
+            "is still current. Cite a source from the last "
+            f"{max_age} days, or record the fact as history with the valid_until date the source gives."
+        )
+    return None
+
+
+def _observed_urls(tool_context: ToolContext | None) -> set[str]:
+    value = tool_context.state.get(OBSERVED_URLS_STATE_KEY) if tool_context is not None else None
+    return set(value) if isinstance(value, list) else set()
 
 
 def _station_code_from_context(tool_context: ToolContext | None) -> str | None:
@@ -193,9 +256,12 @@ def upsert_knowledge_entry(
         categories: Disinformation categories this fact relates to.
         keywords: Keywords for this fact.
         related_claim: Optional common disinformation claim this fact addresses.
-        is_time_sensitive: Whether this fact may become outdated over time.
+        is_time_sensitive: Whether this fact may become outdated over time (who holds an office, whether a law,
+            sanction or contract is in force). A time-sensitive fact recorded as still true needs a source
+            published in the last 180 days; otherwise the entry is rejected.
         valid_from: Optional ISO date when the fact became true.
-        valid_until: Optional ISO date when the fact stopped being true.
+        valid_until: Optional ISO date when the fact stopped being true, as the source states it. Do not project
+            an end date (the end of a term of office or a contract); leave it empty while the fact is current.
         source_url: REQUIRED. URL of the primary evidence source. Every KB entry must have an external source.
         source_name: REQUIRED. Name of the source (e.g., Reuters, PolitiFact).
         source_type: REQUIRED. Source tier. Must be one of: tier1_wire_service, tier1_factchecker,
@@ -216,10 +282,13 @@ def upsert_knowledge_entry(
         return _error(provenance_error)
 
     source_error = validate_kb_source(
-        source_url, source_name, source_type, publication_date, _web_research_text(tool_context)
+        source_url, source_name, source_type, publication_date, _observed_urls(tool_context)
     )
     if source_error:
         return _error(source_error)
+    currency_error = validate_kb_currency(is_time_sensitive, valid_until, publication_date)
+    if currency_error:
+        return _error(currency_error)
 
     supabase_client = _get_supabase_client()
 
@@ -258,7 +327,7 @@ def upsert_knowledge_entry(
             "disinformation_categories": categories,
             "keywords": keywords,
             "is_time_sensitive": is_time_sensitive,
-            "created_by_model": GeminiModel.GEMINI_2_5_PRO.value,
+            "created_by_model": KB_WRITER_MODEL.value,
         }
         if related_claim:
             new_entry_data["related_claim"] = related_claim
@@ -283,7 +352,7 @@ def upsert_knowledge_entry(
             valid_from=valid_from,
             valid_until=valid_until,
             created_by_snippet=snippet_id,
-            created_by_model=GeminiModel.GEMINI_2_5_PRO.value,
+            created_by_model=KB_WRITER_MODEL.value,
         )
         action = "created"
 

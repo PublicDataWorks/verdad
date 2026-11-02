@@ -2,6 +2,7 @@ import os
 import subprocess
 import pytest
 from unittest.mock import Mock, patch, call
+from selenium.common.exceptions import TimeoutException
 
 # Set environment variable before importing RadioStation
 os.environ["ENABLE_PREFECT_DECORATOR"] = "false"
@@ -34,9 +35,10 @@ class TestRadioStation:
     @pytest.fixture
     def mock_webdriver(self):
         """Mock Selenium WebDriver"""
-        with patch("selenium.webdriver.Chrome") as mock_chrome, patch(
-            "selenium.webdriver.chrome.service.Service"
-        ) as mock_service, patch("webdriver_manager.chrome.ChromeDriverManager") as mock_manager:
+        # Patch the names as bound in radiostations.base, or the real ChromeDriverManager downloads chromedriver
+        with patch("selenium.webdriver.Chrome") as mock_chrome, patch("radiostations.base.Service") as mock_service, patch(
+            "radiostations.base.ChromeDriverManager"
+        ) as mock_manager:
             mock_driver = Mock()
             mock_chrome.return_value = mock_driver
             yield {"chrome": mock_chrome, "service": mock_service, "manager": mock_manager, "driver": mock_driver}
@@ -124,10 +126,14 @@ class TestRadioStation:
         mock_wait.return_value = mock_wait_instance
         mock_wait_instance.until.return_value = mock_element
 
-        radio_station.start_browser()
+        with patch.object(radio_station, "is_audio_playing", return_value=True):
+            radio_station.start_browser()
 
         # Verify driver setup
         assert radio_station.driver == mock_webdriver["driver"]
+        mock_webdriver["manager"].return_value.install.assert_called_once_with()
+        mock_webdriver["service"].assert_called_once_with(mock_webdriver["manager"].return_value.install.return_value)
+        assert mock_webdriver["chrome"].call_args[1]["service"] is mock_webdriver["service"].return_value
 
         # Verify Chrome options
         chrome_options_calls = mock_webdriver["chrome"].call_args[1]["options"]
@@ -162,24 +168,67 @@ class TestRadioStation:
         mock_webdriver["driver"].find_element.return_value = mock_element
         mock_webdriver["driver"].execute_script.return_value = True
 
-        radio_station.start_playing()
+        with patch.object(radio_station, "is_audio_playing", return_value=True):
+            radio_station.start_playing()
 
         assert mock_element.click.called
+
+    @patch("time.sleep")
+    def test_start_playing_trusts_the_sink_over_the_video_element(self, mock_sleep, radio_station, mock_webdriver):
+        radio_station.driver = mock_webdriver["driver"]
+        mock_webdriver["driver"].execute_script.return_value = False
+
+        with patch.object(radio_station, "is_audio_playing", return_value=True):
+            radio_station.start_playing()
+
+    @patch("time.sleep")
+    def test_start_playing_retries_diagnostics_after_one_script_timeout(
+        self, mock_sleep, radio_station, mock_webdriver
+    ):
+        radio_station.driver = mock_webdriver["driver"]
+        # First attempt times out on its first script; the retry's five scripts succeed.
+        mock_webdriver["driver"].execute_script.side_effect = [TimeoutException("script timeout"), True, 12.0, 0, False, 1]
+
+        with patch.object(radio_station, "is_audio_playing", return_value=True) as mock_sink:
+            radio_station.start_playing()
+
+        assert mock_sink.called
+        assert mock_webdriver["driver"].execute_script.call_count == 6
+        mock_sleep.assert_any_call(5)
+
+    @patch("time.sleep")
+    def test_start_playing_raises_when_diagnostics_fail_twice(self, mock_sleep, radio_station, mock_webdriver):
+        radio_station.driver = mock_webdriver["driver"]
+        mock_webdriver["driver"].execute_script.side_effect = TimeoutException("script timeout")
+
+        # A RUNNING sink must not hide a frozen page: two diagnostic failures fail the start.
+        with patch.object(radio_station, "is_audio_playing", return_value=True) as mock_sink:
+            with pytest.raises(Exception, match=r"diagnostics failed twice \(TimeoutException\): page may be hung"):
+                radio_station.start_playing()
+
+        assert mock_webdriver["driver"].execute_script.call_count == 2
+        mock_sink.assert_not_called()
+
+    @patch("time.sleep")
+    def test_start_browser_quits_driver_when_page_load_fails(self, mock_sleep, radio_station, mock_webdriver):
+        driver = mock_webdriver["driver"]
+        driver.get.side_effect = TimeoutException("page load timeout")
+
+        with pytest.raises(TimeoutException):
+            radio_station.start_browser()
+
+        driver.quit.assert_called_once_with()
+        assert radio_station.driver is None
 
     @patch("time.sleep")
     def test_start_playing_failure(self, mock_sleep, radio_station, mock_webdriver):
         """Test playback start failure"""
         radio_station.driver = mock_webdriver["driver"]
-        mock_webdriver["driver"].execute_script.return_value = False
+        mock_webdriver["driver"].execute_script.return_value = True
 
-        with pytest.raises(Exception, match=f"Failed to start audio for {radio_station.url}"):
-            radio_station.start_playing()
-
-    def test_is_audio_playing_success(self, radio_station, mock_subprocess):
-        """Test audio playing check success"""
-        mock_subprocess["run"].return_value.stdout = f"State: RUNNING\nName: {radio_station.sink_name}"
-
-        assert radio_station.is_audio_playing() is True
+        with patch.object(radio_station, "is_audio_playing", return_value=False):
+            with pytest.raises(Exception, match=f"Failed to start audio for {radio_station.url}"):
+                radio_station.start_playing()
 
     def test_is_audio_playing_failure(self, radio_station, mock_subprocess):
         """Test audio playing check failure"""
@@ -263,21 +312,6 @@ class TestRadioStation:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-
-    def test_execute_command_success(self, radio_station, mock_subprocess):
-        """Test command execution success"""
-        mock_subprocess["run"].return_value.stdout = "test output"
-
-        radio_station.execute_command(["test", "command"])
-
-        assert mock_subprocess["run"].called
-
-    def test_execute_command_failure(self, radio_station, mock_subprocess):
-        """Test command execution failure"""
-        mock_subprocess["run"].side_effect = Exception("Command failed")
-
-        radio_station.execute_command(["test", "command"])
-        # Should not raise exception, just print error message
 
     def test_is_audio_playing_success(self, radio_station, mock_subprocess):
         """Test audio playing check success"""

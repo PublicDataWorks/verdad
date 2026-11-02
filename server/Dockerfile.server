@@ -1,23 +1,17 @@
-# Use Node.js v20 Alpine as the base image
-FROM node:20-alpine
+FROM node:20-alpine AS builder
 
-# Set the working directory
 WORKDIR /app
-
-# Copy package.json and package-lock.json
 COPY package*.json ./
-
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the application code
+RUN npm ci
 COPY . .
-
-# Build the TypeScript code
 RUN npm run build
 
-# Expose the port the app runs on
-EXPOSE 3000
+FROM node:20-alpine
 
-# Start the application
-CMD [ "npm", "start" ]
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY --from=builder /app/dist ./dist
+
+EXPOSE 3000
+CMD ["node", "dist/server.js"]

@@ -1,5 +1,6 @@
 import asyncio
 import json
+from collections import Counter
 
 from google import genai
 from google.genai.types import (
@@ -18,14 +19,31 @@ from pydantic import ValidationError
 
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.processing_utils import get_safety_settings
+from processing_pipeline.kb_sources import parse_iso_date, url_key
 from processing_pipeline.source_credibility import apply_credibility_gate, get_source_credibility
-from processing_pipeline.stage_3.models import Stage3Output, apply_evidence_caps
-from processing_pipeline.stage_3.web_tools import searxng_web_search, web_url_read
+from processing_pipeline.stage_3.models import (
+    Stage3Output,
+    apply_evidence_caps,
+    cited_url_keys,
+    fill_publication_dates,
+)
+from processing_pipeline.stage_3.web_tools import (
+    SEARCH_TOOLS,
+    jina_search_available,
+    jina_web_search,
+    searxng_web_search,
+    tool_result_dates,
+    tool_result_urls,
+    web_url_read,
+)
 from processing_pipeline.temporal_context import build_temporal_context
 
 
 # The web tools the model may call during the analysis, keyed by the name Gemini must use.
-WEB_TOOLS = {tool.__name__: tool for tool in (searxng_web_search, web_url_read)}
+WEB_TOOLS = {tool.__name__: tool for tool in (searxng_web_search, web_url_read, jina_web_search)}
+
+# Jina tokens are prepaid (VER-415).
+ONCE_PER_ANALYSIS = {jina_web_search.__name__}
 
 # Upper bound on model turns per analysis (one final answer plus up to 19 rounds of tool calls).
 MAX_MODEL_TURNS = 20
@@ -40,9 +58,51 @@ USAGE_FIELDS = (
 )
 
 
+def offered_tools() -> dict:
+    """The web tools declared to the model: Jina only when its API key is set."""
+    return {
+        name: tool for name, tool in WEB_TOOLS.items() if name != jina_web_search.__name__ or jina_search_available()
+    }
+
+
 def usage_metadata_to_dict(usage_metadata) -> dict:
     """Flatten the SDK's ``usage_metadata`` into ``{field: int}`` (missing counts become 0)."""
     return {field: getattr(usage_metadata, field, None) or 0 for field in USAGE_FIELDS}
+
+
+class ObservedToolOutput:
+    """What the search and fetch tools actually put in front of the model during one analysis.
+
+    ``urls`` holds the ``url_key`` of every URL a tool returned; ``dates`` maps those keys to the ISO publication
+    date the search tool reported, when it did. The evidence gate uses both (see ``apply_evidence_caps``).
+    ``calls`` and ``search_urls`` (URL keys per search tool) feed ``tool_usage``.
+    """
+
+    def __init__(self):
+        self.urls: set[str] = set()
+        self.dates: dict[str, str] = {}
+        self.calls: Counter[str] = Counter()
+        self.search_urls: dict[str, set[str]] = {}
+
+    def record(self, tool_name: str, result) -> None:
+        keys = set(filter(None, map(url_key, tool_result_urls(tool_name, result))))
+        self.urls.update(keys)
+        if tool_name in SEARCH_TOOLS:
+            self.search_urls.setdefault(tool_name, set()).update(keys)
+        for url, published in tool_result_dates(tool_name, result).items():
+            key = url_key(url)
+            if key and parse_iso_date(published) is not None:
+                self.dates[key] = published
+
+    def tool_usage(self, verification_evidence: dict | None) -> dict:
+        """Runs per tool, and per search tool how many cited sources were in its results (VER-416)."""
+        cited = cited_url_keys(verification_evidence)
+        return {
+            "calls": dict(self.calls),
+            "sources_by_tool": {
+                tool: len(cited & self.search_urls.get(tool, set())) for tool in self.calls if tool in SEARCH_TOOLS
+            },
+        }
 
 
 class Stage3Executor:
@@ -61,7 +121,7 @@ class Stage3Executor:
         Main execution method for Stage 3 analysis.
 
         Uses the Google GenAI SDK with web search tools (searxng_web_search,
-        web_url_read) for fact checking via automatic function calling.
+        web_url_read, jina_web_search when configured) for fact checking.
 
         Args:
             gemini_client: Google GenAI client instance
@@ -108,7 +168,7 @@ class Stage3Executor:
                 uploaded_audio_file = gemini_client.files.get(name=uploaded_audio_file.name)
 
             # Analyze with web search tools
-            analysis_text, thought_summaries, usage = await cls.__analyze_with_web_search(
+            analysis_text, thought_summaries, usage, observed = await cls.__analyze_with_web_search(
                 gemini_client=gemini_client,
                 model_name=model_name,
                 uploaded_audio_file=uploaded_audio_file,
@@ -124,10 +184,21 @@ class Stage3Executor:
                     gemini_client, analysis_text, prompt_version["output_schema"]
                 )
 
-            # Deterministic evidence gate: never let an unevidenced analysis reach the analyst feed
-            output = apply_evidence_caps(output)
+            # Deterministic evidence gate: never let an unevidenced analysis reach the analyst feed. A
+            # contradicting source only counts if a tool actually returned its URL in this session, and a result
+            # the model left undated gets the date the search tool reported for it, so the date rules can work.
+            filled = fill_publication_dates(output.get("verification_evidence"), observed.dates)
+            if filled:
+                print(f"Filled {filled} publication_date value(s) from search tool results")
+            output = apply_evidence_caps(
+                output,
+                observed_urls=observed.urls,
+                hours_since_recording=temporal["hours_since_recording"],
+                recorded_on=parse_iso_date(additional_info.get("recorded_at_iso") or additional_info.get("recorded_at")),
+            )
             evidence_gate = output.pop("evidence_gate")
             grounding_metadata = dict(output.get("verification_evidence") or {})
+            grounding_metadata["tool_usage"] = observed.tool_usage(output.get("verification_evidence"))
             if evidence_gate.get("applied"):
                 print(f"Evidence gate applied: {evidence_gate['note']}")
                 grounding_metadata["evidence_gate"] = evidence_gate
@@ -161,7 +232,7 @@ class Stage3Executor:
         """
         Analyze using the GenAI SDK with web search tools.
 
-        Exposes searxng_web_search and web_url_read as function tools and runs the
+        Exposes the ``offered_tools`` as function tools and runs the
         tool-calling loop explicitly instead of via the SDK's automatic function
         calling: the SDK looks each requested tool up with ``function_map[name]``, so a
         hallucinated tool name (``search``, ``run``, ``call``, ...) escapes as a bare
@@ -169,18 +240,21 @@ class Stage3Executor:
         with a function-response error, which lets the model correct itself.
 
         Returns:
-            tuple: (analysis_text, thought_summaries, usage) where usage is the token
-            accounting summed over every model turn as a plain dict (see ``usage_metadata_to_dict``)
+            tuple: (analysis_text, thought_summaries, usage, observed) where usage is the token
+            accounting summed over every model turn as a plain dict (see ``usage_metadata_to_dict``) and
+            observed is an ``ObservedToolOutput`` with the ``url_key`` of every URL the tools returned and
+            the publication dates the search tool reported for them (see ``__call_tool``)
         """
         print("Analyzing with SDK + web search tools...")
 
+        tools = offered_tools()
         config = GenerateContentConfig(
             system_instruction=system_instruction,
             max_output_tokens=32768,
             tools=[
                 Tool(
                     function_declarations=[
-                        FunctionDeclaration.from_callable_with_api_option(callable=tool) for tool in WEB_TOOLS.values()
+                        FunctionDeclaration.from_callable_with_api_option(callable=tool) for tool in tools.values()
                     ]
                 )
             ],
@@ -201,6 +275,8 @@ class Stage3Executor:
         response = None
         function_calls = []
         usage = dict.fromkeys(USAGE_FIELDS, 0)  # every turn is billed, so sum them
+        observed = ObservedToolOutput()
+        called: set[str] = set()
         for _ in range(MAX_MODEL_TURNS):
             response = await gemini_client.aio.models.generate_content(
                 model=model_name,
@@ -213,8 +289,15 @@ class Stage3Executor:
             if not function_calls:
                 break
             contents.append(response.candidates[0].content)
+            searched = searxng_web_search.__name__ in called  # the model has seen SearXNG results
             contents.append(
-                Content(role="user", parts=[await cls.__call_tool(function_call) for function_call in function_calls])
+                Content(
+                    role="user",
+                    parts=[
+                        await cls.__call_tool(function_call, observed, tools, called, searched)
+                        for function_call in function_calls
+                    ],
+                )
             )
 
         if function_calls:
@@ -235,7 +318,7 @@ class Stage3Executor:
             print(f"Response finish reason: {finish_reason}")
             raise ValueError("No response from Gemini.")
 
-        return response.text, thoughts, usage
+        return response.text, thoughts, usage, observed
 
     @staticmethod
     def __function_calls(response) -> list[FunctionCall]:
@@ -247,9 +330,31 @@ class Stage3Executor:
             return []
         return [part.function_call for part in content.parts if part.function_call]
 
+    @staticmethod
+    def __outcome(payload: dict) -> str:
+        """Log summary of a tool payload: the result count, the content length, or the failure."""
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            return f"error {payload.get('error')}"
+        if result.get("failed"):
+            return f"failed {result.get('error')}"
+        if "results" in result:
+            return f"{len(result['results'] or [])} results"
+        return f"{len(result.get('content') or '')} chars"
+
     @classmethod
-    async def __call_tool(cls, function_call: FunctionCall) -> Part:
-        """Run one requested tool and wrap its result (or error) as a function-response part."""
+    async def __call_tool(
+        cls, function_call: FunctionCall, observed: "ObservedToolOutput", tools: dict, called: set[str], searched: bool
+    ) -> Part:
+        """Run one requested tool from ``tools`` and wrap its result (or error) as a function-response part.
+
+        ``called`` collects the tools run so far. Jina gets an error instead of running unless ``searched`` (a SearXNG
+        search in an earlier turn), and tools in ``ONCE_PER_ANALYSIS`` run once, even when that call failed.
+
+        Every URL the tool result shows the model is added to ``observed`` (as ``url_key`` values, with the
+        publication date the search tool reported when it did), so the evidence gate can tell a source the
+        model found from one it made up, and can date a source the model left undated.
+        """
         name = function_call.name or ""
         # JSON numbers arrive as floats; integer-valued ones are meant for int parameters (e.g. pageno=1.0).
         args = {
@@ -257,15 +362,29 @@ class Stage3Executor:
             for key, value in (function_call.args or {}).items()
         }
 
-        tool = WEB_TOOLS.get(name)
-        if tool is None:
-            print(f"Model called unknown tool {name!r} with {args}; telling it which tools exist.")
-            payload = {"error": f"Unknown tool {name!r}. The only available tools are: {', '.join(WEB_TOOLS)}."}
+        tool_name = name
+        if name not in tools:
+            # Pro calls the search tool 'call', 'run' or 'search' and then answers without retrying on an error.
+            tool_name = "searxng_web_search" if "query" in args else "web_url_read" if "url" in args else None
+            action = f"running {tool_name}" if tool_name else "telling it which tools exist"
+            print(f"Model called unknown tool {name!r} with {args}; {action}.")
+
+        tool = tools.get(tool_name)
+        if tool_name in ONCE_PER_ANALYSIS and tool_name in called:
+            payload = {"error": f"{tool_name} can be called only once per analysis and was already used."}
+        elif tool_name == jina_web_search.__name__ and not searched:
+            payload = {"error": f"{tool_name} is a fallback: search with searxng_web_search first."}
+        elif tool is None:
+            payload = {"error": f"Unknown tool {name!r}. The only available tools are: {', '.join(tools)}."}
         else:
+            called.add(tool_name)
+            observed.calls[tool_name] += 1
             try:
                 payload = {"result": await tool(**args)}
+                observed.record(tool_name, payload["result"])
             except Exception as e:  # the model gets the error and may retry with different arguments
                 payload = {"error": f"{type(e).__name__}: {e}"}
+        print(f"Tool call {tool_name or repr(name)} {args}: {cls.__outcome(payload)}")
 
         return Part.from_function_response(name=name or "unknown_tool", response=payload)
 

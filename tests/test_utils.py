@@ -2,97 +2,54 @@ import os
 from prefect import Flow
 from prefect.tasks import Task
 import pytest
+from stations import stations_for
 from utils import fetch_radio_stations, optional_flow, optional_task
 
-class TestUtils:
-    def test_fetch_radio_stations_returns_list(self):
-        """Test that fetch_radio_stations returns a list"""
+
+class TestFetchRadioStations:
+    """fetch_radio_stations() is now a thin view over config/stations.yaml.
+
+    The station data itself (which recorder serves what, ordering, uniqueness, url hashes) is
+    asserted in tests/test_stations.py; these tests only pin the legacy dict shape that
+    src/recording.py and the Supabase writes depend on.
+    """
+
+    def test_returns_the_direct_stream_stations_in_config_order(self):
         stations = fetch_radio_stations()
+        expected = stations_for("max") + stations_for("lite")
+
         assert isinstance(stations, list)
-        assert len(stations) > 0
+        assert [s["code"] for s in stations] == [s.code for s in expected]
 
-    def test_radio_station_structure(self):
-        """Test that each radio station has the required fields with correct types"""
-        stations = fetch_radio_stations()
-        required_fields = {
-            'code': str,
-            'url': str,
-            'state': str,
-            'name': str
-        }
+    def test_station_structure(self):
+        """Each station is exactly the four string keys the recorder has always used."""
+        for station in fetch_radio_stations():
+            assert set(station) == {"code", "url", "state", "name"}
+            for field, value in station.items():
+                assert isinstance(value, str), f"Field '{field}' in {station['code']} should be a str"
+                assert value.strip() != "", f"Empty {field} found in station {station['code']}"
 
-        for station in stations:
-            # Check that all required fields are present
-            assert all(field in station for field in required_fields), \
-                f"Missing required field(s) in station: {station}"
-
-            # Check field types
-            for field, expected_type in required_fields.items():
-                assert isinstance(station[field], expected_type), \
-                    f"Field '{field}' in station {station['code']} should be {expected_type}"
+    def test_excludes_generic_stations(self):
+        """The browser-driven stations are served by generic_recording.py, not by this list."""
+        codes = {station["code"] for station in fetch_radio_stations()}
+        for station in stations_for("generic"):
+            assert station.code not in codes
 
     def test_unique_station_codes(self):
-        """Test that all station codes are unique"""
-        stations = fetch_radio_stations()
-        codes = [station['code'] for station in stations]
+        codes = [station["code"] for station in fetch_radio_stations()]
         assert len(codes) == len(set(codes)), "Duplicate station codes found"
 
     def test_valid_urls(self):
-        """Test that all URLs have valid format"""
-        stations = fetch_radio_stations()
-        for station in stations:
-            url = station['url']
-            assert url.startswith(('http://', 'https://')), \
-                f"Invalid URL format for station {station['code']}: {url}"
-
-    def test_non_empty_fields(self):
-        """Test that no fields are empty strings"""
-        stations = fetch_radio_stations()
-        for station in stations:
-            for field, value in station.items():
-                assert value.strip() != "", \
-                    f"Empty {field} found in station {station['code']}"
+        for station in fetch_radio_stations():
+            assert station["url"].startswith(("http://", "https://")), (
+                f"Invalid URL format for station {station['code']}: {station['url']}"
+            )
 
     def test_specific_station_exists(self):
-        """Test that specific known stations exist in the list"""
-        stations = fetch_radio_stations()
-        station_codes = [station['code'] for station in stations]
+        codes = [station["code"] for station in fetch_radio_stations()]
+        for code in ["WLEL - 94.3 FM", "SPMN", "WZHF", "MCD"]:
+            assert code in codes, f"Expected station {code} not found"
 
-        # Test for a few known station codes
-        expected_stations = [
-            "WLEL - 94.3 FM",
-            "SPMN",
-            "WZHF",
-            "MCD"
-        ]
-
-        for code in expected_stations:
-            assert code in station_codes, f"Expected station {code} not found"
-
-    def test_states_are_valid(self):
-        """Test that state names are valid"""
-        stations = fetch_radio_stations()
-        valid_states = {
-            "Georgia", "Pennsylvania", "Michigan", "Texas", "Florida",
-            "Nevada", "Arizona", "Wisconsin", "Russia", "International",
-            "North Carolina", "California"
-        }
-
-        for station in stations:
-            assert station['state'] in valid_states, \
-                f"Invalid state '{station['state']}' for station {station['code']}"
-
-    def test_station_groups(self):
-        """Test that the stations can be properly grouped for max and lite recorders"""
-        stations = fetch_radio_stations()
-
-        # According to the recording.py file, first 39 stations are for max recorder
-        max_recorder_stations = stations[:39]
-        lite_recorder_stations = stations[39:]
-
-        assert len(max_recorder_stations) == 39, "Max recorder should have 39 stations"
-        assert len(lite_recorder_stations) > 0, "Lite recorder should have some stations"
-        assert len(stations) == len(max_recorder_stations) + len(lite_recorder_stations)
 
 class TestOptionalDecorators:
     def test_optional_task_basic(self):

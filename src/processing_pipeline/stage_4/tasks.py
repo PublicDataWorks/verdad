@@ -2,11 +2,16 @@ import json
 from datetime import datetime, timezone
 
 from processing_pipeline.constants import GeminiModel
+from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
+from processing_pipeline.kb_sources import parse_iso_date
 from processing_pipeline.source_credibility import apply_credibility_gate, get_source_credibility
-from processing_pipeline.stage_3.models import apply_evidence_caps
+from processing_pipeline.stage_3.models import apply_evidence_caps, latest_claim_event_date
+from processing_pipeline.stage_4.citation_check import check_stage_4_citations
+from processing_pipeline.stage_4.evidence import combine_evidence, stage_4_evidence
 from processing_pipeline.stage_4.executor import Stage4Executor
 from processing_pipeline.supabase_utils import SupabaseClient
+from processing_pipeline.temporal_context import build_temporal_context
 from utils import optional_task
 
 
@@ -125,14 +130,28 @@ def extract_stage_3_verification_evidence(grounding_metadata) -> dict | None:
 
 
 def merge_grounding_metadata(
-    stage_4_grounding_metadata: str | None, stage_3_verification_evidence, evidence_gate, credibility_gate=None
+    stage_4_grounding_metadata: str | None,
+    stage_3_verification_evidence,
+    evidence_gate,
+    citation_check=None,
+    stage_4_verification_evidence=None,
+    credibility_gate=None,
 ) -> str:
-    """Combine the Stage 4 research record (JSON string or None) with the Stage 3 search record and the gates."""
+    """Combine the Stage 4 research record (JSON string or None) with the Stage 3 search record and the checks.
+
+    The evidence gate is stored only when it applied; the citation check and the credibility gate always, so the
+    invented-citation rate and the corroboration outcome are measurable; the Stage 4 evidence whenever the
+    researcher wrote its block.
+    """
     merged = json.loads(stage_4_grounding_metadata) if stage_4_grounding_metadata else {}
     if stage_3_verification_evidence:
         merged["stage_3_verification_evidence"] = stage_3_verification_evidence
+    if stage_4_verification_evidence is not None:
+        merged["stage_4_verification_evidence"] = stage_4_verification_evidence
     if evidence_gate and evidence_gate.get("applied"):
         merged["evidence_gate"] = evidence_gate
+    if citation_check is not None:
+        merged["stage_4_citation_check"] = citation_check
     if credibility_gate:
         merged["credibility_gate"] = credibility_gate
     return json.dumps(merged)
@@ -160,33 +179,63 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
 
         print("Reviewing the snippet with agentic pipeline...")
         reviewer_model = GeminiModel.GEMINI_2_5_PRO
-        response, grounding_metadata = await Stage4Executor.run_async(
-            snippet_id=snippet["id"],
-            transcription=prepared["transcription"],
-            disinformation_snippet=prepared["disinformation_snippet"],
-            metadata=prepared["metadata"],
-            analysis_json=prepared["analysis_json"],
-            recorded_at=prepared["recorded_at"],
-            current_time=datetime.now(timezone.utc).isoformat(),
-            prompt_versions=prompt_versions,
-            reviewer_model=reviewer_model,
+        response, grounding_metadata = await with_retries(
+            lambda: Stage4Executor.run_async(
+                snippet_id=snippet["id"],
+                transcription=prepared["transcription"],
+                disinformation_snippet=prepared["disinformation_snippet"],
+                metadata=prepared["metadata"],
+                analysis_json=prepared["analysis_json"],
+                recorded_at=prepared["recorded_at"],
+                current_time=datetime.now(timezone.utc).isoformat(),
+                prompt_versions=prompt_versions,
+                reviewer_model=reviewer_model,
+            )
         )
 
-        # Deterministic evidence gate. The reviewer output has no structured evidence of its own, so the
-        # falsity check relies on the Stage 3 search record preserved in grounding_metadata.
+        # Deterministic evidence gate. The reviewer output has no structured evidence or claim dates of its own:
+        # the dates come from the Stage 3 record, the evidence from that record plus what the Stage 4 researcher
+        # reported in its evidence block (VER-396), a result counting only when a tool returned its URL.
         stage_3_evidence = extract_stage_3_verification_evidence(previous_analysis.get("grounding_metadata"))
-        response = apply_evidence_caps(response, verification_evidence=stage_3_evidence)
+        hours_since_recording = build_temporal_context(prepared["recorded_at"])["hours_since_recording"]
+        recorded_on = parse_iso_date(prepared["recorded_at"])
+        event_date = latest_claim_event_date(previous_analysis, not_after=recorded_on)
+        stage_4_record, stage_4_verification_evidence = stage_4_evidence(grounding_metadata, event_date)
+        response = apply_evidence_caps(
+            response,
+            verification_evidence=combine_evidence(stage_3_evidence, stage_4_record),
+            hours_since_recording=hours_since_recording,
+            recorded_on=recorded_on,
+            event_date=event_date,
+        )
         evidence_gate = response.pop("evidence_gate")
         if evidence_gate.get("applied"):
             print(f"Evidence gate applied: {evidence_gate['note']}")
         response = apply_credibility_gate(
-            response, prepared["metadata"].get("radio_station_code"), verification_evidence=stage_3_evidence
+            response,
+            prepared["metadata"].get("radio_station_code"),
+            verification_evidence=combine_evidence(stage_3_evidence, stage_4_record),
         )
         credibility_gate = response.pop("credibility_gate")
         if credibility_gate["capped"]:
             print(f"Credibility gate applied: {credibility_gate['note']}")
+        response, citation_check = check_stage_4_citations(
+            response,
+            grounding_metadata,
+            stage_3_evidence,
+            evidence_backed=bool(
+                stage_4_verification_evidence and stage_4_verification_evidence["admissible_contradicting"]
+            ),
+        )
+        if citation_check["applied"]:
+            print(f"Citation check applied: {citation_check['note']}")
         grounding_metadata = merge_grounding_metadata(
-            grounding_metadata, stage_3_evidence, evidence_gate, credibility_gate
+            grounding_metadata,
+            stage_3_evidence,
+            evidence_gate,
+            citation_check,
+            stage_4_verification_evidence,
+            credibility_gate=credibility_gate,
         )
 
         print("Review completed. Updating the snippet in Supabase")

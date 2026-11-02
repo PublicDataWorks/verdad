@@ -1,5 +1,5 @@
-# Start from the latest Ubuntu image
-FROM ubuntu:latest
+# Pinned: ubuntu:latest moved to a release without apt-key and broke the build (2026-09).
+FROM ubuntu:24.04
 
 # Avoid prompts from apt-get
 ENV DEBIAN_FRONTEND=noninteractive
@@ -19,8 +19,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
+RUN install -d -m 0755 /etc/apt/keyrings \
+    && wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
     && apt-get clean \

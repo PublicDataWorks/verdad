@@ -10,6 +10,7 @@ from processing_pipeline.constants import (
     CONFIDENCE_THRESHOLD,
     ProcessingStatus,
 )
+from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
 from processing_pipeline.stage_3.constants import FALLBACK_MODEL, MAIN_MODEL
 from processing_pipeline.stage_3.executors import Stage3Executor
@@ -135,6 +136,10 @@ def __get_metadata(snippet):
 
 @optional_task(log_prints=True)
 async def analyze_snippet(gemini_client, audio_file, metadata, prompt_version: dict):
+    return await with_retries(lambda: analyze_with_fallback(gemini_client, audio_file, metadata, prompt_version))
+
+
+async def analyze_with_fallback(gemini_client, audio_file, metadata, prompt_version: dict):
     model = MAIN_MODEL
 
     try:

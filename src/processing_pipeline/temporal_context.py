@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 HUMAN_DATETIME_FORMAT = "%B %d, %Y %I:%M %p"  # e.g. "March 05, 2026 09:07 AM" (also parses "March 5, 2026 9:07 AM")
 BREAKING_NEWS_TIERS = ((24, 20), (72, 30))  # (max age in hours, max confidence score)
+BREAKING_NEWS_WINDOW_HOURS = BREAKING_NEWS_TIERS[-1][0]
 
 
 def temporal_notice(now: datetime) -> str:

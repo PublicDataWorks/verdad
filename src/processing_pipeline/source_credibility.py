@@ -471,7 +471,15 @@ def independent(a: DomainRating, b: DomainRating) -> bool:
 
 
 def contradicting_results(verification_evidence: dict | None) -> list[dict]:
-    """Search results marked ``contradicts_claim`` that carry a URL (same fields PR #80's gate reads)."""
+    """Search results marked ``contradicts_claim`` whose URL the evidence gate would also admit as a source.
+
+    Same fields the evidence gate reads. A result marked ``url_observed_in_tools = False`` (no tool returned
+    the URL, so the model may have invented it) and a URL that is not an article (a front page, a search page,
+    a WHOIS lookup; see ``is_article_url``) never count toward corroboration, as they never count there.
+    """
+    # Imported here: stage_3/__init__ imports the executor, which imports this module
+    from processing_pipeline.stage_3.models import is_article_url
+
     items = []
     if not isinstance(verification_evidence, dict):
         return items
@@ -482,8 +490,11 @@ def contradicting_results(verification_evidence: dict | None) -> list[dict]:
             if not isinstance(result, dict):
                 continue
             url = result.get("url")
-            if result.get("relevance_to_claim") == "contradicts_claim" and isinstance(url, str) and url.strip():
-                items.append(result)
+            if result.get("relevance_to_claim") != "contradicts_claim" or not is_article_url(url):
+                continue
+            if result.get("url_observed_in_tools") is False:
+                continue
+            items.append(result)
     return items
 
 

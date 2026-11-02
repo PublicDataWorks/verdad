@@ -34,7 +34,14 @@ primary_region = 'sea'
 
 
 [[vm]]
-  processes = ["in_depth_analysis", "analysis_review", "analysis_review_2"]
+  # 5 Stage 3 loops plus targeted by-id runs OOM-killed the 2gb machine on 2026-09-16
+  processes = ["in_depth_analysis"]
+  memory = '4gb'
+  cpu_kind = 'shared'
+  cpus = 8
+
+[[vm]]
+  processes = ["analysis_review", "analysis_review_2"]
   memory = '2gb'
   cpu_kind = 'shared'
   cpus = 8

@@ -138,7 +138,10 @@ on tier / provenance / category, RLS enabled, read access for `authenticated` an
 ## What the pipeline records
 
 Stage 3 stores the gate outcome in `snippets.grounding_metadata.credibility_gate`; Stage 4 re-applies the gate to
-the reviewer's output (using the preserved Stage 3 search record) and stores it under the same key:
+the reviewer's output (using the preserved Stage 3 search record plus the Stage 4 researcher's evidence block, the
+same combined record the evidence gate reads) and stores it under the same key. Only contradicting results the
+evidence gate would admit as a source count: a URL marked `url_observed_in_tools = false` (no tool returned it) or
+one that is not an article (front page, search page, WHOIS lookup) never corroborates. The stored record:
 
 ```json
 "credibility_gate": {

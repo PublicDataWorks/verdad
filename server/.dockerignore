@@ -1,2 +1,7 @@
 node_modules
 npm-debug.log
+dist
+src/__tests__
+**/*.test.ts
+.env*
+coverage

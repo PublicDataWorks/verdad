@@ -1,0 +1,1 @@
+-- Applied to production out-of-band on 2026-01-29; body in git history (34a19c3, as supabase/migrations/20260129_optimize_filter_functions.sql); definition captured in 20260915000000_baseline_public_schema.sql.

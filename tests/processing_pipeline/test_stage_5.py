@@ -1,4 +1,5 @@
-from unittest.mock import Mock, patch, call
+import os
+from unittest.mock import ANY, Mock, patch, call
 import pytest
 from processing_pipeline.stage_5 import (
     fetch_a_snippet_that_has_no_embedding,
@@ -13,7 +14,7 @@ class TestStage5:
     @pytest.fixture
     def mock_supabase_client(self):
         """Setup mock Supabase client"""
-        with patch('processing_pipeline.stage_5.SupabaseClient') as MockSupabaseClient:
+        with patch('processing_pipeline.stage_5.flows.SupabaseClient') as MockSupabaseClient:
             mock_client = Mock()
             mock_client.get_a_snippet_that_has_no_embedding.return_value = None
             MockSupabaseClient.return_value = mock_client
@@ -37,7 +38,7 @@ class TestStage5:
     @pytest.fixture
     def mock_openai(self):
         """Setup mock OpenAI client"""
-        with patch('processing_pipeline.stage_5.OpenAI') as MockOpenAI:
+        with patch('processing_pipeline.stage_5.flows.OpenAI') as MockOpenAI:
             mock_client = Mock()
             mock_response = Mock()
             mock_response.data = [Mock(embedding=[0.1, 0.2, 0.3])]
@@ -90,9 +91,9 @@ class TestStage5:
 
     def test_generate_snippet_embedding_success(self, mock_supabase_client, mock_openai):
         """Test successful generation of snippet embedding"""
-        with patch('processing_pipeline.stage_5.encoding_for_model') as mock_encoding, \
+        with patch('processing_pipeline.stage_5.tasks.encoding_for_model') as mock_encoding, \
              patch('os.getenv', return_value='test-key'), \
-             patch('processing_pipeline.stage_5.Stage5Executor.run',
+             patch('processing_pipeline.stage_5.tasks.Stage5Executor.run',
                    return_value=[0.1, 0.2, 0.3]) as mock_run:
             # Setup token counting mock
             mock_encoding_instance = Mock()
@@ -100,6 +101,7 @@ class TestStage5:
             mock_encoding.return_value = mock_encoding_instance
 
             generate_snippet_embedding(
+                openai_client=mock_openai,
                 supabase_client=mock_supabase_client,
                 snippet_id="test-id",
                 snippet_document="Test document"
@@ -110,7 +112,7 @@ class TestStage5:
             mock_encoding_instance.encode.assert_called_once_with("Test document")
 
             # Verify Stage5Executor.run was called
-            mock_run.assert_called_once_with("Test document", "text-embedding-3-large")
+            mock_run.assert_called_once_with(mock_openai, "Test document", "text-embedding-3-large")
 
             # Verify upsert call
             mock_supabase_client.upsert_snippet_embedding.assert_called_once_with(
@@ -125,30 +127,31 @@ class TestStage5:
 
     def test_generate_snippet_embedding_token_count_error(self, mock_supabase_client, mock_openai):
         """Test embedding generation with token counting error"""
-        with patch('processing_pipeline.stage_5.encoding_for_model',
+        with patch('processing_pipeline.stage_5.tasks.encoding_for_model',
                   side_effect=Exception("Token count error")), \
-             patch('os.getenv', return_value=None):
+             patch('processing_pipeline.stage_5.tasks.Stage5Executor.run', return_value=[0.1, 0.2, 0.3]):
             generate_snippet_embedding(
+                openai_client=mock_openai,
                 supabase_client=mock_supabase_client,
                 snippet_id="test-id",
                 snippet_document="Test document"
             )
 
-            # Verify upsert was called with None token count
+            # Token counting failure is non-fatal: the embedding is still stored with a None token count
             mock_supabase_client.upsert_snippet_embedding.assert_called_once_with(
                 snippet_id="test-id",
                 snippet_document="Test document",
                 document_token_count=None,
-                embedding=None,
+                embedding=[0.1, 0.2, 0.3],
                 model_name="text-embedding-3-large",
-                status="Error",
-                error_message="OpenAI API key was not set!"
+                status="Processed",
+                error_message=None
             )
 
-    def test_generate_snippet_embedding_embedding_error(self, mock_supabase_client):
+    def test_generate_snippet_embedding_embedding_error(self, mock_supabase_client, mock_openai):
         """Test embedding generation with OpenAI error"""
-        with patch('processing_pipeline.stage_5.encoding_for_model') as mock_encoding, \
-             patch('processing_pipeline.stage_5.Stage5Executor.run', side_effect=Exception("Embedding error")):
+        with patch('processing_pipeline.stage_5.tasks.encoding_for_model') as mock_encoding, \
+             patch('processing_pipeline.stage_5.tasks.Stage5Executor.run', side_effect=Exception("Embedding error")):
 
             # Setup token counting mock
             mock_encoding_instance = Mock()
@@ -156,6 +159,7 @@ class TestStage5:
             mock_encoding.return_value = mock_encoding_instance
 
             generate_snippet_embedding(
+                openai_client=mock_openai,
                 supabase_client=mock_supabase_client,
                 snippet_id="test-id",
                 snippet_document="Test document"
@@ -172,22 +176,21 @@ class TestStage5:
                 error_message="Embedding error"
             )
 
-    def test_stage_5_executor(self, mock_openai):
-        """Test Stage5Executor"""
-        with patch('os.getenv', return_value="test-key"):
-            result = Stage5Executor.run("Test text", "test-model")
+    def test_stage_5_executor_normalizes_embedding(self, mock_openai):
+        result = Stage5Executor.run(mock_openai, "Test text", "test-model")
 
-            assert result == [0.1, 0.2, 0.3]
-            mock_openai.embeddings.create.assert_called_once_with(
-                model="test-model",
-                input="Test text"
-            )
+        norm = (0.1**2 + 0.2**2 + 0.3**2) ** 0.5
+        assert result == pytest.approx([0.1 / norm, 0.2 / norm, 0.3 / norm])
+        mock_openai.embeddings.create.assert_called_once_with(
+            model="test-model",
+            input="Test text"
+        )
 
-    def test_stage_5_executor_no_api_key(self):
-        """Test Stage5Executor without API key"""
-        with patch('os.getenv', return_value=None):
+    def test_embedding_flow_no_api_key(self, mock_supabase_client):
+        """The embedding flow refuses to start without an OpenAI API key"""
+        with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
             with pytest.raises(ValueError, match="OpenAI API key was not set!"):
-                Stage5Executor.run("Test text", "test-model")
+                embedding(repeat=False)
 
     @patch('time.sleep')
     def test_embedding_flow(self, mock_sleep, mock_supabase_client, sample_snippet):
@@ -199,9 +202,9 @@ class TestStage5:
             None
         ]
 
-        with patch('processing_pipeline.stage_5.generate_snippet_document') as mock_generate_document, \
-             patch('processing_pipeline.stage_5.generate_snippet_embedding') as mock_generate_embedding, \
-             patch('processing_pipeline.stage_5.SupabaseClient', return_value=mock_supabase_client), \
+        with patch('processing_pipeline.stage_5.flows.generate_snippet_document') as mock_generate_document, \
+             patch('processing_pipeline.stage_5.flows.generate_snippet_embedding') as mock_generate_embedding, \
+             patch('processing_pipeline.stage_5.flows.SupabaseClient', return_value=mock_supabase_client), \
              patch('os.getenv', return_value='test-key'):
 
             mock_generate_document.return_value = "Test document"
@@ -213,6 +216,7 @@ class TestStage5:
             # Verify the flow
             mock_generate_document.assert_called_once_with(sample_snippet)
             mock_generate_embedding.assert_called_once_with(
+                ANY,  # the OpenAI client created by the flow
                 mock_supabase_client,
                 sample_snippet["id"],
                 "Test document"
@@ -237,9 +241,9 @@ class TestStage5:
 
         mock_supabase_client.get_a_snippet_that_has_no_embedding.side_effect = side_effect
 
-        with patch('processing_pipeline.stage_5.generate_snippet_document') as mock_generate_document, \
-             patch('processing_pipeline.stage_5.generate_snippet_embedding') as mock_generate_embedding, \
-             patch('processing_pipeline.stage_5.SupabaseClient', return_value=mock_supabase_client), \
+        with patch('processing_pipeline.stage_5.flows.generate_snippet_document'), \
+             patch('processing_pipeline.stage_5.flows.generate_snippet_embedding'), \
+             patch('processing_pipeline.stage_5.flows.SupabaseClient', return_value=mock_supabase_client), \
              patch('os.getenv', return_value='test-key'):
 
             try:

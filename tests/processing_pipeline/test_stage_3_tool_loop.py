@@ -21,6 +21,7 @@ from google.genai.types import (
 from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_3 import executors
 from processing_pipeline.stage_3.executors import Stage3Executor
+from processing_pipeline.stage_3.models import cited_url_keys
 
 analyze = Stage3Executor._Stage3Executor__analyze_with_web_search
 
@@ -62,21 +63,49 @@ def function_responses(call):
 
 def test_unknown_tool_name_is_reported_to_the_model_instead_of_raising():
     client = fake_client(
-        model_turn(tool_call("search", query="who said it")),
+        model_turn(tool_call("run", cmd="ls")),
         model_turn(Part.from_text(text='{"final": true}')),
     )
 
-    text, thoughts, usage = run(client)
+    text, thoughts, usage, _ = run(client)
 
     assert text == '{"final": true}'
     assert client.aio.models.generate_content.await_count == 2
     second = client.aio.models.generate_content.await_args_list[1]
     (response,) = function_responses(second)
-    assert response.name == "search"
-    assert "Unknown tool 'search'" in response.response["error"]
+    assert response.name == "run"
+    assert "Unknown tool 'run'" in response.response["error"]
     assert "searxng_web_search, web_url_read" in response.response["error"]
     # The model's own turn is echoed back before the tool responses, as the API requires.
-    assert second.kwargs["contents"][-2].parts[0].function_call.name == "search"
+    assert second.kwargs["contents"][-2].parts[0].function_call.name == "run"
+
+
+@pytest.mark.parametrize(
+    ("name", "args", "target"),
+    [
+        ("call", {"query": "who said it"}, "searxng_web_search"),
+        ("search", {"query": "who said it", "pageno": 2.0}, "searxng_web_search"),
+        ("searxxng_web_search", {"query": "who said it"}, "searxng_web_search"),
+        ("run", {"url": "https://reuters.com/a"}, "web_url_read"),
+    ],
+)
+def test_unknown_tool_name_with_known_arguments_runs_the_matching_tool(monkeypatch, name, args, target):
+    seen = {}
+
+    async def fake_tool(**kwargs) -> dict:
+        seen.update(kwargs)
+        return {"results": [{"url": "https://apnews.com/a"}]} if "query" in kwargs else {"url": kwargs["url"]}
+
+    monkeypatch.setitem(executors.WEB_TOOLS, target, fake_tool)
+    client = fake_client(model_turn(tool_call(name, **args)), model_turn(Part.from_text(text="done")))
+
+    _, _, _, observed = run(client)
+
+    assert seen == {key: int(value) if isinstance(value, float) else value for key, value in args.items()}
+    (response,) = function_responses(client.aio.models.generate_content.await_args_list[1])
+    assert response.name == name
+    assert "result" in response.response
+    assert observed.urls == ({"apnews.com/a"} if target == "searxng_web_search" else {"reuters.com/a"})
 
 
 def test_known_tool_is_invoked_with_integer_coerced_args(monkeypatch):
@@ -92,12 +121,44 @@ def test_known_tool_is_invoked_with_integer_coerced_args(monkeypatch):
         model_turn(Part.from_text(text="done")),
     )
 
-    text, _, _ = run(client)
+    text, _, _, _ = run(client)
 
     assert text == "done"
     assert seen == {"query": "q", "pageno": 2}
     (response,) = function_responses(client.aio.models.generate_content.await_args_list[1])
     assert response.response == {"result": {"query": "q", "results": []}}
+
+
+def test_every_tool_call_is_logged_with_its_outcome(monkeypatch, capsys):
+    async def fake_search(query: str) -> dict:
+        return {"query": query, "results": [{"url": "https://a.com"}, {"url": "https://b.com"}]}
+
+    async def fake_read(url: str) -> dict:
+        if "down" in url:
+            return {"url": url, "failed": True, "error": "404", "content": ""}
+        return {"url": url, "content": "hello"}
+
+    monkeypatch.setitem(executors.WEB_TOOLS, "searxng_web_search", fake_search)
+    monkeypatch.setitem(executors.WEB_TOOLS, "web_url_read", fake_read)
+    client = fake_client(
+        model_turn(
+            tool_call("searxng_web_search", query="q"),
+            tool_call("web_url_read", url="https://up.com"),
+            tool_call("web_url_read", url="https://down.com"),
+            tool_call("web_url_read", nope=1),
+            tool_call("run", cmd="ls"),
+        ),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    run(client)
+
+    out = capsys.readouterr().out
+    assert "Tool call searxng_web_search {'query': 'q'}: 2 results" in out
+    assert "Tool call web_url_read {'url': 'https://up.com'}: 5 chars" in out
+    assert "Tool call web_url_read {'url': 'https://down.com'}: failed 404" in out
+    assert "Tool call web_url_read {'nope': 1}: error TypeError" in out
+    assert "Tool call 'run' {'cmd': 'ls'}: error Unknown tool 'run'" in out
 
 
 def test_tool_exception_becomes_a_function_response_error(monkeypatch):
@@ -126,24 +187,177 @@ def test_endless_tool_calls_stop_at_the_turn_budget():
 
 
 def test_usage_is_summed_over_every_turn():
-    first = model_turn(tool_call("search", query="q"))
+    first = model_turn(tool_call("run", cmd="q"))
     first.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=100, total_token_count=120)
     second = model_turn(Part.from_text(text="done"))
     second.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=150, total_token_count=200)
 
-    _, _, usage = run(fake_client(first, second))
+    _, _, usage, _ = run(fake_client(first, second))
 
     assert usage["prompt_token_count"] == 250
     assert usage["total_token_count"] == 320
     assert usage["thoughts_token_count"] == 0
 
 
-def test_automatic_function_calling_is_disabled_and_tools_are_declared():
+def declared_tools(client):
+    config = client.aio.models.generate_content.await_args.kwargs["config"]
+    return [d.name for tool in config.tools for d in tool.function_declarations]
+
+
+def test_automatic_function_calling_is_disabled_and_tools_are_declared(monkeypatch):
+    monkeypatch.delenv("JINA_API_KEY", raising=False)
     client = fake_client(model_turn(Part.from_text(text="done")))
 
     run(client)
 
     config = client.aio.models.generate_content.await_args.kwargs["config"]
     assert config.automatic_function_calling.disable is True
-    declared = [d.name for tool in config.tools for d in tool.function_declarations]
-    assert declared == ["searxng_web_search", "web_url_read"]
+    assert declared_tools(client) == ["searxng_web_search", "web_url_read"]
+
+
+def test_jina_is_declared_only_when_its_key_is_set(monkeypatch):
+    monkeypatch.setenv("JINA_API_KEY", "test-key")
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    run(client)
+
+    assert declared_tools(client) == ["searxng_web_search", "web_url_read", "jina_web_search"]
+
+
+def fake_search_and_jina(monkeypatch):
+    calls = []
+
+    async def fake_search(query: str) -> dict:
+        calls.append(("searxng", query))
+        return {"query": query, "results": []}
+
+    async def fake_jina(query: str) -> dict:
+        calls.append(("jina", query))
+        return {"query": query, "failed": True, "error": "402", "results": []}
+
+    monkeypatch.setenv("JINA_API_KEY", "test-key")
+    monkeypatch.setitem(executors.WEB_TOOLS, "searxng_web_search", fake_search)
+    monkeypatch.setitem(executors.WEB_TOOLS, "jina_web_search", fake_jina)
+    return calls
+
+
+def test_jina_runs_once_per_analysis_even_when_its_first_call_fails(monkeypatch):
+    calls = fake_search_and_jina(monkeypatch)
+    client = fake_client(
+        model_turn(tool_call("searxng_web_search", query="q")),
+        model_turn(tool_call("jina_web_search", query="first")),
+        model_turn(tool_call("jina_web_search", query="second")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    text, _, _, _ = run(client)
+
+    assert text == "done"
+    assert calls == [("searxng", "q"), ("jina", "first")]
+    (response,) = function_responses(client.aio.models.generate_content.await_args_list[3])
+    assert "only once per analysis" in response.response["error"]
+
+
+def test_jina_waits_for_a_searxng_search_in_an_earlier_turn(monkeypatch):
+    calls = fake_search_and_jina(monkeypatch)
+    client = fake_client(
+        model_turn(tool_call("jina_web_search", query="too early")),
+        model_turn(tool_call("searxng_web_search", query="q"), tool_call("jina_web_search", query="same turn")),
+        model_turn(tool_call("jina_web_search", query="fallback")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    run(client)
+
+    assert calls == [("searxng", "q"), ("jina", "fallback")]
+    # One shared contents list: [prompt, model turn 1, responses 1, model turn 2, responses 2, ...]
+    contents = client.aio.models.generate_content.await_args.kwargs["contents"]
+    (early,) = [p.function_response for p in contents[2].parts]
+    _, same_turn = [p.function_response for p in contents[4].parts]
+    assert "search with searxng_web_search first" in early.response["error"]
+    assert "search with searxng_web_search first" in same_turn.response["error"]
+
+
+def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypatch):
+    async def fake_search(query: str, pageno: int = 1) -> dict:
+        return {
+            "query": query,
+            "results": [
+                {"url": "https://www.apnews.com/article/x/", "publishedDate": "2026-09-15T10:12:00+00:00"},
+                {"url": ""},
+            ],
+        }
+
+    async def fake_read(url: str) -> dict:
+        return {"url": url, "content": "..."}
+
+    async def failed_read(url: str) -> dict:
+        return {"url": url, "failed": True, "error": "404", "content": ""}
+
+    monkeypatch.setitem(executors.WEB_TOOLS, "searxng_web_search", fake_search)
+    monkeypatch.setitem(executors.WEB_TOOLS, "web_url_read", fake_read)
+    client = fake_client(
+        model_turn(
+            tool_call("searxng_web_search", query="q"),
+            tool_call("web_url_read", url="http://Reuters.com/a#top"),
+        ),
+        model_turn(tool_call("run", cmd="hallucinated tool")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    _, _, _, observed = run(client)
+
+    assert observed.urls == {"apnews.com/article/x", "reuters.com/a"}
+    assert observed.dates == {"apnews.com/article/x": "2026-09-15"}
+
+    monkeypatch.setitem(executors.WEB_TOOLS, "web_url_read", failed_read)
+    client = fake_client(
+        model_turn(tool_call("web_url_read", url="https://reuters.com/never-existed")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    _, _, _, observed = run(client)
+
+    assert observed.urls == set()
+    assert observed.dates == {}
+
+
+def cited(url, relevance="supports_claim"):
+    return {"url": url, "relevance_to_claim": relevance}
+
+
+def test_tool_usage_counts_runs_and_the_cited_sources_each_search_tool_returned(monkeypatch):
+    async def fake_search(query: str) -> dict:
+        return {"query": query, "results": [{"url": "https://a.org/1"}, {"url": "https://both.org/x"}]}
+
+    async def fake_jina(query: str) -> dict:
+        return {"query": query, "results": [{"url": "https://both.org/x"}, {"url": "https://jina.org/2"}]}
+
+    async def fake_read(url: str) -> dict:
+        return {"url": url, "content": "..."}
+
+    monkeypatch.setenv("JINA_API_KEY", "test-key")
+    monkeypatch.setitem(executors.WEB_TOOLS, "searxng_web_search", fake_search)
+    monkeypatch.setitem(executors.WEB_TOOLS, "jina_web_search", fake_jina)
+    monkeypatch.setitem(executors.WEB_TOOLS, "web_url_read", fake_read)
+    client = fake_client(
+        model_turn(tool_call("jina_web_search", query="too early"), tool_call("searxng_web_search", query="q")),
+        model_turn(tool_call("jina_web_search", query="fallback"), tool_call("web_url_read", url="https://jina.org/2")),
+        model_turn(Part.from_text(text="done")),
+    )
+    evidence = {
+        "searches_performed": [
+            {"results": [cited("https://a.org/1"), cited("https://both.org/x", "contradicts_claim")]},
+            {"results": [cited("https://jina.org/2"), cited("https://made-up.org/3")]},
+            {"results": [cited("https://a.org/context", "provides_context"), cited("not a url")]},
+        ]
+    }
+    assert cited_url_keys(evidence) == {"a.org/1", "both.org/x", "jina.org/2", "made-up.org/3"}
+
+    _, _, _, observed = run(client)
+
+    assert observed.tool_usage(evidence) == {
+        "calls": {"searxng_web_search": 1, "jina_web_search": 1, "web_url_read": 1},
+        "sources_by_tool": {"searxng_web_search": 2, "jina_web_search": 2},
+    }
+    assert executors.ObservedToolOutput().tool_usage(evidence) == {"calls": {}, "sources_by_tool": {}}

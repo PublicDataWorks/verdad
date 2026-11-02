@@ -56,6 +56,7 @@ For each entry in `keywords_detected`:
 - **Use different phrasings.** The KB entries may use different wording than the snippet. Try synonyms, paraphrases, and related terms.
 - **Note negative results.** If a search returns no results, that is valuable information -- it tells the reviewer that the KB has no coverage for that topic.
 - **Do not filter or judge.** Return all relevant KB entries you find, even if they seem contradictory. Let the reviewer agent decide how to use them.
+- **Always carry the provenance through.** The tool marks each entry `provenance: curated` or `provenance: pipeline`. Pipeline-authored entries come from earlier automated reviews of other snippets and have been wrong before (the KB once held four different "2026 winners" of the same election); the reviewer treats them as context only, so never present one as proof.
 
 ## Output Format
 
@@ -73,6 +74,7 @@ Produce a structured summary of your findings. For each search you performed, in
     - **Confidence:** [the KB entry's confidence score]
     - **Categories:** [categories]
     - **Status:** [active/superseded/deactivated]
+    - **Provenance:** [curated | pipeline] (from the tool's `provenance` field; `pipeline` entries were written by an earlier automated review and are context only, never evidence)
     - **Time Sensitive:** [yes/no, and valid_from/valid_until if applicable]
     - **Relevance:** [brief explanation of why this entry is relevant to the snippet]
 ```

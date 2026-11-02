@@ -1,0 +1,260 @@
+import json
+
+from processing_pipeline.stage_3.models import EVIDENCE_GATE_NOTE_PREFIX, strip_pipeline_note
+from processing_pipeline.stage_4.citation_check import CITATION_CHECK_NOTE_PREFIX, check_stage_4_citations
+
+REAL = "https://apnews.com/article/rubio-secretary-state-1a2b3c"
+FAKE = "https://apnews.com/article/rubio-resigns-a1b2c3d4e5f6"
+FAKE2 = "https://www.politifact.com/factchecks/2026/sep/01/rubio/"
+
+
+def _review(explanation_en, **overrides):
+    review = {
+        "explanation": {"english": explanation_en, "spanish": "Explicación."},
+        "summary": {"english": "Summary.", "spanish": "Resumen."},
+        "thought_summaries": "thoughts",
+        "confidence_scores": {"overall": 97, "categories": [{"category": "Fabricated Content", "score": 96}]},
+    }
+    review.update(overrides)
+    return review
+
+
+def _metadata(observed=(), web_research=""):
+    return json.dumps(
+        {"web_research": web_research, "stage_4_tool_record": {"searches": [], "fetches": [], "observed_urls": list(observed)}}
+    )
+
+
+def _check(review, metadata, stage_3=None, enforce=True):
+    return check_stage_4_citations(review, metadata, stage_3, enforce=enforce)
+
+
+class TestCheckStage4Citations:
+    def test_url_a_tool_returned_passes(self):
+        review = _review(f"Confirmed by {REAL}.")
+        result, check = _check(review, _metadata(["apnews.com/article/rubio-secretary-state-1a2b3c"]))
+
+        assert check["applied"] is False and check["unobserved"] == []
+        assert check["cited"] == [{"url": REAL, "where": "explanation.english", "observed": True}]
+        assert result["confidence_scores"]["overall"] == 97
+        assert CITATION_CHECK_NOTE_PREFIX not in result["explanation"]["english"]
+
+    def test_caps_by_default_since_2026_09_22(self):
+        review = _review(f"Debunked by {FAKE}.")
+        result, check = check_stage_4_citations(review, _metadata(), None)
+
+        assert check["applied"] is True and check["unobserved"] == [FAKE]
+        assert result["confidence_scores"]["overall"] == 40
+
+    def test_record_only_lists_reasons_but_never_caps(self, monkeypatch):
+        monkeypatch.setattr("processing_pipeline.stage_4.constants.CITATION_CHECK_CAPS", False)
+        review = _review(f"Debunked by {FAKE}.")
+        result, check = check_stage_4_citations(review, _metadata(), None)
+
+        assert check["applied"] is False and check["unobserved"] == [FAKE]
+        assert check["reasons"][0].startswith("the review cites URLs")
+        assert result["confidence_scores"]["overall"] == 97
+        assert CITATION_CHECK_NOTE_PREFIX not in result["explanation"]["english"]
+
+    def test_url_no_tool_returned_caps_and_notes(self):
+        review = _review(f"Debunked by {FAKE}.")
+        result, check = _check(review, _metadata(["apnews.com/article/rubio-secretary-state-1a2b3c"]))
+
+        assert check["applied"] is True and check["unobserved"] == [FAKE]
+        assert check["original_overall"] == 97
+        assert check["original_categories"] == [{"category": "Fabricated Content", "score": 96}]
+        assert result["confidence_scores"]["overall"] == 40
+        assert result["confidence_scores"]["categories"][0]["score"] == 40
+        assert result["explanation"]["english"].endswith(check["note"])
+        assert FAKE in check["note"]
+        assert result["explanation"]["spanish"].startswith("Explicación.\n\n" + CITATION_CHECK_NOTE_PREFIX)
+        assert review["confidence_scores"]["overall"] == 97, "input is not mutated"
+
+    def test_url_key_normalisation_matches_www_and_trailing_slash(self):
+        review = _review("See https://www.apnews.com/article/rubio-secretary-state-1a2b3c/.")
+        _, check = _check(review, _metadata(["apnews.com/article/rubio-secretary-state-1a2b3c"]))
+        assert check["applied"] is False
+
+    def test_parenthesised_urls(self):
+        review = _review("Per Wikipedia (https://en.wikipedia.org/wiki/Rubio_(politician)) he was confirmed.")
+        _, check = _check(review, _metadata(["en.wikipedia.org/wiki/Rubio_(politician)"]))
+        assert check["applied"] is False and check["cited"][0]["url"] == "https://en.wikipedia.org/wiki/Rubio_(politician)"
+
+    def test_stage_3_recorded_url_is_admissible_unless_stage_3_marked_it_unobserved(self):
+        stage_3 = {
+            "searches_performed": [
+                {
+                    "query": "q",
+                    "results": [
+                        {"url": REAL, "relevance_to_claim": "contradicts_claim"},
+                        {"url": FAKE, "relevance_to_claim": "contradicts_claim", "url_observed_in_tools": False},
+                    ],
+                }
+            ]
+        }
+        _, check = _check(_review(f"See {REAL}."), None, stage_3=stage_3)
+        assert check["applied"] is False
+
+        _, check = _check(_review(f"See {FAKE}."), None, stage_3=stage_3)
+        assert check["applied"] is True
+
+    def test_fake_url_in_web_research_caps_ver_393(self):
+        review = _review("The claim is unsupported.")
+        result, check = _check(review, _metadata([], web_research=f"Found {FAKE} and {REAL}."))
+
+        assert check["applied"] is True
+        assert check["web_research_unobserved"] == [FAKE, REAL]
+        assert check["reasons"] == [f"the web research cites URLs that no search or read tool returned: {FAKE}, {REAL}"]
+        assert result["confidence_scores"]["overall"] == 40
+        assert "investigación web" in result["explanation"]["spanish"]
+
+    def test_web_research_url_a_tool_returned_passes(self):
+        _, check = _check(
+            _review("Unsupported."),
+            _metadata(["apnews.com/article/rubio-secretary-state-1a2b3c"], web_research=f"Found {REAL}."),
+        )
+        assert check["applied"] is False and check["web_research_unobserved"] == []
+
+    def test_fake_url_in_web_research_is_recorded_not_capped_when_evidence_backed_ver_405(self):
+        review = _review("The claim is unsupported.")
+        result, check = check_stage_4_citations(
+            review, _metadata([], web_research=f"Found {FAKE}."), None, evidence_backed=True
+        )
+
+        assert check["applied"] is False and check["reasons"] == []
+        assert check["web_research_unobserved"] == [FAKE] and check["evidence_backed"] is True
+        assert result["confidence_scores"]["overall"] == 97
+        assert CITATION_CHECK_NOTE_PREFIX not in result["explanation"]["english"]
+
+    def test_fake_url_in_the_review_still_caps_when_evidence_backed(self):
+        review = _review(f"Debunked by {FAKE}.")
+        result, check = check_stage_4_citations(review, _metadata(), None, evidence_backed=True)
+
+        assert check["applied"] is True and check["unobserved"] == [FAKE]
+        assert result["confidence_scores"]["overall"] == 40
+
+    # --- VER-369 item 2: absence of recall is not evidence ---------------------
+
+    @staticmethod
+    def _record(searches=(), fetches=(), kb_searches=(), web_research=""):
+        record = {"searches": list(searches), "fetches": list(fetches), "kb_searches": list(kb_searches), "observed_urls": []}
+        return json.dumps({"web_research": web_research, "stage_4_tool_record": record})
+
+    def test_fabricated_verdict_with_no_successful_search_caps(self):
+        review = _review("The event is fabricated; it never happened.")
+        searches = [{"query": "q", "status": "no_results", "urls": []}, {"query": "q2", "status": "failed", "urls": []}]
+        result, check = _check(review, self._record(searches))
+
+        assert check["applied"] is True
+        assert check["retrieval"] == {"searches": 2, "searches_with_results": 0, "pages_read": 0, "kb_curated_sources": 0}
+        assert check["reasons"] == [
+            "the review asserts the content is fabricated/false but no web search returned results, no page was "
+            "read and no curated knowledge-base source came back in this session (searches run: 2)"
+        ]
+        assert result["confidence_scores"]["overall"] == 40
+        assert result["explanation"]["english"].endswith(check["note"]) and "limited to 40" in check["note"]
+
+    def test_verified_false_status_counts_as_a_falsity_verdict(self):
+        review = _review("The claim is not supported.")
+        review["confidence_scores"]["verification_status"] = "verified_false"
+        _, check = _check(review, self._record())
+        assert check["applied"] is True and check["retrieval"]["searches"] == 0
+
+    def test_fabricated_verdict_with_any_retrieval_passes(self):
+        review = _review("The event is fabricated.")
+        _, check = _check(review, self._record([{"query": "q", "status": "results_found", "urls": ["https://x.org/a"]}]))
+        assert check["applied"] is False and check["retrieval"]["searches_with_results"] == 1
+
+        _, check = _check(review, self._record(fetches=[{"url": "https://x.org/a", "status": "ok"}]))
+        assert check["applied"] is False and check["retrieval"]["pages_read"] == 1
+
+        kb = [{"query": "q", "status": "ok", "entries": 1, "curated_source_urls": ["https://x.org/a"]}]
+        _, check = _check(review, self._record(kb_searches=kb))
+        assert check["applied"] is False and check["retrieval"]["kb_curated_sources"] == 1
+
+    def test_no_falsity_verdict_and_no_search_passes(self):
+        review = _review("The claim is accurate.")
+        review["confidence_scores"]["verification_status"] = "verified_true"
+        _, check = _check(review, self._record())
+        assert check["applied"] is False and check["reasons"] == []
+
+    def test_gate_note_is_not_read_as_the_reviewer_asserting_falsity(self):
+        gate_note = f"{EVIDENCE_GATE_NOTE_PREFIX} Confidence capped at 40 because the analysis asserts the content is fabricated."
+        review = _review(f"The claim is accurate.\n\n{gate_note}")
+        _, check = _check(review, self._record())
+        assert check["applied"] is False
+
+    def test_reasons_combine_into_one_note(self):
+        review = _review(f"Fabricated, see {FAKE}.")
+        result, check = _check(review, self._record(web_research=f"Also {FAKE2}."))
+        assert len(check["reasons"]) == 3
+        assert result["explanation"]["english"].count(CITATION_CHECK_NOTE_PREFIX) == 1
+        assert check["note"] == f"{CITATION_CHECK_NOTE_PREFIX} Confidence limited to 40 by the pipeline because " + "; ".join(check["reasons"]) + "."
+
+    def test_web_research_reason_is_recorded_not_capped_when_record_only(self, monkeypatch):
+        monkeypatch.setattr("processing_pipeline.stage_4.constants.CITATION_CHECK_CAPS", False)
+        result, check = check_stage_4_citations(_review("Unsupported."), self._record(web_research=f"Found {FAKE}."), None)
+        assert check["applied"] is False and check["web_research_unobserved"] == [FAKE]
+        assert check["reasons"] == [f"the web research cites URLs that no search or read tool returned: {FAKE}"]
+        assert result["confidence_scores"]["overall"] == 97
+
+    def test_front_pages_and_search_pages_are_not_citations(self):
+        review = _review("Per AP (https://apnews.com) and https://www.bing.com/search?q=rubio nothing contradicts it.")
+        review["confidence_scores"]["verification_status"] = "verified_true"
+        _, check = _check(review, self._record(web_research="Checked https://www.reuters.com/ and https://google.com/search?q=x"))
+        assert check["applied"] is False
+        assert check["unobserved"] == [] and check["web_research_unobserved"] == []
+        assert len(check["cited"]) == 2, "still recorded, just not a reason"
+
+    def test_note_lists_at_most_three_urls_bilingually(self):
+        urls = [f"https://example.org/article/{i}" for i in range(5)]
+        result, check = _check(_review("Unsupported."), self._record(web_research=" ".join(urls)))
+        assert check["web_research_unobserved"] == urls
+        assert ", ".join(urls[:3]) + " and 2 more" in check["note"]
+        assert ", ".join(urls[:3]) + " y 2 más" in result["explanation"]["spanish"]
+        assert urls[4] not in check["note"]
+
+    def test_thought_summaries_and_claim_evidence_are_checked(self):
+        review = _review("Clean.", thought_summaries=f"I recall {FAKE}")
+        _, check = _check(review, _metadata())
+        assert check["cited"] == [{"url": FAKE, "where": "thought_summaries", "observed": False}]
+
+        review = _review("Clean.")
+        review["confidence_scores"]["analysis"] = {"claims": [{"quote": "q", "evidence": f"per {FAKE}", "score": 90}]}
+        _, check = _check(review, _metadata())
+        assert check["cited"] == [{"url": FAKE, "where": "claims[0].evidence", "observed": False}]
+
+    def test_previous_note_is_dropped_before_checking(self):
+        old_note = f"{CITATION_CHECK_NOTE_PREFIX} Confidence capped at 40 by the pipeline because ...: {FAKE}."
+        review = _review(f"Clean text.\n\n{old_note}")
+        result, check = _check(review, _metadata())
+
+        assert check["applied"] is False
+        assert result["explanation"]["english"] == "Clean text."
+
+    def test_gate_note_survives(self):
+        gate_note = f"{EVIDENCE_GATE_NOTE_PREFIX} Confidence capped at 40 by the pipeline because x."
+        review = _review(f"Fabricated.\n\n{gate_note}")
+        result, check = _check(review, _metadata())
+        # the gate note stays; rule 3 then adds its own note after it (fabricated, nothing retrieved)
+        assert result["explanation"]["english"].startswith(f"Fabricated.\n\n{gate_note}\n\n{CITATION_CHECK_NOTE_PREFIX}")
+        assert check["applied"] is True
+
+    def test_no_grounding_metadata_and_no_stage_3_record(self):
+        result, check = _check(_review("No links here."), None)
+        assert check == {
+            "applied": False,
+            "reasons": [],
+            "cited": [],
+            "unobserved": [],
+            "web_research_unobserved": [],
+            "evidence_backed": False,
+            "retrieval": {"searches": 0, "searches_with_results": 0, "pages_read": 0, "kb_curated_sources": 0},
+        }
+        assert result["confidence_scores"]["overall"] == 97
+
+
+def test_strip_pipeline_note_removes_only_the_given_prefix():
+    text = f"Body.\n\n{EVIDENCE_GATE_NOTE_PREFIX} gate.\n\n{CITATION_CHECK_NOTE_PREFIX} cite."
+    assert strip_pipeline_note(text, CITATION_CHECK_NOTE_PREFIX) == f"Body.\n\n{EVIDENCE_GATE_NOTE_PREFIX} gate."
+    assert strip_pipeline_note(None, CITATION_CHECK_NOTE_PREFIX) == ""
