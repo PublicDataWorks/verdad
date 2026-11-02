@@ -305,6 +305,8 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 | `STAGE1_TRANSCRIBE_FIRST` | Stage 1 flow shape: one Transcribe call per recording supplies every transcript (needs `STAGE1_TRANSCRIPTION_METHOD=transcribe`) | `false` | `transcriptor` on every row |
 | `STAGE1_DETECTION_PASSES` | Stage 1 detection: `two` (initial, then main when flagged) or `one` (main only, every recording; needs `STAGE1_TRANSCRIBE_FIRST=true`) | `two` | `initial_detection_result` is null with `one` |
 | `STAGE1_ANCHOR_TIMESTAMPS` | Stage 1 main detection: flagged snippet times from word timestamps where the row has them | `false` | per snippet in `detection_result` |
+| `STAGE2_USE_WORD_TIMES` | Stage 2 clipping: cut snippets that carry `start_s`/`end_s` at millisecond precision around the words | `false` | `snippets.start_time`/`end_time`/`duration`/`recorded_at` |
+| `STAGE2_CONTEXT_BEFORE_S` / `STAGE2_CONTEXT_AFTER_S` | Stage 2 padding for the word-time cut, float seconds >= 0 | the flow's `context_before_seconds` / `context_after_seconds` (90 / 60 in `main.py`) | (the clip itself) |
 | `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop) | `gemini-2.5-pro` | `snippets.analyzed_by` |
 | `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-2.5-flash` | `snippets.analyzed_by` |
 | `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
@@ -358,9 +360,9 @@ flags, so it does not redo single-pass rows. `STAGE1_ANCHOR_TIMESTAMPS=true` mat
 `transcription` against the stored words (`stage_1/anchor.py`; normalized tokens, `difflib`, accepted at a match
 score of 0.6 or more and within 60 s of the model's window) and writes `start_time`/`end_time` as whole-second MM:SS
 (start rounded down, end up), plus `start_s`, `end_s`, `anchor_score`, `anchor_status` and the model's originals in
-`llm_start_time`/`llm_end_time`; a rejected match keeps the model's times. Stage 2 is unchanged except that it now
-clamps an end past the audio (word ends can land at 1800 s on a file trimmed to 1799 s) instead of failing the
-response, so the 90 s / 60 s padding and the "position inside the clip" meaning of `snippets.start_time` hold. The
+`llm_start_time`/`llm_end_time`; a rejected match keeps the model's times. Unless `STAGE2_USE_WORD_TIMES` is on
+(see below), Stage 2 is unchanged except that it now clamps an end past the audio (word ends can land at 1800 s on a
+file trimmed to 1799 s) instead of failing the response, so the 90 s / 60 s padding and the "position inside the clip" meaning of `snippets.start_time` hold. The
 flow checks the combination at start: `STAGE1_TRANSCRIBE_FIRST=true` without the `transcribe` method, or
 `STAGE1_DETECTION_PASSES=one` without transcribe-first, fails the run with a `ValueError`. Transcribe is 100
 requests/day on Tier 1, against about 2,400 recordings/day: do not turn transcribe-first on in production before the
@@ -369,6 +371,26 @@ quota is raised. Fully streamlined:
 ```bash
 fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_METHOD=transcribe STAGE1_TRANSCRIBE_FIRST=true \
     STAGE1_DETECTION_PASSES=one STAGE1_ANCHOR_TIMESTAMPS=true
+```
+
+**Word-boundary clipping** (`STAGE2_USE_WORD_TIMES`, `STAGE2_CONTEXT_BEFORE_S`, `STAGE2_CONTEXT_AFTER_S`; off by
+default). Without it, Stage 2 cuts from the whole-second `start_time`/`end_time` even when Stage 1 anchored the
+snippet. With `STAGE2_USE_WORD_TIMES=true`, a flagged snippet with `start_s`/`end_s` is cut from
+`start_s - STAGE2_CONTEXT_BEFORE_S` to `end_s + STAGE2_CONTEXT_AFTER_S` with millisecond precision, clamped to the
+audio (`extract_snippet_clip_at_word_times` in `stage_2/tasks.py`); a snippet without word times (not anchored, or
+from a row without words) is cut exactly as before, with the flow's padding. The stored columns keep their meaning:
+`snippets.start_time`/`end_time` are positions inside the clip as whole-second MM:SS (start rounded down, so the
+frontend's seek lands just before the first word; end rounded up, capped at the clip length), `duration` is the clip
+length rounded to the nearest second, `recorded_at` is the recording start plus the clip offset (with milliseconds).
+Unset padding variables fall back to the flow parameters, so turning the flag on alone keeps the 90 s lead-in
+journalists asked for and the 60 s tail; since the anchor already wrote whole-second times, clip edges move by under a
+second. A value that is not a number of seconds >= 0 marks each response `Error` with the variable named in
+`error_message`. Reduce the padding only after Stage 3 has been re-evaluated on the shorter clips: Stage 3 analyzes
+the clip audio itself (with the Stage 1 snippet as metadata), so less context changes its analysis and the confidence
+scores that gate Stage 4, not only what reviewers hear.
+
+```bash
+fly secrets set -a processing-worker STAGE1_ANCHOR_TIMESTAMPS=true STAGE2_USE_WORD_TIMES=true
 ```
 
 ## Triggering one stage run against production
