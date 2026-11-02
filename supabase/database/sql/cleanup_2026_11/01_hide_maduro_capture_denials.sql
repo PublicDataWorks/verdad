@@ -16,7 +16,7 @@
 --
 -- After Gemini quota returns (VER-438): requeue this batch for Stage 4 with
 --   python src/scripts/reprocess_snippets.py --quarantine-batch hide-2026-11-02-maduro --stage 4 --execute
--- and restore (rollback statement, per snippet) the ones whose new verdict is correct.
+-- and restore (rollback statement, with ids set to those snippets) the ones whose new verdict is correct.
 
 BEGIN;
 
@@ -93,16 +93,19 @@ logged AS (
     RETURNING snippet
 )
 INSERT INTO public.user_hide_snippets (snippet, "user")
-SELECT snippet, NULL FROM logged;
+SELECT snippet, NULL FROM logged
+ON CONFLICT (snippet) DO NOTHING;
 
 COMMIT;
 
 -- Verify:
 -- SELECT reason, count(*) FROM public.snippet_quarantine_log WHERE batch = 'hide-2026-11-02-maduro' AND restored_at IS NULL GROUP BY 1;
 
--- Rollback:
--- WITH r AS (
+-- Rollback. Set ids to the snippets to restore (one, several, or NULL for the whole batch):
+-- WITH ids(snippet) AS (VALUES ('00000000-0000-0000-0000-000000000000'::uuid)),
+-- r AS (
 --   DELETE FROM public.user_hide_snippets h USING public.snippet_quarantine_log l
 --   WHERE l.snippet = h.snippet AND l.batch = 'hide-2026-11-02-maduro' AND l.restored_at IS NULL AND h."user" IS NULL
+--     AND (h.snippet IN (SELECT snippet FROM ids) OR EXISTS (SELECT 1 FROM ids WHERE snippet IS NULL))
 --   RETURNING h.snippet)
 -- UPDATE public.snippet_quarantine_log l SET restored_at = now() FROM r WHERE l.snippet = r.snippet AND l.batch = 'hide-2026-11-02-maduro';

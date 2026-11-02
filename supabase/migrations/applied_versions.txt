@@ -1,4 +1,5 @@
 # supabase_migrations.schema_migrations in production, fetched 2026-10-01; regenerate with `make migrations-manifest`.
+# 20261102233630 appended by hand on 2026-11-02 after checking it in schema_migrations (no SUPABASE_ACCESS_TOKEN to refetch).
 # version<TAB>name
 20241029135243	remote_schema
 20241029135348	remote_schema

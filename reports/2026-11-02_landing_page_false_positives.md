@@ -33,7 +33,10 @@ starred, sorted by confidence, and checked nothing else. Of the 10 cards it serv
   no dislikes, confidence 95 or higher, a review on or after 2026-09-22 04:07:30 UTC (reviewer 1.3.0), a recording
   date in the last 180 days and no Fabricated Content category. Each snippet appears once, sorted by star count and
   then recency. New table `landing_page_snippet_overrides` (`pin` / `block`) lets staff curate the carousel by SQL:
-  `INSERT INTO landing_page_snippet_overrides (snippet, mode, note) VALUES ('<id>', 'block', 'why');`
+  `INSERT INTO landing_page_snippet_overrides (snippet, mode, note) VALUES ('<id>', 'block', 'why')
+  ON CONFLICT (snippet) DO UPDATE SET mode = EXCLUDED.mode, note = EXCLUDED.note;`
+  A `pin` skips the star, confidence, review-date, recency and Fabricated Content checks; status, hide and dislike
+  checks still apply, so only pin a snippet someone has checked.
   The result shape is unchanged. The new set of 10 was checked as `anon`.
 - Quarantine batch `hide-2026-11-02-maduro`
   (`supabase/database/sql/cleanup_2026_11/01_hide_maduro_capture_denials.sql`): 49 visible verdicts that deny the
@@ -45,8 +48,9 @@ starred, sorted by confidence, and checked nothing else. Of the 10 cards it serv
 1. Requeue the batch for Stage 4 and restore any snippet whose new verdict is correct:
    `python src/scripts/reprocess_snippets.py --quarantine-batch hide-2026-11-02-maduro --stage 4 --execute`
 2. Re-review only, not hidden: these verdicts accept the capture but dispute timing, the "kidnapping" framing or a
-   detail. Some are probably wrong too, for example `fa2fe5c3` and `9e4c9eff` on the reported use of Claude in the
-   raid. Use `--ids-file`:
+   detail. Some are probably wrong too, for example `fa2fe5c3` on the reported use of Claude in the
+   raid (`9e4c9eff` makes the same Claude point but also denies the capture, so it is in the hidden batch). Use
+   `--ids-file`:
 - `fbe19f67-ae33-4233-bd7c-0ca2771b8a71`
 - `1562add7-289a-4d7b-a9c2-54d042ccd858`
 - `45abe6ff-71ba-4c24-8a83-e51caa1a0427`
