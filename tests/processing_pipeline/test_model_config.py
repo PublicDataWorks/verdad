@@ -242,3 +242,46 @@ class TestStage1FlowOptions:
     def test_explicit_two_passes(self, monkeypatch):
         monkeypatch.setenv("STAGE1_DETECTION_PASSES", "two")
         assert mc.stage1_flow_options().detection_passes is mc.DetectionPasses.TWO
+
+
+class TestStage2ClipOptions:
+    """STAGE2_USE_WORD_TIMES / STAGE2_CONTEXT_BEFORE_S / STAGE2_CONTEXT_AFTER_S; unset is today's clipping."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        for name in ("STAGE2_USE_WORD_TIMES", "STAGE2_CONTEXT_BEFORE_S", "STAGE2_CONTEXT_AFTER_S"):
+            monkeypatch.delenv(name, raising=False)
+
+    def test_unset_is_off_with_the_flow_padding(self):
+        assert mc.stage2_clip_options(90, 60) == mc.Stage2ClipOptions(
+            use_word_times=False, context_before_s=90.0, context_after_s=60.0
+        )
+
+    def test_padding_follows_the_flow_parameters_when_unset(self):
+        options = mc.stage2_clip_options(30, 15)
+        assert (options.context_before_s, options.context_after_s) == (30.0, 15.0)
+
+    def test_env_overrides_with_float_seconds(self, monkeypatch):
+        monkeypatch.setenv("STAGE2_USE_WORD_TIMES", "true")
+        monkeypatch.setenv("STAGE2_CONTEXT_BEFORE_S", "45.5")
+        monkeypatch.setenv("STAGE2_CONTEXT_AFTER_S", " 0 ")
+        assert mc.stage2_clip_options(90, 60) == mc.Stage2ClipOptions(
+            use_word_times=True, context_before_s=45.5, context_after_s=0.0
+        )
+
+    def test_empty_values_mean_unset(self, monkeypatch):
+        monkeypatch.setenv("STAGE2_USE_WORD_TIMES", "")
+        monkeypatch.setenv("STAGE2_CONTEXT_BEFORE_S", "")
+        assert mc.stage2_clip_options(90, 60).use_word_times is False
+        assert mc.stage2_clip_options(90, 60).context_before_s == 90.0
+
+    @pytest.mark.parametrize("value", ["abc", "-1", "nan", "inf"])
+    def test_bad_padding_raises(self, monkeypatch, value):
+        monkeypatch.setenv("STAGE2_CONTEXT_AFTER_S", value)
+        with pytest.raises(ValueError, match="STAGE2_CONTEXT_AFTER_S="):
+            mc.stage2_clip_options(90, 60)
+
+    def test_bad_flag_raises(self, monkeypatch):
+        monkeypatch.setenv("STAGE2_USE_WORD_TIMES", "maybe")
+        with pytest.raises(ValueError, match="STAGE2_USE_WORD_TIMES='maybe'"):
+            mc.stage2_clip_options(90, 60)

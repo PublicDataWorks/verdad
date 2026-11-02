@@ -9,6 +9,7 @@ from processing_pipeline.stage_2 import (
     download_audio_file_from_s3,
     upload_to_r2_and_clean_up,
     extract_snippet_clip,
+    extract_snippet_clip_at_word_times,
     insert_new_snippet_to_snippets_table_in_supabase,
     ensure_correct_timestamps,
     process_llm_response,
@@ -414,3 +415,158 @@ class TestClampToAudio:
         assert (duration, start, end) == ("00:15", "00:05", "00:15")
         assert recorded_at == "2024-01-01T00:00:15+00:00"
         assert os.path.exists(output_file)
+
+
+class TestWordTimeClipping:
+    """STAGE2_USE_WORD_TIMES=true: snippets with start_s/end_s are cut at millisecond precision around the words."""
+
+    RECORDED_AT = "2024-01-01T00:00:00Z"
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        for name in ("STAGE2_USE_WORD_TIMES", "STAGE2_CONTEXT_BEFORE_S", "STAGE2_CONTEXT_AFTER_S"):
+            monkeypatch.delenv(name, raising=False)
+
+    def test_cut_and_columns(self, test_data_dir):
+        audio = AudioSegment.silent(duration=60000)
+        output_file = os.path.join(test_data_dir, "words.mp3")
+
+        duration, start, end, recorded_at = extract_snippet_clip_at_word_times(
+            audio=audio,
+            output_file=output_file,
+            start_s=20.4,
+            end_s=31.6,
+            context_before_s=5.25,
+            context_after_s=3,
+            formatted_recorded_at=self.RECORDED_AT,
+        )
+
+        # clip 15.15-34.6 s (19.45 s): the words sit 5.25-16.45 s into it
+        assert (duration, start, end) == ("00:19", "00:05", "00:17")
+        assert recorded_at == "2024-01-01T00:00:15.150000+00:00"
+        assert abs(len(AudioSegment.from_mp3(output_file)) - 19450) < 100  # mp3 frame padding
+
+    def test_padding_is_clamped_to_the_audio(self, test_data_dir):
+        audio = AudioSegment.silent(duration=30000)
+        output_file = os.path.join(test_data_dir, "edges.mp3")
+
+        # 90 s before a word at 2 s starts the clip at 0; 60 s after an end past the audio stops it at 30 s
+        duration, start, end, recorded_at = extract_snippet_clip_at_word_times(
+            audio, output_file, 2.0, 30.8, 90, 60, self.RECORDED_AT
+        )
+
+        assert (duration, start, end) == ("00:30", "00:02", "00:30")
+        assert recorded_at == "2024-01-01T00:00:00+00:00"
+
+    def test_end_never_passes_the_rounded_duration(self, test_data_dir):
+        audio = AudioSegment.silent(duration=30400)
+        output_file = os.path.join(test_data_dir, "tail.mp3")
+
+        # clip 20.0-30.4 s rounds to 10 s; the end (10.4 s in) would round up to 11 without the cap
+        duration, start, end, _ = extract_snippet_clip_at_word_times(
+            audio, output_file, 25.0, 30.4, 5, 60, self.RECORDED_AT
+        )
+
+        assert (duration, start, end) == ("00:10", "00:05", "00:10")
+
+    def test_start_past_the_audio_raises(self, test_data_dir):
+        audio = AudioSegment.silent(duration=30000)
+        with pytest.raises(ValueError, match="within the audio duration"):
+            extract_snippet_clip_at_word_times(
+                audio, os.path.join(test_data_dir, "x.mp3"), 31.0, 35.0, 5, 5, self.RECORDED_AT
+            )
+
+    def test_columns_pass_ensure_time_format(self):
+        from processing_pipeline.supabase_utils import SupabaseClient
+
+        assert SupabaseClient.ensure_time_format(None, "02:30") == "00:02:30"
+
+    def test_ensure_correct_timestamps_checks_word_times_only_when_on(self):
+        audio = AudioSegment.silent(duration=30000)
+        # MM:SS fine, word times past the audio: only the word-time check rejects it
+        snippet = {"start_time": "00:10", "end_time": "00:20", "start_s": 30.5, "end_s": 31.0}
+        ensure_correct_timestamps(audio, [snippet])
+        with pytest.raises(ValueError, match="within the audio duration"):
+            ensure_correct_timestamps(audio, [snippet], use_word_times=True)
+        # without word times the MM:SS check still runs when the flag is on
+        ensure_correct_timestamps(audio, [{"start_time": "00:10", "end_time": "00:20", "start_s": None}], True)
+
+    def _response(self):
+        return {
+            "id": 7,
+            "audio_file": {"id": 3, "recorded_at": self.RECORDED_AT},
+            "detection_result": {
+                "flagged_snippets": [
+                    # anchored: model said 00:20-00:40, the words are at 22.3-35.7 s
+                    {"uuid": "anchored", "start_time": "00:22", "end_time": "00:36", "start_s": 22.3, "end_s": 35.7},
+                    # not anchored: anchor.py stores None
+                    {"uuid": "plain", "start_time": "00:20", "end_time": "00:40", "start_s": None, "end_s": None},
+                ]
+            },
+        }
+
+    def _run(self, local_file):
+        supabase_client = Mock()
+        s3_client = Mock()
+        process_llm_response(
+            supabase_client=supabase_client,
+            llm_response=self._response(),
+            local_file=local_file,
+            s3_client=s3_client,
+            r2_bucket_name="bucket",
+            context_before_seconds=10,
+            context_after_seconds=5,
+        )
+        inserted = {c.kwargs["uuid"]: c.kwargs for c in supabase_client.insert_snippet.call_args_list}
+        return supabase_client, inserted
+
+    @pytest.fixture
+    def minute_of_audio(self, test_data_dir, monkeypatch):
+        monkeypatch.chdir(test_data_dir)  # snippet mp3s are written to the working directory
+        path = os.path.join(test_data_dir, "radio_station_minute.mp3")
+        AudioSegment.silent(duration=60000).export(path, format="mp3")
+        return path
+
+    def test_flag_on_uses_word_times_and_env_padding(self, monkeypatch, minute_of_audio):
+        monkeypatch.setenv("STAGE2_USE_WORD_TIMES", "true")
+        monkeypatch.setenv("STAGE2_CONTEXT_BEFORE_S", "2.5")
+        monkeypatch.setenv("STAGE2_CONTEXT_AFTER_S", "1.5")
+
+        supabase_client, inserted = self._run(minute_of_audio)
+
+        supabase_client.set_stage_1_llm_response_status.assert_called_with(7, "Processed")
+        # clip 19.8-37.2 s (17.4 s): words 2.5-15.9 s in
+        anchored = inserted["anchored"]
+        assert (anchored["duration"], anchored["start_time"], anchored["end_time"]) == ("00:17", "00:02", "00:16")
+        assert anchored["recorded_at"] == "2024-01-01T00:00:19.800000+00:00"
+        # no word times: today's cut with the flow's 10 s / 5 s, whatever the env padding says
+        plain = inserted["plain"]
+        assert (plain["duration"], plain["start_time"], plain["end_time"]) == ("00:35", "00:10", "00:30")
+        assert plain["recorded_at"] == "2024-01-01T00:00:10+00:00"
+
+    def test_flag_on_without_env_padding_uses_the_flow_parameters(self, monkeypatch, minute_of_audio):
+        monkeypatch.setenv("STAGE2_USE_WORD_TIMES", "true")
+
+        _, inserted = self._run(minute_of_audio)
+
+        # clip 12.3-40.7 s (28.4 s): words 10-23.4 s in
+        anchored = inserted["anchored"]
+        assert (anchored["duration"], anchored["start_time"], anchored["end_time"]) == ("00:28", "00:10", "00:24")
+
+    def test_flag_off_ignores_word_times(self, minute_of_audio):
+        _, inserted = self._run(minute_of_audio)
+
+        # today's path on the MM:SS fields: clip 12-41 s
+        anchored = inserted["anchored"]
+        assert (anchored["duration"], anchored["start_time"], anchored["end_time"]) == ("00:29", "00:10", "00:24")
+        assert anchored["recorded_at"] == "2024-01-01T00:00:12+00:00"
+
+    def test_bad_env_marks_the_response_as_error(self, monkeypatch, minute_of_audio):
+        monkeypatch.setenv("STAGE2_CONTEXT_BEFORE_S", "ninety")
+
+        supabase_client, inserted = self._run(minute_of_audio)
+
+        assert inserted == {}
+        supabase_client.set_stage_1_llm_response_status.assert_called_with(
+            7, "Error", "STAGE2_CONTEXT_BEFORE_S='ninety'; expected a number of seconds"
+        )

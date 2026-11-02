@@ -8,9 +8,11 @@ models".
 
 The Stage 1 flow-shape switches (STAGE1_TRANSCRIBE_FIRST, STAGE1_DETECTION_PASSES, STAGE1_ANCHOR_TIMESTAMPS) are
 read here too, because whether they are valid depends on STAGE1_TRANSCRIPTION_METHOD; ``stage1_flow_options()``
-reads and checks all of them at once.
+reads and checks all of them at once. The Stage 2 clipping switches (STAGE2_USE_WORD_TIMES, STAGE2_CONTEXT_BEFORE_S,
+STAGE2_CONTEXT_AFTER_S) share the same flag parsing; ``stage2_clip_options()`` reads them.
 """
 
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -57,6 +59,11 @@ STAGE1_TRANSCRIPTION_METHOD_ENV = "STAGE1_TRANSCRIPTION_METHOD"
 STAGE1_TRANSCRIBE_FIRST_ENV = "STAGE1_TRANSCRIBE_FIRST"
 STAGE1_DETECTION_PASSES_ENV = "STAGE1_DETECTION_PASSES"
 STAGE1_ANCHOR_TIMESTAMPS_ENV = "STAGE1_ANCHOR_TIMESTAMPS"
+
+# Stage 2 clipping (not models, but read and checked the same way)
+STAGE2_USE_WORD_TIMES_ENV = "STAGE2_USE_WORD_TIMES"
+STAGE2_CONTEXT_BEFORE_S_ENV = "STAGE2_CONTEXT_BEFORE_S"
+STAGE2_CONTEXT_AFTER_S_ENV = "STAGE2_CONTEXT_AFTER_S"
 
 # Stage 3
 STAGE3_MAIN = ModelSetting("STAGE3_MAIN_MODEL", GeminiModel.GEMINI_2_5_PRO)
@@ -173,6 +180,43 @@ def stage1_flow_options() -> Stage1FlowOptions:
 def stage1_anchor_timestamps() -> bool:
     """STAGE1_ANCHOR_TIMESTAMPS alone, for callers that only anchor (main detection, the redo flow)."""
     return _env_flag(STAGE1_ANCHOR_TIMESTAMPS_ENV)
+
+
+@dataclass(frozen=True)
+class Stage2ClipOptions:
+    use_word_times: bool
+    context_before_s: float
+    context_after_s: float
+
+
+def _env_seconds(name: str, default: float) -> float:
+    value = _env(name)
+    if value is None:
+        return float(default)
+    try:
+        seconds = float(value)
+    except ValueError:
+        raise ValueError(f"{name}={value!r}; expected a number of seconds") from None
+    if not math.isfinite(seconds) or seconds < 0:
+        raise ValueError(f"{name}={value!r}; expected a finite number of seconds >= 0")
+    return seconds
+
+
+def stage2_clip_options(context_before_seconds: float, context_after_seconds: float) -> Stage2ClipOptions:
+    """How Stage 2 cuts a snippet that carries word times (``start_s``/``end_s`` from STAGE1_ANCHOR_TIMESTAMPS).
+
+    - STAGE2_USE_WORD_TIMES=true: cut such snippets at ``start_s - before`` / ``end_s + after`` with millisecond
+      precision instead of from the whole-second ``start_time``/``end_time``. Snippets without word times are cut as
+      today either way.
+    - STAGE2_CONTEXT_BEFORE_S / STAGE2_CONTEXT_AFTER_S: the padding for the word-time cut, float seconds >= 0. Unset
+      means the flow's ``context_before_seconds``/``context_after_seconds`` (90 and 60 in main.py), so turning the
+      flag on changes where clips start and end by at most the 20 s window rounding, not how much context they carry.
+    """
+    return Stage2ClipOptions(
+        use_word_times=_env_flag(STAGE2_USE_WORD_TIMES_ENV),
+        context_before_s=_env_seconds(STAGE2_CONTEXT_BEFORE_S_ENV, context_before_seconds),
+        context_after_s=_env_seconds(STAGE2_CONTEXT_AFTER_S_ENV, context_after_seconds),
+    )
 
 
 def stage1_transcription_model() -> ModelName:
