@@ -706,6 +706,39 @@ class TestBuildReviewPipeline:
             "kb_updater": "gemma-4-31b-it",
         }
 
+    @pytest.mark.parametrize(
+        ("reviewer_model", "env", "expected"),
+        [
+            ("gemini-3.8-flash", None, {"thinking_level": "MEDIUM"}),
+            ("gemini-3.8-flash", "low", {"thinking_level": "LOW"}),
+            ("gemini-2.5-pro", None, None),
+            ("gemini-2.5-pro", "high", {"thinking_budget": -1}),
+            ("gemma-4-31b-it", "high", None),
+        ],
+    )
+    def test_reviewer_thinking_defaults_to_medium_on_3x_and_follows_env(
+        self, monkeypatch, reviewer_model, env, expected
+    ):
+        """3.x defaults to high thinking, whose thoughts eat the 16k output cap and truncate the review JSON."""
+        from processing_pipeline.stage_4.agents import build_review_pipeline
+
+        if env is None:
+            monkeypatch.delenv("STAGE4_REVIEWER_THINKING", raising=False)
+        else:
+            monkeypatch.setenv("STAGE4_REVIEWER_THINKING", env)
+
+        pipeline, _ = build_review_pipeline(PROMPT_VERSIONS, reviewer_model)
+        reviewer = pipeline.sub_agents[1]
+        config = reviewer.generate_content_config
+
+        assert config.max_output_tokens == 16384
+        thinking = config.thinking_config
+        if expected is None:
+            assert thinking is None
+        else:
+            dumped = thinking.model_dump(exclude_none=True)
+            assert {k: (v.value if hasattr(v, "value") else v) for k, v in dumped.items()} == expected
+
     def test_only_the_web_researcher_forces_its_first_search_ver_406(self, kb_updater_enabled):
         from processing_pipeline.stage_4.agents import build_review_pipeline, force_first_search
 

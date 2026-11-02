@@ -11,7 +11,14 @@ from google.genai import types
 from processing_pipeline.stage_4.gemini_mcp_toolset import GeminiSafeMcpToolset
 from mcp import StdioServerParameters
 
-from processing_pipeline.model_config import ModelName, stage4_kb_writer_model, stage4_researcher_model
+from processing_pipeline.model_config import (
+    ModelFamily,
+    ModelName,
+    model_family,
+    stage4_kb_writer_model,
+    stage4_researcher_model,
+    thinking_config,
+)
 from processing_pipeline.stage_4 import constants
 from processing_pipeline.stage_4.models import ReviewAnalysisOutput
 from processing_pipeline.stage_4.tools import (
@@ -27,6 +34,19 @@ RETRY_OPTIONS = types.HttpRetryOptions(attempts=6, initial_delay=10, max_delay=6
 
 def _model(model: ModelName) -> Gemini:
     return Gemini(model=str(model), retry_options=RETRY_OPTIONS)
+
+
+def reviewer_thinking(model: ModelName) -> types.ThinkingConfig | None:
+    """Thinking for ``analysis_reviewer``: ``STAGE4_REVIEWER_THINKING`` (minimal|low|medium|high), else medium on 3.x.
+
+    Gemini 3.x defaults to high thinking and the thoughts count against the 16k output cap, so a long review JSON
+    came back truncated and the whole Stage 4 run was retried (Thien, Nov 1 2026). 2.5 keeps its dynamic default
+    unless the variable is set; Gemma takes no thinking config at all.
+    """
+    level = os.getenv("STAGE4_REVIEWER_THINKING") or None
+    if level is None and model_family(model) == ModelFamily.LEVEL:
+        level = "medium"
+    return thinking_config(model, level=level)
 
 
 def force_first_search(callback_context: CallbackContext, llm_request: LlmRequest) -> None:
@@ -102,6 +122,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Mode
         output_schema=ReviewAnalysisOutput,
         generate_content_config=types.GenerateContentConfig(
             max_output_tokens=16384,
+            thinking_config=reviewer_thinking(reviewer_model),
         ),
     )
 

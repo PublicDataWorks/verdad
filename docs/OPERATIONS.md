@@ -312,6 +312,7 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 | `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
 | `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-2.5-flash` | not stored |
 | `STAGE4_REVIEWER_MODEL` | Stage 4 `analysis_reviewer` | `gemini-2.5-pro` | `snippets.reviewed_by` |
+| `STAGE4_REVIEWER_THINKING` | Stage 4 `analysis_reviewer` thinking level (`minimal`/`low`/`medium`/`high`); 3.x defaults to `high`, whose thoughts count against the agent's 16k output cap and truncated review JSON | `medium` on Gemini 3.x, the model default on 2.5, nothing on Gemma | not stored |
 | `STAGE4_KB_WRITER_MODEL` | Stage 4 `kb_updater` (off: `KB_UPDATER_ENABLED = False`) | `gemini-2.5-flash` | `kb_entries.created_by_model` |
 
 ```bash
