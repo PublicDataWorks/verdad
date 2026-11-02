@@ -32,62 +32,11 @@ Please analyze the provided timestamped transcription for potential disinformati
 
 # JSON Schema
 
-```json
-{{
-    "type": "object",
-    "required": ["flagged_snippets"],
-    "properties": {{
-        "flagged_snippets": {{
-            "type": "array",
-            "items": {{
-                "type": "object",
-                "required": [
-                    "start_time",
-                    "end_time",
-                    "transcription",
-                    "explanation",
-                    "disinformation_categories",
-                    "keywords_detected"
-                ],
-                "properties": {{
-                    "start_time": {{
-                        "type": "string",
-                        "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
-                    }},
-                    "end_time": {{
-                        "type": "string",
-                        "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
-                    }},
-                    "transcription": {{
-                        "type": "string",
-                        "description": "Transcription of the snippet (without timestamps)."
-                    }},
-                    "explanation": {{
-                        "type": "string",
-                        "description": "Explain why this snippet was flagged (in English)."
-                    }},
-                    "disinformation_categories": {{
-                        "type": "array",
-                        "items": {{
-                            "type": "string"
-                        }}
-                    }},
-                    "keywords_detected": {{
-                        "type": "array",
-                        "items": {{
-                            "type": "string"
-                        }}
-                    }}
-                }}
-            }}
-        }}
-    }}
-}}
-```
+The output schema is enforced by the API; return only the `flagged_snippets` object.
 
 # Disinformation Detection Heuristics
 
-Below are detailed heuristics for each disinformation category, including culturally relevant examples in **Spanish** and **Arabic**. Use these heuristics to guide your analysis.
+Below are detailed heuristics for each disinformation category, including culturally relevant examples in **Spanish** and **Arabic**. Keywords are not listed; detect the claims by meaning in either language. Use these heuristics to guide your analysis.
 
 ---
 
@@ -95,24 +44,6 @@ Below are detailed heuristics for each disinformation category, including cultur
 
 **Description**:
 Disinformation that falsely claims election fraud or manipulation in cases where no credible evidence exists. Note: Claims about the 2024 Presidential Election outcome should be evaluated against the official results showing Donald Trump's victory with 312 electoral votes and approximately 77.2 million individual votes (49.9%).
-
-**Keywords/Phrases**:
-- **Spanish**:
-  - "elección amañada" (rigged election)
-  - "fraude electoral" (electoral fraud)
-  - "votos robados" (stolen votes)
-  - "voto por correo no seguro" (mail-in voting is unsafe)
-  - "manipulación de máquinas de votación" (voting machine manipulation)
-  - "victoria robada de Harris" (Harris's stolen victory)
-  - "fraude para ayudar a Harris" (fraud to help Harris)
-- **Arabic**:
-  - "انتخابات مزورة" (rigged elections)
-  - "تزوير الأصوات" (vote tampering)
-  - "سرقة الانتخابات" (election theft)
-  - "التصويت عبر البريد غير آمن" (mail-in voting is unsafe)
-  - "تلاعب بآلات التصويت" (voting machine manipulation)
-  - "فوز هاريس المسروق" (Harris's stolen victory)
-  - "تزوير لمساعدة هاريس" (fraud to help Harris)
 
 **Heuristics**:
 - Claims of widespread voter fraud without evidence
@@ -131,17 +62,6 @@ Disinformation that falsely claims election fraud or manipulation in cases where
 **Description**:
 
 Disinformation portraying immigrants as threats to security, economy, or culture, often exaggerating negative impacts.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "invasión en la frontera" (border invasion)
-  - "extranjeros ilegales" (illegal aliens)
-  - "criminales entrando" (criminals entering)
-- **Arabic**:
-  - "غزو الحدود" (border invasion)
-  - "أجانب غير شرعيين" (illegal foreigners)
-  - "مجرمون يدخلون" (criminals entering)
 
 **Heuristics**:
 
@@ -162,17 +82,6 @@ Disinformation portraying immigrants as threats to security, economy, or culture
 
 Disinformation denying the severity of COVID-19, spreading fear about vaccines, or promoting unproven treatments.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "plandemia" (plandemic)
-  - "vacuna experimental" (experimental vaccine)
-  - "microchips en vacunas" (microchips in vaccines)
-- **Arabic**:
-  - "الوباء المخطط" (planned pandemic)
-  - "لقاح تجريبي" (experimental vaccine)
-  - "رقائق في اللقاح" (chips in the vaccine)
-
 **Heuristics**:
 
 - Claims that the pandemic is a hoax or planned event.
@@ -192,15 +101,6 @@ Disinformation denying the severity of COVID-19, spreading fear about vaccines, 
 
 Disinformation denying human impact on climate change, often to oppose environmental regulations.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "engaño climático" (climate hoax)
-  - "calentamiento global falso" (global warming is fake)
-- **Arabic**:
-  - "خدعة المناخ" (climate hoax)
-  - "الاحتباس الحراري كذبة" (global warming is a lie)
-
 **Heuristics**:
 
 - Denial of scientific consensus on climate change.
@@ -218,15 +118,6 @@ Disinformation denying human impact on climate change, often to oppose environme
 **Description**:
 
 Disinformation that misrepresents LGBTQ+ issues, portraying them as threats to traditional values or society.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "ideología de género" (gender ideology)
-  - "adoctrinamiento" (indoctrination)
-- **Arabic**:
-  - "أيديولوجية الجندر" (gender ideology)
-  - "تلقين" (indoctrination)
 
 **Heuristics**:
 
@@ -246,15 +137,6 @@ Disinformation that misrepresents LGBTQ+ issues, portraying them as threats to t
 
 Disinformation that frames abortion in extreme terms, often ignoring legal and ethical complexities.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "aborto es asesinato" (abortion is murder)
-  - "matanza de bebés" (baby killing)
-- **Arabic**:
-  - "الإجهاض قتل" (abortion is killing)
-  - "قتل الأطفال" (killing children)
-
 **Heuristics**:
 
 - Statements that oversimplify abortion debates.
@@ -272,15 +154,6 @@ Disinformation that frames abortion in extreme terms, often ignoring legal and e
 **Description**:
 
 Disinformation predicting economic collapse due to government policies, often exaggerating or misrepresenting facts.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "hiperinflación inminente" (imminent hyperinflation)
-  - "colapso económico" (economic collapse)
-- **Arabic**:
-  - "تضخم مفرط وشيك" (imminent hyperinflation)
-  - "انهيار اقتصادي" (economic collapse)
 
 **Heuristics**:
 
@@ -300,15 +173,6 @@ Disinformation predicting economic collapse due to government policies, often ex
 
 Disinformation that promotes distrust of international cooperation, alleging hidden agendas or conspiracies.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "agenda globalista" (globalist agenda)
-  - "control de la ONU" (UN control)
-- **Arabic**:
-  - "أجندة عالمية" (globalist agenda)
-  - "سيطرة الأمم المتحدة" (UN control)
-
 **Heuristics**:
 
 - Allegations of international organizations undermining national sovereignty.
@@ -326,15 +190,6 @@ Disinformation that promotes distrust of international cooperation, alleging hid
 **Description**:
 
 Disinformation that asserts media and tech companies suppress the truth, fostering distrust in credible sources.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "noticias falsas" (fake news)
-  - "censura de las grandes tecnológicas" (big tech censorship)
-- **Arabic**:
-  - "أخبار مزيفة" (fake news)
-  - "رقابة شركات التكنولوجيا الكبرى" (big tech censorship)
 
 **Heuristics**:
 
@@ -354,15 +209,6 @@ Disinformation that asserts media and tech companies suppress the truth, fosteri
 
 Disinformation that exaggerates crime rates or portrays law enforcement reforms as threats to safety.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "ola de crimen" (crime wave)
-  - "desfinanciar la policía" (defund the police)
-- **Arabic**:
-  - "موجة جريمة" (crime wave)
-  - "خفض تمويل الشرطة" (defund the police)
-
 **Heuristics**:
 
 - Overstating the prevalence of crime to incite fear.
@@ -381,15 +227,6 @@ Disinformation that exaggerates crime rates or portrays law enforcement reforms 
 
 Disinformation that portrays healthcare reforms as harmful, often spreading fear about decreased quality of care or loss of freedoms.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "medicina socializada" (socialized medicine)
-  - "control gubernamental de la salud" (government control of healthcare)
-- **Arabic**:
-  - "الطب الاجتماعي" (socialized medicine)
-  - "سيطرة الحكومة على الصحة" (government control of healthcare)
-
 **Heuristics**:
 
 - Claims that healthcare reforms will lead to poor quality care.
@@ -407,15 +244,6 @@ Disinformation that portrays healthcare reforms as harmful, often spreading fear
 **Description**:
 
 Disinformation that frames social progress as attacks on traditional values, often resisting changes in societal norms.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "valores tradicionales bajo ataque" (traditional values under assault)
-  - "corrección política" (political correctness)
-- **Arabic**:
-  - "القيم التقليدية تحت الهجوم" (traditional values under attack)
-  - "الصوابية السياسية" (political correctness)
 
 **Heuristics**:
 
@@ -437,15 +265,6 @@ Disinformation that frames social progress as attacks on traditional values, oft
 
 Disinformation that justifies aggression or spreads false narratives about the conflict.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "expansión de la OTAN" (NATO expansion)
-  - "provocación occidental" (Western provocation)
-- **Arabic**:
-  - "توسع الناتو" (NATO expansion)
-  - "استفزاز غربي" (Western provocation)
-
 **Heuristics**:
 
 - Blaming external forces for the conflict without evidence.
@@ -462,15 +281,6 @@ Disinformation that justifies aggression or spreads false narratives about the c
 
 Disinformation that oversimplifies the conflict, often taking sides without acknowledging complexities.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "apartheid israelí" (Israeli apartheid)
-  - "terrorismo de Hamás" (Hamas terrorism)
-- **Arabic**:
-  - "الفصل العنصري الإسرائيلي" (Israeli apartheid)
-  - "إرهاب حماس" (Hamas terrorism)
-
 **Heuristics**:
 
 - Using emotionally charged language without context.
@@ -486,15 +296,6 @@ Disinformation that oversimplifies the conflict, often taking sides without ackn
 **Description**:
 
 Disinformation that exaggerates threats from China, often fostering fear and suspicion.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "amenaza china" (Chinese threat)
-  - "guerra comercial" (trade war)
-- **Arabic**:
-  - "التهديد الصيني" (Chinese threat)
-  - "الحرب التجارية" (trade war)
 
 **Heuristics**:
 
@@ -514,15 +315,6 @@ Disinformation that exaggerates threats from China, often fostering fear and sus
 
 Disinformation involving unfounded claims about secret plots or organizations manipulating events.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "estado profundo" (deep state)
-  - "Nuevo Orden Mundial" (New World Order)
-- **Arabic**:
-  - "الدولة العميقة" (deep state)
-  - "النظام العالمي الجديد" (New World Order)
-
 **Heuristics**:
 
 - Promoting theories without credible evidence.
@@ -540,15 +332,6 @@ Disinformation involving unfounded claims about secret plots or organizations ma
 **Description**:
 
 Disinformation alleging that education systems impose biased ideologies, undermining traditional values.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "adoctrinamiento en las escuelas" (indoctrination in schools)
-  - "teoría crítica de la raza" (critical race theory)
-- **Arabic**:
-  - "تلقين في المدارس" (indoctrination in schools)
-  - "نظرية العرق النقدية" (critical race theory)
 
 **Heuristics**:
 
@@ -568,15 +351,6 @@ Disinformation alleging that education systems impose biased ideologies, undermi
 
 Disinformation spreading fear about technology infringing on privacy, often exaggerating risks.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "riesgos de salud del 5G" (health risks of 5G)
-  - "estado de vigilancia" (surveillance state)
-- **Arabic**:
-  - "مخاطر صحية للـ5G" (health risks of 5G)
-  - "دولة المراقبة" (surveillance state)
-
 **Heuristics**:
 
 - Allegations that new technologies harm health or privacy without evidence.
@@ -594,15 +368,6 @@ Disinformation spreading fear about technology infringing on privacy, often exag
 **Description**:
 
 Disinformation that opposes any form of gun regulation, often invoking fears of government overreach.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "confiscación de armas" (gun confiscation)
-  - "derecho a portar armas" (right to bear arms)
-- **Arabic**:
-  - "مصادرة الأسلحة" (gun confiscation)
-  - "الحق في حمل السلاح" (right to bear arms)
 
 **Heuristics**:
 
@@ -622,15 +387,6 @@ Disinformation that opposes any form of gun regulation, often invoking fears of 
 
 Disinformation involving extreme portrayals of political groups or figures, attributing malicious intent without evidence.
 
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "estado profundo" (deep state)
-  - "progresistas radicales" (radical progressives)
-- **Arabic**:
-  - "الدولة العميقة" (deep state)
-  - "التقدميون المتطرفون" (radical progressives)
-
 **Heuristics**:
 
 - Labeling political opponents with extreme terms.
@@ -648,19 +404,6 @@ Disinformation involving extreme portrayals of political groups or figures, attr
 **Description**:
 
 Disinformation that misrepresents labor organizing efforts, union activities, or workers' rights, often aiming to discourage collective action or spread fear about unions.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "sindicatos corruptos" (corrupt unions)
-  - "huelga ilegal" (illegal strike)
-  - "agitadores laborales" (labor agitators)
-  - "pérdida de empleos por sindicatos" (job losses due to unions)
-- **Arabic**:
-  - "نقابات فاسدة" (corrupt unions)
-  - "إضراب غير قانوني" (illegal strike)
-  - "محرضون عماليون" (labor agitators)
-  - "فقدان الوظائف بسبب النقابات" (job losses due to unions)
 
 **Heuristics**:
 
@@ -681,35 +424,6 @@ Disinformation that misrepresents labor organizing efforts, union activities, or
 **Description**:
 
 Disinformation targeting women's health including reproductive care, hormonal health, cancer prevention/treatment, fertility, pregnancy, and menopause. This includes false claims about contraception, menstruation, gynecological conditions, and women-specific medical treatments. Distinct from Category 6 (Abortion and Reproductive Rights) which focuses on political/ethical framing; this category focuses on medical disinformation — false health claims about treatments, procedures, and conditions regardless of political orientation.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "cura milagrosa" / "cura natural" (miracle cure / natural cure)
-  - "sin efectos secundarios" (without side effects)
-  - "sin quimio" / "sin radioterapia" (without chemo / without radiation)
-  - "tu médico no quiere que sepas" (your doctor doesn't want you to know)
-  - "Big Pharma oculta" / "la industria del cáncer" (Big Pharma hides / the cancer industry)
-  - "detox uterino" / "limpieza vaginal" / "desintoxicar el útero" (uterine detox / vaginal cleanse)
-  - "memoria uterina" (uterine memory — pseudoscientific concept)
-  - "equilibrar hormonas" / "fase lunar" / "ciclo hormonal natural" (balance hormones / lunar phase / natural hormonal cycle)
-  - "anticonceptivos dañan" / "píldora causa" / "DIU peligroso" (contraceptives harm / pill causes / IUD dangerous)
-  - "vacuna VPH infertilidad" / "vacuna experimental" (HPV vaccine infertility / experimental vaccine)
-  - "vitaminas milagro" / "enlace en bio" (miracle vitamins / link in bio)
-  - "me censuran" / "grupo de Telegram" / "video censurado" (I'm censored / Telegram group / censored video)
-  - "doctor dice" / "estudio confirma" / "científicamente probado" (doctor says / study confirms / scientifically proven — when unverifiable)
-- **Arabic**:
-  - "علاج طبيعي" (natural treatment)
-  - "بدون آثار جانبية" (without side effects)
-  - "شفاء بالأعشاب" (herbal cure)
-  - "الطب البديل يشفي" (alternative medicine cures)
-  - "شركات الأدوية تخفي" (pharmaceutical companies hide)
-  - "تنظيف الرحم" (uterine cleansing)
-  - "إزالة السموم" (detoxification)
-  - "موانع الحمل خطيرة" (contraceptives are dangerous)
-  - "لقاح فيروس الورم الحليمي يسبب العقم" (HPV vaccine causes infertility)
-  - "الهرمونات تسبب السرطان" (hormones cause cancer)
-  - "العلاج الكيماوي سم" (chemotherapy is poison)
 
 **Heuristics**:
 
@@ -736,36 +450,6 @@ Disinformation targeting women's health including reproductive care, hormonal he
 **Description**:
 
 Disinformation targeting children's health including vaccines, fever management, antibiotic use, developmental conditions (autism, ADHD), nutrition, and general pediatric care. This category is particularly dangerous because it can lead parents to make decisions that directly harm their children's health. Distinct from Category 3 (COVID-19 and Vaccination) which focuses specifically on COVID-19; this category encompasses all childhood vaccines and broader pediatric health disinformation.
-
-**Keywords/Phrases**:
-
-- **Spanish**:
-  - "vacuna experimental" / "vacuna causa autismo" / "chips en vacunas" / "metales pesados" (experimental vaccine / vaccine causes autism / chips in vaccines / heavy metals)
-  - "inmunidad natural mejor" / "calendario vacunas agresivo" (natural immunity better / aggressive vaccine schedule)
-  - "CDS" / "MMS" / "dióxido de cloro" / "protocolo de desparasitación" (chlorine dioxide / deworming protocol)
-  - "quelación natural" / "sacar metales pesados" / "desintoxicar niños" (natural chelation / remove heavy metals / detox children)
-  - "fórmula tóxica" / "leche casera mejor" / "receta de fórmula" (formula is toxic / homemade milk better / formula recipe)
-  - "pediatra pagado" / "médicos comprados" / "farmacéuticas controlan" (pediatrician paid off / doctors bought / pharma controls)
-  - "aceite esencial para autismo" / "Frankincense autismo" (essential oil for autism)
-  - "TDAH no existe" / "TDAH invento" / "medicamentos TDAH drogas" (ADHD doesn't exist / ADHD invention / ADHD meds are drugs)
-  - "jarabes naturales curan" / "antibióticos destruyen" (natural syrups cure / antibiotics destroy)
-  - "video censurado vacunas" / "lo que no te dicen de las vacunas" (censored vaccine video / what they don't tell you about vaccines)
-- **Arabic**:
-  - "لقاح تجريبي" (experimental vaccine)
-  - "اللقاحات تسبب التوحد" (vaccines cause autism)
-  - "شرائح في اللقاحات" (chips in vaccines)
-  - "معادن ثقيلة" (heavy metals)
-  - "المناعة الطبيعية أفضل" (natural immunity is better)
-  - "ثاني أكسيد الكلور" (chlorine dioxide)
-  - "بروتوكول إزالة الطفيليات" (deworming protocol)
-  - "إزالة المعادن الثقيلة" (removing heavy metals)
-  - "تنقية طبيعية" (natural purification)
-  - "الحليب الصناعي سام" (formula is toxic)
-  - "وصفة حليب منزلية" (homemade milk recipe)
-  - "الطبيب مدفوع من شركات الأدوية" (doctor paid by pharmaceutical companies)
-  - "الأدوية كيماويات ضارة" (medications are harmful chemicals)
-  - "علاج التوحد الطبيعي" (natural autism treatment)
-  - "فرط الحركة لا يوجد" (ADHD doesn't exist)
 
 **Heuristics**:
 
@@ -851,16 +535,30 @@ This example illustrates how to structure the output for the flagged snippets. U
 
 ---
 
+# Calibration: What Clears the Bar
+
+Flag a claim when a fact-checker would want to check it and it is likely false, unsupported by evidence, or misleading. It does not need to be provably false from the transcription alone. Hypothetical borderline cases that MUST be flagged:
+
+- Health or product claim without evidence: "Este té de moringa limpia la sangre, previene la diabetes y lo pueden tomar las embarazadas y los bebés sin ningún riesgo." Flag: unsubstantiated disease-prevention claim and an unsupported safety claim for pregnancy and infants.
+- Pseudoscience or folk belief stated as medical fact: "Si usted se baña con el estómago lleno le da una embolia, eso está comprobado por los médicos." Flag: a myth presented as established medicine.
+- False or distorted characterization of a party, group or policy stated as fact: "Los republicanos quieren quitarle el Seguro Social a todos los jubilados." Flag: presents an unsupported claim about a party's position as fact. Apply the same standard whichever side is targeted.
+
+Do NOT flag:
+
+- News about current events, office-holders or conflicts only because you do not recognize them. Treat the recording date as the present; events after your training data may be real. Flag news only when it contradicts the knowledge base, contradicts itself, or matches a disinformation narrative in the heuristics.
+- Opinions, prayers, or moral and religious teaching that make no factual claim about health, science, history, law or public affairs.
+
+---
+
 # Self-Review Process
 
 Before finalizing your output, complete this validation checklist:
 
-1. **False Claims Verification**
-   - For each flagged snippet:
-     * Have I identified specific, verifiably false claims?
-     * Can I articulate exactly why these claims are false?
-     * Would a reasonable person agree these claims are demonstrably false?
-   - If any answer is "no," reconsider flagging the snippet.
+1. **Coverage Check**
+   - Have I gone through the whole transcription, including advertisements, call-ins, interviews and sermons?
+   - Have I flagged every claim that is plausibly false, unsubstantiated, or misleading under the heuristics, even when I cannot prove it false from the transcription alone? A later stage fact-checks every flag, so a missed claim costs more than a flag that turns out to be accurate.
+   - Health and product claims without evidence (cures, disease prevention, safety for pregnancy or infants), pseudoscience stated as fact, and false or distorted characterizations of parties, groups or policies all count.
+   - If the answer to any of these is "no," go back and add the missing snippets.
 
 2. **Context Review**
    - Have I captured sufficient context before and after each snippet?
@@ -869,11 +567,11 @@ Before finalizing your output, complete this validation checklist:
 
 3. **Final Verification**
    Answer each with "yes" before proceeding:
-   - [ ] Each flagged snippet contains demonstrably false claims
+   - [ ] Each flagged snippet contains at least one specific claim that is plausibly false, unsubstantiated, or misleading
    - [ ] Timestamps are accurate and properly formatted
-   - [ ] Explanations clearly identify specific false claims
-   - [ ] I have distinguished between controversial content and actual disinformation
-   - [ ] My analysis would be defensible to fact-checkers
+   - [ ] Explanations name the specific claim and why it is likely false or misleading
+   - [ ] I have not flagged pure opinion, or statements of faith that make no factual claim
+   - [ ] I have not skipped a claim only because it is not demonstrably false
 
 If any verification fails, revise your analysis accordingly.
 
