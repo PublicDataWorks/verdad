@@ -37,7 +37,7 @@ TRIM_TO_SECONDS = 1799
 # One 30 min recording took about 50 s in the October 2026 eval; leave room for a slow queue.
 REQUEST_TIMEOUT_SECONDS = 900
 
-# Waits between attempts on 429/5xx or a dropped connection, then the error propagates to the task's own retries.
+# Waits between attempts on 5xx, a per-minute 429 or a dropped connection; then the task's own retries take over.
 RETRY_DELAYS = (30, 60, 120)
 
 # Radio talk is never silent this long; no words beyond it means a broken response, not a quiet recording.
@@ -183,7 +183,10 @@ class GeminiTranscribeTimestampGenerator:
                     response.status_code,
                     f"{response.status_code} from the interactions endpoint: {response.text[:500]}",
                 )
-                daily_quota = response.status_code == HTTPStatus.TOO_MANY_REQUESTS and "PerDay" in response.text
+                daily_quota = (
+                    response.status_code == HTTPStatus.TOO_MANY_REQUESTS
+                    and cls.error_code(response) == "quota_exceeded"
+                )
                 if response.status_code not in TRANSIENT_HTTP or daily_quota:
                     raise error
 
@@ -191,6 +194,14 @@ class GeminiTranscribeTimestampGenerator:
                 raise error
             print(f"{error} Retrying in {delay} s")
             time.sleep(delay)
+
+    @staticmethod
+    def error_code(response) -> str | None:
+        """``error.code`` of an Interactions error body, e.g. ``quota_exceeded``; None when the body has none."""
+        try:
+            return response.json()["error"]["code"]
+        except (ValueError, KeyError, TypeError):
+            return None
 
     @staticmethod
     def parse_offset(value) -> float | None:

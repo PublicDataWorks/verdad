@@ -252,16 +252,17 @@ class TestRequest:
         assert no_sleep.call_args_list == [call(30), call(60), call(120)]
 
     def test_daily_quota_429_is_not_retried(self, no_sleep):
-        body = '{"error": {"code": 429, "details": [{"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel"}]}]}}'
-        with patch(f"{MODULE}.requests.post", return_value=http_response(429, text=body)) as post:
+        # Interactions API error body: https://aistudio.google.com/docs/api-errors
+        body = {"error": {"code": "quota_exceeded", "message": "You have exceeded your daily quota."}}
+        with patch(f"{MODULE}.requests.post", return_value=http_response(429, body)) as post:
             with pytest.raises(TranscribeAPIError):
                 Transcribe.request_transcription("k", "gemini-3.5-transcribe", "u")
         assert post.call_count == 1
         no_sleep.assert_not_called()
 
-    def test_per_day_text_on_a_5xx_is_still_retried(self, no_sleep):
-        responses = [http_response(503, text="PerDay"), http_response(200, {"status": "completed"})]
-        with patch(f"{MODULE}.requests.post", side_effect=responses) as post:
+    def test_per_minute_429_is_retried(self, no_sleep):
+        busy = http_response(429, {"error": {"code": "rate_limit_exceeded", "message": "slow down"}})
+        with patch(f"{MODULE}.requests.post", side_effect=[busy, http_response(200, {"status": "completed"})]) as post:
             Transcribe.request_transcription("k", "gemini-3.5-transcribe", "u")
         assert post.call_count == 2
 
