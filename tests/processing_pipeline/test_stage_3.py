@@ -215,6 +215,15 @@ class TestStage3:
         assert "explanation" not in result
         assert "keywords_detected" not in result
 
+    def test_get_metadata_accepts_fractional_recorded_at(self, sample_snippet):
+        # Word-time clips (STAGE2_USE_WORD_TIMES) start on a millisecond, so recorded_at has a fraction.
+        sample_snippet["recorded_at"] = "2024-01-01T00:00:12.345+00:00"
+
+        result = get_metadata(sample_snippet)
+
+        assert result["additional_info"]["recorded_at"] == "January 1, 2024 12:00 AM"
+        assert result["additional_info"]["recorded_at_iso"] == "2024-01-01T00:00:12.345000+00:00"
+
     # --- process_snippet -------------------------------------------------------
 
     def _process(self, supabase_client, snippet, skip_review, gemini_client=None):
