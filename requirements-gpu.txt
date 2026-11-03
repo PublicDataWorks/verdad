@@ -1,0 +1,12 @@
+# GPU worker only (STAGE1_TRANSCRIPTION_METHOD=open_model): install on top of requirements.txt with
+# requirements-gpu-overrides.txt, see docs/OPERATIONS.md
+faster-whisper==1.2.1
+transformers==5.22.1
+accelerate==1.15.0
+librosa==0.11.0
+soundfile==0.14.0
+sentencepiece==0.2.2
+protobuf==6.33.6
+omnilingual-asr==0.2.0
+torch==2.8.0
+torchaudio==2.8.0  # forced_align is removed in 2.9

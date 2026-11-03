@@ -29,6 +29,14 @@ if __name__ == "__main__":
                 parameters=dict(audio_file_id=None, limit=1000),
             )
             serve(deployment, limit=100)
+        case "initial_disinformation_detection_gpu":
+            # A GPU machine outside Fly (VER-446): one recording at a time, named by WORKER_NAME
+            deployment = initial_disinformation_detection.to_deployment(
+                name=f"Stage 1: Initial Disinformation Detection GPU {os.environ['WORKER_NAME']}",
+                concurrency_limit=1,
+                parameters=dict(audio_file_id=None, limit=1000),
+            )
+            serve(deployment, limit=1)
         case "regenerate_timestamped_transcript":
             deployment = regenerate_timestamped_transcript.to_deployment(
                 name="Stage 1: Regenerate Timestamped Transcript",

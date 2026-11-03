@@ -1,0 +1,5 @@
+# fairseq2 0.6 (omnilingual-asr) pins psutil<6 and huggingface-hub<1, against requirements.txt and transformers 5;
+# omnilingual-asr asks for pyarrow>=20, which needs numpy 2 that fairseq2 rejects. Checked together on the HCMC box.
+psutil>=5.9,<6
+huggingface-hub>=1.31
+pyarrow<20
