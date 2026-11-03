@@ -321,6 +321,9 @@ fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_MODEL=gemini-3.5-flash
 fly secrets unset -a processing-worker STAGE1_TRANSCRIPTION_MODEL STAGE1_DETECTION_MODEL STAGE1_TRANSCRIPTION_METHOD  # back
 ```
 
+Any variable left unset stays on its 2.5 default. When leaving 2.5 entirely, set every row of the table, including
+`STAGE3_RESTRUCTURE_MODEL`, which is easy to miss because it only runs when an analysis fails validation.
+
 `fly secrets set` restarts the app's machines, which orphans in-flight runs and leaves the workers idle until runs
 are recreated (see "Workers idle after any deploy" in the gotchas below). The variables apply to every process group of the app, so the second Stage 1 and Stage 4 workers
 switch together with the first.
