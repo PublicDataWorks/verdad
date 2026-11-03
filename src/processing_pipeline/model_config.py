@@ -34,6 +34,8 @@ class TranscriptionMethod(StrEnum):
     SEGMENTS = "segments"
     # One request to gemini-3.5-transcribe with word timestamps (GeminiTranscribeTimestampGenerator)
     TRANSCRIBE = "transcribe"
+    # Open models on a GPU worker: Cohere + CTC aligner for Arabic, Whisper otherwise (OpenModelTranscriber)
+    OPEN_MODEL = "open_model"
 
 
 class DetectionPasses(StrEnum):
@@ -145,17 +147,23 @@ class Stage1FlowOptions:
 def stage1_flow_options() -> Stage1FlowOptions:
     """The Stage 1 flow-shape switches, checked against each other; every default is today's flow.
 
-    - STAGE1_TRANSCRIBE_FIRST=true: one Transcribe call per recording supplies both the untimed and the [MM:SS]
-      transcript. Needs STAGE1_TRANSCRIPTION_METHOD=transcribe.
+    - STAGE1_TRANSCRIBE_FIRST=true: one transcription per recording supplies both the untimed and the [MM:SS]
+      transcript. Needs STAGE1_TRANSCRIPTION_METHOD=transcribe or open_model, the methods that return words.
     - STAGE1_DETECTION_PASSES=one: main detection only, on every recording. Needs STAGE1_TRANSCRIBE_FIRST=true,
       the only mode in which every recording has a timestamped transcript before detection.
     - STAGE1_ANCHOR_TIMESTAMPS=true: flagged snippet times from word timestamps where the recording has them.
     """
     transcribe_first = _env_flag(STAGE1_TRANSCRIBE_FIRST_ENV)
-    if transcribe_first and stage1_transcription_method() != TranscriptionMethod.TRANSCRIBE:
+    if transcribe_first and stage1_transcription_method() == TranscriptionMethod.SEGMENTS:
         raise ValueError(
-            f"{STAGE1_TRANSCRIBE_FIRST_ENV}=true needs {STAGE1_TRANSCRIPTION_METHOD_ENV}=transcribe "
+            f"{STAGE1_TRANSCRIBE_FIRST_ENV}=true needs {STAGE1_TRANSCRIPTION_METHOD_ENV}=transcribe or open_model "
             f"(it is {stage1_transcription_method().value!r})"
+        )
+
+    if not transcribe_first and stage1_transcription_method() == TranscriptionMethod.OPEN_MODEL:
+        raise ValueError(
+            f"{STAGE1_TRANSCRIPTION_METHOD_ENV}=open_model needs {STAGE1_TRANSCRIBE_FIRST_ENV}=true: the open models "
+            "replace every Gemini audio call, including the untimed transcript"
         )
 
     value = _env(STAGE1_DETECTION_PASSES_ENV)

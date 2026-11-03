@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import functools
 import json
 import os
 import uuid
@@ -27,10 +28,18 @@ from processing_pipeline.stage_1.executors import (
     Stage1PreprocessTranscriptionExecutor,
 )
 from processing_pipeline.stage_1.kb_context import retrieve_kb_context
+from processing_pipeline.stage_1.open_model_executor import OpenModelTranscriber
 from processing_pipeline.stage_1.transcribe_executor import GeminiTranscribeTimestampGenerator, TranscribeResult
 from processing_pipeline.supabase_utils import SupabaseClient
 from processing_pipeline.temporal_context import build_temporal_context
 from utils import optional_task
+
+try:
+    from processing_pipeline.stage_1.open_model_engines import GpuEngines
+
+    _gpu_import_error = None
+except ImportError as e:  # GPU-only dependencies (requirements-gpu.txt), absent on the Fly images
+    GpuEngines, _gpu_import_error = None, e
 
 
 @optional_task(log_prints=True, retries=3)
@@ -165,6 +174,8 @@ def transcribe_audio_file_with_timestamp_with_gemini(
     ``prompt_version`` drives the segments method only; the transcribe method takes no prompt.
     """
     method = method or stage1_transcription_method()
+    if method == TranscriptionMethod.OPEN_MODEL:
+        raise ValueError("STAGE1_TRANSCRIPTION_METHOD=open_model only runs transcribe-first")
     print(f"Transcribing the audio file {audio_file} using {model_name} ({method} method)")
     if not gemini_client:
         raise ValueError("Gemini client is not provided")
@@ -208,6 +219,19 @@ def transcribe_audio_file_with_gemini_transcribe(
     empty = sum(1 for text in result.windows.values() if not text.strip())
     print(f"Transcript: {len(result.text)} chars, {len(result.words)} words, {empty}/{len(result.windows)} empty windows")
     return result
+
+
+@optional_task(log_prints=True, retries=3)
+def transcribe_audio_file_with_open_models(audio_file: str) -> TranscribeResult:
+    """STAGE1_TRANSCRIPTION_METHOD=open_model: the transcribe-first transcript from the GPU worker's open models."""
+    if GpuEngines is None:
+        raise RuntimeError("STAGE1_TRANSCRIPTION_METHOD=open_model needs requirements-gpu.txt") from _gpu_import_error
+    return _open_model_transcriber().transcribe(audio_file)
+
+
+@functools.cache
+def _open_model_transcriber() -> OpenModelTranscriber:
+    return OpenModelTranscriber(GpuEngines())
 
 
 @optional_task(log_prints=True, retries=3)
@@ -419,21 +443,25 @@ def _process_audio_file_transcribe_first(
     detection_prompt_version: dict,
     options: Stage1FlowOptions,
 ):
-    """STAGE1_TRANSCRIBE_FIRST=true: one Transcribe call supplies every transcript; no other audio call.
+    """STAGE1_TRANSCRIBE_FIRST=true: one transcription (Transcribe or the open models) supplies every transcript.
 
     The plain text replaces the untimed 2.5 Flash pass as ``initial_transcription`` (KB retrieval, initial
     detection), and the [MM:SS] view from the same response feeds main detection, so a flagged recording is not
-    transcribed a second time. ``transcriptor`` is the Transcribe model on every row. The [MM:SS] transcript and
+    transcribed a second time. ``transcriptor`` is the transcription model on every row. The [MM:SS] transcript and
     the words are stored only on rows that ran main detection (as today: ``timestamped_transcription`` is None
     when nothing was flagged), which keeps unflagged rows small. ``transcription_prompt_version_id`` is None:
     Transcribe takes no prompt.
     """
-    transcriptor = stage1_timestamp_model(TranscriptionMethod.TRANSCRIBE)
-    transcript = transcribe_audio_file_with_gemini_transcribe(
-        gemini_client=gemini_client,
-        audio_file=local_file,
-        model_name=transcriptor,
-    )
+    if stage1_transcription_method() == TranscriptionMethod.OPEN_MODEL:
+        transcript = transcribe_audio_file_with_open_models(audio_file=local_file)
+        transcriptor = transcript.model
+    else:
+        transcriptor = stage1_timestamp_model(TranscriptionMethod.TRANSCRIBE)
+        transcript = transcribe_audio_file_with_gemini_transcribe(
+            gemini_client=gemini_client,
+            audio_file=local_file,
+            model_name=transcriptor,
+        )
     initial_transcription = transcript.text
 
     kb_context = fetch_kb_context(supabase_client, openai_client, initial_transcription)

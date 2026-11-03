@@ -61,6 +61,7 @@ class TranscribeResult:
     - ``words``: ``[{"text", "start", "end", "speaker"}]`` in seconds from the start of the recording; ``speaker``
       is None unless the response carries one.
     - ``duration_s``: the length of the recording that was passed in (before any trim for the request).
+    - ``model``: the transcriptor label when it depends on the recording (the open-model route); None otherwise.
     """
 
     text: str
@@ -68,6 +69,7 @@ class TranscribeResult:
     timestamped_transcription: str
     words: list[dict] = field(default_factory=list)
     duration_s: float = 0.0
+    model: str | None = None
 
     def to_storage(self) -> dict:
         """The ``stage_1_llm_responses.timestamped_transcription`` value: the key Stage 2/3 read, plus the words."""
