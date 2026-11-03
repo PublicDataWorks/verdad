@@ -1,0 +1,5 @@
+# Recordings live in R2 (fetch_audio.py); model outputs and scratch are per-run.
+audio/
+segments/
+results*/
+__pycache__/

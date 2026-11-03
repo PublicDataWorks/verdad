@@ -23,9 +23,21 @@ Start with the handoff doc (quota map, needs, gap, local CLI prompt), linked fro
 
 ## eval/
 
-The harnesses expect `PYTHONPATH=.:src`, the repo venv, a Gemini API key in `GOOGLE_GEMINI_KEY` (or the path the
-script names) and a local `audio/` folder of eval mp3s pulled from https://audio.verdad.app. Paths inside them
-still point at the scratchpad folder of the original session; adjust before running.
+Running an eval from the repo root, with the repo's Python 3.11 venv (`pip install -r requirements.txt rapidfuzz`):
+
+```bash
+python docs/migration-2026-11/eval/fetch_audio.py          # 18 recordings from the public R2 bucket, about 250 MB
+SUPABASE_DB_URL=postgres://... python docs/migration-2026-11/eval/build_data.py   # reference data, read-only SELECTs
+export GOOGLE_GEMINI_KEY=...                                # a paid-tier key; 3.x models have tiny free quotas
+python docs/migration-2026-11/eval/harness.py segments --model gemini-3.5-flash
+python docs/migration-2026-11/eval/detection_eval.py --model gemma-4-31b-it
+```
+
+The recordings are not committed: `data/manifest.json` maps each `audio_files` id to its path under
+https://audio.verdad.app/ and `fetch_audio.py` downloads them into the git-ignored `audio/`. `build_data.py` writes
+`data/<audio_file_id>.json` (the production Stage 1 transcripts, flagged snippets and human labels each eval scores
+against). Results land in git-ignored `results*/` folders. Set `REPO` only if the repo root is somewhere other than
+three levels up.
 
 | File | What it does |
 |---|---|
@@ -36,7 +48,8 @@ still point at the scratchpad folder of the original session; adjust before runn
 | `cost_model.py` | Cost per day per lineup at 1x to 10x |
 | `parallel_*.py` | Parallel Decisions API probes and metrics |
 | `prompts_tuning/` | Detection prompt variants v1 to v4 and `NOTES.md`; v4 is what PR #160 ships |
-| `snippets_selection.json`, `data_manifest.json` | The clip and recording selections |
+| `fetch_audio.py` | Downloads the eval recordings from R2 |
+| `data/manifest.json`, `snippets_selection.json` | The 18 recordings (10 Spanish, 5 Arabic, 3 English) and the 38 Stage 3 clips |
 
 ## quota_pull.py
 

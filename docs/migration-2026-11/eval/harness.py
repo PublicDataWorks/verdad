@@ -22,6 +22,8 @@ import subprocess
 import time
 import unicodedata
 import concurrent.futures as cf
+import os
+import sys
 from pathlib import Path
 
 import requests
@@ -30,8 +32,8 @@ from google import genai
 from google.genai import types, errors
 
 HERE = Path(__file__).resolve().parent
-REPO = Path("/Users/j/GitHub/verdad")
-KEY = (HERE.parent / "secrets" / "gemini_eval_key.txt").read_text().strip()
+REPO = Path(os.environ.get("REPO", HERE.parents[2]))  # repo root
+KEY = os.environ.get("GOOGLE_GEMINI_KEY") or sys.exit("set GOOGLE_GEMINI_KEY to a Gemini API key")
 RESULTS = HERE / "results"
 SEG_LEN = 20
 BATCH = 30

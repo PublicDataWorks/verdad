@@ -4,7 +4,7 @@ Runs the production Stage 3 prompt + tool loop (SearXNG web search) on real snip
 structured output across models. Reference = production output stored on the snippet (gemini-2.5-pro mostly),
 plus human labels. A 2.5 Pro rerun measures run-to-run noise.
 
-Requires: REPO (default /Users/j/GitHub/verdad, checked out on the migration branch so 3.x thinking works),
+Requires: REPO (default: this repo's root, checked out on the migration branch so 3.x thinking works),
 PYTHONPATH handled here, ENABLE_PREFECT_DECORATOR=false, SEARXNG_URL, GOOGLE_GEMINI_KEY from the eval key file.
 
 Usage: python stage3_eval.py run --model gemini-3.8-flash [--limit N] [--ids a,b] [--workers 3]
@@ -21,10 +21,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-REPO = Path(os.environ.get("REPO", "/Users/j/GitHub/verdad"))
+REPO = Path(os.environ.get("REPO", HERE.parents[2]))  # repo root: docs/migration-2026-11/eval -> ../../..
 os.environ.setdefault("ENABLE_PREFECT_DECORATOR", "false")
 os.environ.setdefault("SEARXNG_URL", "https://verdad-searxng.fly.dev")
-os.environ["GOOGLE_GEMINI_KEY"] = (HERE.parent / "secrets" / "gemini_eval_key.txt").read_text().strip()
+if not os.environ.get("GOOGLE_GEMINI_KEY"):
+    sys.exit("set GOOGLE_GEMINI_KEY to a Gemini API key (paid tier for 3.x models)")
 sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(REPO))
 os.chdir(REPO)  # prompts/ relative paths inside the repo

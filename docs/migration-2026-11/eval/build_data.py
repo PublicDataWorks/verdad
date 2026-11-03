@@ -26,7 +26,6 @@ for m in json.load(open(os.path.join(D, "manifest.json"))):
     out = subprocess.run(["psql", URL, "-X", "-At", "-v", "ON_ERROR_STOP=1", "-c", Q.format(id=aid)], capture_output=True, text=True)
     if out.returncode: sys.exit(f"{aid}: {out.stderr}")
     full = json.loads(out.stdout)
-    old = json.load(open(os.path.join(D, f"{aid}.json")))
-    full.update(local_audio=old["local_audio"], n_snippets=len(full["snippets"]))
+    full.update(local_audio=m["local_audio"], n_snippets=len(full["snippets"]))
     json.dump(full, open(os.path.join(D, f"{aid}.json"), "w"), ensure_ascii=False, indent=1)
     print(aid, len(full["snippets"]), "snippets", len(full["stage_1"]["timestamped_transcription"] or ""), "ts chars")
