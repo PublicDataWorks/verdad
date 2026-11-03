@@ -478,7 +478,9 @@ refuses the production project unless `--allow-production` is passed.
   the runs; `SELECT public.sweep_stuck_snippets()` by hand returns how many rows it moved. Stage 1 audio files get
   the same from `sweep_stuck_audio_files` (hourly at :35, migration `20261103120000`, VER-452): `Processing` rows
   stuck 2 h to 7 days, with no `stage_1_llm_responses` row, go back to `New`; older ones are left for a backlog
-  decision. Queue depth for watching the Stage 1 fleet:
+  decision. Each requeue counts in `audio_files.retry_attempts` (shared with the error sweep); at 3 the row goes to
+  `Error` ("Stage 1 run died 3 times in Processing"), so a file that kills its run cannot loop. Queue depth for
+  watching the Stage 1 fleet:
 
   ```sql
   SELECT status, count(*), min(recorded_at), max(recorded_at) FROM public.audio_files

@@ -106,7 +106,7 @@ start_deployment_instances "$STAGE_1_INIT" "$STAGE_1_FLOW_RUNS" "Stage 1" '{"lim
 
 IFS=',' read -ra GPU_WORKERS <<< "$GPU_WORKER_NAMES"
 for worker in "${GPU_WORKERS[@]}"; do
-    worker=$(echo "$worker" | xargs)
+    worker=${worker//[[:space:]]/}
     if [[ -n "$worker" ]]; then
         start_deployment_instances "$STAGE_1_INIT GPU $worker" 1 "Stage 1 GPU $worker"
     fi
