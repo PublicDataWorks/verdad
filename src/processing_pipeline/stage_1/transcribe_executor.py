@@ -176,7 +176,7 @@ class GeminiTranscribeTimestampGenerator:
                     return response.json()
                 error = TranscribeAPIError(
                     response.status_code,
-                    f"Interactions endpoint returned HTTP {response.status_code}: {response.text[:500]}",
+                    f"{response.status_code} from the interactions endpoint: {response.text[:500]}",
                 )
                 if response.status_code not in TRANSIENT_HTTP:
                     raise error

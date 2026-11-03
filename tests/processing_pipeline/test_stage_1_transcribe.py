@@ -239,11 +239,19 @@ class TestRequest:
 
     def test_gives_up_after_the_last_delay(self, no_sleep):
         with patch(f"{MODULE}.requests.post", return_value=http_response(503, text="overloaded")) as post:
-            with pytest.raises(TranscribeAPIError, match="HTTP 503: overloaded") as excinfo:
+            with pytest.raises(TranscribeAPIError, match="503 from the interactions endpoint: overloaded") as excinfo:
                 Transcribe.request_transcription("k", "gemini-3.5-transcribe", "u")
         assert excinfo.value.status_code == 503
         assert post.call_count == 4
         assert no_sleep.call_args_list == [call(30), call(60), call(120)]
+
+    @pytest.mark.parametrize("status", [429, 503])
+    def test_error_starts_with_the_status_code(self, no_sleep, status):
+        # sweep_retryable_audio_errors re-queues rows whose error_message is LIKE '429 %' or '503 %'.
+        with patch(f"{MODULE}.requests.post", return_value=http_response(status, text="busy")):
+            with pytest.raises(TranscribeAPIError) as excinfo:
+                Transcribe.request_transcription("k", "gemini-3.5-transcribe", "u")
+        assert str(excinfo.value).startswith(f"{status} ")
 
     @pytest.mark.parametrize("status", [400, 401, 403, 404])
     def test_client_error_is_not_retried(self, no_sleep, status):
