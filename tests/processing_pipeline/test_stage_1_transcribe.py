@@ -123,6 +123,12 @@ class TestExtractWords:
         with pytest.raises(ValueError, match="'in_progress'"):
             Transcribe.extract_words(interaction(word("a", 1.0), status="in_progress"))
 
+    def test_missing_status_fails(self):
+        response = interaction(word("a", 1.0))
+        del response["status"]
+        with pytest.raises(ValueError, match="None"):
+            Transcribe.extract_words(response)
+
 
 class TestTimedWords:
     def test_end_and_speaker_are_kept(self):
@@ -293,6 +299,14 @@ class TestRun:
         with patch(f"{MODULE}.requests.post", return_value=http_response(200, interaction(text=""))) as post:
             Transcribe.run(gemini_client, sample_audio_file, GeminiModel.GEMINI_3_5_TRANSCRIBE)
         assert post.call_args.kwargs["headers"]["x-goog-api-key"] == "env-key"
+
+    def test_no_words_on_a_long_recording_fails(self, sample_audio_file, gemini_client, no_sleep):
+        with (
+            patch(f"{MODULE}.EMPTY_TRANSCRIPT_MAX_SECONDS", 30),
+            patch(f"{MODULE}.requests.post", return_value=http_response(200, interaction(text=""))),
+        ):
+            with pytest.raises(ValueError, match="no words"):
+                Transcribe.run(gemini_client, sample_audio_file, GeminiModel.GEMINI_3_5_TRANSCRIBE, api_key="k")
 
     def test_missing_api_key(self, sample_audio_file, gemini_client, monkeypatch):
         monkeypatch.delenv("GOOGLE_GEMINI_KEY")

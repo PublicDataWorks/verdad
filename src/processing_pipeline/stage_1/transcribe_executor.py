@@ -40,6 +40,9 @@ REQUEST_TIMEOUT_SECONDS = 900
 # Waits between attempts on 429/5xx or a dropped connection, then the error propagates to the task's own retries.
 RETRY_DELAYS = (30, 60, 120)
 
+# Radio talk is never silent this long; no words beyond it means a broken response, not a quiet recording.
+EMPTY_TRANSCRIPT_MAX_SECONDS = 300
+
 
 class TranscribeAPIError(RuntimeError):
     def __init__(self, status_code: int | None, message: str):
@@ -109,6 +112,8 @@ class GeminiTranscribeTimestampGenerator:
 
         words = cls.extract_timed_words(response)
         print(f"{model_name} returned {len(words)} timed words")
+        if not words and duration_ms / 1000 > EMPTY_TRANSCRIPT_MAX_SECONDS:
+            raise ValueError(f"{model_name} returned no words for {duration_ms / 1000:.0f} s of audio")
         segments = cls.bucket_words(words, duration_ms, segment_length)
         return TranscribeResult(
             text=cls.extract_text(response) or " ".join(w["text"] for w in words),
@@ -209,7 +214,7 @@ class GeminiTranscribeTimestampGenerator:
         rounded to milliseconds (the API's precision) so the stored list stays small.
         """
         status = response.get("status")
-        if status not in (None, "completed"):
+        if status != "completed":
             raise ValueError(f"Transcription interaction ended with status {status!r}")
 
         words = []
