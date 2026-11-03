@@ -251,6 +251,20 @@ class TestRequest:
         assert post.call_count == 4
         assert no_sleep.call_args_list == [call(30), call(60), call(120)]
 
+    def test_daily_quota_429_is_not_retried(self, no_sleep):
+        body = '{"error": {"code": 429, "details": [{"violations": [{"quotaId": "GenerateRequestsPerDayPerProjectPerModel"}]}]}}'
+        with patch(f"{MODULE}.requests.post", return_value=http_response(429, text=body)) as post:
+            with pytest.raises(TranscribeAPIError):
+                Transcribe.request_transcription("k", "gemini-3.5-transcribe", "u")
+        assert post.call_count == 1
+        no_sleep.assert_not_called()
+
+    def test_per_day_text_on_a_5xx_is_still_retried(self, no_sleep):
+        responses = [http_response(503, text="PerDay"), http_response(200, {"status": "completed"})]
+        with patch(f"{MODULE}.requests.post", side_effect=responses) as post:
+            Transcribe.request_transcription("k", "gemini-3.5-transcribe", "u")
+        assert post.call_count == 2
+
     @pytest.mark.parametrize("status", [429, 503])
     def test_error_starts_with_the_status_code(self, no_sleep, status):
         # sweep_retryable_audio_errors re-queues rows whose error_message is LIKE '429 %' or '503 %'.

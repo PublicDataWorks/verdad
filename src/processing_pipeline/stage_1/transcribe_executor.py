@@ -183,7 +183,8 @@ class GeminiTranscribeTimestampGenerator:
                     response.status_code,
                     f"{response.status_code} from the interactions endpoint: {response.text[:500]}",
                 )
-                if response.status_code not in TRANSIENT_HTTP:
+                daily_quota = response.status_code == HTTPStatus.TOO_MANY_REQUESTS and "PerDay" in response.text
+                if response.status_code not in TRANSIENT_HTTP or daily_quota:
                     raise error
 
             if delay is None:
