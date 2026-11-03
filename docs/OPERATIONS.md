@@ -328,7 +328,8 @@ switch together with the first.
 **Thinking config.** Call sites state a 2.5-style thinking budget and `thinking_config()` sends what the model accepts:
 the budget on Gemini 2.x (2.5 Pro gets at least 128, since it cannot turn thinking off); on Gemini 3.x a
 `thinking_level` instead, because 3.x rejects `thinking_budget` with 400 INVALID_ARGUMENT (budget 0 = `minimal`,
-up to 1024 = `low`, up to 4096 = `medium`, more = `high`); nothing at all on Gemma, which rejects any thinking config.
+or `low` on 3.8 Flash, which rejects `minimal`; up to 1024 = `low`, up to 4096 = `medium`, more = `high`); nothing at
+all on Gemma, which rejects any thinking config.
 
 **Model limits to check before switching.** Gemma 4 rejects audio input, so it can only take the text-only calls
 (`STAGE1_DETECTION_MODEL`, `STAGE3_RESTRUCTURE_MODEL`, the Stage 4 agents), never `STAGE1_TRANSCRIPTION_MODEL`,

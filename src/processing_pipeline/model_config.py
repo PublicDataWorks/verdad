@@ -275,6 +275,9 @@ _LEVEL_TO_BUDGET = {"minimal": 0, "low": 1024, "medium": 4096, "high": -1}
 # Gemini 2.5 Pro cannot turn thinking off; its smallest budget is 128.
 _PRO_MIN_BUDGET = 128
 
+# 3.x models that return 400 on thinking_level=minimal; they get low instead.
+_NO_MINIMAL = frozenset({"gemini-3.8-flash"})
+
 
 def _bare_id(model: ModelName) -> str:
     return str(model).strip().lower().removeprefix("models/")
@@ -327,6 +330,8 @@ def thinking_config(
     if family == ModelFamily.LEVEL:
         if level is None and budget is not None:
             level = budget_to_level(budget)
+        if level == "minimal" and _bare_id(model) in _NO_MINIMAL:
+            level = "low"
         if level is None and include_thoughts is None:
             return None
         return ThinkingConfig(

@@ -143,6 +143,11 @@ class TestThinkingConfig:
         assert config.thinking_level == level
         assert config.thinking_budget is None  # 3.x rejects thinking_budget with 400
 
+    @pytest.mark.parametrize("ask", [{"budget": 0}, {"level": "minimal"}])
+    def test_gemini_3_8_flash_gets_low_instead_of_minimal(self, ask):
+        # 3.8 Flash returns 400 on thinking_level=minimal (live API, Oct 30).
+        assert thinking_config(GeminiModel.GEMINI_3_8_FLASH, **ask).thinking_level == ThinkingLevel.LOW
+
     def test_gemini_3_explicit_level_wins_over_budget(self):
         config = thinking_config(GeminiModel.GEMINI_3_5_FLASH, budget=0, level="high")
         assert config.thinking_level == ThinkingLevel.HIGH
