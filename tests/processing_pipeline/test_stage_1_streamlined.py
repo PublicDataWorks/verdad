@@ -447,6 +447,19 @@ class TestFlowStart:
         supabase.assert_not_called()
         boto.assert_not_called()
 
+    def test_open_model_without_gpu_packages_fails_before_claiming_a_file(self, env, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "open_model")
+        monkeypatch.setenv("STAGE1_TRANSCRIBE_FIRST", "true")
+        with (
+            patch(f"{TASKS}.GpuEngines", None),
+            patch("processing_pipeline.stage_1.flows.SupabaseClient") as supabase,
+            patch("boto3.client") as boto,
+            pytest.raises(RuntimeError, match="requirements-gpu.txt"),
+        ):
+            initial_disinformation_detection(audio_file_id=None, limit=1)
+        supabase.assert_not_called()
+        boto.assert_not_called()
+
     def test_redo_main_detection_anchors_with_the_stored_words(self, env, monkeypatch):
         monkeypatch.setenv("STAGE1_ANCHOR_TIMESTAMPS", "true")
         response = {

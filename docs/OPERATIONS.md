@@ -392,6 +392,7 @@ detection still calls Gemini (text only). Setup, Python 3.11 and CUDA 12:
 ```bash
 uv venv --python 3.11 .venv
 uv pip install -r requirements.txt -r requirements-gpu.txt --override requirements-gpu-overrides.txt
+source .venv/bin/activate
 SP=.venv/lib/python3.11/site-packages/nvidia
 export LD_LIBRARY_PATH=$SP/cublas/lib:$SP/cudnn/lib   # CTranslate2 (Whisper) loads cuBLAS/cuDNN from torch's wheels
 export STAGE1_TRANSCRIPTION_METHOD=open_model STAGE1_TRANSCRIBE_FIRST=true \
@@ -401,9 +402,9 @@ python src/processing_pipeline/main.py
 
 The worker serves `Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>`, one recording at a time, so a new
 machine is a new `WORKER_NAME`. `start_processing.sh` does not create runs for it yet: start one with
-`prefect deployment run "Stage 1: Initial Disinformation Detection/Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>"`. `OPEN_MODEL_COHERE_PATH` points at a local copy of the Cohere model (default: the
-Hugging Face id `CohereLabs/cohere-transcribe-arabic-07-2026`). Without the GPU packages the method fails each file
-with "needs requirements-gpu.txt".
+`prefect deployment run "Stage 1: Initial Disinformation Detection/Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>"`; a run stops after 1,000 recordings, so start another to go on. `OPEN_MODEL_COHERE_PATH` points at a local copy of the Cohere model (default: the
+Hugging Face id `CohereLabs/cohere-transcribe-arabic-07-2026`). Without the GPU packages the run fails at start
+with "needs requirements-gpu.txt", before it claims a recording.
 
 **Word-boundary clipping** (`STAGE2_USE_WORD_TIMES`, `STAGE2_CONTEXT_BEFORE_S`, `STAGE2_CONTEXT_AFTER_S`; off by
 default). Without it, Stage 2 cuts from the whole-second `start_time`/`end_time` even when Stage 1 anchored the

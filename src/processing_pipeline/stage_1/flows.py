@@ -12,6 +12,7 @@ from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import ProcessingStatus, PromptStage
 from processing_pipeline.model_config import (
+    TranscriptionMethod,
     stage1_detection_model,
     stage1_flow_options,
     stage1_timestamp_model,
@@ -28,6 +29,7 @@ from processing_pipeline.stage_1.tasks import (
     fetch_stage_1_llm_response_by_id,
     get_audio_file_metadata,
     process_audio_file,
+    require_gpu_engines,
     reset_status_of_audio_files,
     reset_status_of_stage_1_llm_response,
     set_audio_file_status,
@@ -63,6 +65,8 @@ def initial_disinformation_detection(audio_file_id, limit):
     # Check the flow-shape switches before touching anything (STAGE1_TRANSCRIBE_FIRST, STAGE1_DETECTION_PASSES,
     # STAGE1_ANCHOR_TIMESTAMPS); an invalid combination fails the run instead of every audio file
     print(f"Stage 1 options: {stage1_flow_options()}")
+    if stage1_transcription_method() == TranscriptionMethod.OPEN_MODEL:
+        require_gpu_engines()
 
     # Setup S3 Client
     s3_client = boto3.client(

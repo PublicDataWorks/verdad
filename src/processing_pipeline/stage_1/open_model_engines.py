@@ -14,7 +14,7 @@ from faster_whisper.vad import VadOptions, get_speech_timestamps
 from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
 from transformers import AutoProcessor, CohereAsrForConditionalGeneration
 
-from processing_pipeline.stage_1.open_model_executor import SAMPLE_RATE
+from processing_pipeline.stage_1.open_model_executor import SAMPLE_RATE, ctc_min_frames
 
 COHERE_DEFAULT = "CohereLabs/cohere-transcribe-arabic-07-2026"
 ALIGNER_CARD = "omniASR_CTC_1B_v2"
@@ -90,14 +90,14 @@ class GpuEngines:
         emission = torch.log_softmax(logits.float(), dim=-1)
         seconds_per_frame = len(chunk) / SAMPLE_RATE / emission.size(1)
         blank = pipe.tokenizer.vocab_info.bos_idx  # the CTC blank in this model (VER-448 probe)
-        targets = torch.tensor([[t for _, ids in keep for t in ids]], dtype=torch.int32, device=emission.device)
-        try:
-            labels, _ = F.forced_align(emission, targets, blank=blank)
-        except RuntimeError:  # more tokens than frames
+        tokens = [t for _, ids in keep for t in ids]
+        if ctc_min_frames(tokens) > emission.size(1):
             step = len(chunk) / SAMPLE_RATE / len(keep)
             return [
                 {"text": w, "start": offset + i * step, "end": offset + (i + 1) * step} for i, (w, _) in enumerate(keep)
             ]
+        targets = torch.tensor([tokens], dtype=torch.int32, device=emission.device)
+        labels, _ = F.forced_align(emission, targets, blank=blank)
         spans = F.merge_tokens(labels[0], torch.zeros_like(labels[0], dtype=torch.float), blank=blank)
         out, k = [], 0
         for w, ids in keep:

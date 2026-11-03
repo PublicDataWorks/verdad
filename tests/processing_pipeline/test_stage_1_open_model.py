@@ -7,6 +7,7 @@ from processing_pipeline.stage_1.open_model_executor import (
     SAMPLE_RATE,
     WHISPER_LABEL,
     OpenModelTranscriber,
+    ctc_min_frames,
 )
 
 
@@ -90,6 +91,17 @@ class TestArabicRoute:
         assert ("align", [], 20) not in engines.calls
         assert result.model == ARABIC_LABEL
         assert result.windows[0] == "مرحبا بكم"
+
+    def test_an_exact_one_second_tail_is_kept(self):
+        engines = FakeEngines(41, ["ar", "ar"], cohere_texts=["", "", ""])
+        OpenModelTranscriber(engines).transcribe("a.mp3")
+        assert ("cohere", [20.0, 20.0, 1.0]) in engines.calls
+
+
+def test_ctc_needs_a_blank_frame_between_repeated_tokens():
+    assert ctc_min_frames([1, 2, 3]) == 3
+    assert ctc_min_frames([1, 1, 2, 2, 2]) == 8
+    assert ctc_min_frames([]) == 0
 
 
 class TestEmptyTranscript:

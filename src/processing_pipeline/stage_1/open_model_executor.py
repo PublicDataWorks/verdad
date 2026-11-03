@@ -7,6 +7,7 @@ the rest to Whisper with the voted language. The result has the same views as th
 import re
 import unicodedata
 from collections import Counter
+from itertools import pairwise
 from typing import Protocol, Sequence
 
 from processing_pipeline.stage_1.executors import GeminiTimestampTranscriptionGenerator
@@ -21,6 +22,11 @@ VOTE_WINDOW_SECONDS = 30
 ARABIC_CHUNK_SECONDS = 20
 WHISPER_LABEL = "faster-whisper-large-v3"
 ARABIC_LABEL = "cohere-transcribe-arabic+omniASR_CTC_1B_v2"
+
+
+def ctc_min_frames(tokens: Sequence[int]) -> int:
+    """Frames CTC forced alignment needs: one per token plus a blank between repeated tokens."""
+    return len(tokens) + sum(a == b for a, b in pairwise(tokens))
 
 
 class OpenModelEngines(Protocol):
@@ -82,7 +88,7 @@ class OpenModelTranscriber:
 
     def arabic_words(self, audio: Sequence[float]) -> list[dict]:
         step = ARABIC_CHUNK_SECONDS * SAMPLE_RATE
-        chunks = [audio[i : i + step] for i in range(0, len(audio) - SAMPLE_RATE, step)]  # drops a tail under 1 s
+        chunks = [audio[i : i + step] for i in range(0, len(audio) - SAMPLE_RATE + 1, step)]  # drops a tail under 1 s
         words = []
         for i, (chunk, text) in enumerate(zip(chunks, self.engines.cohere_texts(chunks), strict=True)):
             tokens = re.sub(r"[^\w\s]", " ", _nfkc(text)).split()

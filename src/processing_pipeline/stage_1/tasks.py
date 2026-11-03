@@ -224,9 +224,13 @@ def transcribe_audio_file_with_gemini_transcribe(
 @optional_task(log_prints=True, retries=3)
 def transcribe_audio_file_with_open_models(audio_file: str) -> TranscribeResult:
     """STAGE1_TRANSCRIPTION_METHOD=open_model: the transcribe-first transcript from the GPU worker's open models."""
+    require_gpu_engines()
+    return _open_model_transcriber().transcribe(audio_file)
+
+
+def require_gpu_engines():
     if GpuEngines is None:
         raise RuntimeError("STAGE1_TRANSCRIPTION_METHOD=open_model needs requirements-gpu.txt") from _gpu_import_error
-    return _open_model_transcriber().transcribe(audio_file)
 
 
 @functools.cache
