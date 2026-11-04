@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import functools
 import json
@@ -40,6 +41,9 @@ try:
     _gpu_import_error = None
 except ImportError as e:  # GPU-only dependencies (requirements-gpu.txt), absent on the Fly images
     GpuEngines, _gpu_import_error = None, e
+
+# Every model loads and runs on this one thread: CUDA and the aligner keep per-thread state
+_GPU_THREAD = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gpu")
 
 
 @optional_task(log_prints=True, retries=3)
@@ -225,7 +229,7 @@ def transcribe_audio_file_with_gemini_transcribe(
 def transcribe_audio_file_with_open_models(audio_file: str) -> TranscribeResult:
     """STAGE1_TRANSCRIPTION_METHOD=open_model: the transcribe-first transcript from the GPU worker's open models."""
     require_gpu_engines()
-    return _open_model_transcriber().transcribe(audio_file)
+    return _GPU_THREAD.submit(lambda: _open_model_transcriber().transcribe(audio_file)).result()
 
 
 def require_gpu_engines():

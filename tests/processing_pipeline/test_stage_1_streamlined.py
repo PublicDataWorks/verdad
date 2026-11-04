@@ -2,6 +2,7 @@
 
 import glob
 import os
+import threading
 import uuid
 from unittest.mock import ANY, Mock, patch
 
@@ -208,6 +209,25 @@ class TestOpenModels:
     def test_task_fails_clearly_without_the_gpu_dependencies(self):
         with patch(f"{TASKS}.GpuEngines", None), pytest.raises(RuntimeError, match="requirements-gpu.txt"):
             transcribe_audio_file_with_open_models(audio_file="a.mp3")
+
+    def test_gpu_work_runs_on_one_thread_whichever_thread_asks(self):
+        gpu_threads = []
+        transcriber = Mock()
+        transcriber.transcribe.side_effect = lambda audio_file: gpu_threads.append(threading.current_thread().name)
+        callers = [
+            threading.Thread(target=transcribe_audio_file_with_open_models, kwargs={"audio_file": f"{i}.mp3"})
+            for i in range(3)
+        ]
+
+        with patch(f"{TASKS}.GpuEngines", object), patch(f"{TASKS}._open_model_transcriber", return_value=transcriber):
+            for caller in callers:
+                caller.start()
+            for caller in callers:
+                caller.join()
+
+        assert len(gpu_threads) == 3
+        assert len(set(gpu_threads)) == 1
+        assert gpu_threads[0].startswith("gpu")
 
 
 def test_transcribe_first_task_needs_a_client():

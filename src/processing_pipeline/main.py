@@ -30,7 +30,7 @@ if __name__ == "__main__":
             )
             serve(deployment, limit=100)
         case "initial_disinformation_detection_gpu":
-            # A GPU machine outside Fly (VER-446): one recording at a time, named by WORKER_NAME
+            # A GPU machine outside Fly (VER-446): one run at a time (STAGE1_FILE_WORKERS files in it), named by WORKER_NAME
             deployment = initial_disinformation_detection.to_deployment(
                 name=f"Stage 1: Initial Disinformation Detection GPU {os.environ['WORKER_NAME']}",
                 concurrency_limit=1,
