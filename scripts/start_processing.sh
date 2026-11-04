@@ -16,6 +16,9 @@ STAGE_3_FLOW_RUNS="${STAGE_3_FLOW_RUNS:-2}"
 STAGE_4_FLOW_RUNS="${STAGE_4_FLOW_RUNS:-1}"
 STAGE_5_FLOW_RUNS="${STAGE_5_FLOW_RUNS:-1}"
 
+# Stage 1 GPU workers outside Fly (VER-446): comma-separated WORKER_NAMEs, one run each; empty skips them
+GPU_WORKER_NAMES="${GPU_WORKER_NAMES:-}"
+
 # Log function
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
@@ -100,6 +103,14 @@ log "========================================="
 
 # Stage 1: Initial Disinformation Detection
 start_deployment_instances "$STAGE_1_INIT" "$STAGE_1_FLOW_RUNS" "Stage 1" '{"limit": 10000, "audio_file_id": null}'
+
+IFS=',' read -ra GPU_WORKERS <<< "$GPU_WORKER_NAMES"
+for worker in "${GPU_WORKERS[@]}"; do
+    worker=${worker//[[:space:]]/}
+    if [[ -n "$worker" ]]; then
+        start_deployment_instances "$STAGE_1_INIT GPU $worker" 1 "Stage 1 GPU $worker"
+    fi
+done
 
 # Stage 2: Audio Clipping
 start_deployment_instances "$STAGE_2_CLIPPING" "$STAGE_2_FLOW_RUNS" "Stage 2"

@@ -99,7 +99,7 @@ the lock forever):
    is provided).
 3. Waits 30 s, runs `start_recording.sh` (timeout 600 s; one `prefect deployment run` per station, 54 stations),
    waits 10 s, runs `start_processing.sh` (timeout 600 s; N runs per stage: `STAGE_{1..5}_FLOW_RUNS`, defaults
-   2/1/2/1/1).
+   2/1/2/1/1; plus one Stage 1 GPU run per name in `GPU_WORKER_NAMES`).
 
 `delete_flow_runs.py` deletes old cancelled flow runs in batches (`BATCH_SIZE`, `DELAY_BETWEEN_BATCHES`).
 
@@ -401,8 +401,10 @@ python src/processing_pipeline/main.py
 ```
 
 The worker serves `Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>`, one recording at a time, so a new
-machine is a new `WORKER_NAME`. `start_processing.sh` does not create runs for it yet: start one with
-`prefect deployment run "Stage 1: Initial Disinformation Detection/Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>"`; a run stops after 1,000 recordings, so start another to go on. `OPEN_MODEL_COHERE_PATH` points at a local copy of the Cohere model (default: the
+machine is a new `WORKER_NAME`. `start_processing.sh` creates one run per name in `GPU_WORKER_NAMES` (comma-separated,
+on the `prefect` app next to `STAGE_{1..5}_FLOW_RUNS`; empty by default); between ticks start one with
+`prefect deployment run "Stage 1: Initial Disinformation Detection/Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>"`.
+A run stops after 1,000 recordings. `OPEN_MODEL_COHERE_PATH` points at a local copy of the Cohere model (default: the
 Hugging Face id `CohereLabs/cohere-transcribe-arabic-07-2026`, a gated repo: it needs `HF_TOKEN` from an account
 granted access). Without the GPU packages the run fails at start
 with "needs requirements-gpu.txt", before it claims a recording.
@@ -473,7 +475,17 @@ refuses the production project unless `--allow-production` is passed.
 - **Every restart strands in-flight rows** in `Processing`/`Reviewing`. The stage 3 `on_crashed` hook resets
   only rows named in `snippet_ids`; the pg_cron job `sweep_stuck_snippets` (hourly at :05, migration
   `20260917080000`) puts rows older than 2 h back to `New` / `Ready for review`. `cron.job_run_details` shows
-  the runs; `SELECT public.sweep_stuck_snippets()` by hand returns how many rows it moved.
+  the runs; `SELECT public.sweep_stuck_snippets()` by hand returns how many rows it moved. Stage 1 audio files get
+  the same from `sweep_stuck_audio_files` (hourly at :35, migration `20261103120000`, VER-452): `Processing` rows
+  stuck 2 h to 7 days, with no `stage_1_llm_responses` row, go back to `New`; older ones are left for a backlog
+  decision. Each requeue counts in `audio_files.retry_attempts` (shared with the error sweep); at 3 the row goes to
+  `Error` ("Stage 1 run died 3 times in Processing"), so a file that kills its run cannot loop. Queue depth for
+  watching the Stage 1 fleet:
+
+  ```sql
+  SELECT status, count(*), min(recorded_at), max(recorded_at) FROM public.audio_files
+  WHERE status IN ('New', 'Processing') GROUP BY status;
+  ```
 - **Stage 3 polls `New` newest-first**, so old rows never drain on their own; reprocess them by id.
 - **`Error` is otherwise terminal.** Nothing in the pipeline re-selects an `Error` row, and because transcription
   is a Stage 3 output a snippet that fails Stage 3 has no text and cannot be found by search. The function
