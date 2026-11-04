@@ -289,6 +289,115 @@ The five dead `lite` stations (WOLS, WNZK, WGSP, WYMY, KMRO) were disabled on 20
 stations with no audio for months (KENO, KNNR, WURN, KFUE, WDJA) on 2026-10-09 (VER-425). Both take effect only
 after a deploy.
 
+## Switching models
+
+Every Gemini call resolves its model at call time in `src/processing_pipeline/model_config.py`, from an env var on
+the `processing-worker` app. Unset or empty means today's production model, so nothing changes until a variable is
+set. A value that is not a `GeminiModel` member is passed through as a plain string; a value that is not a single
+model id (spaces, a swallowed `# comment`) raises `ValueError` when the call runs.
+
+| Variable | Call sites | Default | Persisted as |
+|---|---|---|---|
+| `STAGE1_TRANSCRIPTION_MODEL` | Stage 1 initial (untimed) transcription | `gemini-2.5-flash` | not stored |
+| `STAGE1_DETECTION_MODEL` | Stage 1 initial and main detection, also in `redo_main_detection` / `regenerate_timestamped_transcript` | `gemini-2.5-flash` | not stored |
+| `STAGE1_TRANSCRIPTION_METHOD` | Stage 1 timestamped transcription: `segments` or `transcribe` | `segments` | (see `transcriptor`) |
+| `STAGE1_TIMESTAMP_MODEL` | Stage 1 timestamped transcription | `gemini-2.5-flash` with `segments`, `gemini-3.5-transcribe` with `transcribe` | `stage_1_llm_responses.transcriptor` |
+| `STAGE1_TRANSCRIBE_FIRST` | Stage 1 flow shape: one Transcribe call per recording supplies every transcript (needs `STAGE1_TRANSCRIPTION_METHOD=transcribe`) | `false` | `transcriptor` on every row |
+| `STAGE1_DETECTION_PASSES` | Stage 1 detection: `two` (initial, then main when flagged) or `one` (main only, every recording; needs `STAGE1_TRANSCRIBE_FIRST=true`) | `two` | `initial_detection_result` is null with `one` |
+| `STAGE1_ANCHOR_TIMESTAMPS` | Stage 1 main detection: flagged snippet times from word timestamps where the row has them | `false` | per snippet in `detection_result` |
+| `STAGE2_USE_WORD_TIMES` | Stage 2 clipping: cut snippets that carry `start_s`/`end_s` at millisecond precision around the words | `false` | `snippets.start_time`/`end_time`/`duration`/`recorded_at` |
+| `STAGE2_CONTEXT_BEFORE_S` / `STAGE2_CONTEXT_AFTER_S` | Stage 2 padding for the word-time cut, float seconds >= 0 | the flow's `context_before_seconds` / `context_after_seconds` (90 / 60 in `main.py`) | (the clip itself) |
+| `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop) | `gemini-2.5-pro` | `snippets.analyzed_by` |
+| `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-2.5-flash` | `snippets.analyzed_by` |
+| `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
+| `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-2.5-flash` | not stored |
+| `STAGE4_REVIEWER_MODEL` | Stage 4 `analysis_reviewer` | `gemini-2.5-pro` | `snippets.reviewed_by` |
+| `STAGE4_REVIEWER_THINKING` | Stage 4 `analysis_reviewer` thinking level (`minimal`/`low`/`medium`/`high`); 3.x defaults to `high`, whose thoughts count against the agent's 16k output cap and truncated review JSON | `medium` on Gemini 3.x, the model default on 2.5, nothing on Gemma | not stored |
+| `STAGE4_KB_WRITER_MODEL` | Stage 4 `kb_updater` (off: `KB_UPDATER_ENABLED = False`) | `gemini-2.5-flash` | `kb_entries.created_by_model` |
+
+```bash
+fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_MODEL=gemini-3.5-flash-lite \
+    STAGE1_DETECTION_MODEL=gemini-3.5-flash-lite STAGE1_TRANSCRIPTION_METHOD=transcribe
+fly secrets unset -a processing-worker STAGE1_TRANSCRIPTION_MODEL STAGE1_DETECTION_MODEL STAGE1_TRANSCRIPTION_METHOD  # back
+```
+
+Any variable left unset stays on its 2.5 default. When leaving 2.5 entirely, set every row of the table, including
+`STAGE3_RESTRUCTURE_MODEL`, which is easy to miss because it only runs when an analysis fails validation.
+
+`fly secrets set` restarts the app's machines, which orphans in-flight runs and leaves the workers idle until runs
+are recreated (see "Workers idle after any deploy" in the gotchas below). The variables apply to every process group of the app, so the second Stage 1 and Stage 4 workers
+switch together with the first.
+
+**Thinking config.** Call sites state a 2.5-style thinking budget and `thinking_config()` sends what the model accepts:
+the budget on Gemini 2.x (2.5 Pro gets at least 128, since it cannot turn thinking off); on Gemini 3.x a
+`thinking_level` instead, because 3.x rejects `thinking_budget` with 400 INVALID_ARGUMENT (budget 0 = `minimal`,
+or `low` on 3.8 Flash, which rejects `minimal`; up to 1024 = `low`, up to 4096 = `medium`, more = `high`); nothing at
+all on Gemma, which rejects any thinking config.
+
+**Model limits to check before switching.** Gemma 4 rejects audio input, so it can only take the text-only calls
+(`STAGE1_DETECTION_MODEL`, `STAGE3_RESTRUCTURE_MODEL`, the Stage 4 agents), never `STAGE1_TRANSCRIPTION_MODEL`,
+`STAGE1_TIMESTAMP_MODEL` or the Stage 3 analysis. Stage 3 falls back to `STAGE3_FALLBACK_MODEL` on any 4xx other
+than 401/403, so a main model that rejects a request shows up only as `analyzed_by` = the fallback model.
+
+**The `transcribe` method** (`stage_1/transcribe_executor.py`) replaces 90 inline 20 s clips per recording with one
+request: the mp3 goes up through the Files API and `gemini-3.5-transcribe` is called on the interactions endpoint
+(`POST /v1beta/interactions`, verbatim mode, word timestamps; `generate_content` returns no timestamps). The API
+caps a timestamped request at 30 minutes, so a recording longer than 1799.5 s is cut to its first 1799 s with
+`ffmpeg -c copy` (the last second of a 30 min recording is not transcribed). Words are placed in 20 s windows by
+start time and written in the segments method's exact `[MM:SS] text` format, one line per window from `00:00`, an
+empty window being `[MM:SS] ` as before, so main detection, Stage 2 clipping and the detection prompt are unchanged;
+word timestamps past the end of the audio go into the last window. The timestamped-transcription prompt in
+`prompt_versions` is not used by this method. 429/5xx and dropped connections are retried after 30, 60 and 120 s,
+then the task's own Prefect retries apply; any other HTTP error fails the audio file with the response text.
+
+**Streamlined Stage 1** (`STAGE1_TRANSCRIBE_FIRST`, `STAGE1_DETECTION_PASSES`, `STAGE1_ANCHOR_TIMESTAMPS`; all off by
+default). With `STAGE1_TRANSCRIBE_FIRST=true`, `process_audio_file` calls Transcribe once at the start and derives
+every transcript from that one response (`TranscribeResult`): its plain text is `initial_transcription` (KB retrieval
+and initial detection read it), and its `[MM:SS]` view feeds main detection. Skipped: the whole-file upload to
+`STAGE1_TRANSCRIPTION_MODEL` (the untimed pass) and, for flagged recordings, the second audio call. Stored:
+`transcriptor` = the Transcribe model on every row (today it is null when nothing is flagged);
+`timestamped_transcription` = `{"timestamped_transcription": "[MM:SS] ...", "words": [{"text", "start", "end",
+"speaker"}]}` on rows that ran main detection (null otherwise, as today; about 3,400 words per 30 min file);
+`transcription_prompt_version_id` = null, since Transcribe takes no prompt. `STAGE1_DETECTION_PASSES=one` drops initial
+detection and runs main detection on every recording (`initial_detection_result` null), one text call per file
+instead of one or two; note that `redo_main_detection` still skips rows whose `initial_detection_result` has no
+flags, so it does not redo single-pass rows. `STAGE1_ANCHOR_TIMESTAMPS=true` matches each flagged snippet's
+`transcription` against the stored words (`stage_1/anchor.py`; normalized tokens, `difflib`, accepted at a match
+score of 0.6 or more and within 60 s of the model's window) and writes `start_time`/`end_time` as whole-second MM:SS
+(start rounded down, end up), plus `start_s`, `end_s`, `anchor_score`, `anchor_status` and the model's originals in
+`llm_start_time`/`llm_end_time`; a rejected match keeps the model's times. Unless `STAGE2_USE_WORD_TIMES` is on
+(see below), Stage 2 is unchanged except that it now clamps an end past the audio (word ends can land at 1800 s on a
+file trimmed to 1799 s) instead of failing the response, so the 90 s / 60 s padding and the "position inside the clip" meaning of `snippets.start_time` hold. The
+flow checks the combination at start: `STAGE1_TRANSCRIBE_FIRST=true` without the `transcribe` method, or
+`STAGE1_DETECTION_PASSES=one` without transcribe-first, fails the run with a `ValueError`. Transcribe is 100
+requests/day on Tier 1, against about 2,400 recordings/day: do not turn transcribe-first on in production before the
+quota is raised. Fully streamlined:
+
+```bash
+fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_METHOD=transcribe STAGE1_TRANSCRIBE_FIRST=true \
+    STAGE1_DETECTION_PASSES=one STAGE1_ANCHOR_TIMESTAMPS=true
+```
+
+**Word-boundary clipping** (`STAGE2_USE_WORD_TIMES`, `STAGE2_CONTEXT_BEFORE_S`, `STAGE2_CONTEXT_AFTER_S`; off by
+default). Without it, Stage 2 cuts from the whole-second `start_time`/`end_time` even when Stage 1 anchored the
+snippet. With `STAGE2_USE_WORD_TIMES=true`, a flagged snippet with `start_s`/`end_s` is cut from
+`start_s - STAGE2_CONTEXT_BEFORE_S` to `end_s + STAGE2_CONTEXT_AFTER_S` with millisecond precision, clamped to the
+audio (`extract_snippet_clip_at_word_times` in `stage_2/tasks.py`); a snippet without word times (not anchored, or
+from a row without words) is cut exactly as before, with the flow's padding. The stored columns keep their meaning:
+`snippets.start_time`/`end_time` are positions inside the clip as whole-second MM:SS (start rounded down, so the
+frontend's seek lands just before the first word; end rounded up, capped at the clip length), `duration` is the clip
+length rounded to the nearest second, `recorded_at` is the recording start plus the clip offset (with milliseconds).
+Unset padding variables fall back to the flow parameters, so turning the flag on alone keeps the 90 s lead-in
+journalists asked for and the 60 s tail; since the anchor already wrote whole-second times, clip edges move by under a
+second. A value that is not a number of seconds >= 0 marks each response `Error` with the variable named in
+`error_message`. Reduce the padding only after Stage 3 has been re-evaluated on the shorter clips: Stage 3 analyzes
+the clip audio itself (with the Stage 1 snippet as metadata), so less context changes its analysis and the confidence
+scores that gate Stage 4, not only what reviewers hear.
+
+```bash
+fly secrets set -a processing-worker STAGE1_ANCHOR_TIMESTAMPS=true STAGE2_USE_WORD_TIMES=true
+```
+
 ## Triggering one stage run against production
 
 Deployment names are `"<flow name>/<deployment name>"` (from `main.py`; note stage 3 differs in case):

@@ -4,6 +4,7 @@ from .executors import (
     Stage1PreprocessDetectionExecutor,
     Stage1PreprocessTranscriptionExecutor,
 )
+from .transcribe_executor import GeminiTranscribeTimestampGenerator
 from .flows import (
     initial_disinformation_detection,
     redo_main_detection,
@@ -27,7 +28,6 @@ from .tasks import (
     reset_status_of_stage_1_llm_response,
     set_audio_file_status,
     set_status_of_stage_1_llm_response,
-    transcribe_audio_file_with_open_ai_whisper_1,
     transcribe_audio_file_with_timestamp_with_gemini,
     update_stage_1_llm_response_detection_result,
     update_stage_1_llm_response_timestamped_transcription,
@@ -35,6 +35,7 @@ from .tasks import (
 
 __all__ = [
     "GeminiTimestampTranscriptionGenerator",
+    "GeminiTranscribeTimestampGenerator",
     "Stage1Executor",
     "Stage1PreprocessDetectionExecutor",
     "Stage1PreprocessTranscriptionExecutor",
@@ -57,7 +58,6 @@ __all__ = [
     "reset_status_of_stage_1_llm_response",
     "set_audio_file_status",
     "set_status_of_stage_1_llm_response",
-    "transcribe_audio_file_with_open_ai_whisper_1",
     "transcribe_audio_file_with_timestamp_with_gemini",
     "undo_disinformation_detection",
     "update_stage_1_llm_response_detection_result",

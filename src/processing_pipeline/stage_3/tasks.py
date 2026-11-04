@@ -12,7 +12,7 @@ from processing_pipeline.constants import (
 )
 from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
-from processing_pipeline.stage_3.constants import FALLBACK_MODEL, MAIN_MODEL
+from processing_pipeline.model_config import stage3_fallback_model, stage3_main_model
 from processing_pipeline.stage_3.executors import Stage3Executor
 from processing_pipeline.supabase_utils import SupabaseClient
 from utils import optional_task
@@ -113,7 +113,7 @@ def __get_metadata(snippet):
                 metadata["transcription"] = flagged_snippet["transcription"]
 
     audio_file = snippet["audio_file"]
-    recorded_at = datetime.strptime(snippet["recorded_at"], "%Y-%m-%dT%H:%M:%S+00:00").replace(tzinfo=timezone.utc)
+    recorded_at = datetime.fromisoformat(snippet["recorded_at"]).astimezone(timezone.utc)
     audio_file["recorded_at"] = recorded_at.strftime("%B %-d, %Y %-I:%M %p")
     audio_file["recorded_at_iso"] = recorded_at.isoformat()
     audio_file["recording_day_of_week"] = recorded_at.strftime("%A")
@@ -140,7 +140,7 @@ async def analyze_snippet(gemini_client, audio_file, metadata, prompt_version: d
 
 
 async def analyze_with_fallback(gemini_client, audio_file, metadata, prompt_version: dict):
-    model = MAIN_MODEL
+    model = stage3_main_model()
 
     try:
         print(f"Attempting analysis with {model}")
@@ -156,12 +156,13 @@ async def analyze_with_fallback(gemini_client, audio_file, metadata, prompt_vers
             print(f"Auth error with {model} (code {e.code}): {e.message}")
             raise
 
+        fallback_model = stage3_fallback_model()
         print(
             f"{e.__class__.__name__} with {model} (code {e.code}): {e.message} "
-            f"Falling back to {FALLBACK_MODEL}"
+            f"Falling back to {fallback_model}"
         )
 
-        model = FALLBACK_MODEL
+        model = fallback_model
         analyzing_response = await Stage3Executor.run_async(
             gemini_client=gemini_client,
             model_name=model,

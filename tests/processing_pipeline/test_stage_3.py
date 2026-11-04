@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
 from google.genai import errors
-from google.genai.types import FinishReason
+from google.genai.types import FinishReason, ThinkingLevel
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
 from processing_pipeline.stage_3 import (
@@ -215,6 +215,15 @@ class TestStage3:
         assert "explanation" not in result
         assert "keywords_detected" not in result
 
+    def test_get_metadata_accepts_fractional_recorded_at(self, sample_snippet):
+        # Word-time clips (STAGE2_USE_WORD_TIMES) start on a millisecond, so recorded_at has a fraction.
+        sample_snippet["recorded_at"] = "2024-01-01T00:00:12.345+00:00"
+
+        result = get_metadata(sample_snippet)
+
+        assert result["additional_info"]["recorded_at"] == "January 1, 2024 12:00 AM"
+        assert result["additional_info"]["recorded_at_iso"] == "2024-01-01T00:00:12.345000+00:00"
+
     # --- process_snippet -------------------------------------------------------
 
     def _process(self, supabase_client, snippet, skip_review, gemini_client=None):
@@ -295,6 +304,23 @@ class TestStage3:
         assert mock_run.await_args_list[0].kwargs["model_name"] == GeminiModel.GEMINI_2_5_PRO
         assert mock_run.await_args_list[1].kwargs["model_name"] == GeminiModel.GEMINI_2_5_FLASH
         assert mock_supabase_client.update_snippet.call_args.kwargs["analyzed_by"] == GeminiModel.GEMINI_2_5_FLASH
+
+    def test_process_snippet_models_come_from_env(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_MAIN_MODEL", "gemini-3.8-flash")
+        monkeypatch.setenv("STAGE3_FALLBACK_MODEL", "gemini-3.5-flash")
+        server_error = errors.ClientError(400, {"error": {"message": "invalid", "status": "INVALID_ARGUMENT"}})
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async",
+            new=AsyncMock(side_effect=[server_error, analysis_result]),
+        ) as mock_run, patch("processing_pipeline.stage_3.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        assert mock_run.await_args_list[0].kwargs["model_name"] is GeminiModel.GEMINI_3_8_FLASH
+        assert mock_run.await_args_list[1].kwargs["model_name"] is GeminiModel.GEMINI_3_5_FLASH
+        # analyzed_by records the model that actually produced the analysis
+        assert mock_supabase_client.update_snippet.call_args.kwargs["analyzed_by"] == "gemini-3.5-flash"
 
     def test_process_snippet_auth_error_is_not_retried(self, mock_supabase_client, sample_snippet):
         auth_error = errors.ClientError(401, {"error": {"message": "bad key", "status": "UNAUTHENTICATED"}})
@@ -420,6 +446,42 @@ class TestStage3:
         assert second_call["config"].response_schema is not None
         mock_gemini_client.files.upload.assert_called_once_with(file="test.mp3")
         mock_gemini_client.files.delete.assert_called_once_with(name="files/test-audio")
+
+    def test_stage_3_executor_thinking_and_restructure_model_on_gemini_3(self, mock_gemini_client, monkeypatch):
+        monkeypatch.setenv("STAGE3_RESTRUCTURE_MODEL", "gemini-3.5-flash-lite")
+        analysis_response = model_response('{"test": "response"}')
+        restructure_response = Mock(parsed={"test": "response", "is_convertible": True})
+        mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
+
+        asyncio.run(
+            Stage3Executor.run_async(
+                gemini_client=mock_gemini_client,
+                model_name=GeminiModel.GEMINI_3_8_FLASH,
+                audio_file="test.mp3",
+                metadata={"additional_info": {"recorded_at": "January 1, 2024 12:00 AM"}},
+                prompt_version=PROMPT_VERSION,
+            )
+        )
+
+        first_call, second_call = (c.kwargs for c in mock_gemini_client.aio.models.generate_content.await_args_list)
+        assert first_call["model"] is GeminiModel.GEMINI_3_8_FLASH
+        assert first_call["config"].thinking_config.thinking_level == ThinkingLevel.MEDIUM
+        assert first_call["config"].thinking_config.thinking_budget is None
+        assert first_call["config"].thinking_config.include_thoughts is True
+        assert second_call["model"] is GeminiModel.GEMINI_3_5_FLASH_LITE
+        assert second_call["config"].thinking_config.thinking_level == ThinkingLevel.MINIMAL
+
+    def test_stage_3_executor_default_thinking_on_2_5(self, mock_gemini_client):
+        analysis_response = model_response('{"test": "response"}')
+        restructure_response = Mock(parsed={"test": "response", "is_convertible": True})
+        mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
+
+        self._run_executor(mock_gemini_client)
+
+        first_call, second_call = (c.kwargs for c in mock_gemini_client.aio.models.generate_content.await_args_list)
+        assert first_call["config"].thinking_config.thinking_budget == 4096
+        assert first_call["config"].thinking_config.include_thoughts is True
+        assert second_call["config"].thinking_config.thinking_budget == 0
 
     def test_stage_3_executor_collects_thoughts(self, mock_gemini_client):
         thought_part = text_part("thinking...", thought=True)

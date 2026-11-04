@@ -8,12 +8,11 @@ from google.genai.types import (
     FinishReason,
     GenerateContentConfig,
     Part,
-    ThinkingConfig,
 )
 from prefect.tasks import exponential_backoff
 from pydub import AudioSegment
 
-from processing_pipeline.constants import GeminiModel
+from processing_pipeline.model_config import ModelName, thinking_config
 from processing_pipeline.processing_utils import get_safety_settings
 from utils import optional_task
 
@@ -25,7 +24,7 @@ class Stage1PreprocessTranscriptionExecutor:
         cls,
         gemini_client: genai.Client,
         audio_file: str,
-        model_name: GeminiModel,
+        model_name: ModelName,
         prompt_version: dict,
     ):
         # Upload the audio file and wait for it to finish processing
@@ -44,7 +43,7 @@ class Stage1PreprocessTranscriptionExecutor:
                     response_mime_type="application/json",
                     response_schema=prompt_version["output_schema"],
                     max_output_tokens=16384,
-                    thinking_config=ThinkingConfig(thinking_budget=1024),
+                    thinking_config=thinking_config(model_name, budget=1024),
                     safety_settings=get_safety_settings(),
                 ),
             )
@@ -67,7 +66,7 @@ class Stage1PreprocessDetectionExecutor:
     def run(
         cls,
         gemini_client: genai.Client,
-        model_name: GeminiModel,
+        model_name: ModelName,
         transcription: str,
         metadata: dict,
         prompt_version: dict,
@@ -87,7 +86,7 @@ class Stage1PreprocessDetectionExecutor:
                 response_schema=prompt_version["output_schema"],
                 max_output_tokens=16384,
                 system_instruction=prompt_version.get("system_instruction"),
-                thinking_config=ThinkingConfig(thinking_budget=2048),
+                thinking_config=thinking_config(model_name, budget=2048),
                 safety_settings=get_safety_settings(),
             ),
         )
@@ -108,7 +107,7 @@ class Stage1Executor:
     def run(
         cls,
         gemini_client: genai.Client,
-        model_name: GeminiModel,
+        model_name: ModelName,
         timestamped_transcription: str,
         metadata: dict,
         prompt_version: dict,
@@ -129,7 +128,7 @@ class Stage1Executor:
                 response_schema=prompt_version["output_schema"],
                 max_output_tokens=16384,
                 system_instruction=prompt_version["system_instruction"],
-                thinking_config=ThinkingConfig(thinking_budget=4096),
+                thinking_config=thinking_config(model_name, budget=4096),
                 safety_settings=get_safety_settings(),
             ),
         )
@@ -151,7 +150,7 @@ class GeminiTimestampTranscriptionGenerator:
         cls,
         gemini_client: genai.Client,
         audio_file: str,
-        model_name: GeminiModel,
+        model_name: ModelName,
         prompt_version: dict,
         segment_length: int = 20,
         batch_size: int = 30,
@@ -213,7 +212,7 @@ class GeminiTimestampTranscriptionGenerator:
         cls,
         gemini_client: genai.Client,
         segment_paths: list,
-        model_name: GeminiModel,
+        model_name: ModelName,
         prompt_version: dict,
     ):
         segments = []
@@ -227,8 +226,6 @@ class GeminiTimestampTranscriptionGenerator:
                 ]
             )
 
-        thinking_budget = 128 if model_name == GeminiModel.GEMINI_2_5_PRO else 0
-
         result = gemini_client.models.generate_content(
             model=model_name,
             contents=[prompt_version["user_prompt"]] + segments,
@@ -237,7 +234,8 @@ class GeminiTimestampTranscriptionGenerator:
                 response_schema=prompt_version["output_schema"],
                 system_instruction=prompt_version["system_instruction"],
                 max_output_tokens=16384,
-                thinking_config=ThinkingConfig(thinking_budget=thinking_budget),
+                # budget 0: no thinking on Flash, the 128 minimum on 2.5 Pro, "minimal" on 3.x
+                thinking_config=thinking_config(model_name, budget=0),
                 safety_settings=get_safety_settings(),
             ),
         )
