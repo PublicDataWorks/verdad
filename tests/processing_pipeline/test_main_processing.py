@@ -1,7 +1,10 @@
 import importlib
+import runpy
 import sys
 from unittest.mock import Mock, patch
 import pytest
+
+from processing_pipeline.stage_1 import initial_disinformation_detection
 
 class TestMainProcessing:
     @pytest.fixture(autouse=True)
@@ -62,3 +65,18 @@ class TestMainProcessing:
 
                 mock_init.assert_called_once_with(dsn=case['expected_dsn'])
                 mock_init.reset_mock()
+
+    def test_gpu_deployment_limit_outlasts_the_six_hourly_restart(self, monkeypatch):
+        monkeypatch.setenv('FLY_PROCESS_GROUP', 'initial_disinformation_detection_gpu')
+        monkeypatch.setenv('WORKER_NAME', 'hcmc-1')
+
+        with (
+            patch.dict('sys.modules', {'sentry_sdk': Mock()}),
+            patch('prefect.serve') as serve,
+            patch.object(initial_disinformation_detection, 'to_deployment', create=True) as to_deployment,
+        ):
+            runpy.run_module('processing_pipeline.main', run_name='__main__')
+
+        to_deployment.assert_called_once()
+        assert to_deployment.call_args.kwargs['parameters'] == {'audio_file_id': None, 'limit': 10000}
+        serve.assert_called_once_with(to_deployment.return_value, limit=1)

@@ -34,7 +34,7 @@ if __name__ == "__main__":
             deployment = initial_disinformation_detection.to_deployment(
                 name=f"Stage 1: Initial Disinformation Detection GPU {os.environ['WORKER_NAME']}",
                 concurrency_limit=1,
-                parameters=dict(audio_file_id=None, limit=1000),
+                parameters=dict(audio_file_id=None, limit=10000),
             )
             serve(deployment, limit=1)
         case "regenerate_timestamped_transcript":
