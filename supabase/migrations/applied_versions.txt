@@ -1,5 +1,4 @@
-# supabase_migrations.schema_migrations in production, fetched 2026-10-01; regenerate with `make migrations-manifest`.
-# 20261102233630 appended by hand on 2026-11-02 after checking it in schema_migrations (no SUPABASE_ACCESS_TOKEN to refetch).
+# supabase_migrations.schema_migrations in production, fetched 2026-11-04; regenerate with `make migrations-manifest`.
 # version<TAB>name
 20241029135243	remote_schema
 20241029135348	remote_schema
@@ -61,3 +60,4 @@
 20261001100000	sweep_retryable_audio_errors
 20261001160000	sweep_audio_nonetype_once
 20261102233630	landing_page_safe_snippets
+20261103120000	sweep_stuck_audio_files
