@@ -8,6 +8,7 @@ from functools import cached_property
 
 import torch
 import torchaudio.functional as F
+from fairseq2 import gang
 from fairseq2.nn import BatchLayout
 from faster_whisper import BatchedInferencePipeline, WhisperModel, decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps
@@ -41,6 +42,8 @@ class GpuEngines:
 
     @cached_property
     def aligner(self):
+        # fairseq2 0.6 creates this per-thread list only in the importing thread; models load on the gpu thread
+        gang._thread_local.__dict__.setdefault("current_gangs", [])
         return ASRInferencePipeline(model_card=ALIGNER_CARD)
 
     def window_language(self, window):
