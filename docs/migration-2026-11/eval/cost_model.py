@@ -20,6 +20,8 @@ PRICE = {  # $/1M input (audio rate where it differs), output
     "gemini-3.5-flash-lite": (0.30, 2.50),
     "gemini-3.5-flash": (0.30, 2.50),
     "gemini-3.8-flash": (0.75, 3.75),
+    "gemini-3.6-flash": (0.75, 3.75),
+    "gemini-3.1-pro-preview": (2.0, 12.0),
     "gemma-4-26b-a4b-it-maas": (0.0, 0.0),
     "gemma-4-31b-it": (0.0, 0.0),
 }
@@ -136,11 +138,7 @@ def main():
             base = [json.load(open(p)) for p in glob.glob(str(HERE / "results_stage3" / "gemini-2.5-pro" / "*.json"))]
             base = [b for b in base if b.get("ok")]
             pin, pout = PRICE[sc["s3"]]
-            s3_cost = st.mean(
-                (b["usage"]["prompt_token_count"]) / 1e6 * pin
-                + (b["usage"]["candidates_token_count"] + (b["usage"].get("thoughts_token_count") or 0)) / 1e6 * pout
-                for b in base
-            )
+            s3_cost = st.mean(usage_cost(b["usage"], pin, pout) for b in base)
             s3_note = " (scaled from 2.5 Pro token usage)"
         else:
             s3_note = ""
