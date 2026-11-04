@@ -473,6 +473,12 @@ class TestTaskDispatch:
         run.assert_not_called()
         assert segments.call_args.kwargs["prompt_version"] == self.PROMPT_VERSION
 
+    def test_open_models_have_no_timestamped_only_path(self):
+        with pytest.raises(ValueError, match="open_model only runs transcribe-first"):
+            transcribe_audio_file_with_timestamp_with_gemini(
+                Mock(), "a.mp3", self.PROMPT_VERSION, "gemini-2.5-flash", method=TranscriptionMethod.OPEN_MODEL
+            )
+
     def test_transcribe_method_needs_a_client(self):
         with pytest.raises(ValueError, match="Gemini client is not provided"):
             transcribe_audio_file_with_timestamp_with_gemini(

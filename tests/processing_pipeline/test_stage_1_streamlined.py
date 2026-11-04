@@ -3,7 +3,7 @@
 import glob
 import os
 import uuid
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import pytest
 from pydub import AudioSegment
@@ -16,7 +16,10 @@ from processing_pipeline.stage_1 import (
     process_audio_file,
     redo_main_detection,
 )
-from processing_pipeline.stage_1.tasks import transcribe_audio_file_with_gemini_transcribe
+from processing_pipeline.stage_1.tasks import (
+    transcribe_audio_file_with_gemini_transcribe,
+    transcribe_audio_file_with_open_models,
+)
 from processing_pipeline.stage_1.transcribe_executor import TranscribeResult
 
 TASKS = "processing_pipeline.stage_1.tasks"
@@ -179,6 +182,32 @@ class TestTranscribeFirstTwoPasses:
         supabase.set_audio_file_status.assert_called_once_with(
             1, ProcessingStatus.ERROR, "The transcription came back without word timestamps"
         )
+
+
+class TestOpenModels:
+    @pytest.fixture
+    def open_models(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "open_model")
+        monkeypatch.setenv("STAGE1_TRANSCRIBE_FIRST", "true")
+        result = TranscribeResult(**{**TRANSCRIPT.__dict__, "model": "faster-whisper-large-v3"})
+        with patch(f"{TASKS}.transcribe_audio_file_with_open_models", return_value=result) as open_models:
+            yield open_models
+
+    def test_transcript_comes_from_the_open_models(self, open_models, mock_tasks):
+        supabase = Mock()
+
+        run(supabase)
+
+        open_models.assert_called_once_with(audio_file="test.mp3")
+        mock_tasks["transcribe"].assert_not_called()
+        mock_tasks["kb_context"].assert_called_once_with(supabase, ANY, TRANSCRIPT.text)
+        stored = supabase.insert_stage_1_llm_response.call_args.kwargs
+        assert stored["transcriptor"] == "faster-whisper-large-v3"
+        assert stored["timestamped_transcription"]["words"] == WORDS
+
+    def test_task_fails_clearly_without_the_gpu_dependencies(self):
+        with patch(f"{TASKS}.GpuEngines", None), pytest.raises(RuntimeError, match="requirements-gpu.txt"):
+            transcribe_audio_file_with_open_models(audio_file="a.mp3")
 
 
 def test_transcribe_first_task_needs_a_client():
@@ -413,6 +442,19 @@ class TestFlowStart:
             patch("processing_pipeline.stage_1.flows.SupabaseClient") as supabase,
             patch("boto3.client") as boto,
             pytest.raises(ValueError, match="STAGE1_DETECTION_PASSES=one needs STAGE1_TRANSCRIBE_FIRST=true"),
+        ):
+            initial_disinformation_detection(audio_file_id=None, limit=1)
+        supabase.assert_not_called()
+        boto.assert_not_called()
+
+    def test_open_model_without_gpu_packages_fails_before_claiming_a_file(self, env, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "open_model")
+        monkeypatch.setenv("STAGE1_TRANSCRIBE_FIRST", "true")
+        with (
+            patch(f"{TASKS}.GpuEngines", None),
+            patch("processing_pipeline.stage_1.flows.SupabaseClient") as supabase,
+            patch("boto3.client") as boto,
+            pytest.raises(RuntimeError, match="requirements-gpu.txt"),
         ):
             initial_disinformation_detection(audio_file_id=None, limit=1)
         supabase.assert_not_called()

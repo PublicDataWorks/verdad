@@ -76,9 +76,13 @@ class TestTranscriptionMethod:
         monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", value)
         assert mc.stage1_transcription_method() is TranscriptionMethod.TRANSCRIBE
 
+    def test_open_model(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "open_model")
+        assert mc.stage1_transcription_method() is TranscriptionMethod.OPEN_MODEL
+
     def test_invalid_method_is_rejected(self, monkeypatch):
         monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "whisper")
-        with pytest.raises(ValueError, match="segments, transcribe"):
+        with pytest.raises(ValueError, match="segments, transcribe, open_model"):
             mc.stage1_transcription_method()
 
     def test_timestamp_model_default_follows_method(self, monkeypatch):
@@ -231,6 +235,16 @@ class TestStage1FlowOptions:
     def test_transcribe_first_needs_the_transcribe_method(self, monkeypatch):
         monkeypatch.setenv("STAGE1_TRANSCRIBE_FIRST", "true")
         with pytest.raises(ValueError, match="needs STAGE1_TRANSCRIPTION_METHOD=transcribe"):
+            mc.stage1_flow_options()
+
+    def test_transcribe_first_with_open_models(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "open_model")
+        monkeypatch.setenv("STAGE1_TRANSCRIBE_FIRST", "true")
+        assert mc.stage1_flow_options().transcribe_first is True
+
+    def test_open_models_need_transcribe_first(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "open_model")
+        with pytest.raises(ValueError, match="open_model needs STAGE1_TRANSCRIBE_FIRST=true"):
             mc.stage1_flow_options()
 
     def test_one_pass_needs_transcribe_first(self, monkeypatch):

@@ -300,9 +300,9 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 |---|---|---|---|
 | `STAGE1_TRANSCRIPTION_MODEL` | Stage 1 initial (untimed) transcription | `gemini-2.5-flash` | not stored |
 | `STAGE1_DETECTION_MODEL` | Stage 1 initial and main detection, also in `redo_main_detection` / `regenerate_timestamped_transcript` | `gemini-2.5-flash` | not stored |
-| `STAGE1_TRANSCRIPTION_METHOD` | Stage 1 timestamped transcription: `segments` or `transcribe` | `segments` | (see `transcriptor`) |
+| `STAGE1_TRANSCRIPTION_METHOD` | Stage 1 timestamped transcription: `segments`, `transcribe` or `open_model` (GPU worker only, see below) | `segments` | (see `transcriptor`) |
 | `STAGE1_TIMESTAMP_MODEL` | Stage 1 timestamped transcription | `gemini-2.5-flash` with `segments`, `gemini-3.5-transcribe` with `transcribe` | `stage_1_llm_responses.transcriptor` |
-| `STAGE1_TRANSCRIBE_FIRST` | Stage 1 flow shape: one Transcribe call per recording supplies every transcript (needs `STAGE1_TRANSCRIPTION_METHOD=transcribe`) | `false` | `transcriptor` on every row |
+| `STAGE1_TRANSCRIBE_FIRST` | Stage 1 flow shape: one transcription per recording supplies every transcript (needs `STAGE1_TRANSCRIPTION_METHOD=transcribe` or `open_model`) | `false` | `transcriptor` on every row |
 | `STAGE1_DETECTION_PASSES` | Stage 1 detection: `two` (initial, then main when flagged) or `one` (main only, every recording; needs `STAGE1_TRANSCRIBE_FIRST=true`) | `two` | `initial_detection_result` is null with `one` |
 | `STAGE1_ANCHOR_TIMESTAMPS` | Stage 1 main detection: flagged snippet times from word timestamps where the row has them | `false` | per snippet in `detection_result` |
 | `STAGE2_USE_WORD_TIMES` | Stage 2 clipping: cut snippets that carry `start_s`/`end_s` at millisecond precision around the words | `false` | `snippets.start_time`/`end_time`/`duration`/`recorded_at` |
@@ -368,8 +368,8 @@ score of 0.6 or more and within 60 s of the model's window) and writes `start_ti
 `llm_start_time`/`llm_end_time`; a rejected match keeps the model's times. Unless `STAGE2_USE_WORD_TIMES` is on
 (see below), Stage 2 is unchanged except that it now clamps an end past the audio (word ends can land at 1800 s on a
 file trimmed to 1799 s) instead of failing the response, so the 90 s / 60 s padding and the "position inside the clip" meaning of `snippets.start_time` hold. The
-flow checks the combination at start: `STAGE1_TRANSCRIBE_FIRST=true` without the `transcribe` method, or
-`STAGE1_DETECTION_PASSES=one` without transcribe-first, fails the run with a `ValueError`. Transcribe is 100
+flow checks the combination at start: `STAGE1_TRANSCRIBE_FIRST=true` with the `segments` method, `open_model`
+without transcribe-first, or `STAGE1_DETECTION_PASSES=one` without transcribe-first, fails the run with a `ValueError`. Transcribe is 100
 requests/day on Tier 1, against about 2,400 recordings/day: do not turn transcribe-first on in production before the
 quota is raised. Fully streamlined:
 
@@ -377,6 +377,35 @@ quota is raised. Fully streamlined:
 fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_METHOD=transcribe STAGE1_TRANSCRIBE_FIRST=true \
     STAGE1_DETECTION_PASSES=one STAGE1_ANCHOR_TIMESTAMPS=true
 ```
+
+**Open-model transcription on a GPU worker** (`STAGE1_TRANSCRIPTION_METHOD=open_model`, VER-446/VER-450). A
+machine outside Fly with an NVIDIA GPU runs Stage 1 with open models instead of Gemini audio calls
+(`stage_1/open_model_executor.py` routes, `stage_1/open_model_engines.py` holds the models). Per recording, Whisper
+large-v3 votes the language over 30 s windows (windows with under 5 s of speech do not vote). Arabic goes to Cohere
+Transcribe Arabic in 20 s chunks, with word times from the omniASR CTC 1B v2 forced aligner (both Apache 2.0);
+everything else goes to Whisper large-v3 with the voted language forced (Silero VAD threshold 0.1,
+`condition_on_previous_text=False`, word timestamps). Words are NFKC-normalized and give the same `TranscribeResult` as
+the `transcribe` method, so detection, anchoring and Stage 2 are unchanged. `transcriptor` is
+`faster-whisper-large-v3` or `cohere-transcribe-arabic+omniASR_CTC_1B_v2` per row. It needs transcribe-first; Stage 1
+detection still calls Gemini (text only). Setup, Python 3.11 and CUDA 12:
+
+```bash
+uv venv --python 3.11 .venv
+uv pip install -r requirements.txt -r requirements-gpu.txt --override requirements-gpu-overrides.txt
+source .venv/bin/activate
+SP=.venv/lib/python3.11/site-packages/nvidia
+export LD_LIBRARY_PATH=$SP/cublas/lib:$SP/cudnn/lib   # CTranslate2 (Whisper) loads cuBLAS/cuDNN from torch's wheels
+export PYTHONPATH=src STAGE1_TRANSCRIPTION_METHOD=open_model STAGE1_TRANSCRIBE_FIRST=true \
+    FLY_PROCESS_GROUP=initial_disinformation_detection_gpu WORKER_NAME=hcmc-1   # plus the processing-worker secrets
+python src/processing_pipeline/main.py
+```
+
+The worker serves `Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>`, one recording at a time, so a new
+machine is a new `WORKER_NAME`. `start_processing.sh` does not create runs for it yet: start one with
+`prefect deployment run "Stage 1: Initial Disinformation Detection/Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>"`; a run stops after 1,000 recordings, so start another to go on. `OPEN_MODEL_COHERE_PATH` points at a local copy of the Cohere model (default: the
+Hugging Face id `CohereLabs/cohere-transcribe-arabic-07-2026`, a gated repo: it needs `HF_TOKEN` from an account
+granted access). Without the GPU packages the run fails at start
+with "needs requirements-gpu.txt", before it claims a recording.
 
 **Word-boundary clipping** (`STAGE2_USE_WORD_TIMES`, `STAGE2_CONTEXT_BEFORE_S`, `STAGE2_CONTEXT_AFTER_S`; off by
 default). Without it, Stage 2 cuts from the whole-second `start_time`/`end_time` even when Stage 1 anchored the
