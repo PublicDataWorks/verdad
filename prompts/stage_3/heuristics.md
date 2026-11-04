@@ -1739,7 +1739,7 @@ Attacks on women politicians, officials, artists or public figures through their
 
 **Description**:
 
-Claims that shame women for reproductive decisions or steer them away from medical care. The false health claim belongs to Category 20 (see 20.1 Contraception, 20.7 Medication Abortion, 20.8 Menopause) and abortion-policy framing to Category 6; add Category 22 when the claim also demeans women.
+Claims that shame women for reproductive decisions or steer them away from medical care. The false health claim belongs to Category 20 (see 20.1 Contraception, 20.7 Medication Abortion, 20.8 Menopause) and abortion-policy framing to Category 6; add Category 22 when the claim also demeans women or steers them away from care.
 
 **Narratives**:
 - "La mamá que aborta tiene que estar endemoniada" (A mother who aborts must be possessed)

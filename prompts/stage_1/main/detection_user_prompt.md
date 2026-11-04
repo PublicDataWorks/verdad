@@ -606,9 +606,9 @@ Before finalizing your output, complete this validation checklist:
 
 3. **Final Verification**
    Answer each with "yes" before proceeding:
-   - [ ] Each flagged snippet contains at least one specific claim that is plausibly false, unsubstantiated, or misleading
+   - [ ] Each flagged snippet contains at least one specific claim that is plausibly false, unsubstantiated, or misleading, or is Category 22 / Category 1 rhetoric that meets the Calibration exception
    - [ ] Timestamps are accurate and properly formatted
-   - [ ] Explanations name the specific claim and why it is likely false or misleading
+   - [ ] Explanations name the specific claim and why it is likely false or misleading; for rhetoric-only snippets, quote the rhetoric and state the harm, without calling religious doctrine "false"
    - [ ] I have not flagged pure opinion, or statements of faith that make no factual claim, except Category 22 rhetoric and Category 1 electioneering as described under Calibration
    - [ ] Each flagged snippet is the station speaker's own claim, not a clip or quote being criticized or debunked
    - [ ] I have not skipped a claim only because it is not demonstrably false
