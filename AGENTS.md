@@ -20,6 +20,9 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
   `stations_for`, `station_dicts`, and `python -m stations prefect-runs` for `scripts/start_recording.sh`).
 - `src/utils.py`: `optional_flow`/`optional_task` decorators and `fetch_radio_stations()` (see gotchas).
 - `src/processing_pipeline/supabase_utils.py`: the only DB access layer (`SupabaseClient`).
+- `src/processing_pipeline/model_config.py`: every model choice (`STAGE*_MODEL` env vars, production defaults) and
+  `thinking_config()`, which sends a budget, a level or nothing per model family. Never hardcode a model or a
+  `ThinkingConfig` at a call site; see docs/OPERATIONS.md, "Switching models".
 - `prompts/`: prompt sources, but the pipeline reads prompts from the `prompt_versions` table; `prompts/manifest.json`
   names each entry's files and semver version. `src/scripts/import_prompts_to_db.py` moves files to the DB
   (`import --from-manifest` or `import --version`, `list`, `diff`); `src/scripts/evaluate_prompt.py` measures a

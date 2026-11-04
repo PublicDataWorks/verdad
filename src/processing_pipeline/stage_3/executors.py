@@ -12,12 +12,11 @@ from google.genai.types import (
     FunctionDeclaration,
     GenerateContentConfig,
     Part,
-    ThinkingConfig,
     Tool,
 )
 from pydantic import ValidationError
 
-from processing_pipeline.constants import GeminiModel
+from processing_pipeline.model_config import ModelName, stage3_restructure_model, thinking_config
 from processing_pipeline.processing_utils import get_safety_settings
 from processing_pipeline.kb_sources import parse_iso_date, url_key
 from processing_pipeline.stage_3.models import (
@@ -111,7 +110,7 @@ class Stage3Executor:
     async def run_async(
         cls,
         gemini_client: genai.Client,
-        model_name: GeminiModel,
+        model_name: ModelName,
         audio_file: str,
         metadata: dict,
         prompt_version: dict,
@@ -212,7 +211,7 @@ class Stage3Executor:
     async def __analyze_with_web_search(
         cls,
         gemini_client: genai.Client,
-        model_name: GeminiModel,
+        model_name: ModelName,
         uploaded_audio_file: File,
         user_prompt: str,
         system_instruction: str,
@@ -247,7 +246,7 @@ class Stage3Executor:
                 )
             ],
             automatic_function_calling=AutomaticFunctionCallingConfig(disable=True),
-            thinking_config=ThinkingConfig(thinking_budget=4096, include_thoughts=True),
+            thinking_config=thinking_config(model_name, budget=4096, include_thoughts=True),
             safety_settings=get_safety_settings(),
         )
         contents = [
@@ -414,15 +413,16 @@ class Stage3Executor:
 
         user_prompt = f"Please structure the following analysis text into the required JSON format:\n\n{analysis_text}"
 
+        model_name = stage3_restructure_model()
         response = await gemini_client.aio.models.generate_content(
-            model=GeminiModel.GEMINI_2_5_FLASH,
+            model=model_name,
             contents=[user_prompt],
             config=GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=output_schema,
                 system_instruction=system_instruction,
                 max_output_tokens=8192,
-                thinking_config=ThinkingConfig(thinking_budget=0),
+                thinking_config=thinking_config(model_name, budget=0),
                 safety_settings=get_safety_settings(),
             ),
         )

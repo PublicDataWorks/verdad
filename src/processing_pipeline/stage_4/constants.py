@@ -1,7 +1,5 @@
 from enum import StrEnum
 
-from processing_pipeline.constants import GeminiModel
-
 
 class Stage4SubStage(StrEnum):
     KB_RESEARCHER = "kb_researcher"
@@ -9,9 +7,6 @@ class Stage4SubStage(StrEnum):
     REVIEWER = "reviewer"
     KB_UPDATER = "kb_updater"
 
-
-# kb_updater's model; every KB entry it writes is labelled with it (created_by_model)
-KB_WRITER_MODEL = GeminiModel.GEMINI_2_5_FLASH
 
 # A time-sensitive KB fact recorded as still current needs a source no older than this (see validate_kb_currency)
 KB_CURRENT_FACT_MAX_SOURCE_AGE_DAYS = 180
