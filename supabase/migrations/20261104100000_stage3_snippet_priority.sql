@@ -7,11 +7,9 @@
 --   3  station tier A in station_priority
 --   2  station_hour_priority has the station's local day of week and hour of recorded_at
 --   1  everything else (unknown station, null timezone, null recorded_at)
--- station_hour_priority ships empty; after loading a ranking, re-score waiting rows with the backfill UPDATE below.
+-- station_hour_priority ships empty; after loading a ranking, re-score waiting rows with 20261104100200 (backfill).
 --
--- Apply in one Management API request (one transaction), then 20261104100100 (index). The backfill reads New rows
--- through idx_snippets_status_not_processed and fires snippets_handle_updated_at on each; harmless, since
--- sweep_stuck_snippets keys on Processing/Reviewing only.
+-- Apply in one Management API request (one transaction), then 20261104100100 (index), then 20261104100200.
 -- Rollback: restore ORDER BY recorded_at DESC in fetch_a_new_snippet_and_reserve_it (both copies), then
 -- DROP TRIGGER snippets_set_priority ON public.snippets and SELECT cron.unschedule('demote_stale_live_snippets').
 -- Column and tables are inert without them.
@@ -58,7 +56,7 @@ INSERT INTO public.station_priority (radio_station_code, tier, timezone) VALUES
     ('KNOG - 91.7 FM', 'C', 'America/Phoenix'),
     ('KRGT - 99.3 FM', 'C', 'America/Los_Angeles'),
     ('KRMC - 91.7 FM', 'C', 'America/Phoenix'),
-    ('KVIV - 1340 AM', 'B', 'America/Chicago'),
+    ('KVIV - 1340 AM', 'B', 'America/Denver'),
     ('KVNR', 'B', 'America/Los_Angeles'),
     ('KWST - 1430 AM', 'C', 'America/Phoenix'),
     ('KYAR - 98.3 FM', 'C', 'America/Chicago'),
@@ -259,9 +257,5 @@ BEGIN
     RETURN snippet_record;
 END;
 $function$;
-
-UPDATE public.snippets
-SET priority = public.snippet_priority(audio_file, recorded_at)
-WHERE status = 'New';
 
 RESET lock_timeout;

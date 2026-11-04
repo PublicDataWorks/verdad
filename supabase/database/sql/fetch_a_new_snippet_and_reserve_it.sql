@@ -1,3 +1,4 @@
+-- Needs snippets.priority: apply migration 20261104100000_stage3_snippet_priority.sql first.
 CREATE OR REPLACE FUNCTION public.fetch_a_new_snippet_and_reserve_it()
  RETURNS jsonb
  LANGUAGE plpgsql
