@@ -61,3 +61,6 @@
 20261001160000	sweep_audio_nonetype_once
 20261102233630	landing_page_safe_snippets
 20261103120000	sweep_stuck_audio_files
+20261104100000	stage3_snippet_priority
+20261104100100	stage3_snippet_priority_index
+20261104100200	stage3_snippet_priority_backfill
