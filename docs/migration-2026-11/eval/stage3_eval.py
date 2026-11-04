@@ -7,7 +7,7 @@ plus human labels. A 2.5 Pro rerun measures run-to-run noise.
 Requires: REPO (default: this repo's root, checked out on the migration branch so 3.x thinking works),
 PYTHONPATH handled here, ENABLE_PREFECT_DECORATOR=false, SEARXNG_URL, GOOGLE_GEMINI_KEY from the eval key file.
 
-Usage: python stage3_eval.py run --model gemini-3.8-flash [--limit N] [--ids a,b] [--workers 3]
+Usage: python stage3_eval.py run --model gemini-3.8-flash [--tag r2] [--limit N] [--ids a,b] [--workers 3]
        python stage3_eval.py report
 """
 
@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import time
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -46,18 +47,20 @@ PRICE = {
     "gemini-3.5-flash-lite": (0.30, 2.50),
     "gemini-3.1-pro-preview": (2.0, 12.0),
 }
-_cached_tokens = contextvars.ContextVar("cached_tokens")
+_tally = contextvars.ContextVar("tally")
 
 
-def count_cached_tokens(client):
-    """Tally implicit-cache hits per analysis: the executor's usage dict has no cached count on main."""
+def count_analysis_usage(client):
+    """Tally implicit-cache hits and tool-loop turns per analysis: the executor's usage dict has neither."""
     generate = client.aio.models.generate_content
 
     async def counted(**kwargs):
         response = await generate(**kwargs)
-        tally = _cached_tokens.get(None)
-        if tally is not None and kwargs["config"].response_schema is None and response.usage_metadata:
-            tally[0] += response.usage_metadata.cached_content_token_count or 0
+        tally = _tally.get(None)
+        if tally is not None and kwargs["config"].response_schema is None:
+            tally[1] += 1
+            if response.usage_metadata:
+                tally[0] += response.usage_metadata.cached_content_token_count or 0
         return response
 
     client.aio.models.generate_content = counted
@@ -112,8 +115,8 @@ def build_metadata(sel, data, snip):
 
 async def run_one(client, model, pv, sel, data, snip, outp):
     md = build_metadata(sel, data, snip)
-    tally = [0]
-    _cached_tokens.set(tally)
+    tally = [0, 0]
+    _tally.set(tally)
     t = time.time()
     try:
         res = await Stage3Executor.run_async(
@@ -131,6 +134,7 @@ async def run_one(client, model, pv, sel, data, snip, outp):
             "snippet_id": sel["snippet_id"],
             "model": model,
             "latency": round(time.time() - t, 1),
+            "turns": tally[1],
             "usage": u,
             "cost_usd": round(cost, 4),
             "overall": (r.get("confidence_scores") or {}).get("overall"),
@@ -153,11 +157,25 @@ async def run_one(client, model, pv, sel, data, snip, outp):
     return out
 
 
-async def run(model, selection, workers):
+def fetch_clips(selection):
+    """Clips stay in R2, like the recordings (fetch_audio.py); snippets/ is git-ignored."""
+    (HERE / "snippets").mkdir(exist_ok=True)
+    for sel in selection:
+        dst = HERE / "snippets" / f"{sel['snippet_id']}.mp3"
+        if not dst.exists():
+            req = urllib.request.Request(
+                "https://audio.verdad.app/" + sel["file_path"], headers={"User-Agent": "verdad-eval"}
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                dst.write_bytes(resp.read())
+
+
+async def run(model, tag, selection, workers):
+    fetch_clips(selection)
     client = genai.Client(api_key=os.environ["GOOGLE_GEMINI_KEY"])
-    count_cached_tokens(client)
+    count_analysis_usage(client)
     pv = prompt_version()
-    outdir = RESULTS / model
+    outdir = RESULTS / (f"{model}-{tag}" if tag else model)
     outdir.mkdir(parents=True, exist_ok=True)
     sem = asyncio.Semaphore(workers)
 
@@ -170,7 +188,7 @@ async def run(model, selection, workers):
         async with sem:
             out = await run_one(client, model, pv, sel, data, snip, outp)
         return sel["snippet_id"], (
-            f"overall={out['overall']} cats={len(out['categories'] or [])} tools={(out['grounding'].get('tool_usage') or {})} {out['latency']}s ${out['cost_usd']}"
+            f"overall={out['overall']} cats={len(out['categories'] or [])} turns={out['turns']} tools={(out['grounding'].get('tool_usage') or {})} {out['latency']}s ${out['cost_usd']}"
             if out["ok"]
             else f"FAILED {out['error'][:200]}"
         )
@@ -184,7 +202,7 @@ def report(selection):
     models = sorted(p.name for p in RESULTS.iterdir() if p.is_dir())
     bysel = {s["snippet_id"]: s for s in selection}
     print(
-        f"{'model':24s} {'n':>3s} {'fail':>4s} {'mean overall':>12s} {'ref overall':>11s} {'|d| overall':>11s} {'>=95 agree':>10s} {'cat jaccard':>11s} {'human-flag':>10s} {'$/snip':>7s} {'s/snip':>6s}"
+        f"{'model':24s} {'n':>3s} {'fail':>4s} {'mean overall':>12s} {'ref overall':>11s} {'|d| overall':>11s} {'>=95 agree':>10s} {'cat jaccard':>11s} {'human-flag':>10s} {'$/snip':>7s} {'s/snip':>6s} {'turns':>5s}"
     )
     for model in models:
         n = fail = 0
@@ -192,7 +210,7 @@ def report(selection):
         agree = 0
         jac = 0.0
         hum = hum_hit = 0
-        cost = lat = 0.0
+        cost = lat = turns = 0.0
         for p in (RESULTS / model).glob("*.json"):
             r = json.load(open(p))
             s = bysel.get(r["snippet_id"])
@@ -210,6 +228,7 @@ def report(selection):
             agree += int((o >= 95) == (ref >= 95))
             cost += r.get("cost_usd") or 0
             lat += r["latency"]
+            turns += r.get("turns") or 0
             norm = lambda xs: {json.dumps(x, sort_keys=True) if isinstance(x, dict) else str(x) for x in (xs or [])}  # noqa: E731
             a = norm(r.get("categories"))
             b = norm(s.get("categories"))
@@ -219,7 +238,7 @@ def report(selection):
                 hum_hit += int(o >= 80)
         if n:
             print(
-                f"{model:24s} {n:3d} {fail:4d} {so / n:12.1f} {sr / n:11.1f} {sd / n:11.1f} {agree / n:10.2f} {jac / n:11.2f} {f'{hum_hit}/{hum}':>10s} {cost / n:7.3f} {lat / n:6.0f}"
+                f"{model:24s} {n:3d} {fail:4d} {so / n:12.1f} {sr / n:11.1f} {sd / n:11.1f} {agree / n:10.2f} {jac / n:11.2f} {f'{hum_hit}/{hum}':>10s} {cost / n:7.3f} {lat / n:6.0f} {turns / n:5.1f}"
             )
         else:
             print(f"{model:24s} no ok results; fail={fail}")
@@ -229,17 +248,18 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["run", "report"])
     ap.add_argument("--model", default="gemini-3.8-flash")
+    ap.add_argument("--tag", help="repeat-run suffix for the results directory, e.g. r2")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--ids")
     ap.add_argument("--workers", type=int, default=3)
     a = ap.parse_args()
-    selection = json.load(open(HERE / "snippets" / "selection.json"))
+    selection = json.load(open(HERE / "snippets_selection.json"))
     if a.ids:
         w = a.ids.split(",")
         selection = [s for s in selection if s["snippet_id"] in w or s["snippet_id"][:8] in w]
     if a.limit:
         selection = selection[: a.limit]
     if a.cmd == "run":
-        asyncio.run(run(a.model, selection, a.workers))
+        asyncio.run(run(a.model, a.tag, selection, a.workers))
     else:
         report(selection)
