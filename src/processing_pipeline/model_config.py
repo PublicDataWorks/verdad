@@ -61,6 +61,7 @@ STAGE1_TRANSCRIPTION_METHOD_ENV = "STAGE1_TRANSCRIPTION_METHOD"
 STAGE1_TRANSCRIBE_FIRST_ENV = "STAGE1_TRANSCRIBE_FIRST"
 STAGE1_DETECTION_PASSES_ENV = "STAGE1_DETECTION_PASSES"
 STAGE1_ANCHOR_TIMESTAMPS_ENV = "STAGE1_ANCHOR_TIMESTAMPS"
+STAGE1_FILE_WORKERS_ENV = "STAGE1_FILE_WORKERS"
 
 # Stage 2 clipping (not models, but read and checked the same way)
 STAGE2_USE_WORD_TIMES_ENV = "STAGE2_USE_WORD_TIMES"
@@ -188,6 +189,16 @@ def stage1_flow_options() -> Stage1FlowOptions:
 def stage1_anchor_timestamps() -> bool:
     """STAGE1_ANCHOR_TIMESTAMPS alone, for callers that only anchor (main detection, the redo flow)."""
     return _env_flag(STAGE1_ANCHOR_TIMESTAMPS_ENV)
+
+
+def stage1_file_workers() -> int:
+    """STAGE1_FILE_WORKERS: recordings one Stage 1 run keeps in flight at once (the GPU worker); default 1."""
+    value = _env(STAGE1_FILE_WORKERS_ENV)
+    if value is None:
+        return 1
+    if not value.isdigit() or int(value) < 1:
+        raise ValueError(f"{STAGE1_FILE_WORKERS_ENV}={value!r}; expected a whole number of at least 1")
+    return int(value)
 
 
 @dataclass(frozen=True)

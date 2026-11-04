@@ -263,6 +263,22 @@ class TestStage1FlowOptions:
         assert mc.stage1_flow_options().detection_passes is mc.DetectionPasses.TWO
 
 
+class TestStage1FileWorkers:
+    def test_default_is_one_file_at_a_time(self, monkeypatch):
+        monkeypatch.delenv("STAGE1_FILE_WORKERS", raising=False)
+        assert mc.stage1_file_workers() == 1
+
+    def test_reads_the_env(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", " 3 ")
+        assert mc.stage1_file_workers() == 3
+
+    @pytest.mark.parametrize("value", ["0", "-2", "two"])
+    def test_rejects_anything_but_a_positive_count(self, monkeypatch, value):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", value)
+        with pytest.raises(ValueError, match=f"STAGE1_FILE_WORKERS='{value}'"):
+            mc.stage1_file_workers()
+
+
 class TestStage2ClipOptions:
     """STAGE2_USE_WORD_TIMES / STAGE2_CONTEXT_BEFORE_S / STAGE2_CONTEXT_AFTER_S; unset is today's clipping."""
 

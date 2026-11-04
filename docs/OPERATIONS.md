@@ -343,6 +343,7 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 | `STAGE1_TRANSCRIBE_FIRST` | Stage 1 flow shape: one transcription per recording supplies every transcript (needs `STAGE1_TRANSCRIPTION_METHOD=transcribe` or `open_model`) | `false` | `transcriptor` on every row |
 | `STAGE1_DETECTION_PASSES` | Stage 1 detection: `two` (initial, then main when flagged) or `one` (main only, every recording; needs `STAGE1_TRANSCRIBE_FIRST=true`) | `two` | `initial_detection_result` is null with `one` |
 | `STAGE1_ANCHOR_TIMESTAMPS` | Stage 1 main detection: flagged snippet times from word timestamps where the row has them | `false` | per snippet in `detection_result` |
+| `STAGE1_FILE_WORKERS` | Stage 1 recordings one run keeps in flight at once (GPU worker, see below) | `1` | not stored |
 | `STAGE2_USE_WORD_TIMES` | Stage 2 clipping: cut snippets that carry `start_s`/`end_s` at millisecond precision around the words | `false` | `snippets.start_time`/`end_time`/`duration`/`recorded_at` |
 | `STAGE2_CONTEXT_BEFORE_S` / `STAGE2_CONTEXT_AFTER_S` | Stage 2 padding for the word-time cut, float seconds >= 0 | the flow's `context_before_seconds` / `context_after_seconds` (90 / 60 in `main.py`) | (the clip itself) |
 | `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop) | `gemini-2.5-pro` | `snippets.analyzed_by` |
@@ -438,11 +439,12 @@ export PYTHONPATH=src STAGE1_TRANSCRIPTION_METHOD=open_model STAGE1_TRANSCRIBE_F
 python src/processing_pipeline/main.py
 ```
 
-The worker serves `Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>`, one recording at a time, so a new
-machine is a new `WORKER_NAME`. `start_processing.sh` creates one run per name in `GPU_WORKER_NAMES` (comma-separated,
+The worker serves `Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>`, one run at a time, so a new
+machine is a new `WORKER_NAME`. Inside that run `STAGE1_FILE_WORKERS` recordings are in flight at once (default 1):
+downloads and Gemini detection overlap while every model call queues on one GPU thread. `start_processing.sh` creates one run per name in `GPU_WORKER_NAMES` (comma-separated,
 on the `prefect` app next to `STAGE_{1..5}_FLOW_RUNS`; empty by default); between ticks start one with
 `prefect deployment run "Stage 1: Initial Disinformation Detection/Stage 1: Initial Disinformation Detection GPU <WORKER_NAME>"`.
-A run stops after 1,000 recordings. `OPEN_MODEL_COHERE_PATH` points at a local copy of the Cohere model (default: the
+A run stops after 10,000 recordings, so it lasts until the next 6-hourly restart. `OPEN_MODEL_COHERE_PATH` points at a local copy of the Cohere model (default: the
 Hugging Face id `CohereLabs/cohere-transcribe-arabic-07-2026`, a gated repo: it needs `HF_TOKEN` from an account
 granted access). Without the GPU packages the run fails at start
 with "needs requirements-gpu.txt", before it claims a recording.

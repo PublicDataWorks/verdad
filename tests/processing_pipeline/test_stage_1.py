@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import threading
 import uuid
 from unittest.mock import Mock, patch
 
@@ -609,6 +610,52 @@ class TestInitialDisinformationDetectionFlow:
             initial_disinformation_detection(audio_file_id=None, limit=1)
 
         mock_sleep.assert_called_once_with(60)
+        mock_process.assert_called_once()
+
+    def test_file_workers_keep_several_files_in_flight(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.return_value = AUDIO_FILE
+        all_three_in_flight = threading.Barrier(3, timeout=5)  # breaks, failing the run, if files go one at a time
+
+        with patch("os.remove"), patch("time.sleep"), patch(
+            "processing_pipeline.stage_1.flows.process_audio_file", side_effect=lambda **_: all_three_in_flight.wait()
+        ) as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=6)
+
+        assert mock_process.call_count == 6
+
+    def test_file_workers_never_exceed_the_limit(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.return_value = AUDIO_FILE
+
+        with patch("os.remove"), patch("time.sleep"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=2)
+
+        assert mock_process.call_count == 2
+
+    def test_zero_limit_is_a_no_op_with_file_workers(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+
+        with patch("os.remove"), patch("time.sleep"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=0)
+
+        mock_process.assert_not_called()
+
+    def test_specific_audio_file_ignores_file_workers(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+        mock_supabase_client.get_audio_file_by_id.return_value = AUDIO_FILE
+
+        with patch("os.remove"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=1, limit=1000)
+
         mock_process.assert_called_once()
 
     def test_without_gemini_key(
