@@ -637,6 +637,16 @@ class TestInitialDisinformationDetectionFlow:
 
         assert mock_process.call_count == 2
 
+    def test_zero_limit_is_a_no_op_with_file_workers(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+
+        with patch("os.remove"), patch("time.sleep"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=0)
+
+        mock_process.assert_not_called()
+
     def test_specific_audio_file_ignores_file_workers(
         self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
     ):

@@ -264,7 +264,8 @@ class TestStage1FlowOptions:
 
 
 class TestStage1FileWorkers:
-    def test_default_is_one_file_at_a_time(self):
+    def test_default_is_one_file_at_a_time(self, monkeypatch):
+        monkeypatch.delenv("STAGE1_FILE_WORKERS", raising=False)
         assert mc.stage1_file_workers() == 1
 
     def test_reads_the_env(self, monkeypatch):

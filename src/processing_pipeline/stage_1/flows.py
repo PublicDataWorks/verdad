@@ -108,7 +108,7 @@ def initial_disinformation_detection(audio_file_id, limit):
         detection_prompt_version=detection_prompt_version,
     )
     workers = 1 if audio_file_id else min(stage1_file_workers(), limit)
-    if workers == 1:
+    if workers <= 1:
         process_files(limit=limit)
         return
 
