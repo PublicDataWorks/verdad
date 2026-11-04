@@ -1,5 +1,8 @@
-CREATE
-OR REPLACE FUNCTION fetch_a_new_snippet_and_reserve_it () RETURNS jsonb SECURITY INVOKER AS $$
+CREATE OR REPLACE FUNCTION public.fetch_a_new_snippet_and_reserve_it()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY INVOKER
+AS $function$
 DECLARE
     snippet_record jsonb;
 BEGIN
@@ -9,7 +12,7 @@ BEGIN
         SELECT id
         FROM public.snippets
         WHERE status = 'New'
-        ORDER BY recorded_at DESC
+        ORDER BY priority DESC, recorded_at DESC
         LIMIT 1
         FOR UPDATE SKIP LOCKED
     )
@@ -39,4 +42,4 @@ BEGIN
 
     RETURN snippet_record;
 END;
-$$ LANGUAGE plpgsql;
+$function$;
