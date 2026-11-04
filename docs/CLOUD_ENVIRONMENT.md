@@ -189,6 +189,10 @@ such as `gh api repos/PublicDataWorks/verdad/pulls/156`. A `GH_TOKEN` set here w
 be readable by everyone who uses the environment; the docs do not say it lifts the proxy's attached-repository
 scope, so it adds nothing documented for this repo. Leave it unset.
 
+The proxy exists only in Claude Code on the web. GitHub Actions runners, including the Claude review and `@claude`
+workflows, call GitHub directly, so `gh pr` and `gh issue` work there; `claude-code-review.yml` tells the reviewer
+so in its appended system prompt, since it also loads `CLAUDE.md`.
+
 ### Pipeline access (only for running stages, prompt import/diff/eval)
 
 These are what `scripts/run_stage.py`, `src/scripts/import_prompts_to_db.py` and `src/scripts/evaluate_prompt.py`
