@@ -52,6 +52,9 @@ class OpenModelEngines(Protocol):
 
     def align(self, chunk: Sequence[float], words: list[str], offset: float) -> list[dict]: ...
 
+    def release_arabic(self) -> None:
+        """Frees the Arabic models' GPU memory: Whisper's batched decode does not fit next to them (VER-452)."""
+
 
 def _nfkc(text: str) -> str:
     return unicodedata.normalize("NFKC", text).strip()
@@ -66,7 +69,10 @@ class OpenModelTranscriber:
         duration_s = len(audio) / SAMPLE_RATE
         language = self.vote_language(audio)
         if language == "ar":
-            words, model = self.arabic_words(audio), ARABIC_LABEL
+            try:
+                words, model = self.arabic_words(audio), ARABIC_LABEL
+            finally:
+                self.engines.release_arabic()
         else:
             words, model = self.engines.whisper_words(audio, language), WHISPER_LABEL
         print(f"{model} ({language or 'no vote'}) returned {len(words)} timed words")

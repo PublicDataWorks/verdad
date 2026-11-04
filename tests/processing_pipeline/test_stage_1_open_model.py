@@ -43,6 +43,9 @@ class FakeEngines:
         self.calls.append(("align", words, offset))
         return [{"text": w, "start": offset + i, "end": offset + i + 0.5} for i, w in enumerate(words)]
 
+    def release_arabic(self):
+        self.calls.append(("release_arabic",))
+
 
 def w(text, start):
     return {"text": text, "start": start, "end": start + 0.4}
@@ -112,6 +115,22 @@ class TestArabicRoute:
         engines = FakeEngines(41, ["ar", "ar"], cohere_texts=["", "", ""])
         OpenModelTranscriber(engines).transcribe("a.mp3")
         assert ("cohere", [20.0, 20.0, 1.0]) in engines.calls
+
+    def test_arabic_models_are_released_after_the_file(self):
+        engines = FakeEngines(40, ["ar", "ar"], cohere_texts=["مرحبا", "بكم"])
+        OpenModelTranscriber(engines).transcribe("a.mp3")
+        assert engines.calls[-1] == ("release_arabic",)
+
+    def test_arabic_models_are_released_when_the_file_fails(self):
+        engines = FakeEngines(40, ["ar", "ar"], cohere_texts=["مرحبا"])  # one text for two chunks
+        with pytest.raises(ValueError):
+            OpenModelTranscriber(engines).transcribe("a.mp3")
+        assert engines.calls[-1] == ("release_arabic",)
+
+    def test_whisper_files_keep_the_arabic_models_untouched(self):
+        engines = FakeEngines(20, ["en"], whisper_words=[w("hi", 0)])
+        OpenModelTranscriber(engines).transcribe("a.mp3")
+        assert ("release_arabic",) not in engines.calls
 
 
 def test_ctc_needs_a_blank_frame_between_repeated_tokens():
