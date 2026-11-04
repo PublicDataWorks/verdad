@@ -13,6 +13,7 @@ Usage: python stage3_eval.py run --model gemini-3.8-flash [--limit N] [--ids a,b
 
 import argparse
 import asyncio
+import contextvars
 import json
 import os
 import sys
@@ -30,7 +31,9 @@ sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(REPO))
 os.chdir(REPO)  # prompts/ relative paths inside the repo
 
+from cost_model import usage_cost  # noqa: E402
 from google import genai  # noqa: E402
+
 from processing_pipeline.stage_3.executors import Stage3Executor  # noqa: E402
 
 RESULTS = HERE / "results_stage3"
@@ -43,6 +46,21 @@ PRICE = {
     "gemini-3.5-flash-lite": (0.30, 2.50),
     "gemini-3.1-pro-preview": (2.0, 12.0),
 }
+_cached_tokens = contextvars.ContextVar("cached_tokens")
+
+
+def count_cached_tokens(client):
+    """Tally implicit-cache hits per analysis: the executor's usage dict has no cached count on main."""
+    generate = client.aio.models.generate_content
+
+    async def counted(**kwargs):
+        response = await generate(**kwargs)
+        tally = _cached_tokens.get(None)
+        if tally is not None and kwargs["config"].response_schema is None and response.usage_metadata:
+            tally[0] += response.usage_metadata.cached_content_token_count or 0
+        return response
+
+    client.aio.models.generate_content = counted
 
 
 def prompt_version():
@@ -94,6 +112,8 @@ def build_metadata(sel, data, snip):
 
 async def run_one(client, model, pv, sel, data, snip, outp):
     md = build_metadata(sel, data, snip)
+    tally = [0]
+    _cached_tokens.set(tally)
     t = time.time()
     try:
         res = await Stage3Executor.run_async(
@@ -104,11 +124,8 @@ async def run_one(client, model, pv, sel, data, snip, outp):
             prompt_version=pv,
         )
         r = res["response"]
-        u = res.get("usage") or {}
-        pin, pout = PRICE.get(model, (0, 0))
-        cost = (u.get("prompt_token_count") or 0) / 1e6 * pin + (
-            (u.get("candidates_token_count") or 0) + (u.get("thoughts_token_count") or 0)
-        ) / 1e6 * pout
+        u = {**(res.get("usage") or {}), "cached_content_token_count": tally[0]}
+        cost = usage_cost(u, *PRICE.get(model, (0, 0)))
         out = {
             "ok": True,
             "snippet_id": sel["snippet_id"],
@@ -138,6 +155,7 @@ async def run_one(client, model, pv, sel, data, snip, outp):
 
 async def run(model, selection, workers):
     client = genai.Client(api_key=os.environ["GOOGLE_GEMINI_KEY"])
+    count_cached_tokens(client)
     pv = prompt_version()
     outdir = RESULTS / model
     outdir.mkdir(parents=True, exist_ok=True)

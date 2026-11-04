@@ -23,6 +23,17 @@ PRICE = {  # $/1M input (audio rate where it differs), output
     "gemma-4-26b-a4b-it-maas": (0.0, 0.0),
     "gemma-4-31b-it": (0.0, 0.0),
 }
+# The pricing page (4 Nov 2026) bills cached input at 10% of the input rate on every model it lists.
+CACHED_RATE = 0.10
+
+
+def usage_cost(u, pin, pout):
+    """Cost of one analysis from its token usage, cached input at CACHED_RATE."""
+    cached = u.get("cached_content_token_count") or 0
+    return (
+        ((u.get("prompt_token_count") or 0) - cached + cached * CACHED_RATE) * pin
+        + ((u.get("candidates_token_count") or 0) + (u.get("thoughts_token_count") or 0)) * pout
+    ) / 1e6
 
 
 def mean_cost(dirpath, key="cost_usd"):
@@ -61,12 +72,7 @@ def main():
             if not rows:
                 print(f"  stage 3 analysis           {d.name:28s} no data")
                 continue
-            pin, pout = PRICE.get(d.name, (0, 0))
-            c = st.mean(
-                (r["usage"].get("prompt_token_count") or 0) / 1e6 * pin
-                + ((r["usage"].get("candidates_token_count") or 0) + (r["usage"].get("thoughts_token_count") or 0)) / 1e6 * pout
-                for r in rows
-            )
+            c = st.mean(usage_cost(r["usage"], *PRICE.get(d.name, (0, 0))) for r in rows)
             s3[d.name] = c
             print(f"  stage 3 analysis           {d.name:28s} ${c:.4f}/snippet (n={len(rows)}, mean prompt tokens {int(st.mean(r['usage'].get('prompt_token_count') or 0 for r in rows)):,})")
     # Stage 1 initial transcription (whole file, Files API) is priced from audio tokens: 30 min * 32 tok/s = 57.6k tokens
