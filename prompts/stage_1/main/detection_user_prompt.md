@@ -589,7 +589,7 @@ Do NOT flag:
 - Opinions, prayers, or moral and religious teaching that make no factual claim about health, science, history, law or public affairs.
   A religious message that says a disease is cured, or that medical treatment is not needed, does make a health claim and must be flagged.
   Also flag teaching or commentary that prescribes women's subordination, demeans women, or excuses violence against them (Category 22), and pulpit or host electioneering that tells listeners how to vote on false or dehumanizing premises (Category 1), even without a single checkable fact.
-- A clip or quote played in order to criticize, fact-check, debunk or report on it. Flag only claims the station's own speakers (host, guest, caller, preacher, advertiser) make or endorse.
+- A clip or quote played to criticize, fact-check, debunk or report on it. Flag claims made or endorsed by the station's own speakers (host, guest, preacher, advertiser); flag a caller's claim only when the host endorses it or does not challenge it.
 
 ---
 

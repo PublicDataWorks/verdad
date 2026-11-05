@@ -2821,7 +2821,7 @@ Claims that shame women for reproductive decisions or steer them away from medic
 Category 22 may overlap with:
 - Category 1 (Election Integrity): gendered attacks used to steer votes
 - Category 5 (LGBTQ+ Rights and Gender Issues): content about transgender and LGBTQ+ people belongs there
-- Category 6 (Abortion and Reproductive Rights): political framing of abortion; add Category 22 when it demeans women
+- Category 6 (Abortion and Reproductive Rights): political framing of abortion; add Category 22 when it demeans women or steers them away from care
 - Category 18 (Political Figures and Movements): attacks on named women politicians
 - Category 20 (Women's Health and Reproductive Care): false medical claims; add Category 22 when they demean women or steer them away from care
 
