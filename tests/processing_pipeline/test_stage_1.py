@@ -859,9 +859,14 @@ class TestModelSelection:
 
     @pytest.mark.parametrize(
         "model, level",
-        [(GeminiModel.GEMINI_3_5_FLASH_LITE, ThinkingLevel.MEDIUM), (GeminiModel.GEMMA_4_26B_A4B_IT, None)],
+        [
+            (GeminiModel.GEMINI_3_8_FLASH, ThinkingLevel.LOW),
+            (GeminiModel.GEMINI_3_5_FLASH_LITE, ThinkingLevel.LOW),
+            (GeminiModel.GEMMA_4_26B_A4B_IT, None),
+        ],
     )
     def test_main_detection_thinking(self, model, level):
+        # VER-453 E6: low re-flagged 67% of Oct >=95 snippets vs 54% at medium, at half the cost.
         client = self._client({"flagged_snippets": []})
 
         Stage1Executor.run(client, model, "T", {}, PROMPT_VERSION)
