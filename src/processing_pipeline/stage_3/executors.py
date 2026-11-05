@@ -204,8 +204,12 @@ class Stage3Executor:
                 "usage": usage,
             }
         finally:
+            # A failed delete must not discard a finished analysis; the Files API drops uploads after 48 h anyway.
             if uploaded_audio_file:
-                gemini_client.files.delete(name=uploaded_audio_file.name)
+                try:
+                    gemini_client.files.delete(name=uploaded_audio_file.name)
+                except Exception as e:
+                    print(f"Could not delete uploaded file {uploaded_audio_file.name}: {e}")
 
     @classmethod
     async def __analyze_with_web_search(

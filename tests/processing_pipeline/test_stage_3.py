@@ -4,6 +4,7 @@ import os
 from unittest import mock
 from unittest.mock import AsyncMock, Mock, call, patch
 
+import httpx
 import pytest
 from google.genai import errors
 from google.genai.types import FinishReason, ThinkingLevel
@@ -494,6 +495,17 @@ class TestStage3:
         result = self._run_executor(mock_gemini_client)
 
         assert result["thought_summaries"] == "thinking..."
+
+    def test_stage_3_executor_keeps_result_when_delete_fails(self, mock_gemini_client):
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            model_response('{"x": 1}'),
+            Mock(parsed={"is_convertible": True}),
+        ]
+        mock_gemini_client.files.delete.side_effect = httpx.ReadTimeout("stalled")
+
+        result = self._run_executor(mock_gemini_client)
+
+        assert result["response"] == {"is_convertible": True}
 
     def test_stage_3_executor_waits_for_upload_processing(self, mock_gemini_client):
         processing = Mock(name="files/test-audio")
