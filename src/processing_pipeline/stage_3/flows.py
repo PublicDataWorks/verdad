@@ -8,6 +8,7 @@ from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import ProcessingStatus, PromptStage
+from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
 from processing_pipeline.stage_3.tasks import (
     download_audio_file_from_s3,
     fetch_a_new_snippet_from_supabase,
@@ -52,7 +53,7 @@ async def in_depth_analysis(snippet_ids, skip_review, repeat):
     GEMINI_KEY = os.getenv("GOOGLE_GEMINI_KEY")
     if not GEMINI_KEY:
         raise ValueError("No Gemini API key set (GOOGLE_GEMINI_KEY)")
-    gemini_client = genai.Client(api_key=GEMINI_KEY)
+    gemini_client = genai.Client(api_key=GEMINI_KEY, http_options=GEMINI_HTTP_OPTIONS)
 
     # Setup Supabase client
     supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))

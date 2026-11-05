@@ -4,11 +4,13 @@ import os
 from unittest import mock
 from unittest.mock import AsyncMock, Mock, call, patch
 
+import httpx
 import pytest
 from google.genai import errors
 from google.genai.types import FinishReason, ThinkingLevel
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
+from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
 from processing_pipeline.stage_3 import (
     Stage3Executor,
     download_audio_file_from_s3,
@@ -494,6 +496,17 @@ class TestStage3:
 
         assert result["thought_summaries"] == "thinking..."
 
+    def test_stage_3_executor_keeps_result_when_delete_fails(self, mock_gemini_client):
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            model_response('{"x": 1}'),
+            Mock(parsed={"is_convertible": True}),
+        ]
+        mock_gemini_client.files.delete.side_effect = httpx.ReadTimeout("stalled")
+
+        result = self._run_executor(mock_gemini_client)
+
+        assert result["response"] == {"is_convertible": True}
+
     def test_stage_3_executor_waits_for_upload_processing(self, mock_gemini_client):
         processing = Mock(name="files/test-audio")
         processing.state.name = "PROCESSING"
@@ -547,7 +560,7 @@ class TestStage3:
 
         asyncio.run(in_depth_analysis(snippet_ids=None, skip_review=True, repeat=False))
 
-        mock_flow_deps["genai"].Client.assert_called_once_with(api_key="test-key")
+        mock_flow_deps["genai"].Client.assert_called_once_with(api_key="test-key", http_options=GEMINI_HTTP_OPTIONS)
         mock_supabase_client.get_active_prompt.assert_called_once()
         mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_called_once()
         mock_s3_client.download_file.assert_called_once_with("test-bucket", "test/path.mp3", "path.mp3")

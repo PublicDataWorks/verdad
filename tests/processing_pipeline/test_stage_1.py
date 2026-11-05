@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import threading
 import uuid
 from unittest.mock import Mock, patch
 
@@ -9,6 +10,7 @@ from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory, T
 from pydub import AudioSegment
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
+from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
 from processing_pipeline.model_config import TranscriptionMethod
 from processing_pipeline.stage_1 import (
     GeminiTimestampTranscriptionGenerator,
@@ -29,6 +31,7 @@ from processing_pipeline.stage_1 import (
     transcribe_audio_file_with_timestamp_with_gemini,
     undo_disinformation_detection,
 )
+from processing_pipeline.stage_1.flows import _create_gemini_client
 
 SELECT_WITH_AUDIO_FILE = (
     "*, audio_file(radio_station_name, radio_station_code, location_state, location_city, "
@@ -223,6 +226,14 @@ class TestDetectionFunctions:
     def test_disinformation_detection_requires_client(self):
         with pytest.raises(ValueError, match="Gemini client is not provided"):
             disinformation_detection_with_gemini(None, "T", {}, PROMPT_VERSION, GeminiModel.GEMINI_2_5_FLASH)
+
+    def test_gemini_client_has_timeout(self):
+        with (
+            patch("processing_pipeline.stage_1.flows.genai") as mock_genai,
+            patch.dict(os.environ, {"GOOGLE_GEMINI_KEY": "k"}),
+        ):
+            _create_gemini_client()
+        mock_genai.Client.assert_called_once_with(api_key="k", http_options=GEMINI_HTTP_OPTIONS)
 
 
 class TestStage1Executor:
@@ -611,6 +622,52 @@ class TestInitialDisinformationDetectionFlow:
         mock_sleep.assert_called_once_with(60)
         mock_process.assert_called_once()
 
+    def test_file_workers_keep_several_files_in_flight(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.return_value = AUDIO_FILE
+        all_three_in_flight = threading.Barrier(3, timeout=5)  # breaks, failing the run, if files go one at a time
+
+        with patch("os.remove"), patch("time.sleep"), patch(
+            "processing_pipeline.stage_1.flows.process_audio_file", side_effect=lambda **_: all_three_in_flight.wait()
+        ) as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=6)
+
+        assert mock_process.call_count == 6
+
+    def test_file_workers_never_exceed_the_limit(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.return_value = AUDIO_FILE
+
+        with patch("os.remove"), patch("time.sleep"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=2)
+
+        assert mock_process.call_count == 2
+
+    def test_zero_limit_is_a_no_op_with_file_workers(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+
+        with patch("os.remove"), patch("time.sleep"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=0)
+
+        mock_process.assert_not_called()
+
+    def test_specific_audio_file_ignores_file_workers(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+        mock_supabase_client.get_audio_file_by_id.return_value = AUDIO_FILE
+
+        with patch("os.remove"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=1, limit=1000)
+
+        mock_process.assert_called_once()
+
     def test_without_gemini_key(
         self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
     ):
@@ -802,9 +859,14 @@ class TestModelSelection:
 
     @pytest.mark.parametrize(
         "model, level",
-        [(GeminiModel.GEMINI_3_5_FLASH_LITE, ThinkingLevel.MEDIUM), (GeminiModel.GEMMA_4_26B_A4B_IT, None)],
+        [
+            (GeminiModel.GEMINI_3_8_FLASH, ThinkingLevel.LOW),
+            (GeminiModel.GEMINI_3_5_FLASH_LITE, ThinkingLevel.LOW),
+            (GeminiModel.GEMMA_4_26B_A4B_IT, None),
+        ],
     )
     def test_main_detection_thinking(self, model, level):
+        # VER-453 E6: low re-flagged 67% of Oct >=95 snippets vs 54% at medium, at half the cost.
         client = self._client({"flagged_snippets": []})
 
         Stage1Executor.run(client, model, "T", {}, PROMPT_VERSION)

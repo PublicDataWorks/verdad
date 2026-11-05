@@ -8,6 +8,7 @@ import re
 import unicodedata
 from collections import Counter
 from itertools import pairwise
+from math import ceil
 from typing import Protocol, Sequence
 
 from processing_pipeline.stage_1.executors import GeminiTimestampTranscriptionGenerator
@@ -19,9 +20,19 @@ from processing_pipeline.stage_1.transcribe_executor import (
 
 SAMPLE_RATE = 16000
 VOTE_WINDOW_SECONDS = 30
+VOTE_LEAD = 5  # VER-452 re-score of 40 files: ~5 of ~58 windows, same language as the full vote on all 40
 ARABIC_CHUNK_SECONDS = 20
 WHISPER_LABEL = "faster-whisper-large-v3"
 ARABIC_LABEL = "cohere-transcribe-arabic+omniASR_CTC_1B_v2"
+
+
+def spread_order(n: int) -> list[int]:
+    """0..n-1 so that every prefix covers the whole range: 0, n/2, n/4, 3n/4, ..."""
+    order, step = [], n
+    while step:
+        order += [i for i in range(0, n, step) if i not in order]
+        step //= 2
+    return order
 
 
 def ctc_min_frames(tokens: Sequence[int]) -> int:
@@ -41,6 +52,9 @@ class OpenModelEngines(Protocol):
 
     def align(self, chunk: Sequence[float], words: list[str], offset: float) -> list[dict]: ...
 
+    def release_arabic(self) -> None:
+        """Frees the Arabic models' GPU memory: Whisper's batched decode does not fit next to them (VER-452)."""
+
 
 def _nfkc(text: str) -> str:
     return unicodedata.normalize("NFKC", text).strip()
@@ -55,7 +69,10 @@ class OpenModelTranscriber:
         duration_s = len(audio) / SAMPLE_RATE
         language = self.vote_language(audio)
         if language == "ar":
-            words, model = self.arabic_words(audio), ARABIC_LABEL
+            try:
+                words, model = self.arabic_words(audio), ARABIC_LABEL
+            finally:
+                self.engines.release_arabic()
         else:
             words, model = self.engines.whisper_words(audio, language), WHISPER_LABEL
         print(f"{model} ({language or 'no vote'}) returned {len(words)} timed words")
@@ -81,9 +98,17 @@ class OpenModelTranscriber:
         )
 
     def vote_language(self, audio: Sequence[float]) -> str | None:
+        """Visits windows spread over the file and stops once one language leads by VOTE_LEAD."""
         step = VOTE_WINDOW_SECONDS * SAMPLE_RATE
-        votes = Counter(self.engines.window_language(audio[i : i + step]) for i in range(0, len(audio), step))
-        votes.pop(None, None)
+        votes = Counter()
+        for i in spread_order(ceil(len(audio) / step)):
+            language = self.engines.window_language(audio[i * step : (i + 1) * step])
+            if language is None:
+                continue
+            votes[language] += 1
+            (top, top_n), *rest = votes.most_common(2)
+            if top_n - (rest[0][1] if rest else 0) >= VOTE_LEAD:
+                return top
         return votes.most_common(1)[0][0] if votes else None
 
     def arabic_words(self, audio: Sequence[float]) -> list[dict]:

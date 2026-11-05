@@ -128,7 +128,7 @@ class Stage1Executor:
                 response_schema=prompt_version["output_schema"],
                 max_output_tokens=16384,
                 system_instruction=prompt_version["system_instruction"],
-                thinking_config=thinking_config(model_name, budget=4096),
+                thinking_config=thinking_config(model_name, budget=4096, level="low"),
                 safety_settings=get_safety_settings(),
             ),
         )

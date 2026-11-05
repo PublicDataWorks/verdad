@@ -5,6 +5,7 @@ import pytest
 from processing_pipeline.stage_1.open_model_executor import (
     ARABIC_LABEL,
     SAMPLE_RATE,
+    VOTE_WINDOW_SECONDS,
     WHISPER_LABEL,
     OpenModelTranscriber,
     ctc_min_frames,
@@ -27,8 +28,8 @@ class FakeEngines:
         return self.audio
 
     def window_language(self, window):
-        self.calls.append(("window", len(window)))
-        return self.languages.pop(0)
+        self.calls.append(("window", window.start // (VOTE_WINDOW_SECONDS * SAMPLE_RATE), len(window)))
+        return self.languages[window.start // (VOTE_WINDOW_SECONDS * SAMPLE_RATE)]
 
     def whisper_words(self, audio, language):
         self.calls.append(("whisper", language))
@@ -42,6 +43,9 @@ class FakeEngines:
         self.calls.append(("align", words, offset))
         return [{"text": w, "start": offset + i, "end": offset + i + 0.5} for i, w in enumerate(words)]
 
+    def release_arabic(self):
+        self.calls.append(("release_arabic",))
+
 
 def w(text, start):
     return {"text": text, "start": start, "end": start + 0.4}
@@ -51,13 +55,28 @@ class TestLanguageVote:
     def test_majority_of_windows_with_speech(self):
         engines = FakeEngines(100, ["en", None, "es", "es"])
         assert OpenModelTranscriber(engines).vote_language(engines.audio) == "es"
-        assert [c for c in engines.calls if c[0] == "window"] == [("window", 30 * SAMPLE_RATE)] * 3 + [
-            ("window", 10 * SAMPLE_RATE)
+        assert sorted(c[1:] for c in engines.calls) == [(i, 30 * SAMPLE_RATE) for i in range(3)] + [
+            (3, 10 * SAMPLE_RATE)
         ]
 
     def test_none_when_no_window_has_speech(self):
         engines = FakeEngines(40, [None, None])
         assert OpenModelTranscriber(engines).vote_language(engines.audio) is None
+
+    def test_stops_once_one_language_leads_by_five(self):
+        engines = FakeEngines(1800, ["es"] * 60)
+        assert OpenModelTranscriber(engines).vote_language(engines.audio) == "es"
+        assert len(engines.calls) == 5
+
+    def test_first_windows_are_spread_over_the_file(self):
+        engines = FakeEngines(1800, ["en"] * 30 + ["es"] * 30)
+        OpenModelTranscriber(engines).vote_language(engines.audio)
+        assert [c[1] for c in engines.calls[:4]] == [0, 30, 15, 45]
+
+    def test_close_vote_visits_every_window(self):
+        engines = FakeEngines(1800, ["en", "es"] * 30)
+        assert OpenModelTranscriber(engines).vote_language(engines.audio) == "en"
+        assert len(engines.calls) == 60
 
 
 class TestWhisperRoute:
@@ -96,6 +115,22 @@ class TestArabicRoute:
         engines = FakeEngines(41, ["ar", "ar"], cohere_texts=["", "", ""])
         OpenModelTranscriber(engines).transcribe("a.mp3")
         assert ("cohere", [20.0, 20.0, 1.0]) in engines.calls
+
+    def test_arabic_models_are_released_after_the_file(self):
+        engines = FakeEngines(40, ["ar", "ar"], cohere_texts=["مرحبا", "بكم"])
+        OpenModelTranscriber(engines).transcribe("a.mp3")
+        assert engines.calls[-1] == ("release_arabic",)
+
+    def test_arabic_models_are_released_when_the_file_fails(self):
+        engines = FakeEngines(40, ["ar", "ar"], cohere_texts=["مرحبا"])  # one text for two chunks
+        with pytest.raises(ValueError):
+            OpenModelTranscriber(engines).transcribe("a.mp3")
+        assert engines.calls[-1] == ("release_arabic",)
+
+    def test_whisper_files_keep_the_arabic_models_untouched(self):
+        engines = FakeEngines(20, ["en"], whisper_words=[w("hi", 0)])
+        OpenModelTranscriber(engines).transcribe("a.mp3")
+        assert ("release_arabic",) not in engines.calls
 
 
 def test_ctc_needs_a_blank_frame_between_repeated_tokens():

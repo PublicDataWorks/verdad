@@ -1,4 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
+import contextvars
 from datetime import datetime
+import functools
 import json
 import os
 import time
@@ -11,9 +14,11 @@ from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import ProcessingStatus, PromptStage
+from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
 from processing_pipeline.model_config import (
     TranscriptionMethod,
     stage1_detection_model,
+    stage1_file_workers,
     stage1_flow_options,
     stage1_timestamp_model,
     stage1_transcription_method,
@@ -91,6 +96,43 @@ def initial_disinformation_detection(audio_file_id, limit):
     transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.TIMESTAMPED_TRANSCRIPTION)
     detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.DISINFORMATION_DETECTION)
 
+    process_files = functools.partial(
+        _process_audio_files,
+        audio_file_id=audio_file_id,
+        s3_client=s3_client,
+        supabase_client=supabase_client,
+        gemini_client=gemini_client,
+        openai_client=openai_client,
+        initial_transcription_prompt_version=initial_transcription_prompt_version,
+        initial_detection_prompt_version=initial_detection_prompt_version,
+        transcription_prompt_version=transcription_prompt_version,
+        detection_prompt_version=detection_prompt_version,
+    )
+    workers = 1 if audio_file_id else min(stage1_file_workers(), limit)
+    if workers <= 1:
+        process_files(limit=limit)
+        return
+
+    # Workers claim distinct files (the reserve RPC skips locked rows) and split the limit
+    shares = [limit // workers + (i < limit % workers) for i in range(workers)]
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="stage1-file") as pool:
+        futures = [pool.submit(contextvars.copy_context().run, process_files, limit=share) for share in shares]
+    for future in futures:
+        future.result()
+
+
+def _process_audio_files(
+    audio_file_id,
+    limit,
+    s3_client,
+    supabase_client,
+    gemini_client,
+    openai_client,
+    initial_transcription_prompt_version,
+    initial_detection_prompt_version,
+    transcription_prompt_version,
+    detection_prompt_version,
+):
     # Track the number of audio files processed
     processed_audio_files = 0
 
@@ -313,7 +355,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
 
 def _create_gemini_client() -> genai.Client | None:
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
-    return genai.Client(api_key=gemini_key) if gemini_key else None
+    return genai.Client(api_key=gemini_key, http_options=GEMINI_HTTP_OPTIONS) if gemini_key else None
 
 
 def _create_openai_client() -> OpenAI:
