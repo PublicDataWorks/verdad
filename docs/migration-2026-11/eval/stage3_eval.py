@@ -34,6 +34,7 @@ os.chdir(REPO)  # prompts/ relative paths inside the repo
 
 from cost_model import usage_cost  # noqa: E402
 from google import genai  # noqa: E402
+from google.genai.types import HttpOptions  # noqa: E402
 
 from processing_pipeline.stage_3.executors import Stage3Executor  # noqa: E402
 
@@ -172,7 +173,8 @@ def fetch_clips(selection):
 
 async def run(model, tag, selection, workers):
     fetch_clips(selection)
-    client = genai.Client(api_key=os.environ["GOOGLE_GEMINI_KEY"])
+    # Same as GEMINI_HTTP_OPTIONS (VER-456), inlined so REPO checkouts without it still run.
+    client = genai.Client(api_key=os.environ["GOOGLE_GEMINI_KEY"], http_options=HttpOptions(timeout=600_000))
     count_analysis_usage(client)
     pv = prompt_version()
     outdir = RESULTS / (f"{model}-{tag}" if tag else model)
