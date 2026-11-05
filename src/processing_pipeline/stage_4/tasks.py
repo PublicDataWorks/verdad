@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from processing_pipeline.constants import GeminiModel
+from processing_pipeline.model_config import stage4_reviewer_model
 from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
 from processing_pipeline.kb_sources import parse_iso_date
@@ -178,7 +178,7 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         )
 
         print("Reviewing the snippet with agentic pipeline...")
-        reviewer_model = GeminiModel.GEMINI_2_5_PRO
+        reviewer_model = stage4_reviewer_model()
         response, grounding_metadata = await with_retries(
             lambda: Stage4Executor.run_async(
                 snippet_id=snippet["id"],
@@ -239,7 +239,7 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         )
 
         print("Review completed. Updating the snippet in Supabase")
-        submit_snippet_review_result(supabase_client, snippet["id"], response, grounding_metadata, reviewer_model.value)
+        submit_snippet_review_result(supabase_client, snippet["id"], response, grounding_metadata, str(reviewer_model))
 
         postprocess_snippet(supabase_client, snippet["id"], response["disinformation_categories"])
         print(f"Processing completed for snippet {snippet['id']}")

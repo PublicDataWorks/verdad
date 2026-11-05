@@ -61,8 +61,12 @@ def _split_into_chunks(text: str, chunk_size: int) -> list[str]:
     return chunks
 
 
+# Model-id prefixes the pipeline's KB writer can carry (STAGE4_KB_WRITER_MODEL); anything else is a person.
+PIPELINE_MODEL_PREFIXES = ("gemini", "gemma")
+
+
 def is_pipeline_authored(entry: dict) -> bool:
-    return str(entry.get("created_by_model") or "").lower().startswith("gemini")
+    return str(entry.get("created_by_model") or "").lower().removeprefix("models/").startswith(PIPELINE_MODEL_PREFIXES)
 
 
 def is_trustworthy_entry(entry: dict, min_confidence: int = KB_STAGE1_MIN_CONFIDENCE) -> bool:

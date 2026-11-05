@@ -1,14 +1,17 @@
 import glob
 import json
 import os
+import threading
 import uuid
 from unittest.mock import Mock, patch
 
 import pytest
-from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory
+from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory, ThinkingLevel
 from pydub import AudioSegment
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
+from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
+from processing_pipeline.model_config import TranscriptionMethod
 from processing_pipeline.stage_1 import (
     GeminiTimestampTranscriptionGenerator,
     Stage1Executor,
@@ -19,14 +22,16 @@ from processing_pipeline.stage_1 import (
     fetch_stage_1_llm_response_by_id,
     get_audio_file_metadata,
     initial_disinformation_detection,
+    initial_disinformation_detection_with_gemini,
+    initial_transcription_with_gemini,
     insert_stage_1_llm_response,
     process_audio_file,
     redo_main_detection,
     regenerate_timestamped_transcript,
-    transcribe_audio_file_with_open_ai_whisper_1,
     transcribe_audio_file_with_timestamp_with_gemini,
     undo_disinformation_detection,
 )
+from processing_pipeline.stage_1.flows import _create_gemini_client
 
 SELECT_WITH_AUDIO_FILE = (
     "*, audio_file(radio_station_name, radio_station_code, location_state, location_city, "
@@ -222,6 +227,14 @@ class TestDetectionFunctions:
         with pytest.raises(ValueError, match="Gemini client is not provided"):
             disinformation_detection_with_gemini(None, "T", {}, PROMPT_VERSION, GeminiModel.GEMINI_2_5_FLASH)
 
+    def test_gemini_client_has_timeout(self):
+        with (
+            patch("processing_pipeline.stage_1.flows.genai") as mock_genai,
+            patch.dict(os.environ, {"GOOGLE_GEMINI_KEY": "k"}),
+        ):
+            _create_gemini_client()
+        mock_genai.Client.assert_called_once_with(api_key="k", http_options=GEMINI_HTTP_OPTIONS)
+
 
 class TestStage1Executor:
     def _client(self, parsed=None, finish_reason=None):
@@ -395,38 +408,6 @@ class TestGeminiTimestampTranscriptionGenerator:
         assert len(kwargs["config"].safety_settings) == 5
 
 
-class TestWhisper:
-    def test_transcribe_audio_file_with_whisper_1(self):
-        mock_file = Mock()
-        with patch("os.getenv", return_value="test-key"), patch("builtins.open", return_value=mock_file) as mock_open, patch(
-            "processing_pipeline.stage_1.tasks.OpenAI"
-        ) as mock_openai_class:
-            mock_client = Mock()
-            mock_openai_class.return_value = mock_client
-            mock_client.audio.transcriptions.create.return_value = Mock(
-                text="Test transcription",
-                language="en",
-                duration=60.0,
-                segments=[Mock(start=0, text="Test segment 1"), Mock(start=30, text="Test segment 2")],
-            )
-
-            result = transcribe_audio_file_with_open_ai_whisper_1("test.mp3")
-
-        mock_open.assert_called_once_with("test.mp3", "rb")
-        mock_openai_class.assert_called_once_with(api_key="test-key")
-        mock_client.audio.transcriptions.create.assert_called_once_with(
-            model="whisper-1", file=mock_file, response_format="verbose_json", timestamp_granularities=["segment"]
-        )
-        assert result["language"] == "en"
-        assert result["duration"] == 60
-        assert result["transcription"] == "Test transcription"
-        assert result["timestamped_transcription"] == "[00:00] Test segment 1\n[00:30] Test segment 2\n"
-
-    def test_transcribe_audio_file_with_whisper_1_no_api_key(self):
-        with patch.dict("os.environ", {}, clear=True), pytest.raises(ValueError, match="OpenAI API key was not set!"):
-            transcribe_audio_file_with_open_ai_whisper_1("test.mp3")
-
-
 class TestProcessAudioFile:
     @pytest.fixture
     def mock_tasks(self):
@@ -477,6 +458,7 @@ class TestProcessAudioFile:
             audio_file="test.mp3",
             prompt_version={**PROMPT_VERSION, "id": "pv-tt"},
             model_name=GeminiModel.GEMINI_2_5_FLASH,
+            method=TranscriptionMethod.SEGMENTS,
         )
         mock_tasks["detect"].assert_called_once_with(
             gemini_client=gemini_client,
@@ -498,6 +480,38 @@ class TestProcessAudioFile:
             transcription_prompt_version_id="pv-tt",
         )
         mock_supabase_client.set_audio_file_status.assert_called_once_with(1, ProcessingStatus.PROCESSED, None)
+
+    def test_transcribe_method_records_the_transcribe_model(self, mock_supabase_client, mock_tasks, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "transcribe")
+        monkeypatch.setenv("STAGE1_DETECTION_MODEL", "gemini-3.5-flash-lite")
+
+        self._run(mock_supabase_client)
+
+        transcribe_kwargs = mock_tasks["transcribe"].call_args.kwargs
+        assert transcribe_kwargs["model_name"] is GeminiModel.GEMINI_3_5_TRANSCRIBE
+        assert transcribe_kwargs["method"] is TranscriptionMethod.TRANSCRIBE
+        assert mock_tasks["detect"].call_args.kwargs["model_name"] is GeminiModel.GEMINI_3_5_FLASH_LITE
+        stored = mock_supabase_client.insert_stage_1_llm_response.call_args.kwargs
+        assert stored["transcriptor"] == "gemini-3.5-transcribe"
+        assert stored["timestamped_transcription"] == {"timestamped_transcription": "[00:00] text"}
+
+    def test_unknown_timestamp_model_is_recorded_verbatim(self, mock_supabase_client, mock_tasks, monkeypatch):
+        monkeypatch.setenv("STAGE1_TIMESTAMP_MODEL", "gemini-4.0-flash-exp")
+
+        self._run(mock_supabase_client)
+
+        assert mock_tasks["transcribe"].call_args.kwargs["method"] is TranscriptionMethod.SEGMENTS
+        assert mock_supabase_client.insert_stage_1_llm_response.call_args.kwargs["transcriptor"] == "gemini-4.0-flash-exp"
+
+    def test_invalid_method_marks_the_audio_file_as_error(self, mock_supabase_client, mock_tasks, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "whisper")
+
+        self._run(mock_supabase_client)
+
+        mock_tasks["transcribe"].assert_not_called()
+        status_args = mock_supabase_client.set_audio_file_status.call_args.args
+        assert status_args[1] == ProcessingStatus.ERROR
+        assert "STAGE1_TRANSCRIPTION_METHOD" in status_args[2]
 
     def test_no_initial_flags_skips_timestamped_transcription(self, mock_supabase_client, mock_tasks):
         mock_tasks["initial_detection"].return_value = {"flagged_snippets": []}
@@ -608,6 +622,52 @@ class TestInitialDisinformationDetectionFlow:
         mock_sleep.assert_called_once_with(60)
         mock_process.assert_called_once()
 
+    def test_file_workers_keep_several_files_in_flight(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.return_value = AUDIO_FILE
+        all_three_in_flight = threading.Barrier(3, timeout=5)  # breaks, failing the run, if files go one at a time
+
+        with patch("os.remove"), patch("time.sleep"), patch(
+            "processing_pipeline.stage_1.flows.process_audio_file", side_effect=lambda **_: all_three_in_flight.wait()
+        ) as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=6)
+
+        assert mock_process.call_count == 6
+
+    def test_file_workers_never_exceed_the_limit(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.return_value = AUDIO_FILE
+
+        with patch("os.remove"), patch("time.sleep"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=2)
+
+        assert mock_process.call_count == 2
+
+    def test_zero_limit_is_a_no_op_with_file_workers(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+
+        with patch("os.remove"), patch("time.sleep"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=None, limit=0)
+
+        mock_process.assert_not_called()
+
+    def test_specific_audio_file_ignores_file_workers(
+        self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
+    ):
+        monkeypatch.setenv("STAGE1_FILE_WORKERS", "3")
+        mock_supabase_client.get_audio_file_by_id.return_value = AUDIO_FILE
+
+        with patch("os.remove"), patch("processing_pipeline.stage_1.flows.process_audio_file") as mock_process:
+            initial_disinformation_detection(audio_file_id=1, limit=1000)
+
+        mock_process.assert_called_once()
+
     def test_without_gemini_key(
         self, mock_environment, monkeypatch, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client
     ):
@@ -704,6 +764,7 @@ class TestMaintenanceFlows:
             audio_file="test.mp3",
             prompt_version=PROMPT_VERSION,
             model_name=GeminiModel.GEMINI_2_5_FLASH,
+            method=TranscriptionMethod.SEGMENTS,
         )
         mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_called_once_with(
             1, {"timestamped_transcription": "[00:00] regenerated"}, GeminiModel.GEMINI_2_5_FLASH
@@ -739,3 +800,128 @@ class TestMaintenanceFlows:
 
         mock_supabase_client.set_stage_1_llm_response_status.assert_not_called()
         mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_not_called()
+
+
+class TestModelSelection:
+    """Each Stage 1 call takes its model from model_config and sends the thinking config that model family accepts."""
+
+    def _client(self, parsed):
+        client = Mock()
+        client.models.generate_content.return_value.parsed = parsed
+        client.files.upload.return_value.state.name = "ACTIVE"
+        return client
+
+    def test_initial_transcription_default(self):
+        client = self._client({"transcription": "hola"})
+
+        assert initial_transcription_with_gemini(client, "a.mp3", PROMPT_VERSION) == "hola"
+
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["model"] is GeminiModel.GEMINI_2_5_FLASH
+        assert kwargs["config"].thinking_config.thinking_budget == 1024
+        client.files.delete.assert_called_once()
+
+    def test_initial_transcription_on_gemini_3(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_MODEL", "gemini-3.5-flash-lite")
+        client = self._client({"transcription": "hola"})
+
+        initial_transcription_with_gemini(client, "a.mp3", PROMPT_VERSION)
+
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["model"] is GeminiModel.GEMINI_3_5_FLASH_LITE
+        assert kwargs["config"].thinking_config.thinking_level == ThinkingLevel.LOW
+        assert kwargs["config"].thinking_config.thinking_budget is None
+
+    @pytest.mark.parametrize(
+        "model, budget, level, has_config",
+        [
+            ("gemini-2.5-flash", 2048, None, True),
+            ("gemini-3.8-flash", None, ThinkingLevel.MEDIUM, True),
+            ("gemma-4-31b-it", None, None, False),
+        ],
+    )
+    def test_initial_detection(self, monkeypatch, model, budget, level, has_config):
+        monkeypatch.setenv("STAGE1_DETECTION_MODEL", model)
+        client = self._client({"flagged_snippets": []})
+
+        initial_disinformation_detection_with_gemini(client, "T", {}, PROMPT_VERSION, None)
+
+        kwargs = client.models.generate_content.call_args.kwargs
+        assert kwargs["model"] == model
+        config = kwargs["config"].thinking_config
+        if has_config:
+            assert config.thinking_budget == budget
+            assert config.thinking_level == level
+        else:
+            assert config is None
+        assert kwargs["config"].system_instruction == "system"
+        assert kwargs["config"].response_mime_type == "application/json"
+
+    @pytest.mark.parametrize(
+        "model, level",
+        [(GeminiModel.GEMINI_3_5_FLASH_LITE, ThinkingLevel.MEDIUM), (GeminiModel.GEMMA_4_26B_A4B_IT, None)],
+    )
+    def test_main_detection_thinking(self, model, level):
+        client = self._client({"flagged_snippets": []})
+
+        Stage1Executor.run(client, model, "T", {}, PROMPT_VERSION)
+
+        config = client.models.generate_content.call_args.kwargs["config"].thinking_config
+        if level is None:
+            assert config is None
+        else:
+            assert config.thinking_level == level
+            assert config.thinking_budget is None
+
+    def test_segments_batch_on_gemini_3_uses_minimal_thinking(self, sample_audio_file):
+        client = Mock()
+        client.models.generate_content.return_value.parsed = {"segments": [{"segment_number": 1, "transcript": "x"}]}
+
+        GeminiTimestampTranscriptionGenerator.transcribe_batch(
+            client, [sample_audio_file], GeminiModel.GEMINI_3_5_FLASH, PROMPT_VERSION
+        )
+
+        config = client.models.generate_content.call_args.kwargs["config"].thinking_config
+        assert config.thinking_level == ThinkingLevel.MINIMAL
+        assert config.thinking_budget is None
+
+    def test_redo_main_detection_uses_the_detection_model(
+        self, mock_environment, mock_supabase_client, mock_gemini_client, mock_openai_client, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE1_DETECTION_MODEL", "gemini-3.6-flash")
+        mock_supabase_client.get_stage_1_llm_response_by_id.return_value = {
+            "id": 1,
+            "initial_transcription": "t",
+            "timestamped_transcription": {"timestamped_transcription": "[00:00] t"},
+            "initial_detection_result": {"flagged_snippets": [{"transcription": "x"}]},
+            "audio_file": {**AUDIO_FILE, "file_path": "test.mp3"},
+        }
+
+        with patch("processing_pipeline.stage_1.flows.fetch_kb_context", return_value=None):
+            redo_main_detection([1])
+
+        assert mock_gemini_client.models.generate_content.call_args.kwargs["model"] is GeminiModel.GEMINI_3_6_FLASH
+
+    def test_regenerate_with_the_transcribe_method(
+        self, mock_environment, mock_supabase_client, mock_s3_client, mock_gemini_client, mock_openai_client, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "transcribe")
+        mock_supabase_client.get_stage_1_llm_response_by_id.return_value = {
+            "id": 1,
+            "initial_transcription": "t",
+            "timestamped_transcription": None,
+            "initial_detection_result": {"flagged_snippets": [{"transcription": "x"}]},
+            "audio_file": {**AUDIO_FILE, "file_path": "test.mp3"},
+        }
+
+        with patch("os.remove"), patch(
+            "processing_pipeline.stage_1.flows.transcribe_audio_file_with_timestamp_with_gemini",
+            return_value={"timestamped_transcription": "[00:00] t"},
+        ) as mock_transcribe, patch("processing_pipeline.stage_1.flows.fetch_kb_context", return_value=None):
+            regenerate_timestamped_transcript([1])
+
+        assert mock_transcribe.call_args.kwargs["method"] is TranscriptionMethod.TRANSCRIBE
+        assert mock_transcribe.call_args.kwargs["model_name"] is GeminiModel.GEMINI_3_5_TRANSCRIBE
+        mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_called_once_with(
+            1, {"timestamped_transcription": "[00:00] t"}, GeminiModel.GEMINI_3_5_TRANSCRIBE
+        )

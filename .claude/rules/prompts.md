@@ -58,6 +58,10 @@ are *not* in the manifest. The heuristics the model actually sees are pasted inl
 `prompts/stage_1/main/detection_user_prompt.md` and `prompts/stage_3/analysis_prompt.md`, so a category edit
 has to land in both the reference file and the user prompt, for both stages.
 
+Since `stage_1/disinformation_detection` 3.0.0 the Stage 1 user prompt carries only **Description**, **Heuristics** and
+**Examples** per category (no keyword lists, no subcategories), and its recall-first wording is tuned for Gemini 3.x and
+Gemma 4, not `gemini-2.5-flash`. Stage 3 and the reference `heuristics.md` files keep the full format below.
+
 Format (21 numbered categories, identical numbering in both stages): `### **N. Title**`, then
 **Description**, **Common Narratives**, **Cultural/Regional Variations** with separate
 *Spanish-Speaking Communities* and *Arabic-Speaking Communities* bullet lists (each with the in-language

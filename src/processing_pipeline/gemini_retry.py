@@ -2,10 +2,14 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 
-from google.genai import errors
+import httpx
+from google.genai import errors, types
 
 # Waits between attempts; a 429 burst clears in seconds, a 503 spike in minutes.
 RETRY_DELAYS = (30, 120, 300)
+
+# In ms. Without it a dropped connection hangs forever; the longest normal call seen was 316 s (VER-456).
+GEMINI_HTTP_OPTIONS = types.HttpOptions(timeout=600_000)
 
 TRANSIENT_HTTP = {
     HTTPStatus.REQUEST_TIMEOUT,
@@ -23,6 +27,9 @@ def is_transient(e: Exception) -> bool:
         return all(is_transient(inner) for inner in e.exceptions)
     if isinstance(e, errors.APIError):
         return e.code in TRANSIENT_HTTP
+    # GEMINI_HTTP_OPTIONS timeout: httpx raises on sync calls, aiohttp a plain TimeoutError on async ones.
+    if isinstance(e, (httpx.TimeoutException, TimeoutError)):
+        return True
     # Empty, truncated or unparseable model output; see Stage3Executor.
     return isinstance(e, ValueError)
 

@@ -5,7 +5,11 @@ import pytest
 
 from processing_pipeline.kb_sources import url_key
 from processing_pipeline.stage_4 import tools
-from processing_pipeline.stage_4.constants import KB_WRITER_MODEL, OBSERVED_URLS_STATE_KEY
+from processing_pipeline.constants import GeminiModel
+from processing_pipeline.stage_4.constants import OBSERVED_URLS_STATE_KEY
+
+# STAGE4_KB_WRITER_MODEL is unset in tests, so entries carry the production default
+KB_WRITER_MODEL = GeminiModel.GEMINI_2_5_FLASH
 
 VALID = dict(
     fact="The 2024 election results were certified by all 50 states.",
@@ -93,6 +97,13 @@ class TestValidateKbCurrency:
 
 
 class TestUpsertKnowledgeEntry:
+    def test_entry_is_labelled_with_the_configured_writer_model(self, supabase, monkeypatch):
+        monkeypatch.setenv("STAGE4_KB_WRITER_MODEL", "gemma-4-31b-it")
+
+        tools.upsert_knowledge_entry(**VALID, snippet_id="snip", tool_context=_tool_context(OBSERVED))
+
+        assert supabase.insert_kb_entry.call_args.kwargs["created_by_model"] == "gemma-4-31b-it"
+
     def test_creates_entry_with_publication_date(self, supabase):
         result = tools.upsert_knowledge_entry(**VALID, snippet_id="snip", tool_context=_tool_context(OBSERVED))
 

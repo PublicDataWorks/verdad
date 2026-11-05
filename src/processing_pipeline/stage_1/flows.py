@@ -1,4 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
+import contextvars
 from datetime import datetime
+import functools
 import json
 import os
 import time
@@ -10,7 +13,16 @@ from prefect.flows import Flow
 from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 
-from processing_pipeline.constants import GeminiModel, ProcessingStatus, PromptStage
+from processing_pipeline.constants import ProcessingStatus, PromptStage
+from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
+from processing_pipeline.model_config import (
+    TranscriptionMethod,
+    stage1_detection_model,
+    stage1_file_workers,
+    stage1_flow_options,
+    stage1_timestamp_model,
+    stage1_transcription_method,
+)
 from processing_pipeline.stage_1.constants import Stage1SubStage
 from processing_pipeline.stage_1.tasks import (
     delete_stage_1_llm_responses,
@@ -22,6 +34,7 @@ from processing_pipeline.stage_1.tasks import (
     fetch_stage_1_llm_response_by_id,
     get_audio_file_metadata,
     process_audio_file,
+    require_gpu_engines,
     reset_status_of_audio_files,
     reset_status_of_stage_1_llm_response,
     set_audio_file_status,
@@ -54,6 +67,12 @@ def reset_audio_file_status_hook(flow: Flow, flow_run: FlowRun, state: State):
     on_cancellation=[reset_audio_file_status_hook],
 )
 def initial_disinformation_detection(audio_file_id, limit):
+    # Check the flow-shape switches before touching anything (STAGE1_TRANSCRIBE_FIRST, STAGE1_DETECTION_PASSES,
+    # STAGE1_ANCHOR_TIMESTAMPS); an invalid combination fails the run instead of every audio file
+    print(f"Stage 1 options: {stage1_flow_options()}")
+    if stage1_transcription_method() == TranscriptionMethod.OPEN_MODEL:
+        require_gpu_engines()
+
     # Setup S3 Client
     s3_client = boto3.client(
         "s3",
@@ -77,6 +96,43 @@ def initial_disinformation_detection(audio_file_id, limit):
     transcription_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.TIMESTAMPED_TRANSCRIPTION)
     detection_prompt_version = supabase_client.get_active_prompt(PromptStage.STAGE_1, Stage1SubStage.DISINFORMATION_DETECTION)
 
+    process_files = functools.partial(
+        _process_audio_files,
+        audio_file_id=audio_file_id,
+        s3_client=s3_client,
+        supabase_client=supabase_client,
+        gemini_client=gemini_client,
+        openai_client=openai_client,
+        initial_transcription_prompt_version=initial_transcription_prompt_version,
+        initial_detection_prompt_version=initial_detection_prompt_version,
+        transcription_prompt_version=transcription_prompt_version,
+        detection_prompt_version=detection_prompt_version,
+    )
+    workers = 1 if audio_file_id else min(stage1_file_workers(), limit)
+    if workers <= 1:
+        process_files(limit=limit)
+        return
+
+    # Workers claim distinct files (the reserve RPC skips locked rows) and split the limit
+    shares = [limit // workers + (i < limit % workers) for i in range(workers)]
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="stage1-file") as pool:
+        futures = [pool.submit(contextvars.copy_context().run, process_files, limit=share) for share in shares]
+    for future in futures:
+        future.result()
+
+
+def _process_audio_files(
+    audio_file_id,
+    limit,
+    s3_client,
+    supabase_client,
+    gemini_client,
+    openai_client,
+    initial_transcription_prompt_version,
+    initial_detection_prompt_version,
+    transcription_prompt_version,
+    detection_prompt_version,
+):
     # Track the number of audio files processed
     processed_audio_files = 0
 
@@ -186,14 +242,14 @@ def redo_main_detection(stage_1_llm_response_ids):
                 initial_transcription = stage_1_llm_response.get("initial_transcription", "")
                 kb_context = fetch_kb_context(supabase_client, openai_client, initial_transcription)
 
-                print("Processing the timestamped transcription with Gemini Flash Latest")
                 detection_result = disinformation_detection_with_gemini(
                     gemini_client=gemini_client,
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                     prompt_version=detection_prompt_version,
-                    model_name=GeminiModel.GEMINI_2_5_FLASH,
+                    model_name=stage1_detection_model(),
                     kb_context=kb_context,
+                    words=timestamped_transcription.get("words"),  # stored by transcribe-first rows
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
                 update_stage_1_llm_response_detection_result(supabase_client, id, detection_result)
@@ -248,12 +304,14 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                 print("No flagged snippets found during the initial detection phase.")
             else:
                 # Timestamped transcription
-                transcriptor = GeminiModel.GEMINI_2_5_FLASH
+                method = stage1_transcription_method()
+                transcriptor = stage1_timestamp_model(method)
                 timestamped_transcription = transcribe_audio_file_with_timestamp_with_gemini(
                     gemini_client=gemini_client,
                     audio_file=local_file,
                     prompt_version=transcription_prompt_version,
                     model_name=transcriptor,
+                    method=method,
                 )
                 update_stage_1_llm_response_timestamped_transcription(
                     supabase_client, id, timestamped_transcription, transcriptor
@@ -269,7 +327,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
                     timestamped_transcription=timestamped_transcription["timestamped_transcription"],
                     metadata=metadata,
                     prompt_version=detection_prompt_version,
-                    model_name=GeminiModel.GEMINI_2_5_FLASH,
+                    model_name=stage1_detection_model(),
                     kb_context=kb_context,
                 )
                 print(f"Detection result:\n{json.dumps(detection_result, indent=2)}\n")
@@ -297,7 +355,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
 
 def _create_gemini_client() -> genai.Client | None:
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
-    return genai.Client(api_key=gemini_key) if gemini_key else None
+    return genai.Client(api_key=gemini_key, http_options=GEMINI_HTTP_OPTIONS) if gemini_key else None
 
 
 def _create_openai_client() -> OpenAI:

@@ -23,7 +23,7 @@ When this skill triggers, immediately:
 
 The VERDAD pipeline has two stages that use heuristics, each optimized differently:
 
-- **Stage 1** (fast flagging): Scans transcriptions to flag potential disinformation. Heuristics are concise — just keywords, detection patterns, and examples. No subcategories in the main prompt.
+- **Stage 1** (fast flagging): Scans transcriptions to flag potential disinformation. Heuristics are concise — just a description, detection patterns, and examples (no keyword lists since Stage 1 prompt 3.0.0). No subcategories in the main prompt.
 - **Stage 3** (deep analysis): Evaluates flagged snippets with web search verification. Heuristics are detailed — includes evidence grounding, cultural context, legitimate discussions, red flags, and full subcategories.
 
 Each stage has two files: a **user prompt** (imported to Supabase DB, used at runtime) and a standalone **heuristics.md** (reference file, not imported).
@@ -92,7 +92,7 @@ Every new category needs:
 
 Raw input needs these transformations:
 - **Strip links and dates** — Remove verdad.app URLs, TikTok links, timestamps. Use representative examples that capture *patterns*.
-- **Restructure** — Convert flat notes into the structured format (Description → Keywords → Heuristics → Examples for Stage 1; full template for Stage 3).
+- **Restructure** — Convert flat notes into the structured format (Description → Heuristics → Examples for Stage 1; full template for Stage 3).
 - **Add cross-category notes** — Note overlaps with existing categories (especially 3/COVID, 6/Abortion, 11/Healthcare, 14/Conspiracies).
 
 ### Step 4: Update Files

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import os
 from pydub import AudioSegment
+from processing_pipeline.model_config import stage2_clip_options
 from utils import optional_task
 
 
@@ -56,6 +57,30 @@ def convert_formatted_time_str_to_seconds(time_str):
     return int(round(total_seconds))
 
 
+def clamp_to_audio(start_time, end_time, duration):
+    """``(start, end)`` in whole seconds clamped to ``[0, duration]``.
+
+    Word timestamps (and the model) can put an end a little past the audio, e.g. 1800 s on a recording that decodes
+    to 1799.9 s or was trimmed to 1799 s for Transcribe; that is clamped with a warning instead of failing the whole
+    response. A snippet that ends before it starts, or starts past the end of the audio, still raises.
+    """
+    if start_time > end_time:
+        raise ValueError("start_time must be less than or equal to end_time.")
+
+    clamped_start = max(0, start_time)
+    clamped_end = min(duration, end_time)
+    if clamped_start > clamped_end:
+        raise ValueError(
+            f"start_time ({start_time} s) must be within the audio duration of {duration} seconds."
+        )
+    if (clamped_start, clamped_end) != (start_time, end_time):
+        print(
+            f"Warning: snippet {start_time}-{end_time} s is outside the audio (0-{duration} s); "
+            f"clamped to {clamped_start}-{clamped_end} s"
+        )
+    return clamped_start, clamped_end
+
+
 @optional_task(log_prints=True)
 def extract_snippet_clip(
     audio,
@@ -70,12 +95,9 @@ def extract_snippet_clip(
     start_time = convert_formatted_time_str_to_seconds(formatted_start_time)
     end_time = convert_formatted_time_str_to_seconds(formatted_end_time)
 
-    # Ensure start_time and end_time are within the audio duration
+    # Clamp start_time and end_time to the audio duration
     duration = int(len(audio) / 1000)  # Duration in seconds
-    if start_time < 0 or end_time > duration:
-        raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
-    if start_time > end_time:
-        raise ValueError("start_time must be less than or equal to end_time.")
+    start_time, end_time = clamp_to_audio(start_time, end_time, duration)
 
     # Include surrounding context to the snippet
     new_start_time = max(0, start_time - context_before_seconds)
@@ -122,6 +144,75 @@ def extract_snippet_clip(
     )
 
 
+def has_word_times(snippet):
+    """True when Stage 1 anchored the snippet to word timestamps (``start_s``/``end_s`` set, see stage_1/anchor.py)."""
+    return snippet.get("start_s") is not None and snippet.get("end_s") is not None
+
+
+def _format_mm_ss(seconds):
+    """Whole seconds -> ``MM:SS``, minutes not wrapped into hours (the format ``extract_snippet_clip`` writes)."""
+    return f"{(seconds // 60):02}:{(seconds % 60):02}"
+
+
+@optional_task(log_prints=True)
+def extract_snippet_clip_at_word_times(
+    audio,
+    output_file,
+    start_s,
+    end_s,
+    context_before_s,
+    context_after_s,
+    formatted_recorded_at,
+):
+    """``extract_snippet_clip`` for a snippet with word times (STAGE2_USE_WORD_TIMES=true).
+
+    The clip runs from ``start_s - context_before_s`` to ``end_s + context_after_s`` (float seconds, cut at
+    millisecond precision), clamped to the audio. The returned values keep the columns' meaning: ``start_time`` and
+    ``end_time`` are positions inside the clip as whole-second ``MM:SS`` (start rounded down so the frontend's seek
+    lands just before the first word, end rounded up but never past the clip), ``duration`` is the clip length rounded
+    to the nearest second, and ``recorded_at`` is the recording's start plus the clip's offset.
+    """
+    audio_ms = len(audio)
+    start_s, end_s = clamp_to_audio(float(start_s), float(end_s), audio_ms / 1000)
+    start_ms = round(start_s * 1000)
+    end_ms = round(end_s * 1000)
+
+    clip_start_ms = max(0, start_ms - round(context_before_s * 1000))
+    clip_end_ms = min(audio_ms, end_ms + round(context_after_s * 1000))
+
+    subclip = audio[clip_start_ms:clip_end_ms]
+    subclip.export(output_file, format="mp3")
+    print(f"Snippet clip is extracted successfully (word times): {output_file}")
+
+    clip_ms = clip_end_ms - clip_start_ms
+    snippet_duration = (clip_ms + 500) // 1000
+    snippet_start_time = (start_ms - clip_start_ms) // 1000
+    snippet_end_time = min(-(-(end_ms - clip_start_ms) // 1000), snippet_duration)
+
+    snippet_recorded_at = datetime.fromisoformat(formatted_recorded_at.replace("Z", "+00:00")) + timedelta(
+        milliseconds=clip_start_ms
+    )
+
+    formatted_snippet_duration = _format_mm_ss(snippet_duration)
+    formatted_snippet_start_time = _format_mm_ss(snippet_start_time)
+    formatted_snippet_end_time = _format_mm_ss(snippet_end_time)
+    formatted_snippet_recorded_at = snippet_recorded_at.isoformat()
+    print(
+        f"Snippet word times: {start_s:.3f}-{end_s:.3f} s; clip {clip_start_ms / 1000:.3f}-{clip_end_ms / 1000:.3f} s\n"
+        f"Snippet clip duration: {formatted_snippet_duration}\n"
+        f"Snippet clip start_time: {formatted_snippet_start_time}\n"
+        f"Snippet clip end_time: {formatted_snippet_end_time}\n"
+        f"Snippet recorded_at: {formatted_snippet_recorded_at}\n"
+    )
+
+    return (
+        formatted_snippet_duration,
+        formatted_snippet_start_time,
+        formatted_snippet_end_time,
+        formatted_snippet_recorded_at,
+    )
+
+
 @optional_task(log_prints=True, retries=3)
 def insert_new_snippet_to_snippets_table_in_supabase(
     supabase_client,
@@ -149,10 +240,15 @@ def insert_new_snippet_to_snippets_table_in_supabase(
 
 
 @optional_task(log_prints=True)
-def ensure_correct_timestamps(audio, snippets):
+def ensure_correct_timestamps(audio, snippets, use_word_times=False):
     duration = int(len(audio) / 1000)  # Duration in seconds
 
     for snippet in snippets:
+        if use_word_times and has_word_times(snippet):
+            # The word times are what will be cut; check them against the exact audio length
+            clamp_to_audio(float(snippet["start_s"]), float(snippet["end_s"]), len(audio) / 1000)
+            continue
+
         start_time = snippet["start_time"]
         end_time = snippet["end_time"]
 
@@ -160,12 +256,8 @@ def ensure_correct_timestamps(audio, snippets):
         start_time = convert_formatted_time_str_to_seconds(start_time)
         end_time = convert_formatted_time_str_to_seconds(end_time)
 
-        if start_time > end_time:
-            raise ValueError("start_time must be less than or equal to end_time.")
-
-        # Ensure start_time and end_time are within the audio duration
-        if start_time < 0 or end_time > duration:
-            raise ValueError(f"start_time and end_time must be within the audio duration of {duration} seconds.")
+        # Raises on start > end or a start past the end of the audio; an end past it is clamped when clipping
+        clamp_to_audio(start_time, end_time, duration)
 
 
 @optional_task(log_prints=True)
@@ -183,10 +275,13 @@ def process_llm_response(
         if not os.path.isfile(local_file):
             raise FileNotFoundError(f"Audio file {local_file} does not exist.")
 
+        # STAGE2_USE_WORD_TIMES and its padding; unset = today's whole-second cut with the flow's padding
+        clip_options = stage2_clip_options(context_before_seconds, context_after_seconds)
+
         print("Loading the audio file into the memory")
         audio = AudioSegment.from_mp3(local_file)
         flagged_snippets = (llm_response["detection_result"] or {}).get("flagged_snippets", [])
-        ensure_correct_timestamps(audio, flagged_snippets)
+        ensure_correct_timestamps(audio, flagged_snippets, clip_options.use_word_times)
 
         for snippet in flagged_snippets:
             uuid = snippet["uuid"]
@@ -196,15 +291,28 @@ def process_llm_response(
             parts = local_file.split("_")
             folder_name = f"{parts[0]}_{parts[1]}"
 
-            snippet_duration, snippet_start_time, snippet_end_time, snippet_recorded_at = extract_snippet_clip(
-                audio,
-                output_file,
-                start_time,
-                end_time,
-                context_before_seconds,
-                context_after_seconds,
-                llm_response["audio_file"]["recorded_at"],
-            )
+            if clip_options.use_word_times and has_word_times(snippet):
+                snippet_duration, snippet_start_time, snippet_end_time, snippet_recorded_at = (
+                    extract_snippet_clip_at_word_times(
+                        audio,
+                        output_file,
+                        snippet["start_s"],
+                        snippet["end_s"],
+                        clip_options.context_before_s,
+                        clip_options.context_after_s,
+                        llm_response["audio_file"]["recorded_at"],
+                    )
+                )
+            else:
+                snippet_duration, snippet_start_time, snippet_end_time, snippet_recorded_at = extract_snippet_clip(
+                    audio,
+                    output_file,
+                    start_time,
+                    end_time,
+                    context_before_seconds,
+                    context_after_seconds,
+                    llm_response["audio_file"]["recorded_at"],
+                )
             file_size = os.path.getsize(output_file)
 
             uploaded_path = upload_to_r2_and_clean_up(s3_client, r2_bucket_name, folder_name, output_file)

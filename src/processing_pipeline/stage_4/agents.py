@@ -11,7 +11,14 @@ from google.genai import types
 from processing_pipeline.stage_4.gemini_mcp_toolset import GeminiSafeMcpToolset
 from mcp import StdioServerParameters
 
-from processing_pipeline.constants import GeminiModel
+from processing_pipeline.model_config import (
+    ModelFamily,
+    ModelName,
+    model_family,
+    stage4_kb_writer_model,
+    stage4_researcher_model,
+    thinking_config,
+)
 from processing_pipeline.stage_4 import constants
 from processing_pipeline.stage_4.models import ReviewAnalysisOutput
 from processing_pipeline.stage_4.tools import (
@@ -25,8 +32,21 @@ from processing_pipeline.stage_4.tools import (
 RETRY_OPTIONS = types.HttpRetryOptions(attempts=6, initial_delay=10, max_delay=60)
 
 
-def _model(model: GeminiModel) -> Gemini:
-    return Gemini(model=model.value, retry_options=RETRY_OPTIONS)
+def _model(model: ModelName) -> Gemini:
+    return Gemini(model=str(model), retry_options=RETRY_OPTIONS)
+
+
+def reviewer_thinking(model: ModelName) -> types.ThinkingConfig | None:
+    """Thinking for ``analysis_reviewer``: ``STAGE4_REVIEWER_THINKING`` (minimal|low|medium|high), else medium on 3.x.
+
+    Gemini 3.x defaults to high thinking and the thoughts count against the 16k output cap, so a long review JSON
+    came back truncated and the whole Stage 4 run was retried (Thien, Nov 1 2026). 2.5 keeps its dynamic default
+    unless the variable is set; Gemma takes no thinking config at all.
+    """
+    level = os.getenv("STAGE4_REVIEWER_THINKING") or None
+    if level is None and model_family(model) == ModelFamily.LEVEL:
+        level = "medium"
+    return thinking_config(model, level=level)
 
 
 def force_first_search(callback_context: CallbackContext, llm_request: LlmRequest) -> None:
@@ -40,14 +60,14 @@ def force_first_search(callback_context: CallbackContext, llm_request: LlmReques
     )
 
 
-def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: GeminiModel):
+def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: ModelName):
     """Build the Stage 4 multi-agent review pipeline.
 
     Args:
         prompt_versions: Dict with keys 'kb_researcher', 'web_researcher',
             'reviewer', 'kb_updater', each containing a prompt_version dict
             from the database (with 'system_instruction' field).
-        reviewer_model: GeminiModel to use for the analysis reviewer agent.
+        reviewer_model: Model id for the analysis reviewer agent (STAGE4_REVIEWER_MODEL).
 
     Returns:
         tuple: (review_pipeline, searxng_toolset)
@@ -68,12 +88,14 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
         hidden_args={"searxng_web_search": {"time_range"}},
     )
 
-    # Research agents and KB updater on Flash: Pro invented citations several times more often (VER-391, PR #122)
+    # Research agents and KB updater default to Flash: Pro invented citations several times more often (VER-391,
+    # PR #122). STAGE4_RESEARCHER_MODEL / STAGE4_KB_WRITER_MODEL override them (model_config.py).
+    researcher_model = stage4_researcher_model()
     # Agent 1: KB Researcher — searches existing knowledge base
     kb_researcher = LlmAgent(
         name="kb_researcher",
         description="Searches the internal knowledge base for verified facts relevant to the flagged claims.",
-        model=_model(GeminiModel.GEMINI_2_5_FLASH),
+        model=_model(researcher_model),
         instruction=prompt_versions["kb_researcher"]["system_instruction"],
         tools=[FunctionTool(search_knowledge_base)],
         output_key="kb_research",
@@ -83,7 +105,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     web_researcher = LlmAgent(
         name="web_researcher",
         description="Performs web-based fact-checking using search engines and source reading.",
-        model=_model(GeminiModel.GEMINI_2_5_FLASH),
+        model=_model(researcher_model),
         instruction=prompt_versions["web_researcher"]["system_instruction"],
         tools=[searxng_toolset],
         output_key="web_research",
@@ -100,6 +122,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
         output_schema=ReviewAnalysisOutput,
         generate_content_config=types.GenerateContentConfig(
             max_output_tokens=16384,
+            thinking_config=reviewer_thinking(reviewer_model),
         ),
     )
 
@@ -107,7 +130,7 @@ def build_review_pipeline(prompt_versions: dict[str, dict], reviewer_model: Gemi
     kb_updater = LlmAgent(
         name="kb_updater",
         description="Updates the knowledge base with newly verified facts from the review.",
-        model=_model(constants.KB_WRITER_MODEL),
+        model=_model(stage4_kb_writer_model()),
         instruction=prompt_versions["kb_updater"]["system_instruction"],
         tools=[
             FunctionTool(upsert_knowledge_entry),
