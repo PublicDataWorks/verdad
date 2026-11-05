@@ -14,6 +14,7 @@ from prefect.client.schemas import FlowRun, State
 from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import ProcessingStatus, PromptStage
+from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
 from processing_pipeline.model_config import (
     TranscriptionMethod,
     stage1_detection_model,
@@ -354,7 +355,7 @@ def regenerate_timestamped_transcript(stage_1_llm_response_ids):
 
 def _create_gemini_client() -> genai.Client | None:
     gemini_key = os.getenv("GOOGLE_GEMINI_KEY")
-    return genai.Client(api_key=gemini_key) if gemini_key else None
+    return genai.Client(api_key=gemini_key, http_options=GEMINI_HTTP_OPTIONS) if gemini_key else None
 
 
 def _create_openai_client() -> OpenAI:

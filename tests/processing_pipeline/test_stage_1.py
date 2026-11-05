@@ -10,6 +10,7 @@ from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory, T
 from pydub import AudioSegment
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
+from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
 from processing_pipeline.model_config import TranscriptionMethod
 from processing_pipeline.stage_1 import (
     GeminiTimestampTranscriptionGenerator,
@@ -30,6 +31,7 @@ from processing_pipeline.stage_1 import (
     transcribe_audio_file_with_timestamp_with_gemini,
     undo_disinformation_detection,
 )
+from processing_pipeline.stage_1.flows import _create_gemini_client
 
 SELECT_WITH_AUDIO_FILE = (
     "*, audio_file(radio_station_name, radio_station_code, location_state, location_city, "
@@ -224,6 +226,14 @@ class TestDetectionFunctions:
     def test_disinformation_detection_requires_client(self):
         with pytest.raises(ValueError, match="Gemini client is not provided"):
             disinformation_detection_with_gemini(None, "T", {}, PROMPT_VERSION, GeminiModel.GEMINI_2_5_FLASH)
+
+    def test_gemini_client_has_timeout(self):
+        with (
+            patch("processing_pipeline.stage_1.flows.genai") as mock_genai,
+            patch.dict(os.environ, {"GOOGLE_GEMINI_KEY": "k"}),
+        ):
+            _create_gemini_client()
+        mock_genai.Client.assert_called_once_with(api_key="k", http_options=GEMINI_HTTP_OPTIONS)
 
 
 class TestStage1Executor:
