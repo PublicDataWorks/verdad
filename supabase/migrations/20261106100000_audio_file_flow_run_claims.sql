@@ -1,8 +1,9 @@
 -- VER-461: the Stage 1 cancel/crash hook can run after the run's process is gone, so the reserve RPC records the
--- claiming flow run and release_flow_run_audio_files frees that run's Processing files (Processed with a Stage 1
--- response, else New; a crash counts toward retry_attempts like sweep_stuck_audio_files).
+-- claiming flow run; release_flow_run_audio_files frees that run's files (Processed with a Stage 1 response, else
+-- New; a crash counts toward retry_attempts). sweep_stuck_audio_files also marks stuck files with a response Processed.
 -- Apply in one request (one transaction) before deploying the code that passes p_flow_run_id.
--- Rollback: DROP both functions, then restore the zero-argument reserve from the baseline (both copies).
+-- Rollback: DROP both new functions, restore the zero-argument reserve from the baseline (both copies), re-apply
+-- the sweep from 20261103120000.
 
 SET lock_timeout = '3s';
 
@@ -81,3 +82,43 @@ $function$;
 -- Not an RPC for clients: only the Stage 1 hook (service_role) calls it.
 REVOKE EXECUTE ON FUNCTION public.release_flow_run_audio_files(uuid, boolean, integer) FROM public, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.release_flow_run_audio_files(uuid, boolean, integer) TO service_role;
+
+-- Backstop when the hook failed or never ran: a file stuck with a Stage 1 response is done.
+CREATE OR REPLACE FUNCTION public.sweep_stuck_audio_files(p_max_attempts integer DEFAULT 3)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path = ''
+AS $function$
+DECLARE
+    processed integer;
+    requeued integer;
+    errored integer;
+BEGIN
+    UPDATE public.audio_files a
+    SET status = 'Processed'
+    WHERE a.status = 'Processing'
+      AND a.updated_at < now() - interval '2 hours'
+      AND EXISTS (SELECT 1 FROM public.stage_1_llm_responses r WHERE r.audio_file = a.id);
+    GET DIAGNOSTICS processed = ROW_COUNT;
+
+    UPDATE public.audio_files a
+    SET status = 'Error', error_message = 'Stage 1 run died ' || p_max_attempts || ' times in Processing'
+    WHERE a.status = 'Processing'
+      AND a.updated_at < now() - interval '2 hours'
+      AND a.updated_at > now() - interval '7 days'
+      AND a.retry_attempts >= p_max_attempts
+      AND NOT EXISTS (SELECT 1 FROM public.stage_1_llm_responses r WHERE r.audio_file = a.id);
+    GET DIAGNOSTICS errored = ROW_COUNT;
+
+    UPDATE public.audio_files a
+    SET status = 'New', retry_attempts = a.retry_attempts + 1
+    WHERE a.status = 'Processing'
+      AND a.updated_at < now() - interval '2 hours'
+      AND a.updated_at > now() - interval '7 days'
+      AND a.retry_attempts < p_max_attempts
+      AND NOT EXISTS (SELECT 1 FROM public.stage_1_llm_responses r WHERE r.audio_file = a.id);
+    GET DIAGNOSTICS requeued = ROW_COUNT;
+
+    RETURN jsonb_build_object('processed', processed, 'requeued', requeued, 'errored', errored);
+END;
+$function$;

@@ -30,6 +30,14 @@ def test_reserve_stamps_the_claiming_flow_run_in_one_statement():
     assert "FOR UPDATE SKIP LOCKED" in definition
 
 
+def test_sweep_marks_stuck_files_with_a_response_processed():
+    sql = MIGRATION.read_text()
+    start = sql.index("CREATE OR REPLACE FUNCTION public.sweep_stuck_audio_files(")
+    sweep = sql[start : sql.index(END, start)]
+    assert "SET status = 'Processed'" in sweep
+    assert "AND EXISTS (SELECT 1 FROM public.stage_1_llm_responses r WHERE r.audio_file = a.id)" in sweep
+
+
 def test_old_zero_argument_reserve_is_dropped():
     # Keeping it next to the new one makes the no-argument PostgREST call ambiguous
     assert "DROP FUNCTION IF EXISTS public.fetch_a_new_audio_file_and_reserve_it();" in MIGRATION.read_text()

@@ -523,7 +523,8 @@ refuses the production project unless `--allow-production` is passed.
   crashed Stage 1 loop run frees its own files first (VER-461, migration `20261106100000`): its hook calls
   `release_flow_run_audio_files` for rows whose `claimed_by_flow_run` is the run; rows with a Stage 1 response go
   to `Processed`, the rest to `New`, and only a crash counts toward `retry_attempts`. The sweep still covers runs
-  whose serve process died with them. Queue depth for watching the Stage 1 fleet:
+  whose serve process died with them, and also sets `Processing` rows stuck over 2 h with a Stage 1 response
+  to `Processed`, at any age. Queue depth for watching the Stage 1 fleet:
 
   ```sql
   SELECT status, count(*), min(recorded_at), max(recorded_at) FROM public.audio_files
