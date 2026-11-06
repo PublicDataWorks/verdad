@@ -16,12 +16,19 @@
 -- What changes (and only this)
 -- ============================================================================================
 -- 1. labels.is_research boolean NOT NULL DEFAULT false (a constant default: catalog-only, no
---    rewrite; labels is small), set true for the three "Texas research 2026:" labels.
+--    rewrite; labels is small), set true for the three VER-430 labels BY ID. Not by text: any
+--    logged-in user can create a label with any text (create_apply_and_upvote_label), so a text
+--    prefix must never grant research status. RLS on labels allows SELECT only, so the flag can
+--    only be set by a migration or the service role.
 -- 2. get_snippets, starting from 20260921000400 (== supabase/database/sql/get_snippets_function.sql
 --    before this change):
 --    * DECLARE research_view := coalesce(p_filter->>'view', '') = 'research', and
 --      research_snippet_ids uuid[], filled (only when research_view) with every snippet that
---      carries an is_research label;
+--      carries an is_research label APPLIED BY AN ADMIN (snippet_labels.applied_by in user_roles
+--      with roles.name = 'admin', the notion get_snippets already uses for user_is_admin). Any
+--      logged-in user can apply an existing label to any snippet, so without this a non-admin could
+--      put any clip into the research view. On production on 2026-11-06 all 769 applications of
+--      the three labels were made by one admin, so the filter drops none of them;
 --    * the visibility predicate in filtered_snippets becomes two branches on research_view:
 --        NOT research_view AND status = 'Processed' AND overall >= 95            -- unchanged
 --        OR research_view AND status = 'Processed' AND (overall >= 95
@@ -36,6 +43,10 @@
 --    Deviation from the first sketch (EXISTS over snippet_labels inside the OR): an EXISTS arm
 --    has no index, so the OR could only be evaluated as a filter over every Processed row. The
 --    pre-extracted uuid[] is a snippets_pkey index condition, so all three arms can be BitmapOr-ed.
+-- 3. create_apply_and_upvote_label (the only user write path into snippet_labels: RLS on
+--    snippet_labels allows SELECT only) refuses to apply an is_research label for a non-admin
+--    caller. Otherwise unchanged; the search_path pin from 20260918053000 is written into the
+--    definition because CREATE OR REPLACE would drop it.
 --
 -- ============================================================================================
 -- Apply order -- see supabase/migrations/README_2026-11-06_research_view_apply_order.md
@@ -45,9 +56,10 @@
 -- The research view works without step 2, only slower; nothing changes for the default feed
 -- either way. Neither file is in applied_versions.txt yet.
 --
--- Rollback: supabase/database/sql/rollback/2026-11-06_get_snippets_before.sql (run as is), then
--- optionally ALTER TABLE public.labels DROP COLUMN IF EXISTS is_research; (only after the function
--- rollback: the new body reads the column).
+-- Rollback: supabase/database/sql/rollback/2026-11-06_get_snippets_before.sql and
+-- 2026-11-06_create_apply_and_upvote_label_before.sql (run as is), then optionally
+-- ALTER TABLE public.labels DROP COLUMN IF EXISTS is_research; (only after both function
+-- rollbacks: the new bodies read the column).
 
 -- ACCESS EXCLUSIVE on labels is brief (catalog-only ADD COLUMN), but must not queue get_snippets
 -- (which reads labels for every page) behind a slow reader.
@@ -57,17 +69,85 @@ ALTER TABLE public.labels
     ADD COLUMN IF NOT EXISTS is_research boolean NOT NULL DEFAULT false;
 
 COMMENT ON COLUMN public.labels.is_research IS
-    'VER-462: research label; snippets carrying one are shown in the get_snippets research view (p_filter.view = ''research'') whatever their score.';
+    'VER-462: research label. A snippet an admin applied one to is shown in the get_snippets research view (p_filter.view = ''research'') whatever its score; only admins can apply one (create_apply_and_upvote_label). Set by id in migrations only.';
 
--- The three VER-430 labels (ids ed57c3a2-d010-48f0-bf0b-9c1c1ca8d3ec,
--- 7e9fa7e4-b11c-45a8-9dc7-1acf1b307056, ff87ca7f-ac26-4859-af93-a585c0acdaf8 on production).
--- Matched by text so the statement is also correct on a branch or a restored copy.
+-- The three VER-430 "Texas research 2026:" labels on production, by id only (see header item 1).
+-- On a branch or a restored copy without these rows this updates nothing; flag research labels
+-- there by id as well.
 UPDATE public.labels
 SET is_research = true
-WHERE text LIKE 'Texas research 2026:%'
+WHERE id IN ('ed57c3a2-d010-48f0-bf0b-9c1c1ca8d3ec',
+             '7e9fa7e4-b11c-45a8-9dc7-1acf1b307056',
+             'ff87ca7f-ac26-4859-af93-a585c0acdaf8')
   AND NOT is_research;
 
 RESET lock_timeout;
+
+CREATE OR REPLACE FUNCTION public.create_apply_and_upvote_label(snippet_id uuid, label_text text, p_language text DEFAULT 'english'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public, extensions, pg_temp
+AS $function$
+DECLARE
+    current_user_id UUID;
+    snippet_label_id UUID;
+    label_id UUID;
+BEGIN
+    -- Check if the user is authenticated
+    current_user_id := auth.uid();
+    IF current_user_id IS NULL THEN
+        RAISE EXCEPTION 'Only logged-in users can call this function';
+    END IF;
+
+    -- Ensure that the label exists
+    SELECT id INTO label_id
+    FROM public.labels
+    WHERE text = label_text OR text_spanish = label_text
+    LIMIT 1;
+
+    IF label_id IS NULL THEN
+        -- Create the label
+        INSERT INTO public.labels (created_by, is_ai_suggested, text, text_spanish)
+        VALUES (current_user_id, FALSE, label_text, label_text)
+        RETURNING id INTO label_id;
+    END IF;
+
+    -- Ensure that the label is applied to the snippet
+    SELECT id INTO snippet_label_id
+    FROM public.snippet_labels
+    WHERE snippet = snippet_id AND label = label_id;
+
+    IF snippet_label_id IS NULL THEN
+        -- 2026-11-06 (VER-462): a research label puts a snippet into the get_snippets research
+        -- view, so only admins may apply one. get_snippets also ignores research labels applied by
+        -- non-admins; this guard keeps such rows from being created in the first place. Upvoting
+        -- an already-applied research label (the row exists) is still open to every user.
+        IF EXISTS (SELECT 1 FROM public.labels WHERE id = label_id AND is_research)
+           AND NOT EXISTS (
+               SELECT 1
+               FROM public.user_roles ur
+               JOIN public.roles r ON r.id = ur.role
+               WHERE ur."user" = current_user_id AND r.name = 'admin'
+           ) THEN
+            RAISE EXCEPTION 'Only admins can apply a research label';
+        END IF;
+
+        -- Apply the label to the snippet
+        INSERT INTO public.snippet_labels (snippet, label, applied_by)
+        VALUES (snippet_id, label_id, current_user_id)
+        RETURNING id INTO snippet_label_id;
+    END IF;
+
+    -- Proceed to upvote the label
+    INSERT INTO public.label_upvotes (upvoted_by, snippet_label)
+    VALUES (current_user_id, snippet_label_id)
+    ON CONFLICT (upvoted_by, snippet_label) DO NOTHING;
+
+    -- Return the result of the get_snippet_labels function
+    RETURN get_snippet_labels(snippet_id, p_language);
+END;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
@@ -120,8 +200,9 @@ DECLARE
     -- caller asks, so the default feed is unchanged; see the visibility predicate in
     -- filtered_snippets for how the planner folds it away.
     research_view BOOLEAN := COALESCE(p_filter->>'view', '') = 'research';
-    -- Snippets carrying a research label (labels.is_research), pre-extracted like state_codes so
-    -- "s.id = ANY(uuid[])" is a snippets_pkey index condition. Only filled in the research view.
+    -- Snippets carrying a research label (labels.is_research) applied by an admin, pre-extracted
+    -- like state_codes so "s.id = ANY(uuid[])" is a snippets_pkey index condition. Only filled in
+    -- the research view.
     research_snippet_ids UUID[];
 BEGIN
     current_user_id := auth.uid();
@@ -161,12 +242,17 @@ BEGIN
     IF p_filter IS NOT NULL AND p_filter ? 'sources' AND jsonb_array_length(p_filter->'sources') > 0 THEN
         source_codes := ARRAY(SELECT jsonb_array_elements_text(p_filter->'sources'));
     END IF;
+    -- Trust boundary: any logged-in user can apply an existing label through
+    -- create_apply_and_upvote_label, so a research label only counts when an admin
+    -- (user_roles -> roles.name = 'admin', the same notion as user_is_admin above) applied it.
     IF research_view THEN
         research_snippet_ids := ARRAY(
             SELECT DISTINCT sl.snippet
             FROM snippet_labels sl
             JOIN labels l ON l.id = sl.label
-            WHERE l.is_research
+            JOIN public.user_roles ur ON ur."user" = sl.applied_by
+            JOIN public.roles r ON r.id = ur.role
+            WHERE l.is_research AND r.name = 'admin'
         );
     END IF;
 
@@ -268,8 +354,8 @@ BEGIN
         --    previous predicate, status = 'Processed' AND overall >= 95. The partial indexes
         --    (idx_snippets_visible_recorded_at / _cover / _state / _station) still match it, so
         --    the default feed keeps its plan.
-        --  * research_view = TRUE: a snippet is also visible when it carries a research label
-        --    (research_snippet_ids, pkey) or its Stage 3/4 harmful_rhetoric.score is >= 70
+        --  * research_view = TRUE: a snippet is also visible when an admin applied a research label
+        --    to it (research_snippet_ids, pkey) or its Stage 3/4 harmful_rhetoric.score is >= 70
         --    (idx_snippets_research_rhetoric). Every arm of the OR has an index, so the planner
         --    can BitmapOr them instead of scanning every Processed row. The score is compared
         --    without COALESCE so the comparison matches that index's predicate; a missing score

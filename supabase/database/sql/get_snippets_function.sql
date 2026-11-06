@@ -54,7 +54,8 @@ DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text,
 
 -- 2026-11-06 (VER-462, see supabase/migrations/20261106100000_research_view.sql):
 -- - opt-in research view: p_filter.view = 'research' also shows Processed snippets that carry a
---   research label (labels.is_research) or whose confidence_scores.harmful_rhetoric.score is >= 70.
+--   research label (labels.is_research) applied by an admin, or whose
+--   confidence_scores.harmful_rhetoric.score is >= 70.
 --   Without it the visibility predicate folds back to exactly status = 'Processed' AND overall >= 95.
 -- - Rollback: supabase/database/sql/rollback/2026-11-06_get_snippets_before.sql
 
@@ -109,8 +110,9 @@ DECLARE
     -- caller asks, so the default feed is unchanged; see the visibility predicate in
     -- filtered_snippets for how the planner folds it away.
     research_view BOOLEAN := COALESCE(p_filter->>'view', '') = 'research';
-    -- Snippets carrying a research label (labels.is_research), pre-extracted like state_codes so
-    -- "s.id = ANY(uuid[])" is a snippets_pkey index condition. Only filled in the research view.
+    -- Snippets carrying a research label (labels.is_research) applied by an admin, pre-extracted
+    -- like state_codes so "s.id = ANY(uuid[])" is a snippets_pkey index condition. Only filled in
+    -- the research view.
     research_snippet_ids UUID[];
 BEGIN
     current_user_id := auth.uid();
@@ -150,12 +152,17 @@ BEGIN
     IF p_filter IS NOT NULL AND p_filter ? 'sources' AND jsonb_array_length(p_filter->'sources') > 0 THEN
         source_codes := ARRAY(SELECT jsonb_array_elements_text(p_filter->'sources'));
     END IF;
+    -- Trust boundary: any logged-in user can apply an existing label through
+    -- create_apply_and_upvote_label, so a research label only counts when an admin
+    -- (user_roles -> roles.name = 'admin', the same notion as user_is_admin above) applied it.
     IF research_view THEN
         research_snippet_ids := ARRAY(
             SELECT DISTINCT sl.snippet
             FROM snippet_labels sl
             JOIN labels l ON l.id = sl.label
-            WHERE l.is_research
+            JOIN public.user_roles ur ON ur."user" = sl.applied_by
+            JOIN public.roles r ON r.id = ur.role
+            WHERE l.is_research AND r.name = 'admin'
         );
     END IF;
 
@@ -257,8 +264,8 @@ BEGIN
         --    previous predicate, status = 'Processed' AND overall >= 95. The partial indexes
         --    (idx_snippets_visible_recorded_at / _cover / _state / _station) still match it, so
         --    the default feed keeps its plan.
-        --  * research_view = TRUE: a snippet is also visible when it carries a research label
-        --    (research_snippet_ids, pkey) or its Stage 3/4 harmful_rhetoric.score is >= 70
+        --  * research_view = TRUE: a snippet is also visible when an admin applied a research label
+        --    to it (research_snippet_ids, pkey) or its Stage 3/4 harmful_rhetoric.score is >= 70
         --    (idx_snippets_research_rhetoric). Every arm of the OR has an index, so the planner
         --    can BitmapOr them instead of scanning every Processed row. The score is compared
         --    without COALESCE so the comparison matches that index's predicate; a missing score

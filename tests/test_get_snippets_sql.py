@@ -12,6 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATIONS_DIR = REPO_ROOT / "supabase" / "migrations"
 LOOSE_SQL = REPO_ROOT / "supabase" / "database" / "sql" / "get_snippets_function.sql"
+LOOSE_LABEL_SQL = REPO_ROOT / "supabase" / "database" / "sql" / "create_apply_and_upvote_label_function.sql"
 
 # The latest migration that defines get_snippets; the loose file must match it.
 GET_SNIPPETS_MIGRATION = MIGRATIONS_DIR / "20261106100000_research_view.sql"
@@ -28,15 +29,21 @@ VER_387_MIGRATIONS = [
 
 OLD_VISIBILITY = "WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95"
 RHETORIC_SCORE = "(s.confidence_scores->'harmful_rhetoric'->>'score')::INTEGER >= 70"
+RESEARCH_LABEL_IDS = (
+    "ed57c3a2-d010-48f0-bf0b-9c1c1ca8d3ec",
+    "7e9fa7e4-b11c-45a8-9dc7-1acf1b307056",
+    "ff87ca7f-ac26-4859-af93-a585c0acdaf8",
+)
+LABEL_START = "CREATE OR REPLACE FUNCTION public.create_apply_and_upvote_label("
 
 START = "CREATE OR REPLACE FUNCTION public.get_snippets("
 END = "$function$;"
 
 
-def function_definition(path):
+def function_definition(path, start_marker=START):
     """The CREATE OR REPLACE ... $function$; block, normalised to one stripped line per line."""
     sql = path.read_text()
-    start = sql.index(START)
+    start = sql.index(start_marker)
     end = sql.index(END, start) + len(END)
     return [line.strip() for line in sql[start:end].splitlines()]
 
@@ -132,7 +139,9 @@ def test_research_view_changes_nothing_but_the_visibility_predicate_and_its_inpu
         "SELECT DISTINCT sl.snippet",
         "FROM snippet_labels sl",
         "JOIN labels l ON l.id = sl.label",
-        "WHERE l.is_research",
+        'JOIN public.user_roles ur ON ur."user" = sl.applied_by',
+        "JOIN public.roles r ON r.id = ur.role",
+        "WHERE l.is_research AND r.name = 'admin'",
         ");",
         "END IF;",
         "WHERE (",
@@ -170,7 +179,6 @@ def test_research_view_migration_adds_and_seeds_is_research():
     sql = GET_SNIPPETS_MIGRATION.read_text()
     statements = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
     assert "ADD COLUMN IF NOT EXISTS is_research boolean NOT NULL DEFAULT false;" in statements
-    assert "WHERE text LIKE 'Texas research 2026:%'" in statements
     assert statements.index("SET lock_timeout = '3s';") < statements.index("ALTER TABLE public.labels")
     assert statements.index("ALTER TABLE public.labels") < statements.index(START)
     assert "NOTIFY pgrst, 'reload schema';" in statements
@@ -193,3 +201,50 @@ def test_research_view_migrations_are_not_marked_applied():
     applied = APPLIED_VERSIONS.read_text()
     for path in (GET_SNIPPETS_MIGRATION, RESEARCH_INDEX_MIGRATION):
         assert path.name.split("_", 1)[0] not in applied, f"{path.name} is not applied to production yet"
+
+
+def test_research_labels_are_seeded_by_id_never_by_text():
+    # Security review: any logged-in user can create a label with any text, so a text match must not grant
+    # research status. The seed names the three production ids and nothing else.
+    sql = GET_SNIPPETS_MIGRATION.read_text()
+    statements = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    update = statements[statements.index("UPDATE public.labels") : statements.index("RESET lock_timeout;")]
+    assert "SET is_research = true" in update
+    assert "WHERE id IN (" in update
+    for label_id in RESEARCH_LABEL_IDS:
+        assert f"'{label_id}'" in update
+    assert "LIKE" not in update.upper()
+    assert "text" not in update.replace("is_research", "")
+    assert statements.count("is_research = true") == 1, "is_research must only be set by the id-based seed"
+
+
+def test_research_view_counts_only_admin_applied_research_labels():
+    # Security review: any logged-in user can apply an existing label to any snippet, so the research view
+    # trusts a research label only when snippet_labels.applied_by is an admin.
+    definition = "\n".join(function_definition(GET_SNIPPETS_MIGRATION))
+    start = definition.index("research_snippet_ids := ARRAY(")
+    block = definition[start : definition.index("END IF;", start)]
+    assert 'JOIN public.user_roles ur ON ur."user" = sl.applied_by' in block
+    assert "JOIN public.roles r ON r.id = ur.role" in block
+    assert "WHERE l.is_research AND r.name = 'admin'" in block
+    # the only code that reads research labels is that admin-filtered array
+    code = [line for line in definition.splitlines() if not line.startswith("--")]
+    assert sum("is_research" in line for line in code) == 1
+
+
+def test_label_write_path_refuses_research_labels_for_non_admins():
+    definition = "\n".join(function_definition(GET_SNIPPETS_MIGRATION, LABEL_START))
+    guard = definition.index("RAISE EXCEPTION 'Only admins can apply a research label';")
+    insert = definition.index("INSERT INTO public.snippet_labels (snippet, label, applied_by)")
+    assert guard < insert, "the guard must run before the snippet_labels insert"
+    assert "IF EXISTS (SELECT 1 FROM public.labels WHERE id = label_id AND is_research)" in definition
+    assert 'WHERE ur."user" = current_user_id AND r.name = \'admin\'' in definition
+    # CREATE OR REPLACE drops settings it does not restate; keep the VER-372 pin
+    assert "SET search_path = public, extensions, pg_temp" in definition
+    assert "SECURITY DEFINER" in definition
+
+
+def test_label_write_path_loose_sql_matches_the_migration():
+    assert function_definition(GET_SNIPPETS_MIGRATION, LABEL_START) == function_definition(
+        LOOSE_LABEL_SQL, LABEL_START
+    ), f"{LOOSE_LABEL_SQL.name} and {GET_SNIPPETS_MIGRATION.name} define different create_apply_and_upvote_label bodies"
