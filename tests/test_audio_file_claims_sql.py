@@ -4,6 +4,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATION = REPO_ROOT / "supabase" / "migrations" / "20261106100000_audio_file_flow_run_claims.sql"
+INDEX_MIGRATION = REPO_ROOT / "supabase" / "migrations" / "20261106130000_audio_file_flow_run_claims_index.sql"
 LOOSE_SQL = REPO_ROOT / "supabase" / "database" / "sql" / "fetch_a_new_audio_file_and_reserve_it.sql"
 
 START = "CREATE OR REPLACE FUNCTION public.fetch_a_new_audio_file_and_reserve_it("
@@ -36,6 +37,14 @@ def test_sweep_marks_stuck_files_with_a_response_processed():
     sweep = sql[start : sql.index(END, start)]
     assert "SET status = 'Processed'" in sweep
     assert "AND EXISTS (SELECT 1 FROM public.stage_1_llm_responses r WHERE r.audio_file = a.id)" in sweep
+
+
+def test_release_filter_has_a_partial_index():
+    # Without it each release UPDATE seq-scans audio_files and the hook hits the 8 s statement timeout (VER-463)
+    sql = INDEX_MIGRATION.read_text()
+    assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_audio_files_processing_claimed_by_flow_run" in sql
+    assert "ON public.audio_files (claimed_by_flow_run)" in sql
+    assert "WHERE status = 'Processing';" in sql
 
 
 def test_old_zero_argument_reserve_is_dropped():
