@@ -30,6 +30,8 @@ Below are detailed heuristics for each disinformation category, including cultur
 **Description**:
 Disinformation that falsely claims election fraud or manipulation in cases where no credible evidence exists. Note: Claims about the 2024 Presidential Election outcome should be evaluated against the official results showing Donald Trump's victory with 312 electoral votes and approximately 77.2 million individual votes (49.9%).
 
+This category also covers content that misleads voters about how, when or whether they can vote, or that steers their vote with false or dehumanizing premises: wrong election dates, places or requirements; claims that an election will be cancelled or suspended; telling listeners not to vote by mail because ballots are destroyed; claims that noncitizens or "illegals" vote in meaningful numbers; and pulpit or host electioneering that tells listeners a vote for a party or candidate is a vote for the devil or against God, built on false or dehumanizing claims about that party or its voters.
+
 **Keywords/Phrases**:
 - **Spanish**:
   - "elección amañada" (rigged election)
@@ -39,6 +41,11 @@ Disinformation that falsely claims election fraud or manipulation in cases where
   - "manipulación de máquinas de votación" (voting machine manipulation)
   - "victoria robada de Harris" (Harris's stolen victory)
   - "fraude para ayudar a Harris" (fraud to help Harris)
+  - "no mande su voto por correo" / "las boletas por correo las trituran" / "nunca llegan a contarse" (don't send your vote by mail / mail ballots get shredded / they never get counted)
+  - "votan los ilegales" / "votos de no ciudadanos" / "votan los muertos" / "crear boletas" (illegals vote / noncitizen votes / the dead vote / create ballots)
+  - "van a cancelar las elecciones" / "no va a haber elecciones" / "suspender las elecciones" (they will cancel the elections / there won't be elections / suspend the elections)
+  - "puede votar por teléfono" / "las elecciones son el miércoles" (you can vote by phone / the election is on Wednesday: wrong procedures or dates)
+  - "votar por los demócratas es votar por el diablo" / "ningún cristiano puede votar por" / "usted será cómplice" (a vote for the Democrats is a vote for the devil / no Christian can vote for / you will be complicit)
 - **Arabic**:
   - "انتخابات مزورة" (rigged elections)
   - "تزوير الأصوات" (vote tampering)
@@ -47,16 +54,31 @@ Disinformation that falsely claims election fraud or manipulation in cases where
   - "تلاعب بآلات التصويت" (voting machine manipulation)
   - "فوز هاريس المسروق" (Harris's stolen victory)
   - "تزوير لمساعدة هاريس" (fraud to help Harris)
+  - "لا ترسل صوتك بالبريد" / "بطاقات الاقتراع البريدية تُمزق" (don't send your vote by mail / mail ballots are shredded)
+  - "غير المواطنين يصوتون" / "المهاجرون غير الشرعيين يصوتون" / "الموتى يصوتون" (noncitizens vote / illegal immigrants vote / the dead vote)
+  - "سيتم إلغاء الانتخابات" / "تأجيل الانتخابات" (the elections will be cancelled / the elections will be postponed)
+  - "يمكنك التصويت عبر الهاتف" / "الانتخابات يوم الأربعاء" (you can vote by phone / the election is on Wednesday)
+  - "التصويت لهم تصويت للشيطان" / "لا يمكن للمؤمن أن يصوت لهم" / "ستكون شريكاً في الجريمة" (a vote for them is a vote for the devil / no believer can vote for them / you will be an accomplice)
 
 **Heuristics**:
 - Claims of widespread voter fraud without evidence
 - False claims that Kamala Harris won the 2024 election
 - Unfounded allegations about voting systems being manipulated to favor Harris
+- Voter confusion: wrong election dates, polling places, hours, eligibility or ID requirements stated to listeners, or false voting methods (by phone, by text), even when the speaker hedges ("creo que", "si no me equivoco")
+- Claims that an upcoming election will be cancelled, suspended or postponed, or that votes will not be counted
+- Telling listeners not to vote by mail, or not to vote at all, because ballots are shredded, thrown away or never counted
+- Claims that noncitizens, "illegals" or the dead vote in numbers that change outcomes, or that a party wants immigration in order to harvest votes
+- Pulpit or host electioneering that frames a vote for a party or candidate as a vote for the devil, against God, or as complicity in murder, when it rests on false premises (e.g., "they castrate children", "they want to kill babies up to nine months") or demonizes the other side's voters
 - Note: Statements accurately reporting Trump's 2024 victory (312 electoral votes and winning the popular vote) should NOT be flagged as disinformation
+- Note: Do NOT flag ordinary endorsements, policy arguments, religious moral teaching that makes no false claims about a party or its voters, get-out-the-vote reminders with correct information, or accurate reporting on election rules, candidates and results
 
 **Examples**:
 - *Spanish*: "Harris ganó el voto popular por millones, pero Trump robó la elección" (FALSE claim to flag)
 - *Arabic*: "هاريس فازت بالتصويت الشعبي بالملايين ، لكن ترامب سرق الانتخابات" (FALSE claim to flag)
+- *Spanish*: "Si usted vota por los demócratas, está votando por el diablo, porque votan para que a los niños los castren." (pulpit electioneering on a false premise: flag)
+- *Arabic*: "إذا صوّتّ للديمقراطيين فأنت تصوّت للشيطان، لأنك تصوّت لإخصاء الأطفال." (pulpit electioneering on a false premise: flag)
+- *Spanish*: "No mande su voto por correo; adentro los trituran y la mitad nunca llega a contarse." (mail-ballot discouragement: flag)
+- *Arabic*: "لا ترسل صوتك بالبريد؛ في الداخل يمزقونها ونصفها لا يُحسب أبداً." (mail-ballot discouragement: flag)
 
 ---
 
@@ -530,11 +552,172 @@ Disinformation that misrepresents labor organizing efforts, union activities, or
 
 ---
 
+### **20. Women's Health and Reproductive Care**
+
+**Description**:
+
+Disinformation targeting women's health including reproductive care, hormonal health, cancer prevention/treatment, fertility, pregnancy, and menopause. This includes false claims about contraception, menstruation, gynecological conditions, and women-specific medical treatments. Distinct from Category 6 (Abortion and Reproductive Rights) which focuses on political/ethical framing; this category focuses on medical disinformation — false health claims about treatments, procedures, and conditions regardless of political orientation.
+
+**Keywords/Phrases**:
+
+- **Spanish**:
+  - "cura milagrosa" / "cura natural" (miracle cure / natural cure)
+  - "sin efectos secundarios" (without side effects)
+  - "sin quimio" / "sin radioterapia" (without chemo / without radiation)
+  - "tu médico no quiere que sepas" (your doctor doesn't want you to know)
+  - "Big Pharma oculta" / "la industria del cáncer" (Big Pharma hides / the cancer industry)
+  - "detox uterino" / "limpieza vaginal" / "desintoxicar el útero" (uterine detox / vaginal cleanse)
+  - "memoria uterina" (uterine memory — pseudoscientific concept)
+  - "equilibrar hormonas" / "fase lunar" / "ciclo hormonal natural" (balance hormones / lunar phase / natural hormonal cycle)
+  - "anticonceptivos dañan" / "píldora causa" / "DIU peligroso" (contraceptives harm / pill causes / IUD dangerous)
+  - "vacuna VPH infertilidad" / "vacuna experimental" (HPV vaccine infertility / experimental vaccine)
+  - "vitaminas milagro" / "enlace en bio" (miracle vitamins / link in bio)
+  - "me censuran" / "grupo de Telegram" / "video censurado" (I'm censored / Telegram group / censored video)
+  - "doctor dice" / "estudio confirma" / "científicamente probado" (doctor says / study confirms / scientifically proven — when unverifiable)
+- **Arabic**:
+  - "علاج طبيعي" (natural treatment)
+  - "بدون آثار جانبية" (without side effects)
+  - "شفاء بالأعشاب" (herbal cure)
+  - "الطب البديل يشفي" (alternative medicine cures)
+  - "شركات الأدوية تخفي" (pharmaceutical companies hide)
+  - "تنظيف الرحم" (uterine cleansing)
+  - "إزالة السموم" (detoxification)
+  - "موانع الحمل خطيرة" (contraceptives are dangerous)
+  - "لقاح فيروس الورم الحليمي يسبب العقم" (HPV vaccine causes infertility)
+  - "الهرمونات تسبب السرطان" (hormones cause cancer)
+  - "العلاج الكيماوي سم" (chemotherapy is poison)
+
+**Heuristics**:
+
+- Claims that natural substances (cúrcuma, jengibre, guanábana, sábila) can cure cancer or serious conditions without medical treatment
+- Assertions that doctors, "Big Pharma," or the "cancer industry" hide cures for profit
+- False equivalence that natural products are always safe while pharmaceuticals are inherently dangerous
+- Claims that contraceptives cause permanent brain damage, infertility, or irreversible hormonal disruption
+- Promotion of vaginal detoxes, uterine cleanses, or parasite protocols as cure-alls
+- Claims of being "silenced" or "censored" to build credibility before promoting products
+- Use of lab coats and medical terminology by unqualified individuals to appear credible
+- Promises of miracle cures without side effects
+- Migration to closed platforms (Telegram groups) to avoid content moderation
+- Commercial incentives (link in bio, discount codes) embedded in health claims
+
+**Examples**:
+
+- *Spanish*: "Con cúrcuma y jengibre mi prima curó el cáncer de mama sin quimioterapia. Los doctores no quieren que sepas esto porque pierden dinero."
+- *Arabic*: "استخدمت أختي الحلبة والعسل وشُفيت من تكيس المبايض. الأطباء يخفون هذه العلاجات الطبيعية."
+
+---
+
+### **21. Children's Health and Pediatric Care**
+
+**Description**:
+
+Disinformation targeting children's health including vaccines, fever management, antibiotic use, developmental conditions (autism, ADHD), nutrition, and general pediatric care. This category is particularly dangerous because it can lead parents to make decisions that directly harm their children's health. Distinct from Category 3 (COVID-19 and Vaccination) which focuses specifically on COVID-19; this category encompasses all childhood vaccines and broader pediatric health disinformation.
+
+**Keywords/Phrases**:
+
+- **Spanish**:
+  - "vacuna experimental" / "vacuna causa autismo" / "chips en vacunas" / "metales pesados" (experimental vaccine / vaccine causes autism / chips in vaccines / heavy metals)
+  - "inmunidad natural mejor" / "calendario vacunas agresivo" (natural immunity better / aggressive vaccine schedule)
+  - "CDS" / "MMS" / "dióxido de cloro" / "protocolo de desparasitación" (chlorine dioxide / deworming protocol)
+  - "quelación natural" / "sacar metales pesados" / "desintoxicar niños" (natural chelation / remove heavy metals / detox children)
+  - "fórmula tóxica" / "leche casera mejor" / "receta de fórmula" (formula is toxic / homemade milk better / formula recipe)
+  - "pediatra pagado" / "médicos comprados" / "farmacéuticas controlan" (pediatrician paid off / doctors bought / pharma controls)
+  - "aceite esencial para autismo" / "Frankincense autismo" (essential oil for autism)
+  - "TDAH no existe" / "TDAH invento" / "medicamentos TDAH drogas" (ADHD doesn't exist / ADHD invention / ADHD meds are drugs)
+  - "jarabes naturales curan" / "antibióticos destruyen" (natural syrups cure / antibiotics destroy)
+  - "video censurado vacunas" / "lo que no te dicen de las vacunas" (censored vaccine video / what they don't tell you about vaccines)
+- **Arabic**:
+  - "لقاح تجريبي" (experimental vaccine)
+  - "اللقاحات تسبب التوحد" (vaccines cause autism)
+  - "شرائح في اللقاحات" (chips in vaccines)
+  - "معادن ثقيلة" (heavy metals)
+  - "المناعة الطبيعية أفضل" (natural immunity is better)
+  - "ثاني أكسيد الكلور" (chlorine dioxide)
+  - "بروتوكول إزالة الطفيليات" (deworming protocol)
+  - "إزالة المعادن الثقيلة" (removing heavy metals)
+  - "تنقية طبيعية" (natural purification)
+  - "الحليب الصناعي سام" (formula is toxic)
+  - "وصفة حليب منزلية" (homemade milk recipe)
+  - "الطبيب مدفوع من شركات الأدوية" (doctor paid by pharmaceutical companies)
+  - "الأدوية كيماويات ضارة" (medications are harmful chemicals)
+  - "علاج التوحد الطبيعي" (natural autism treatment)
+  - "فرط الحركة لا يوجد" (ADHD doesn't exist)
+
+**Heuristics**:
+
+- Claims that childhood vaccines cause autism, infertility, contain microchips, or alter DNA
+- Assertions that natural infection is always preferable to vaccination
+- Conspiracy claims that pediatricians are financially motivated to vaccinate/prescribe
+- Promotion of dangerous "treatments" for autism including bleach (CDS/MMS), chelation, restrictive diets
+- Claims that common medications (acetaminophen, ibuprofen) are poison
+- Promotion of essential oils, homeopathy, or herbs as replacements for medical treatment
+- Claims that vaccines cause a hidden wave of harm being covered up
+- Promotion of homemade infant formula as superior to commercial formula
+- Claims that ADHD doesn't exist or is an invention to sell medications
+- Use of "censored video" narrative to build credibility for anti-vaccine content
+
+**Examples**:
+
+- *Spanish*: "No le pongas esa vacuna nueva a tu bebé. Nirsevimab es experimental y nadie sabe los efectos a largo plazo. Big Pharma solo quiere ganar dinero con nuestros hijos."
+- *Arabic*: "لا تعطي طفلك هذا اللقاح الجديد. إنه تجريبي ولا أحد يعرف آثاره على المدى الطويل."
+
+---
+
+### **22. Gender-Based Harmful Rhetoric and Misogyny**
+
+**Description**:
+
+Rhetoric by the station's own speakers that demeans women, prescribes their subordination, restricts their rights or safety, or minimizes violence against them. Unlike most categories, this one applies even when there is no single checkable false fact: a sermon telling wives that citing their rights is rebellion against God, or a host saying a wife's "no" does not mean no, is flagged for the rhetoric itself. False health claims about women, contraception and pregnancy belong to Category 20 (Women's Health and Reproductive Care) and political framing of abortion to Category 6 (Abortion and Reproductive Rights); add Category 22 alongside them when the claim also demeans women or steers them away from care. Content about transgender and LGBTQ+ people belongs to Category 5.
+
+**Keywords/Phrases**:
+
+- **Spanish**:
+  - "la esposa debe someterse en todo" / "sujetas a sus maridos" / "gánatelo sin hablar" (the wife must submit in everything / subject to their husbands / win him without speaking)
+  - "conozco mis derechos... es un necio" / "los creyentes no tenemos derechos" / "está en rebelión contra Dios" (I know my rights... is a fool / believers have no rights / she is in rebellion against God)
+  - "la mujer no puede enseñar ni dirigir al hombre" / "calladas en la iglesia" / "tropiezo" (a woman cannot teach or lead a man / silent in church / stumbling block)
+  - "las mujeres son las que causan problemas" / "por culpa de una mujer" / "rasgo femenino" (women are the ones who cause problems / because of a woman / feminine trait)
+  - "cuando ella dice no, no significa no" / "el deber conyugal" / "la violación es una forma de promiscuidad" / "ella se lo buscó" (when she says no it does not mean no / conjugal duty / rape is a form of promiscuity / she was asking for it)
+  - "el feminismo es satánico" / "el feminismo es una religión falsa" / "la ideología más mortífera" / "brujería" (feminism is satanic / feminism is a false religion / the deadliest ideology / witchcraft)
+  - "el empoderamiento de la mujer nos engañó" / "le quieren quitar la autoridad al varón" (women's empowerment deceived us / they want to take authority away from the man)
+  - "la mamá tiene que estar endemoniada" / "abortan por su figura o su carrera" (the mother must be possessed / they abort for their figure or career)
+  - "su nombre lo dice, es mala" / "nunca ha tenido hijos, por eso" (her name says it, she is bad / she has never had children, that is why)
+- **Arabic**:
+  - "يجب على الزوجة أن تخضع لزوجها في كل شيء" (the wife must submit to her husband in everything)
+  - "المرأة التي تطالب بحقوقها متمردة على الله" (a woman who demands her rights is rebelling against God)
+  - "لا يجوز للمرأة أن تعلّم الرجال أو تقودهم" (a woman may not teach or lead men)
+  - "النساء سبب المشاكل" / "بسبب امرأة" (women are the cause of problems / because of a woman)
+  - "عندما تقول الزوجة لا فهي لا تعني لا" / "حق الزوج في الفراش" (when the wife says no she does not mean no / the husband's right in bed)
+  - "هي التي جلبت ذلك لنفسها" (she brought it on herself)
+  - "النسوية شيطانية" / "النسوية مؤامرة" / "النسوية أخطر أيديولوجيا" (feminism is satanic / feminism is a conspiracy / feminism is the most dangerous ideology)
+  - "تمكين المرأة خدعة" (women's empowerment is a deception)
+  - "الأم التي تجهض ممسوسة" (a mother who aborts is possessed)
+
+**Heuristics**:
+
+- Prescribing women's subordination, silence or obedience as a requirement for listeners today, especially with threats (God will punish her, she will lose authority over her children) or by calling women who claim rights fools or rebels
+- Sweeping statements that women by nature cause disorder, are vain, dissatisfied or dangerous, or that men's crimes and sins are women's fault
+- Minimizing or excusing violence against women: "no" does not mean no in marriage, rape framed as promiscuity, a sexual-assault survivor dismissed as a liar without basis, women told to endure abuse
+- Framing feminism or women's rights as satanic, occult, communist, a deception that strips men of authority, or a plot deadlier than genocides
+- Gendered attacks on women in public life that target their bodies, sexuality, motherhood or name rather than their record, or that blame women as a group for social ills
+- Calling women who have abortions possessed or vain, and women's health claims that steer women away from care (also tag Category 20 or 6)
+- Do NOT flag: ordinary religious teaching on marriage or ordination that does not demean women or restrict their rights or safety; neutral news about women officials; emotional-support or suicide-prevention segments; song lyrics; sin lists addressed to men and women alike; pro-life advocacy or prayer with no false claim and no statement about women's roles; segments that quote such rhetoric in order to criticize it
+
+**Examples**:
+
+- *Spanish*: "Las mujeres dicen 'conozco mis derechos', pero el que habla de derechos es un necio. La esposa debe someterse a su marido en todo, y la que no, está en rebelión contra Dios."
+- *Arabic*: "تقول النساء 'أعرف حقوقي'، لكن من يتحدث عن الحقوق أحمق. يجب على الزوجة أن تخضع لزوجها في كل شيء، والتي لا تفعل فهي متمردة على الله."
+- *Spanish*: "Cuando la esposa dice que no, no significa no; ella solo quiere ser deseada y es el esposo quien debe tomar la iniciativa."
+- *Arabic*: "عندما تقول الزوجة لا، فهي لا تعني لا؛ إنها تريد فقط أن تكون مرغوبة، والزوج هو من يجب أن يبادر."
+
+---
+
 ## Additional Instructions
 
 - **Maximize Reliability**: Carefully apply the heuristics to ensure accurate identification of potential disinformation.
 - **Cultural Sensitivity**: Be mindful of cultural nuances and avoid stereotypes or generalizations.
 - **Efficiency**: Focus on relevant content that may contain disinformation according to the heuristics provided.
+- **Speaker Stance**: Flag what the station's own speakers assert: hosts, preachers, guests, and callers whose claims the host does not challenge. A clip, quote or claim that is played or repeated in order to criticize, fact-check, debunk or neutrally report on it is NOT the station's claim; do not flag it as disinformation. Example: a news program plays a recording of someone alleging election fraud, then explains that the allegation is false; that is a fact-check, not election disinformation. If the station speaker endorses the quoted claim ("tiene toda la razón", "eso es exactamente así", "معه حق تماماً"), it becomes the station's claim.
+- **Harmful Rhetoric Without a Checkable Claim**: Category 22 (Gender-Based Harmful Rhetoric and Misogyny) and pulpit or host electioneering under Category 1 (a vote for a party is a vote for the devil, on false or dehumanizing premises) are flagged for the rhetoric itself, even when no single fact can be checked. In the explanation, quote the rhetoric and say what it does (demeans women, restricts their rights or safety, minimizes violence, demonizes voters); do not describe opinion or doctrine as "false".
 
 ---
 
@@ -561,21 +744,32 @@ Found related knowledge entries:
 Before finalizing your output, complete this validation checklist:
 
 1. **False Claims Verification**
-   - For each flagged snippet:
+   - For each flagged snippet (except Category 22 rhetoric and Category 1 pulpit electioneering, which item 2 covers):
      * Have I identified specific, verifiably false claims?
      * Can I articulate exactly why these claims are false?
      * Would a reasonable person agree these claims are demonstrably false?
    - If any answer is "no," reconsider flagging the snippet.
 
-2. **Context Review**
+2. **Harmful Rhetoric (Category 22 and Category 1 Electioneering)**
+   - Is the rhetoric spoken by the station's own speaker, not quoted in order to criticize it?
+   - Does it demean women, prescribe their subordination, restrict their rights or safety, or minimize violence against them; or does it tell listeners that a vote for a party is a vote for the devil or against God on false or dehumanizing premises?
+   - Is it more than ordinary religious teaching, neutral news, emotional support, song lyrics or a get-out-the-vote reminder?
+   - If every answer is "yes," flag it even though it has no checkable false claim.
+
+3. **Speaker Stance**
+   - Is each flagged snippet the station speaker's own claim, rather than a clip or quote played in order to criticize, fact-check, debunk or report on it?
+   - If not, do not flag it.
+
+4. **Context Review**
    - Have I captured sufficient context in the flagged text excerpt?
    - Does the surrounding context change the interpretation of the flagged content?
 
-3. **Final Verification**
+5. **Final Verification**
    Answer each with "yes" before proceeding:
-   - [ ] Each flagged snippet contains demonstrably false claims
+   - [ ] Each flagged snippet contains demonstrably false claims, or Category 22 / Category 1 electioneering rhetoric that meets item 2
+   - [ ] Each flagged snippet is the station speaker's own claim, not a quoted claim being criticized or debunked
    - [ ] Text excerpts accurately represent the flagged content
-   - [ ] Explanations clearly identify specific false claims
+   - [ ] Explanations clearly identify specific false claims (for rhetoric: quote it and state the harm)
    - [ ] I have distinguished between controversial content and actual disinformation
    - [ ] My analysis would be defensible to fact-checkers
 
