@@ -41,7 +41,7 @@ def test_sweep_marks_stuck_files_with_a_response_processed():
 
 def test_release_filter_has_a_partial_index():
     # Without it each release UPDATE seq-scans audio_files and the hook hits the 8 s statement timeout (VER-463)
-    sql = INDEX_MIGRATION.read_text()
+    sql = "\n".join(line for line in INDEX_MIGRATION.read_text().splitlines() if not line.lstrip().startswith("--"))
     assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_audio_files_processing_claimed_by_flow_run" in sql
     assert "ON public.audio_files (claimed_by_flow_run)" in sql
     assert "WHERE status = 'Processing';" in sql
