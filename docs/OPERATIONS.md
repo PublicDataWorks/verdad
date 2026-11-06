@@ -519,8 +519,11 @@ refuses the production project unless `--allow-production` is passed.
   the same from `sweep_stuck_audio_files` (hourly at :35, migration `20261103120000`, VER-452): `Processing` rows
   stuck 2 h to 7 days, with no `stage_1_llm_responses` row, go back to `New`; older ones are left for a backlog
   decision. Each requeue counts in `audio_files.retry_attempts` (shared with the error sweep); at 3 the row goes to
-  `Error` ("Stage 1 run died 3 times in Processing"), so a file that kills its run cannot loop. Queue depth for
-  watching the Stage 1 fleet:
+  `Error` ("Stage 1 run died 3 times in Processing"), so a file that kills its run cannot loop. A cancelled or
+  crashed Stage 1 loop run frees its own files first (VER-461, migration `20261106100000`): its hook calls
+  `release_flow_run_audio_files` for rows whose `claimed_by_flow_run` is the run; rows with a Stage 1 response go
+  to `Processed`, the rest to `New`, and only a crash counts toward `retry_attempts`. The sweep still covers runs
+  whose serve process died with them. Queue depth for watching the Stage 1 fleet:
 
   ```sql
   SELECT status, count(*), min(recorded_at), max(recorded_at) FROM public.audio_files

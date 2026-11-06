@@ -36,6 +36,21 @@ class TestSupabaseClient:
         mock_supabase.rpc.assert_called_once_with("fetch_a_new_audio_file_and_reserve_it")
         assert response == expected_response
 
+    def test_get_a_new_audio_file_and_reserve_it_stamps_the_flow_run(self, supabase_client, mock_supabase):
+        supabase_client.get_a_new_audio_file_and_reserve_it("run-1")
+
+        mock_supabase.rpc.assert_called_once_with("fetch_a_new_audio_file_and_reserve_it", {"p_flow_run_id": "run-1"})
+
+    def test_release_flow_run_audio_files(self, supabase_client, mock_supabase):
+        mock_supabase.rpc.return_value.execute.return_value.data = {"processed": 1, "requeued": 2, "errored": 0}
+
+        response = supabase_client.release_flow_run_audio_files("run-1", count_attempt=True)
+
+        mock_supabase.rpc.assert_called_once_with(
+            "release_flow_run_audio_files", {"p_flow_run_id": "run-1", "p_count_attempt": True}
+        )
+        assert response == {"processed": 1, "requeued": 2, "errored": 0}
+
     def test_get_a_new_stage_1_llm_response_and_reserve_it(self, supabase_client, mock_supabase):
         """Test fetching and reserving a new stage 1 LLM response"""
         expected_response = {"id": 1, "status": "New"}
