@@ -1,3 +1,4 @@
+import copy
 import json
 from datetime import datetime, timezone
 
@@ -5,7 +6,7 @@ from processing_pipeline.model_config import stage4_reviewer_model
 from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
 from processing_pipeline.kb_sources import parse_iso_date
-from processing_pipeline.stage_3.models import apply_evidence_caps, latest_claim_event_date
+from processing_pipeline.stage_3.models import apply_evidence_caps, apply_rhetoric_gate, latest_claim_event_date
 from processing_pipeline.stage_4.citation_check import check_stage_4_citations
 from processing_pipeline.stage_4.evidence import combine_evidence, stage_4_evidence
 from processing_pipeline.stage_4.executor import Stage4Executor
@@ -133,11 +134,12 @@ def merge_grounding_metadata(
     evidence_gate,
     citation_check=None,
     stage_4_verification_evidence=None,
+    rhetoric_gate=None,
 ) -> str:
     """Combine the Stage 4 research record (JSON string or None) with the Stage 3 search record and the checks.
 
-    The gate is stored only when it applied; the citation check always, so the invented-citation rate is measurable;
-    the Stage 4 evidence whenever the researcher wrote its block.
+    The evidence and rhetoric gates are stored only when they applied; the citation check always, so the
+    invented-citation rate is measurable; the Stage 4 evidence whenever the researcher wrote its block.
     """
     merged = json.loads(stage_4_grounding_metadata) if stage_4_grounding_metadata else {}
     if stage_3_verification_evidence:
@@ -148,7 +150,29 @@ def merge_grounding_metadata(
         merged["evidence_gate"] = evidence_gate
     if citation_check is not None:
         merged["stage_4_citation_check"] = citation_check
+    if rhetoric_gate and rhetoric_gate.get("applied"):
+        merged["rhetoric_gate"] = rhetoric_gate
     return json.dumps(merged)
+
+
+def carry_over_harmful_rhetoric(response: dict, previous_analysis: dict | None) -> dict:
+    """Copy the Stage 3 ``confidence_scores.harmful_rhetoric`` into the reviewer's output when it has none.
+
+    Stage 4 replaces ``confidence_scores`` wholesale and the reviewer prompt does not ask for the field, so without
+    this a review would erase the score. A block the reviewer did write is kept as it is. Returns ``response``.
+    """
+    scores = response.get("confidence_scores")
+    if not isinstance(scores, dict) or scores.get("harmful_rhetoric") is not None:
+        return response
+    previous_scores = (previous_analysis or {}).get("confidence_scores")
+    if isinstance(previous_scores, str):
+        try:
+            previous_scores = json.loads(previous_scores)
+        except ValueError:
+            previous_scores = None
+    if isinstance(previous_scores, dict) and isinstance(previous_scores.get("harmful_rhetoric"), dict):
+        scores["harmful_rhetoric"] = copy.deepcopy(previous_scores["harmful_rhetoric"])
+    return response
 
 
 @optional_task(log_prints=True)
@@ -215,8 +239,20 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         )
         if citation_check["applied"]:
             print(f"Citation check applied: {citation_check['note']}")
+        # Harmful-rhetoric score (VER-462): the reviewer prompt does not ask for it, so keep Stage 3's when the
+        # reviewer left it out, then hold whichever block survives to the same grounding rules as Stage 3.
+        response = carry_over_harmful_rhetoric(response, previous_analysis)
+        response = apply_rhetoric_gate(response, prepared["transcription"])
+        rhetoric_gate = response.pop("rhetoric_gate")
+        if rhetoric_gate.get("applied"):
+            print(f"Rhetoric gate dropped harmful_rhetoric: {'; '.join(rhetoric_gate['reasons'])}")
         grounding_metadata = merge_grounding_metadata(
-            grounding_metadata, stage_3_evidence, evidence_gate, citation_check, stage_4_verification_evidence
+            grounding_metadata,
+            stage_3_evidence,
+            evidence_gate,
+            citation_check,
+            stage_4_verification_evidence,
+            rhetoric_gate=rhetoric_gate,
         )
 
         print("Review completed. Updating the snippet in Supabase")

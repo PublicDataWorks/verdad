@@ -449,6 +449,59 @@ class TestStage3:
         mock_gemini_client.files.upload.assert_called_once_with(file="test.mp3")
         mock_gemini_client.files.delete.assert_called_once_with(name="files/test-audio")
 
+    def test_stage_3_executor_applies_the_rhetoric_gate_ver_462(self, mock_gemini_client):
+        """An ungrounded harmful_rhetoric block is dropped and the reason lands in grounding_metadata"""
+        restructured = {
+            "is_convertible": True,
+            "transcription": "La mujer debe obedecer a su marido en todo.",
+            "disinformation_categories": [{"english": "Gender-Based Harmful Rhetoric and Misogyny", "spanish": ""}],
+            "confidence_scores": {
+                "overall": 30,
+                "verification_status": "insufficient_evidence",
+                "categories": [],
+                "harmful_rhetoric": {"score": 90, "kind": "gender", "quote": "las mujeres no deben votar", "harm": {}},
+            },
+        }
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            model_response('{"test": "response"}'),
+            Mock(parsed=restructured),
+        ]
+
+        result = self._run_executor(mock_gemini_client)
+
+        assert result["response"]["confidence_scores"]["harmful_rhetoric"] is None
+        assert "rhetoric_gate" not in result["response"]
+        gate = json.loads(result["grounding_metadata"])["rhetoric_gate"]
+        assert gate["applied"] is True
+        assert gate["reasons"] == ["harmful_rhetoric.quote does not occur in the snippet transcription"]
+        assert gate["dropped"]["score"] == 90
+
+    def test_stage_3_executor_keeps_a_grounded_rhetoric_score_above_the_evidence_cap(self, mock_gemini_client):
+        restructured = {
+            "is_convertible": True,
+            "transcription": "La mujer debe obedecer a su marido en todo.",
+            "disinformation_categories": [{"english": "Gender-Based Harmful Rhetoric and Misogyny", "spanish": ""}],
+            "confidence_scores": {
+                "overall": 80,
+                "verification_status": "insufficient_evidence",
+                "categories": [],
+                "harmful_rhetoric": {"score": 88, "kind": "gender", "quote": "La mujer debe obedecer", "harm": {}},
+            },
+        }
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            model_response('{"test": "response"}'),
+            Mock(parsed=restructured),
+        ]
+
+        result = self._run_executor(mock_gemini_client)
+
+        scores = result["response"]["confidence_scores"]
+        assert scores["overall"] == 40
+        assert scores["harmful_rhetoric"]["score"] == 88
+        grounding_metadata = json.loads(result["grounding_metadata"])
+        assert grounding_metadata["evidence_gate"]["applied"] is True
+        assert "rhetoric_gate" not in grounding_metadata
+
     def test_stage_3_executor_thinking_and_restructure_model_on_gemini_3(self, mock_gemini_client, monkeypatch):
         monkeypatch.setenv("STAGE3_RESTRUCTURE_MODEL", "gemini-3.5-flash-lite")
         analysis_response = model_response('{"test": "response"}')
