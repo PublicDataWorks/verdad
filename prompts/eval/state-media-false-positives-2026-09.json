@@ -1,0 +1,29 @@
+{
+  "description": "Sputnik Mundo (SPMN, state_controlled) snippets disliked or commented by analysts and scored 95-100, incl. 8fc973ef (Feedback #5: real Colombian earthquake + Rubio labelled Contenido Fabricado). Reported = expected false positives that the credibility gate should cap. Control = the non-state-media true positives from fabricated-content-false-positives-2026-09.json, reused until a dedicated control set is drawn (VER-360).",
+  "reported": [
+    "72c497dd-e411-440e-b4cb-98d198a3be55",
+    "8fc973ef-5884-42b6-bfe4-0bca241abae0",
+    "0939364d-a08d-4756-8614-49945e703fd4",
+    "2bebf1e4-c54d-4508-991e-e2a841b10529",
+    "d5cd6206-65d9-4076-b3e9-f91a8385393b",
+    "12bbf2ac-a157-4870-883d-75f7588468d1",
+    "16b620d8-0a5c-4487-8c84-6f4d9bc1fc64",
+    "a91da8a4-4273-4329-9022-df094e611bc1",
+    "1f38bcb2-5834-4594-ae45-a9d8a2a52ec4",
+    "32a9c35c-6f9f-4b60-ac33-b5505dabd409"
+  ],
+  "control": [
+    "e1cca2ee-8522-4b93-b18b-efa173d88c77",
+    "ed8e2e7e-9bb4-4cbd-954a-520e04a5340a",
+    "3bf8fe72-4652-4960-a79b-d5e217abac32",
+    "7d18be46-4491-41d7-b953-d8b131fca831",
+    "f4bbd6a5-0b4a-4716-8b7e-787b9b53d78f",
+    "e2f22586-dec7-435b-86dc-98fb55de09db",
+    "f3759ada-778a-4815-a0b5-f5c875cda2bf",
+    "1a8beccc-b191-48e4-99be-03f538ba5be1",
+    "59f4704f-9000-4589-9a53-9c5274308bc6",
+    "96038f67-9f5b-450a-ba81-2e2ee7cabc8b",
+    "f61dce35-92f0-4fb1-a271-fffa350a89dd",
+    "4303ae8b-7ee1-4795-82d7-610fae7c6660"
+  ]
+}

@@ -58,7 +58,9 @@ def test_jina_search_asks_for_no_content_and_returns_the_searxng_shape(monkeypat
         "url": "https://news.un.org/a",
         "content": "d" * web_tools.JINA_CONTENT_CHARS,
         "publishedDate": "2026-09-24",
+        **web_tools._source_tier_fields("https://news.un.org/a"),
     }
+    assert {"source_tier", "source_category"} <= second.keys()
     assert second["content"] == "" and second["publishedDate"] is None
 
 

@@ -103,6 +103,8 @@ class TestStage4:
             "radio_station_code": "TEST-FM",
             "radio_station_name": "Test Station",
             "time_zone": "UTC",
+            # VER-360: the station's provenance, shown to the reviewer; TEST-FM is not in source_provenance
+            "source_provenance": {"station_code": "TEST-FM", "provenance": "unknown", "owner": "", "country": ""},
         }
         assert set(prepared["analysis_json"]) == {
             "translation",
@@ -361,20 +363,30 @@ class TestStage4:
     # --- VER-396: the gate also sees what the Stage 4 researcher retrieved ------
 
     @staticmethod
-    def _stage_4_report(cited_url, fetched_url, prose="findings"):
-        """The researcher's report with its evidence block; the tool record holds one page read."""
-        result = {"url": cited_url, "source_type": "tier1_wire_service", "relevance_to_claim": "contradicts_claim"}
-        block = json.dumps({"results": [result]})
+    def _stage_4_report(cited_url, fetched_url, prose="findings", corroborating_urls=()):
+        """The researcher's report with its evidence block; the tool record holds one page read.
+
+        ``corroborating_urls`` are further contradicting articles, each also read by a tool, so the VER-360
+        credibility gate (two independent tier 1-2 sources) can be satisfied alongside the evidence gate.
+        """
+        results = [
+            {"url": url, "source_type": "tier1_wire_service", "relevance_to_claim": "contradicts_claim"}
+            for url in (cited_url, *corroborating_urls)
+        ]
+        block = json.dumps({"results": results})
+        fetched = [fetched_url, *corroborating_urls]
         return json.dumps(
             {
                 "web_research": f"{prose}\n```evidence\n{block}\n```",
                 "stage_4_tool_record": {
                     "searches": [],
-                    "fetches": [{"url": fetched_url, "status": "ok"}],
-                    "observed_urls": [url_key(fetched_url)],
+                    "fetches": [{"url": url, "status": "ok"} for url in fetched],
+                    "observed_urls": [url_key(url) for url in fetched],
                 },
             }
         )
+
+    BBC_MUNDO_URL = "https://www.bbc.com/mundo/articles/government-still-in-place-2026-09-20"
 
     @staticmethod
     def _falsity_review(review_result):
@@ -396,7 +408,12 @@ class TestStage4:
         url = "https://www.reuters.com/world/middle-east/government-still-in-place-2026-09-20/"
         with patch(
             "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
-            new=AsyncMock(return_value=(self._falsity_review(review_result), self._stage_4_report(url, url))),
+            new=AsyncMock(
+                return_value=(
+                    self._falsity_review(review_result),
+                    self._stage_4_report(url, url, corroborating_urls=[self.BBC_MUNDO_URL]),
+                )
+            ),
         ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
             self._process(mock_supabase_client, self._downvoted_snippet(sample_snippet))
 
@@ -416,7 +433,12 @@ class TestStage4:
         """VER-405: the evidence block holds an observed contradicting article; the prose names one unseen URL."""
         url = "https://www.reuters.com/world/middle-east/government-still-in-place-2026-09-20/"
         stray = "https://apnews.com/article/government-still-in-place-0f1e2d3c"
-        report = self._stage_4_report(url, url, prose=f"Reuters and AP ({stray}) both report the government in place.")
+        report = self._stage_4_report(
+            url,
+            url,
+            prose=f"Reuters and AP ({stray}) both report the government in place.",
+            corroborating_urls=[self.BBC_MUNDO_URL],
+        )
         with patch(
             "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
             new=AsyncMock(return_value=(self._falsity_review(review_result), report)),
@@ -429,6 +451,25 @@ class TestStage4:
         check = json.loads(kwargs["grounding_metadata"])["stage_4_citation_check"]
         assert check["applied"] is False and check["evidence_backed"] is True
         assert check["web_research_unobserved"] == [stray]
+
+    def test_stage_4_single_retrieved_source_is_capped_by_the_credibility_gate(
+        self, mock_supabase_client, sample_snippet, review_result
+    ):
+        """VER-360: one observed tier-1 article clears the evidence gate but is not independent corroboration."""
+        url = "https://www.reuters.com/world/middle-east/government-still-in-place-2026-09-20/"
+        with patch(
+            "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+            new=AsyncMock(return_value=(self._falsity_review(review_result), self._stage_4_report(url, url))),
+        ), patch("processing_pipeline.stage_4.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, self._downvoted_snippet(sample_snippet))
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["overall"] == 40
+        grounding_metadata = json.loads(kwargs["grounding_metadata"])
+        assert "evidence_gate" not in grounding_metadata
+        gate = grounding_metadata["credibility_gate"]
+        assert gate["capped"] is True
+        assert [t["domain"] for t in gate["evidence_tiers"]] == ["reuters.com"]
 
     def test_stage_4_source_no_tool_returned_keeps_the_cap(self, mock_supabase_client, sample_snippet, review_result):
         cited = "https://www.reuters.com/world/middle-east/government-still-in-place-2026-09-20/"

@@ -5,6 +5,7 @@ from processing_pipeline.model_config import stage4_reviewer_model
 from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
 from processing_pipeline.kb_sources import parse_iso_date
+from processing_pipeline.source_credibility import apply_credibility_gate, get_source_credibility
 from processing_pipeline.stage_3.models import apply_evidence_caps, latest_claim_event_date
 from processing_pipeline.stage_4.citation_check import check_stage_4_citations
 from processing_pipeline.stage_4.evidence import combine_evidence, stage_4_evidence
@@ -65,6 +66,7 @@ def prepare_snippet_for_review(supabase_client, snippet_json):
         "location_state": audio_file.get("location_state"),
         "radio_station_code": audio_file.get("radio_station_code"),
         "radio_station_name": audio_file.get("radio_station_name"),
+        "source_provenance": get_source_credibility().provenance_for(audio_file.get("radio_station_code")).as_dict(),
         "time_zone": "UTC",
     }
 
@@ -133,11 +135,13 @@ def merge_grounding_metadata(
     evidence_gate,
     citation_check=None,
     stage_4_verification_evidence=None,
+    credibility_gate=None,
 ) -> str:
     """Combine the Stage 4 research record (JSON string or None) with the Stage 3 search record and the checks.
 
-    The gate is stored only when it applied; the citation check always, so the invented-citation rate is measurable;
-    the Stage 4 evidence whenever the researcher wrote its block.
+    The evidence gate is stored only when it applied; the citation check and the credibility gate always, so the
+    invented-citation rate and the corroboration outcome are measurable; the Stage 4 evidence whenever the
+    researcher wrote its block.
     """
     merged = json.loads(stage_4_grounding_metadata) if stage_4_grounding_metadata else {}
     if stage_3_verification_evidence:
@@ -148,6 +152,8 @@ def merge_grounding_metadata(
         merged["evidence_gate"] = evidence_gate
     if citation_check is not None:
         merged["stage_4_citation_check"] = citation_check
+    if credibility_gate:
+        merged["credibility_gate"] = credibility_gate
     return json.dumps(merged)
 
 
@@ -205,6 +211,14 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         evidence_gate = response.pop("evidence_gate")
         if evidence_gate.get("applied"):
             print(f"Evidence gate applied: {evidence_gate['note']}")
+        response = apply_credibility_gate(
+            response,
+            prepared["metadata"].get("radio_station_code"),
+            verification_evidence=combine_evidence(stage_3_evidence, stage_4_record),
+        )
+        credibility_gate = response.pop("credibility_gate")
+        if credibility_gate["capped"]:
+            print(f"Credibility gate applied: {credibility_gate['note']}")
         response, citation_check = check_stage_4_citations(
             response,
             grounding_metadata,
@@ -216,7 +230,12 @@ async def process_snippet(supabase_client, snippet, prompt_versions):
         if citation_check["applied"]:
             print(f"Citation check applied: {citation_check['note']}")
         grounding_metadata = merge_grounding_metadata(
-            grounding_metadata, stage_3_evidence, evidence_gate, citation_check, stage_4_verification_evidence
+            grounding_metadata,
+            stage_3_evidence,
+            evidence_gate,
+            citation_check,
+            stage_4_verification_evidence,
+            credibility_gate=credibility_gate,
         )
 
         print("Review completed. Updating the snippet in Supabase")

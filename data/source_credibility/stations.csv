@@ -1,0 +1,4 @@
+station_code,provenance,owner,country,rating_sources,notes
+SPMN,state_controlled,rossiya-segodnya,RU,EU:Reg2022/350;Ownership:state,Sputnik Mundo (Russian state media)
+WZHF,state_controlled,rossiya-segodnya,RU,EU:Reg2022/350;Ownership:state,Radio Sputnik lease on WZHF 1390 AM; programming from Rossiya Segodnya
+MCD,state_funded_independent,france-medias-monde,FR,Ownership:public-broadcaster,Monte Carlo Doualiya (France Medias Monde)

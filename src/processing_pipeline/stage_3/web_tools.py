@@ -8,6 +8,7 @@ import certifi
 import html2text
 
 from processing_pipeline.kb_sources import parse_iso_date
+from processing_pipeline.source_credibility import get_source_credibility
 
 SEARXNG_URL = os.environ.get("SEARXNG_URL", "")
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=10)
@@ -38,10 +39,12 @@ async def searxng_web_search(
 
     Returns:
         A dictionary with a list of search results, each containing
-        title, url, content snippet, and relevance score. When the search
-        could not be performed (network error, timeout, bad response) the
-        dictionary has failed=true and an error message, with an empty
-        results list: treat that as "search failed", not "no results".
+        title, url, content snippet, relevance score, and the source's
+        credibility tier (source_tier: 1 trusted, 2 generally reliable,
+        3 default/unrated, 4 unreliable, 5 denylisted) and source_category. When the search could not be performed (network
+        error, timeout, bad response) the dictionary has failed=true and an
+        error message, with an empty results list: treat that as "search
+        failed", not "no results".
     """
     try:
         return await _searxng_web_search(query, pageno, language, safesearch)
@@ -72,17 +75,27 @@ async def _searxng_web_search(query: str, pageno: int, language: str, safesearch
     results = data.get("results", [])
     return {
         "query": query,
-        "results": [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "content": r.get("content", ""),
-                "score": r.get("score"),
-                "publishedDate": r.get("publishedDate"),
-                "engines": r.get("engines", []),
-            }
-            for r in results
-        ],
+        "results": [{**_result_fields(r), **_source_tier_fields(r.get("url", ""))} for r in results],
+    }
+
+
+def _result_fields(r: dict) -> dict:
+    return {
+        "title": r.get("title", ""),
+        "url": r.get("url", ""),
+        "content": r.get("content", ""),
+        "score": r.get("score"),
+        "publishedDate": r.get("publishedDate"),
+        "engines": r.get("engines", []),
+    }
+
+
+def _source_tier_fields(url: str) -> dict:
+    """Label each result with its credibility tier; denylisted results stay visible but are marked."""
+    rating = get_source_credibility().tier_for(url)
+    return {
+        "source_tier": rating.tier,
+        "source_category": "denylisted" if rating.denylisted else rating.category,
     }
 
 
@@ -101,8 +114,9 @@ async def jina_web_search(query: str) -> dict:
 
     Returns:
         Same shape as searxng_web_search: a list of results with title, url, content snippet and
-        publishedDate (YYYY-MM-DD) when known. When the search could not be performed the
-        dictionary has failed=true and an error message, with an empty results list.
+        publishedDate (YYYY-MM-DD) when known, plus source_tier and source_category. When the
+        search could not be performed the dictionary has failed=true and an error message, with
+        an empty results list.
     """
     try:
         return await _jina_web_search(query)
@@ -131,6 +145,7 @@ async def _jina_web_search(query: str) -> dict:
                 "url": r.get("url", ""),
                 "content": (r.get("description") or "")[:JINA_CONTENT_CHARS],
                 "publishedDate": jina_date(r.get("date"), now),
+                **_source_tier_fields(r.get("url", "")),
             }
             for r in data.get("data") or []
         ],

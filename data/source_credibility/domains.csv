@@ -1,0 +1,269 @@
+domain,tier,category,country,languages,owner,rating_sources,notes
+abc.net.au,1,public_broadcaster,AU,en,abc.net.au,Lin2023 pc1=0.893; RSP Generally reliable,
+afp.com,1,wire,FR,fr;en;es;ar,afp,Lin2023 pc1=0.955; RSP Generally reliable (AFP); AFP Factual/AFP Factuel is IFCN verified signatory & EFCSN member,Spanish fact-checks at factual.afp.com; Arabic at factcheck.afp.com/ar
+agenciaocote.com,1,fact_checker,GT,es,agenciaocote.com,IFCN Verified Signatory 'Ocote' (approved 2025-07-11); LatamChequea member,
+akhbarmeter.org,1,fact_checker,EG,ar,akhbarmeter.org,IFCN Verified Signatory (approved 2025-07-11),
+alhurra.com,1,public_broadcaster,US,ar,usagm,No MBFC page found; USAGM/MBN with statutory firewall,2025 USAGM cuts; admin to monitor
+annir.ly,1,fact_checker,LY,ar,annir.ly,IFCN Verified Signatory (approved 2025-11-06),
+aosfatos.org,1,fact_checker,BR,pt,aosfatos.org,IFCN Verified Signatory (approved 2026-05-20); LatamChequea,
+apnews.com,1,wire,US,en;es,associated-press,Lin2023 pc1=0.998; RSP Generally reliable; MBFC High,AP News Values: unnamed-source material must be corroborated; AP Fact Check (IFCN signatory) publishes at apnews.com/hub/ap-fact-check
+bbc.co.uk,1,public_broadcaster,GB,en,bbc,Lin2023 pc1=0.718; RSP Generally reliable,Same organisation as bbc.com
+bbc.com,1,public_broadcaster,GB,en;es;ar,bbc,Lin2023 pc1=0.882; RSP Generally reliable; MBFC Least Biased / Mostly Factual / High Credibility; Royal Charter guarantees editorial independence,BBC Mundo (bbc.com/mundo) and BBC Arabic (bbc.com/arabic) share the domain
+bloomberg.com,1,wire,US,en;es,bloomberg.com,RSP Generally reliable; MBFC High/Least Biased,Bloomberg Línea (bloomberglinea.com) is the Spanish-language service
+bls.gov,1,official,US,en,us-government,Official:government-agency,
+boliviaverifica.bo,1,fact_checker,BO,es,boliviaverifica.bo,IFCN 'Expired Signatory' (last approved 2025-05-16); LatamChequea member,Tier 2 until IFCN renewal
+cazadoresdefakenews.info,1,fact_checker,VE/UY,es,cazadoresdefakenews.info,IFCN Verified Signatory (approved 2026-05-20); LatamChequea member,
+cbc.ca,1,public_broadcaster,CA,en;fr,cbc.ca,Lin2023 pc1=0.817; RSP Generally reliable,
+cdc.gov,1,official,US,en;es,us-government,US federal public-health authority; primary source,"Vaccine claims — treat as primary evidence, not as 'news'"
+census.gov,1,official,US,en;es,us-government,Lin-type governmental primary source (cbo.gov/usaspending.gov score 0.965 in Lin2023),
+chequeado.com,1,fact_checker,AR,es,chequeado.com,IFCN Verified Signatory (approved 2024-10-07); MBFC Least Biased / HIGH / High Credibility (mediabiasfactcheck.com/chequeado/); LatamChequea coordinator,Runs 'Desinformantes' investigations
+colombiacheck.com,1,fact_checker,CO,es,consejo-de-redaccion,"IFCN signatory (status 'In Renewal', last approved 2024-03-27); LatamChequea member",
+cotejo.info,1,fact_checker,VE,es,cotejo.info,IFCN Verified Signatory (approved 2026-07-17); LatamChequea member,
+doblecheck.cr,1,fact_checker,CR,es,doblecheck.cr,IFCN Verified Signatory (approved 2026-08-26); LatamChequea member,
+dpa.com,1,wire,DE,de;en;es,dpa.com,RSP Generally reliable; dpa Fact-Checking is EFCSN member (dpa-fact-checking),German wire with Spanish service
+dw.com,1,public_broadcaster,DE,de;en;es;ar,deutsche-welle,Lin2023 pc1=0.864; RSP Generally reliable (Deutsche Welle),DW Español and DW Arabic; Deutsche-Welle-Gesetz guarantees independence
+eac.gov,1,official,US,en;es,eac.gov,US Election Assistance Commission; primary source,Election-administration claims
+ecuadorchequea.com,1,fact_checker,EC,es,ecuadorchequea.com,IFCN Verified Signatory (approved 2024-12-05); LatamChequea member,
+efe.com,1,wire,ES,es,efe.com,MBFC Least Biased / Factual HIGH / High Credibility (mediabiasfactcheck.com/efe/); EFE Verifica is IFCN Verified Signatory (approved 2025-10-23) and EFCSN member,Spanish national wire; EFE Verifica at efe.com/efe/espana/efeverifica
+efectococuyo.com,1,fact_checker,VE,es,efectococuyo.com,IFCN Verified Signatory 'Efecto Cocuyo (Cocuyo Chequea)' (approved 2026-08-26); LatamChequea member,Independent Venezuelan outlet
+factcheck.afp.com,1,fact_checker,FR,en;ar;fr,afp,IFCN verified signatory (AFP); EFCSN member,AFP Fact Check incl. Arabic edition
+factcheck.org,1,fact_checker,US,en;es,annenberg-public-policy-center,Lin2023 pc1=0.918; RSP Generally reliable; IFCN Verified Signatory; LatamChequea member,FactCheck.org en español exists
+factchequeado.com,1,fact_checker,US,es,maldita,IFCN Verified Signatory (approved 2026-08-26); MBFC Least Biased / HIGH / High Credibility (mediabiasfactcheck.com/factchequeado/); LatamChequea member,US Spanish-language fact-checker (Maldita + Chequeado); most directly relevant to Verdad
+factual.afp.com,1,fact_checker,FR,es,afp,IFCN verified signatory (AFP); EFCSN member (afp-agence-france-presse),AFP Factual — Spanish-language fact-checking
+factuel.afp.com,1,fact_checker,FR,fr,afp,IFCN:signatory,
+fastcheck.cl,1,fact_checker,CL,es,fastcheck.cl,IFCN Verified Signatory (approved 2026-08-28); LatamChequea member,
+fatabyyano.net,1,fact_checker,JO,ar,fatabyyano.net,"IFCN signatory EXPIRED (last approved 2023-04-04, expired=true)",Arabic fact-checker; tier 2 until renewal
+fda.gov,1,official,US,en;es,us-government,Official:government-agency,
+fec.gov,1,official,US,en,fec.gov,US election finance authority; primary source,
+france24.com,1,public_broadcaster,FR,fr;en;es;ar,france-medias-monde,Lin2023 pc1=0.879,France 24 en Español and Arabic editions (France Médias Monde)
+fullfact.org,1,fact_checker,GB,en,fullfact.org,Lin2023 pc1=0.879; IFCN Verified Signatory; EFCSN member (full-fact),Co-powers Duke MediaVault
+grupoanimal.mx,1,fact_checker,MX,es,grupoanimal.mx,IFCN Verified Signatory 'Animal Político - El Sabueso' (grupoanimal.mx/verificacion-de-hechos),
+kashif.ps,1,fact_checker,PS,ar,kashif.ps,IFCN Verified Signatory 'Kashif' (approved 2026-08-26),
+ladiaria.com.uy,1,fact_checker,UY,es,ladiaria.com.uy,IFCN Verified Signatory (approved 2025-08-04); LatamChequea member,General outlet with IFCN-verified fact-check unit
+larepublica.pe,1,fact_checker,PE,es,grupo-la-republica,IFCN Verified Signatory 'Verificador de La República' (approved 2025-10-29) — fact-check section only,
+lasillavacia.com,1,fact_checker,CO,es,lasillavacia.com,IFCN:signatory,
+leadstories.com,1,fact_checker,US,en;es,leadstories.com,IFCN Verified Signatory; EFCSN member (lead-stories),Has Spanish-language fact-checks
+lupa.news,1,fact_checker,BR,pt,lupa.news,"IFCN signatory (In Renewal, approved 2024-01-19); EFCSN member (lupa); LatamChequea",Portuguese-language
+lsm.lv,1,public_broadcaster,LV,lv;ru;en,lsm.lv,Ownership:public-broadcaster-statutory; Latvian Public Media (Latvijas Sabiedriskie mediji) established by the Public Electronic Media Law (2020) with an independent council; EBU member,Joint portal of LTV and Latvijas Radio; English edition at eng.lsm.lv; Russian edition at rus.lsm.lv
+malaespinacheck.cl,1,fact_checker,CL,es,malaespinacheck.cl,IFCN Verified Signatory (approved 2025-10-27); LatamChequea member,
+maldita.es,1,fact_checker,ES,es,maldita,"IFCN signatory (status 'In Renewal', last approved 2023-11-03); EFCSN member (fundaci-n-maldita-es); LatamChequea; co-founder of Factchequeado",Tracks Spanish disinformation sites; Maldito Bulo
+misbar.com,1,fact_checker,JO/QA,ar;en,misbar.com,NOT found in current IFCN signatory JSON (2026-09); previously a signatory,Tier 2 pending status check
+newtral.es,1,fact_checker,ES,es,newtral.es,IFCN Verified Signatory (approved 2024-09-25); EFCSN member (newtral); MBFC Least Biased / HIGH / High Credibility (mediabiasfactcheck.com/newtral/),
+nhk.or.jp,1,public_broadcaster,JP,ja;en;es;ar,or.jp,Lin2023 pc1=0.867 (0.776 for nhkworld),NHK World has Spanish and Arabic services
+nih.gov,1,official,US,en;es,us-government,Official:government-agency,
+npr.org,1,public_broadcaster,US,en,npr.org,Lin2023 pc1=0.931; RSP Generally reliable; MBFC Left-Center / HIGH / High Credibility,Editorially independent; Twitter's 2023 'state-affiliated' label was withdrawn after criticism
+pbs.org,1,public_broadcaster,US,en,pbs.org,Lin2023 pc1=0.874; RSP Generally reliable,CPB-funded with statutory firewall
+poligrafo.sapo.pt,1,fact_checker,PT,pt,sapo.pt,IFCN Verified Signatory (approved 2024-12-05); EFCSN member (pol-grafo),
+politifact.com,1,fact_checker,US,en,poynter,Lin2023 pc1=0.868; RSP Generally reliable; IFCN Verified Signatory; LatamChequea member,
+reuters.com,1,wire,GB,en;es;ar,thomson-reuters,"Lin2023 pc1=1.000 (top of 11,520); MBFC High/Least Biased; RSP Generally reliable",Reuters Handbook: single-source stories are the exception and need supervisor approval
+rferl.org,1,public_broadcaster,US,en;ru;+,usagm,Lin2023 pc1=0.811; RSP No consensus,USAGM grantee; 2025 funding turmoil; tier 2 due to RSP no-consensus
+rfi.fr,1,public_broadcaster,FR,fr;es;ar,france-medias-monde,Lin2023 pc1=0.670 (rfi.fr) / 0.854 (rfi.fr/en),RFI en español; France Médias Monde
+rtve.es,1,public_broadcaster,ES,es,rtve.es,No MBFC/Lin rating found; Spanish public broadcaster with statutory independence (Ley 17/2006),Admin to confirm; RTVE Verifica is not an IFCN signatory
+sciencefeedback.org,1,fact_checker,FR,en,sciencefeedback.org,IFCN Verified Signatory; EFCSN member (science-feedback); RSP Generally reliable (Climate Feedback),Publishes the Consensus Credibility Scores dataset
+shechecks.net,1,fact_checker,LY,ar,shechecks.net,IFCN Verified Signatory 'Heya tatahaqaq' (approved 2026-01-27),
+snopes.com,1,fact_checker,US,en,snopes-media-group,Lin2023 pc1=0.904; RSP Generally reliable; IFCN signatory (status varies),
+t4p.co,1,fact_checker,IQ,ar,t4p.co,IFCN Verified Signatory 'Tech4Peace' (approved 2025-07-15),
+uscis.gov,1,official,US,en;es,uscis.gov,US immigration authority; primary source,Immigration claims
+usgs.gov,1,official,US,en,us-government,Official:government-agency,
+verificado.com.mx,1,fact_checker,MX,es,verificado.com.mx,IFCN Verified Signatory (approved 2026-01-14); LatamChequea member,
+verificat.cat,1,fact_checker,ES,ca;es,verificat.cat,IFCN Verified Signatory (approved 2026-05-18); EFCSN member (verificat),
+verify-sy.com,1,fact_checker,SY/TR,ar;en,verify-sy.com,"IFCN signatory 'Verify' (In Renewal, last approved 2024-12-05)",Verify-Sy
+voanews.com,1,public_broadcaster,US,en;es;ar,usagm,Lin2023 pc1=0.944; RSP Generally reliable; MBFC Least Biased / HIGH / High Credibility,USAGM; statutory firewall (22 USC 6204) but 2025 political interference — admin should monitor; VOA Noticias (voanoticias.com) & alhurra.com are sister services
+who.int,1,official,INT,en;es;ar,united-nations,UN agency; primary source,
+aawsat.com,2,broadsheet,SA/GB,ar;en,srmg,MBFC Right-Center / MIXED / Medium Credibility (mediabiasfactcheck.com/asharq-al-awsat-2/); Lin2023 pc1=0.754 (english) / 0.561 (main),Saudi-owned pan-Arab daily; tier 2 with Saudi-topic caveat
+abc.es,2,broadsheet,ES,es,abc.es,MBFC Right-Center / HIGH / High Credibility (mediabiasfactcheck.com/abc-spain/); Lin2023 pc1=0.842,Conservative broadsheet
+abcnews.go.com,2,broadcaster,US,en,disney,WikipediaRSP:generally-reliable,
+al-monitor.com,2,broadsheet,US,en;ar,al-monitor.com,MBFC Left-Center / HIGH / High Credibility (mediabiasfactcheck.com/al-monitor/); Lin2023 pc1=0.817,Middle East specialist
+aljazeera.com,2,broadcaster,QA,en,al-jazeera-media-network,"RSP Generally reliable (Al Jazeera); MBFC Left-Center / MIXED / Medium Credibility; Ad Fontes Reliability 41.30 ('Reliable, Analysis/Fact Reporting'); Lin2023 pc1=0.779",Qatar state-funded; editorial independence contested (RSP GR but 'use caution on Qatar/Gulf topics')
+aljazeera.net,2,broadcaster,QA,ar,al-jazeera-media-network,Same organisation as aljazeera.com (RSP Generally reliable); MBFC rates Al Jazeera Medium/Mixed,Arabic edition; tier 2 with topic caveats
+animalpolitico.com,2,broadsheet,MX,es,grupo-animal,MBFC Left-Center / HIGH / High Credibility (mediabiasfactcheck.com/animal-politico/); El Sabueso (grupoanimal.mx) is IFCN Verified Signatory (approved 2024-08-23),Digital-native investigative outlet with in-house IFCN fact-checker
+cbsnews.com,2,broadcaster,US,en,paramount,WikipediaRSP:generally-reliable,
+clarin.com,2,broadsheet,AR,es,grupo-clarin,MBFC Right-Center / HIGH / High Credibility (mediabiasfactcheck.com/clarin/),Grupo Clarín; largest Argentine daily
+cnn.com,2,broadcaster,US,en;es,warner-bros-discovery,WikipediaRSP:generally-reliable,
+cnnespanol.cnn.com,2,broadcaster,US,es,cnn.com,CNN: RSP Generally reliable; MBFC Left-Center/Mostly Factual (CNN),Spanish edition of CNN; inherits parent rating
+economist.com,2,broadsheet,GB,en,economist.com,RSP Generally reliable; MBFC High,
+elcomercio.pe,2,broadsheet,PE,es,elcomercio.pe,No MBFC page found via slug probe,Tier 3 pending review
+eldiario.es,2,broadsheet,ES,es,eldiario.es,MBFC Left-Center / HIGH / High Credibility (mediabiasfactcheck.com/eldiario-es/); Lin2023 pc1=0.601,Digital-native
+eldiariony.com,2,broadsheet,US,es,eldiariony.com,MBFC page exists (mediabiasfactcheck.com/el-diario-ny/) — rating not captured in probe,Impremedia; admin to record MBFC values
+elespectador.com,2,broadsheet,CO,es,elespectador.com,No MBFC page found via slug probe; oldest Colombian daily,Admin to confirm
+elfinanciero.com.mx,2,broadsheet,MX,es,elfinanciero.com.mx,MBFC Right-Center / MOSTLY FACTUAL / High Credibility (mediabiasfactcheck.com/el-financiero/),
+elmundo.es,2,broadsheet,ES,es,unidad-editorial,MBFC Right-Center / MOSTLY FACTUAL / High Credibility (mediabiasfactcheck.com/el-mundo/); Lin2023 pc1=0.780,
+elnuevoherald.com,2,broadsheet,US,es,mcclatchy,No MBFC page found via slug probe; McClatchy (Miami Herald sister paper),Key Miami Spanish-language daily; admin to confirm
+elpais.com,2,broadsheet,ES,es;en,prisa,MBFC Left-Center / Factual HIGH / High Credibility (mediabiasfactcheck.com/el-pais/); Lin2023 pc1=0.791,Largest Spanish-language broadsheet; El País América edition targets LatAm/US
+eltiempo.com,2,broadsheet,CO,es,eltiempo.com,No MBFC page found via slug probe; Colombia's paper of record (Grupo Luis Carlos Sarmiento),Admin to confirm; tier 2 on reputation only
+eluniversal.com.mx,2,broadsheet,MX,es,eluniversal.com.mx,"MBFC: Right-Center bias, 'often publishes factual information that utilizes loaded words' (search snippet; page slug not resolved)",Admin to confirm MBFC factual level
+eluniverso.com,2,broadsheet,EC,es,eluniverso.com,MBFC Right-Center / HIGH / High Credibility (mediabiasfactcheck.com/el-universo/),
+emol.com,2,broadsheet,CL,es,emol.com,MBFC Right-Center / MOSTLY FACTUAL / High Credibility (mediabiasfactcheck.com/emol/),El Mercurio online
+en.wikipedia.org,2,other,INT,en,wikimedia,WikipediaRSP:generally-unreliable,See wikipedia.org
+es.wikipedia.org,2,other,INT,es,wikimedia,WikipediaRSP:generally-unreliable,See wikipedia.org
+excelsior.com.mx,2,broadsheet,MX,es,excelsior.com.mx,No MBFC page found,Tier 3 (unrated) pending admin review
+ft.com,2,broadsheet,GB,en,ft.com,RSP Generally reliable; MBFC High,
+infobae.com,2,broadsheet,AR,es;en,infobae.com,MBFC Left-Center / HIGH / High Credibility (mediabiasfactcheck.com/infobae/); Lin2023 pc1=0.775,Very high traffic across LatAm and US Hispanic audiences
+jstor.org,2,other,US,en,ithaka,Ownership:academic; non-profit digital library run by ITHAKA holding peer-reviewed journals and primary sources,Academic archive rather than a news outlet; cite the underlying article
+lajornada.com.mx,2,broadsheet,MX,es,lajornada.com.mx,MBFC Left / HIGH / High Credibility (mediabiasfactcheck.com/la-jornada/),Left-leaning; strong factual record per MBFC
+lanacion.com.ar,2,broadsheet,AR,es,lanacion.com.ar,MBFC Right-Center / HIGH / High Credibility (mediabiasfactcheck.com/la-nacion/),
+laopinion.com,2,broadsheet,US,es,impremedia,MBFC Left-Center / MOSTLY FACTUAL / High Credibility (mediabiasfactcheck.com/la-opinion/),Largest US Spanish-language daily (LA); Impremedia
+latercera.com,2,broadsheet,CL,es,latercera.com,MBFC Right-Center / HIGH / High Credibility (mediabiasfactcheck.com/la-tercera/),
+latimes.com,2,broadsheet,US,en;es,latimes.com,RSP Generally reliable; MBFC High,LA Times en Español (latimes.com/espanol) relevant to Southern California radio markets
+lavanguardia.com,2,broadsheet,ES,es;ca,lavanguardia.com,MBFC Left-Center / HIGH / High Credibility (mediabiasfactcheck.com/la-vanguardia/),
+lemonde.fr,2,broadsheet,FR,fr;en,lemonde.fr,Lin2023 pc1=0.666; RSP Generally reliable; MBFC High,Tier 2 on Lin score
+miamiherald.com,2,broadsheet,US,en,mcclatchy,WikipediaRSP:generally-reliable,
+milenio.com,2,broadsheet,MX,es,grupo-multimedios,No MBFC page found; no Lin entry,Tier 3 (unrated) pending admin review
+nbcnews.com,2,broadcaster,US,en,comcast,WikipediaRSP:generally-reliable,
+nytimes.com,2,broadsheet,US,en;es,new-york-times-company,Lin2023 pc1=0.859; RSP Generally reliable; MBFC High,NYT en Español discontinued as standalone in 2019 but nytimes.com/es still exists
+oec.world,2,other,US,en;es,oec.world,Ownership:academic; Observatory of Economic Complexity originated at the MIT Media Lab (Collective Learning group) and is run by Datawheel; aggregates UN Comtrade and BACI trade statistics,Trade-statistics reference; the primary data are UN Comtrade
+proceso.com.mx,2,broadsheet,MX,es,proceso.com.mx,No MBFC page found,Tier 3 (unrated) pending admin review
+reforma.com,2,broadsheet,MX,es,grupo-reforma,MBFC Right-Center / HIGH / High Credibility (mediabiasfactcheck.com/reforma/),Paywalled; Grupo Reforma
+skynewsarabia.com,2,broadcaster,AE,ar,skynewsarabia.com,No MBFC page found; no Lin entry; Sky/ADMIC (Abu Dhabi) JV,Tier 3 pending review
+telemundo.com,2,broadcaster,US,es,comcast,Lin2023 pc1=0.674; NewsGuard 100/100 (per WTTW 2024-03-01); T Verifica is IFCN Verified Signatory (approved 2025-11-04),NBCUniversal; telemundo.com/noticias/t-verifica
+theguardian.com,2,broadsheet,GB,en,guardian-media-group,Lin2023 pc1=0.750; RSP Generally reliable; MBFC Mixed (2023 downgrade) / High credibility,Tier 2 because MBFC 'Mixed' since 2023 despite RSP GR
+univision.com,2,broadcaster,US,es,televisa-univision,MBFC Left-Center / HIGH / High Credibility (mediabiasfactcheck.com/univision-bias-and-credibility/); Lin2023 pc1=0.717; NewsGuard 100/100 (per WTTW 2024-03-01); El Detector is IFCN Verified Signatory (approved 2025-10-31),TelevisaUnivision; univision.com/eldetector fact-checks
+usatoday.com,2,broadsheet,US,en,gannett,WikipediaRSP:generally-reliable,
+washingtonpost.com,2,broadsheet,US,en,nash-holdings,Lin2023 pc1=0.819; RSP Generally reliable; MBFC High,WaPo policy: a single unnamed source is rarely enough; two sources with same firsthand knowledge
+wikipedia.org,2,other,INT,en;es;ar,wikimedia,WikipediaRSP:generally-unreliable,Tier 2 by team decision for background lookups; Wikipedia rates itself unreliable as a source
+wsj.com,2,broadsheet,US,en,news-corp,Lin2023 pc1=0.804; RSP Generally reliable (news); MBFC Mostly Factual (news),Opinion section rated separately by RSP
+adnamerica.com,3,hyperpartisan,US,es;en,adnamerica.com,No MBFC/Iffy/Lin rating found,Miami; tier 3 (watch) pending admin review
+diariolasamericas.com,3,broadsheet,US,es,diariolasamericas.com,No MBFC/Iffy/Lin rating found,Miami legacy daily; tier 3 (unrated) — not a denylist candidate on current evidence
+elamerican.com,3,hyperpartisan,US,es;en,elamerican.com,Lin2023 pc1=0.493; no MBFC page found,Miami-based; tier 3 (watch) — Lin score in 'mixed' band
+elnacional.com,3,regional,VE,es,elnacional.com,,
+elnuevodia.com,3,regional,PR,es,gfr-media,,
+gaceta.es,3,hyperpartisan,ES,es,gaceta.es,La Gaceta de la Iberosfera — Fundación Disenso (Vox party think tank) since 2020; El Salto far-right media list,Party-affiliated; no MBFC/Iffy rating — tier 3 (watch)
+houstonchronicle.com,3,regional,US,en,hearst,,
+laderechadiario.com,3,hyperpartisan,AR,es,laderechadiario.com,MBFC Right / MIXED / Medium Credibility (mediabiasfactcheck.com/la-derecha-diario-bias-and-credibility/),Milei-aligned; tier 3
+lapatilla.com,3,hyperpartisan,VE,es,lapatilla.com,RSP No consensus (La Patilla),Venezuelan opposition site; tier 3
+panampost.com,3,hyperpartisan,US,es;en,panampost.com,MBFC Right / MIXED / Medium Credibility (mediabiasfactcheck.com/panam-post/); Lin2023 pc1=0.548,Tier 3 (mixed) — do not count as corroboration
+periodistadigital.com,3,hyperpartisan,ES,es,periodistadigital.com,Maldita.es has a tag page of debunks (maldita.es/tag/periodista-digital); El Salto/EPI lists,No third-party credibility rating — tier 3 (watch) not deny
+sun-sentinel.com,3,regional,US,en,tribune-publishing,,
+100percentfedup.com,4,hyperpartisan,US,en,100percentfedup.com,"Iffy Index row 1: MBFC Fact=L, Bias=FN(Questionable), cred=L, Wiki Fake=1, score 0.1",
+12minutos.com,4,conspiracy,ES,es,12minutos.com,"Iffy Index: MBFC Fact=L, Bias=FN (Questionable), cred=L, Wiki Fake=1, lang=es, score 0.1 (mediabiasfactcheck.com/12minutos-com/)",One of only 2 Spanish-language rows in Iffy Index
+actualidadpanamericana.com,4,satire,CO,es,actualidadpanamericana.com,OpenSources 'satire' (2017),Spanish-language satire — must never be cited as evidence
+alarabiya.net,4,state_controlled,AE/SA,ar;en,mbc-group,"MBFC Right-Center / MIXED / Low Credibility, propaganda (mediabiasfactcheck.com/al-arabiya/); RSP No consensus; Lin2023 pc1=0.683",Saudi-owned; tier 4 (unreliable) not 5 — RSP no consensus; use for Saudi-adverse topics with caution
+alertadigital.com,4,hyperpartisan,ES,es,alertadigital.com,EPI 2022 study: listed among websites journalists perceive as disinformation sources; El Salto far-right media list,No MBFC/Iffy rating; tier 4 pending admin review
+bitchute.com,4,other,GB,multi,bitchute.com,Lin2023 pc1=0.124; RSP Generally unreliable (user-generated),Video platform — not a source; treat cited videos as unverified
+breitbart.com,4,hyperpartisan,US,en,breitbart.com,"MBFC Right / MIXED / Low Credibility, propaganda (mediabiasfactcheck.com/breitbart/); RSP Blacklisted+Deprecated (WP:BREITBART); Lin2023 pc1=0.297; Ad Fontes 30.42 'Mixed Reliability/Opinion OR Other Issues'; Iffy Index",Immigration misinformation
+casoaislado.com,4,hyperpartisan,ES,es,casoaislado.com,"Academic/press: 'classified multiple times as generating false news with far-right tendencies, particularly hoaxes about immigration' (El Salto); EPI 2022 list of pseudo-media",No MBFC/Iffy rating — immigration hoaxes; tier 4 on fact-checker record
+chihuahuapost.com,4,hyperpartisan,MX,es,chihuahuapost.com,"Iffy Index: MBFC Fact=M, Bias=FN (Questionable), cred=L, lang=es",Second Spanish-language row in Iffy Index
+chinadaily.com.cn,4,state_controlled,CN,en;es,china-state,RSP No consensus (WP:CHINADAILY); FARA-registered (China Daily Distribution Corp),Has Spanish edition (cn.chinadaily.com.cn/espanol?); tier 4 per RSP no-consensus
+consortiumnews.com,4,hyperpartisan,US,en,consortiumnews.com,RSP Generally unreliable (WP:CONSORTIUMNEWS); Lin2023 pc1=0.535,
+dailycaller.com,4,hyperpartisan,US,en,dailycaller.com,RSP Deprecated (WP:DAILYCALLER); Lin2023 pc1=0.470; Ad Fontes 34.42; MBFC Right / Mixed (page mediabiasfactcheck.com/daily-caller/),
+dailymail.co.uk,4,other,GB,en,dailymail.co.uk,RSP Deprecated (WP:DAILYMAIL); Lin2023 pc1=0.384; Iffy/Grinberg 'yellow',Widely syndicated; low tier
+elmundotoday.com,4,satire,ES,es,elmundotoday.com,OpenSources 'satire' (2017),Spanish-language satire
+es.theepochtimes.com,4,hyperpartisan,US,es,epoch-media-group,La Gran Época — Spanish edition of The Epoch Times (RSP Deprecated),Also lagranepoca.com; anti-vaccine/anti-China narratives in Spanish
+lagranepoca.com,4,hyperpartisan,US,es,epoch-media-group,La Gran Época legacy domain (Epoch Times; RSP Deprecated),
+martinoticias.com,4,state_controlled,US,es,wikimedia,RSP Deprecated (WP:MARTI — Office of Cuba Broadcasting / Radio y Televisión Martí),US-government Spanish outlet deprecated by Wikipedia for reliability; tier 4
+mediterraneodigital.com,4,hyperpartisan,ES,es,mediterraneodigital.com,Maldita.es registered and debunked ~70 pieces of its content (La Marea 2023-04-26: 'el antiguo rey de los bulos'); EPI study lists it as top perceived disinformation source,No MBFC/Iffy rating found — evidence is fact-checker debunk volume
+mintpressnews.com,4,hyperpartisan,US,en,mintpressnews.com,RSP Deprecated (WP:MINTPRESS); Lin2023 pc1=0.495,
+newsmax.com,4,hyperpartisan,US,en,newsmax-media,"MBFC Right / LOW / Low Credibility, propaganda (mediabiasfactcheck.com/newsmax/); RSP Deprecated (WP:NEWSMAX); NewsGuard 20/100 (Press Gazette); Lin2023 pc1=0.287; Ad Fontes 28.35",Election misinformation; settled Dominion/Smartmatic suits
+ntd.com,4,hyperpartisan,US,en;es,epoch-media-group,"RSP Deprecated (New Tang Dynasty Television, with Epoch Times)",NTD en Español exists
+oann.com,4,hyperpartisan,US,en,herring-networks,"MBFC Far Right / LOW / Low Credibility, propaganda (mediabiasfactcheck.com/one-america-news-network/); RSP Deprecated (WP:OANN); NewsGuard 25/100 (Press Gazette); Lin2023 pc1=0.415",One America News
+occupydemocrats.com,4,hyperpartisan,US,en,occupydemocrats.com,RSP Deprecated (WP:OCCUPYDEMOCRATS),Left-wing hyperpartisan; included for balance
+okdiario.com,4,hyperpartisan,ES,es,okdiario.com,MBFC Right / MIXED / Low Credibility (mediabiasfactcheck.com/okdiario/); named among problematic Spanish outlets in El Salto / EPI academic studies,High-traffic Spanish digital
+rumble.com,4,other,US,multi,rumble.com,Lin2023 pc1=0.163; user-generated,Video platform — not a source
+shafaq.com,4,hyperpartisan,IQ,ar,shafaq.com,"Iffy Index: MBFC Fact=M, Bias=FN, cred=L, lang=ar",Arabic-language Iffy row
+theepochtimes.com,4,hyperpartisan,US,en;es,epoch-media-group,"RSP Deprecated (WP:EPOCHTIMES, incl. NTD/Vision Times); NewsGuard 17.5/100 (Press Gazette); Lin2023 pc1=0.415 (0.263 for theepochtimes.com); Ad Fontes 35.37; MBFC Right-Center / MOSTLY FACTUAL / Medium (re-rated; MBFC notes conspiracy history)",Falun Gong-affiliated; tier 4 despite MBFC upgrade because RSP deprecation + NewsGuard
+thefederalist.com,4,hyperpartisan,US,en,thefederalist.com,RSP Generally unreliable (WP:THEFEDERALIST),
+thegrayzone.com,4,hyperpartisan,US,en,thegrayzone.com,RSP Deprecated (WP:GRAYZONE); Lin2023 pc1=0.316,Pro-Kremlin/pro-Assad; frequently syndicated by teleSUR/RT
+thepostmillennial.com,4,hyperpartisan,CA,en,thepostmillennial.com,RSP Generally unreliable (WP:POSTMIL),
+tierrapura.org,4,conspiracy,AR,es,tierrapura.org,Chequeado 'Desinformantes' investigation: spread COVID-19 conspiracy theories via paid Facebook ads to millions,Spanish-language conspiracy site
+wnd.com,4,conspiracy,US,en,wnd.com,RSP Deprecated (WP:WND); Lin2023 pc1=0.192,WorldNetDaily
+youm7.com,4,hyperpartisan,EG,ar,youm7.com,"Iffy Index: MBFC Fact=M, Bias=FN, cred=L, lang=ar (Al Youm Al Sabea)",Pro-government Egyptian tabloid
+zerohedge.com,4,conspiracy,US,en,zerohedge.com,RSP Deprecated (WP:ZEROHEDGE); Lin2023 pc1=0.272; Ad Fontes 20.87,Frequently launders RT/Sputnik narratives
+1tv.ru,5,state_controlled,RU,ru,1tv.ru,"Iffy Index (MBFC Questionable/propaganda, Low credibility); EU broadcasting ban (Pervyi Kanal / Channel One, 2022 packages)",Channel One Russia
+actualidad-rt.com,5,state_controlled,RU,es,rossiya-segodnya,RT en Español mirror domain advertised by RT to evade blocks,Mirror
+actualidad.rt.com,5,state_controlled,RU,es,rossiya-segodnya,RT en Español — named in EU Reg 2022/350 ('RT - Russia Today Spanish'); ISD 2025 audit names actualidad.rt.com; RSP Deprecated (RT),Primary Spanish-language RT domain; most-engaged Kremlin outlet on Facebook/Instagram in LatAm per Hamilton 2.0
+alalam.ir,5,state_controlled,IR,ar,irib,Al-Alam — IRIB Arabic channel (same parent as Press TV),Iranian Arabic-language outlet
+almanar.com.lb,5,state_controlled,LB,ar;en;es,al-manar,"RSP Generally unreliable (controversial topics) / No consensus (general); MBFC Right-Center / MIXED / Low Credibility, propaganda (mediabiasfactcheck.com/al-manar/); Lin2023 pc1=0.483; US-designated (Hezbollah) since 2004",Hezbollah TV; has Spanish section
+almayadeen.net,5,state_controlled,LB,ar;en;es,al-mayadeen,"RSP Deprecated (WP:ALMAYADEEN); MBFC Left / MIXED / Low Credibility, propaganda (mediabiasfactcheck.com/al-mayadeen/)",Hezbollah/Iran-aligned; espanol.almayadeen.net Spanish edition targets LatAm
+america.cgtn.com,5,state_controlled,CN,en,china-state,Ownership:state;WikipediaRSP:deprecated;MBFC:Questionable,
+arabic.cgtn.com,5,state_controlled,CN,ar,china-state,CGTN Arabic — same entity (RSP Deprecated),
+arabic.rt.com,5,state_controlled,RU,ar,rossiya-segodnya,"EU Reg 2023/427 + Implementing Reg 2023/722 (RT Arabic listed 2023-04-10, Annex XV); RSP Deprecated (RT)",RT Arabic
+arabic.sputniknews.com,5,state_controlled,RU,ar,rossiya-segodnya,Legacy Sputnik Arabic domain; EU Sputnik ban,Legacy
+banned.video,5,conspiracy,US,en,banned.video,"RSP Blacklisted (InfoWars family); Iffy Index (2020electioncenter.com = Banned.Video, MBFC Very Low)",InfoWars video platform
+beforeitsnews.com,5,conspiracy,US,en,beforeitsnews.com,MBFC:Questionable;MBFC:factual=low;Iffy:listed,
+canal4.com.ni,5,state_controlled,NI,es,canal4.com.ni,Nicaraguan pro-government channel (Ortega family),
+cgtn.com,5,state_controlled,CN,en,china-state,RSP Deprecated (WP:CGTN); MBFC Left-Center / MIXED / LOW credibility (mediabiasfactcheck.com/china-global-television-network-cgtn/); Lin2023 pc1=0.568; FARA-registered (CGTN America); GEC 2023 PRC report; Ofcom licence revoked 2021,CCTV international arm
+cubadebate.cu,5,state_controlled,CU,es,cuba-state,Cuban state media (UPEC/ICRT); no MBFC page found,Official Cuban state site
+de.rt.com,5,state_controlled,RU,en;es;ar;de,rossiya-segodnya,EU:Reg2022/350;WikipediaRSP:deprecated;MBFC:Questionable;MBFC:factual=very-low;Ownership:state,RT / Russia Today; suspended in the EU by Council Regulation 2022/350
+eadaily.com,5,state_controlled,RU,ru;en,eadaily.com,EU 16th package (Feb 2025): EADaily / Eurasia Daily,
+egypt.news-pravda.com,5,state_controlled,RU,ar,pravda-network,Pravda network Egypt subdomain (CheckFirst dataset),Arabic-targeting
+el19digital.com,5,state_controlled,NI,es,el19digital.com,Nicaraguan Sandinista government portal (FSLN),Ortega-Murillo state outlet
+english.almayadeen.net,5,hyperpartisan,LB,en,almayadeen.net,WikipediaRSP:deprecated;MBFC:Questionable,
+espanol.almayadeen.net,5,state_controlled,LB,es,al-mayadeen,Al Mayadeen Español — same entity (RSP Deprecated),
+espanol.cgtn.com,5,state_controlled,CN,es,china-state,CGTN en Español — same entity as cgtn.com (RSP Deprecated),Spanish-language CGTN
+espanol.cri.cn,5,state_controlled,CN,es,china-state,China Radio International Spanish (China Media Group),
+esrt.online,5,state_controlled,RU,es,rossiya-segodnya,RT en Español mirror; Lin2023 pc1=0.250,Mirror
+esrt.press,5,state_controlled,RU,es,rossiya-segodnya,RT en Español mirror; Lin2023 pc1=0.346,Mirror
+esrt.space,5,state_controlled,RU,es,rossiya-segodnya,RT en Español mirror (esrt.space/actualidad),Mirror
+esrt.tech,5,state_controlled,RU,es,rossiya-segodnya,RT en Español mirror; Lin2023 pc1=0.422,Mirror
+farsnews.ir,5,state_controlled,IR,fa;en;ar,farsnews.ir,IRGC-affiliated; US Treasury sanctioned 2020,
+fondsk.ru,5,state_controlled,RU,ru,fondsk.ru,EU 16th package (Feb 2025): Fondsk,
+geopolitika.ru,5,state_controlled,RU,ru;en;es;+,geopolitika.ru,Dugin/Malofeev network; GEC 2020 'Pillars' (Geopolitica.ru),Spanish edition exists
+globalresearch.ca,5,conspiracy,CA,en;es,globalresearch.ca,MBFC:Conspiracy-Pseudoscience;MBFC:factual=low;Iffy:listed,
+globaltimes.cn,5,state_controlled,CN,en;zh,china-state,RSP Deprecated (WP:GLOBALTIMES); Lin2023 pc1=0.543,People's Daily subsidiary
+granma.cu,5,state_controlled,CU,es;en,cuba-state,"MBFC Far Left / MIXED / Low Credibility, propaganda, lack of transparency (mediabiasfactcheck.com/granma-cuba-bias/); Iffy Index (en.granma.cu); Lin2023 pc1=0.596",Official organ of the Cuban Communist Party
+hispantv.com,5,state_controlled,IR,es,irib,"HispanTV — IRIB Spanish channel (same parent as Press TV, RSP Deprecated); EU sanctions on IRIB (2013); YouTube/Google removed accounts 2013/2018 for sanctions",Primary Iranian Spanish-language outlet targeting LatAm
+infowars.com,5,conspiracy,US,en,free-speech-systems,"MBFC Extreme Right / VERY LOW / Low Credibility, Conspiracy-Pseudoscience (mediabiasfactcheck.com/infowars/); RSP Blacklisted+Deprecated (WP:INFOWARS); Lin2023 pc1=0.046; Ad Fontes 15.90; Iffy Index",
+irna.ir,5,state_controlled,IR,fa;en;es;ar,irna.ir,Islamic Republic News Agency — official state agency,Spanish and Arabic editions
+iz.ru,5,state_controlled,RU,ru,iz.ru,EU broadcasting ban May 2024 (Izvestia),
+journal-neo.su,5,state_controlled,RU,en;es;ar,journal-neo.su,New Eastern Outlook — GEC 2020 'Pillars' report; US Treasury sanctioned 2021,Proxy; Spanish/Arabic editions
+katehon.com,5,state_controlled,RU,en;es;ar;+,katehon.com,GEC 2020 'Pillars' report names Katehon as proxy; Konstantin Malofeev network (EU/US-sanctioned individual),Has Spanish and Arabic editions
+latamnews.lat,5,state_controlled,RU,es,rossiya-segodnya,Duplicate of Sputnik Mundo launched spring 2024 (Insight News / Espreso),Rebrand #3
+lenta.ru,5,state_controlled,RU,ru,lenta.ru,EU 16th package (Feb 2025): Lenta broadcasting ban,
+mundo.sputniknews.com,5,state_controlled,RU,es,rossiya-segodnya,Sputnik Mundo original domain; Lin2023 pc1=0.362; EU Sputnik ban,Legacy Spanish domain
+naturalnews.com,5,conspiracy,US,en,naturalnews.com,"MBFC Far Right Conspiracy-Pseudoscience / VERY LOW (mediabiasfactcheck.com/natural-news/); RSP Blacklisted+Generally unreliable; Lin2023 pc1=0.000 (bottom of 11,520); Ad Fontes 9.31; Iffy Index",Anti-vaccine hub; naturalnewsblogs.com/naturalnewsradio.com also scored ≤0.26 by Lin
+news-front.info,5,disinformation_network,RU,en;es,wikimedia,WikipediaRSP:blacklisted;Iffy:listed,
+news-front.su,5,state_controlled,RU,ru;en;es;+,news-front.su,EU 16th package (Feb 2025): NewsFront; GEC 2020 'Pillars' report names News Front as proxy site,Crimea-based; has Spanish edition (es.news-front.su)
+news-pravda.com,5,state_controlled,RU,multi,pravda-network,"Pravda / Portal Kombat network — VIGINUM (Feb 2024, 224 portals), DFRLab+CheckFirst (2025), American Sunlight Project (Feb 2025), EU 17th package (May 2025) listed network operators; CheckFirst data repo (MPL-2.0) counts 3,802 citations of news-pravda.com in Wikipedia/Community Notes",Hub domain; ~140 country/language subdomains
+news.cn,5,state_controlled,CN,zh;en;es;ar,china-state,Xinhua primary domain (same as xinhuanet.com),spanish.news.cn and arabic.news.cn are the Spanish/Arabic editions
+newspunch.com,5,conspiracy,US,en,newspunch.com,MBFC:Questionable;MBFC:factual=very-low;Iffy:listed,Formerly YourNewsWire
+newstarget.com,5,conspiracy,US,en,newstarget.com,RSP Blacklisted (Natural News family),
+newswars.com,5,conspiracy,US,en,newswars.com,RSP Blacklisted (InfoWars family),
+noticiaslatam.lat,5,state_controlled,RU,es,rossiya-segodnya,Current Sputnik Mundo domain (site self-identifies as 'Sputnik Mundo'),Rebrand #2; live as of 2026
+ntv.ru,5,state_controlled,RU,ru,ntv.ru,"EU broadcasting ban (NTV/NTV Mir, 2022 packages); Gazprom-Media",Admin to confirm annex entry text
+orientalreview.su,5,state_controlled,RU,en,orientalreview.su,ISD 2025 audit lists Oriental Review among EU-listed entities; GEC 2020 'Pillars',Proxy
+people.com.cn,5,state_controlled,CN,zh;en;es;ar,people.com.cn,CCP Central Committee organ; GEC 2023 PRC report,spanish.peopledaily.com.cn and arabic.people.com.cn editions
+plenglish.com,5,state_controlled,CU,en,cuba-state,Ownership:state,Prensa Latina English
+pravda-de.com,5,disinformation_network,RU,es;en;fr;de,pravda-network,VIGINUM:PortalKombat-2024;WikipediaRSP:blacklisted,Pravda / Portal Kombat network documented by VIGINUM (Feb 2024)
+pravda-en.com,5,state_controlled,RU,en,pravda-network,Pravda network English domain (CheckFirst dataset),
+pravda-es.com,5,state_controlled,RU,es,pravda-network,Pravda network Spanish domain (CheckFirst dataset),MBFC also has 'Pravda Spain' page (pravda-spain-bias-and-credibility)
+pravda-fr.com,5,disinformation_network,RU,es;en;fr;de,pravda-network,VIGINUM:PortalKombat-2024;WikipediaRSP:blacklisted,Pravda / Portal Kombat network documented by VIGINUM (Feb 2024)
+prensa-latina.cu,5,state_controlled,CU,es;en,cuba-state,Cuban state news agency (Prensa Latina); no MBFC page found,plenglish.com is English edition
+presstv.com,5,state_controlled,IR,en,irib,Press TV alternate domain; Lin2023 pc1=0.234,Seized by US DOJ 2021; use presstv.ir
+presstv.ir,5,state_controlled,IR,en,irib,"RSP Deprecated (WP:PRESSTV); MBFC Right / LOW / Low Credibility, propaganda (mediabiasfactcheck.com/press-tv/); Lin2023 pc1=0.691 (presstv.ir) / 0.234 (presstv.com); EU-sanctioned entity (2013, Council Reg 267/2012 — human-rights listing); Ofcom licence revoked 2012; US seized presstv.com 2021",IRIB World Service
+projectveritas.com,5,hyperpartisan,US,en,projectveritas.com,RSP Blacklisted+Deprecated (WP:VERITAS),
+ren.tv,5,state_controlled,RU,ru,ren.tv,"EU broadcasting ban (REN TV, 2022 packages)",National Media Group
+rg.ru,5,state_controlled,RU,ru,rg.ru,EU broadcasting ban May 2024 (Rossiyskaya Gazeta),Russian government's official gazette
+ria.ru,5,state_controlled,RU,ru,rossiya-segodnya,EU broadcasting ban May 2024 (RIA Novosti); RSP No consensus,Rossiya Segodnya
+rt.com,5,state_controlled,RU,en,rossiya-segodnya,EU Reg 2022/350 broadcasting ban (RT English/UK/DE/FR/Spanish); RSP Deprecated (WP:RT.COM); MBFC Questionable/propaganda; Lin2023 pc1=0.293; NewsGuard 20/100 (Press Gazette); GEC 2022 'Kremlin-Funded Media' report; Ad Fontes 28.33 'Mixed Reliability/Opinion OR Other Issues'; FARA-registered (T&R Productions),"ANO TV-Novosti; includes Ruptly, Redfish, Maffick per RSP"
+rubaltic.ru,5,state_controlled,RU,ru,rubaltic.ru,EU 16th package (Feb 2025): RuBaltic,
+sana.sy,5,state_controlled,SY,ar;en;es,syria-state,MBFC Left / MIXED / Low Credibility (mediabiasfactcheck.com/syrian-arab-news-agency-sana-bias-and-credibility/),Syrian state agency; note post-Dec-2024 regime change — status may evolve; has Spanish edition
+sarabic.ae,5,state_controlled,RU,ar,rossiya-segodnya,Sputnik Arabic current domain; Sputnik Arabic listed by EU 2023-04-10 (Reg 2023/427),Registered under .ae TLD
+smotrim.ru,5,state_controlled,RU,ru,smotrim.ru,"VGTRK (Rossiya 1 / Rossiya RTR / Rossiya 24) — EU broadcasting bans 2022 (RTR Planeta, Rossiya 24)",VGTRK streaming portal; vesti.ru is the news portal
+southfront.org,5,disinformation_network,RU,en,wikimedia,MBFC:Conspiracy-Pseudoscience;MBFC:factual=low;WikipediaRSP:blacklisted,
+southfront.press,5,state_controlled,RU,en,southfront.press,EU 16th package (Feb 2025): SouthFront; US Treasury sanctioned 2021,Proxy site
+spain.news-pravda.com,5,state_controlled,RU,es,pravda-network,Pravda network Spain subdomain (CheckFirst dataset),
+spanish.news-pravda.com,5,state_controlled,RU,es,pravda-network,Pravda network Spanish subdomain — 274 citations in CheckFirst Wikipedia/Community-Notes dataset,Spanish-language laundering portal
+spanish.peopledaily.com.cn,5,state_controlled,CN,es,china-state,People's Daily Spanish edition (same entity),
+spanish.xinhuanet.com,5,state_controlled,CN,es,china-state,Xinhua Español (same entity),Legacy Spanish domain
+sputnikglobe.com,5,state_controlled,RU,en,rossiya-segodnya,Sputnik rebrand domain (2023) — same entity as sputniknews.com,Rebrand
+sputniknews.com,5,state_controlled,RU,en,rossiya-segodnya,EU Reg 2022/350 (Sputnik); RSP Deprecated (WP:SPUTNIK); MBFC Questionable / 'very Low' factual (mediabiasfactcheck.com/sputnik-news/); Lin2023 pc1=0.346; FARA (RIA Global / RM Broadcasting); GEC 2022,Rossiya Segodnya
+sputniknews.lat,5,state_controlled,RU,es,rossiya-segodnya,"Sputnik Mundo domain adopted late 2022, later sanctioned/blocked",Rebrand #1
+strategic-culture.org,5,disinformation_network,RU,en,strategic-culture-foundation,MBFC:Questionable;MBFC:factual=very-low;Iffy:listed,
+strategic-culture.su,5,state_controlled,RU,en,strategic-culture.su,EU 16th package (Feb 2025): Strategic Culture Foundation; GEC 2020 'Pillars'; US Treasury sanctioned 2021,Proxy site (formerly .org)
+swentr.site,5,state_controlled,RU,en,swentr.site,RT mirror domain used after 2022 blocks,Mirror
+syria.news-pravda.com,5,state_controlled,RU,ar,pravda-network,Pravda network Syria subdomain (CheckFirst dataset),Arabic-targeting
+tasnimnews.com,5,state_controlled,IR,fa;en;ar,tasnimnews.com,"Iffy Index (MBFC Questionable, Low credibility, lang=ar); IRGC-affiliated",Arabic edition in Iffy
+tass.com,5,state_controlled,RU,en;ru,tass,RSP Generally unreliable (WP:TASS); Lin2023 pc1=0.344; EU 16th-package deliberations (Meduza 2025-01-30),Tass.ru is the Russian edition
+tass.ru,5,state_controlled,RU,ru,tass,Ownership:state;WikipediaRSP:generally-unreliable;MBFC:Questionable;MBFC:factual=mixed,
+telesurenglish.net,5,state_controlled,VE,en,telesur,"Iffy Index (MBFC Questionable, Low; Wiki RSP deprecated); Lin2023 pc1=0.401",English edition
+telesurtv.net,5,state_controlled,VE,es,telesur,"RSP Deprecated (Telesur); MBFC Left / MIXED / Low Credibility, propaganda (mediabiasfactcheck.com/telesur/); Lin2023 pc1=0.217; Iffy Index lists telesurenglish.net (Wiki RSP+DEPS flags); US Treasury sanctioned teleSUR's parent? (not — but Venezuelan state-owned)",Venezuelan government multi-state channel; Spanish-language flagship
+thegatewaypundit.com,5,conspiracy,US,en,thegatewaypundit.com,"MBFC Extreme Right / VERY LOW / Low Credibility, propaganda (mediabiasfactcheck.com/the-gateway-pundit/); RSP Deprecated; Lin2023 pc1=0.109; NewsGuard 'unreliable'; Iffy Index",Election-fraud misinformation
+tsargrad.tv,5,state_controlled,RU,ru,tsargrad.tv,Malofeev-owned; sanctioned individual; YouTube removed channel 2020 (sanctions),
+tvc.ru,5,state_controlled,RU,ru,tvc.ru,EU broadcasting ban June 2022 (TV Centre International),
+tvzvezda.ru,5,state_controlled,RU,ru,tvzvezda.ru,EU 16th package (Feb 2025): Krasnaya Zvezda / Tvzvezda,Russian MoD channel
+usa.news-pravda.com,5,state_controlled,RU,en,pravda-network,Pravda network US subdomain — 292 citations (CheckFirst dataset),Targets US audiences
+vesti.ru,5,state_controlled,RU,ru,vesti.ru,VGTRK (Rossiya 24) — EU broadcasting ban June 2022,
+veteranstoday.com,5,conspiracy,US,en,veteranstoday.com,WikipediaRSP:blacklisted;MBFC:Conspiracy-Pseudoscience;MBFC:factual=very-low,
+voiceofeurope.com,5,state_controlled,RU/CZ,en,voiceofeurope.com,EU broadcasting ban May 2024 (Voice of Europe); Czech sanctions Mar 2024 (Medvedchuk network),
+vtv.gob.ve,5,state_controlled,VE,es,venezuela-state,Venezolana de Televisión — Venezuelan government channel (.gob.ve),Official state TV
+xinhuanet.com,5,state_controlled,CN,zh;en,china-state,"RSP No consensus (WP:XINHUA — 'state media, not reliable for contentious topics'); MBFC Left / MIXED / LOW credibility (mediabiasfactcheck.com/xinhua/); Lin2023 pc1=0.308; DOJ requested FARA registration; GEC 2023 PRC report",State news agency; also news.cn

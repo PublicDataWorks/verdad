@@ -432,7 +432,10 @@ class TestStage3:
 
         assert result["response"] == {"test": "response", "is_convertible": True}
         # no verification_evidence in the output, no tool ran
-        assert json.loads(result["grounding_metadata"]) == {"tool_usage": {"calls": {}, "sources_by_tool": {}}}
+        grounding_metadata = json.loads(result["grounding_metadata"])
+        # VER-360: the credibility gate is always recorded; with no falsity verdict it caps nothing
+        assert grounding_metadata.pop("credibility_gate")["capped"] is False
+        assert grounding_metadata == {"tool_usage": {"calls": {}, "sources_by_tool": {}}}
         assert result["thought_summaries"] is None
         assert result["usage"] == dict.fromkeys(USAGE_FIELDS, 0)  # the response double reports no usage
         assert mock_gemini_client.aio.models.generate_content.await_count == 2
