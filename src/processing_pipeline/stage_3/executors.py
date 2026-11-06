@@ -22,6 +22,7 @@ from processing_pipeline.kb_sources import parse_iso_date, url_key
 from processing_pipeline.stage_3.models import (
     Stage3Output,
     apply_evidence_caps,
+    apply_rhetoric_gate,
     cited_url_keys,
     fill_publication_dates,
 )
@@ -191,11 +192,18 @@ class Stage3Executor:
                 recorded_on=parse_iso_date(additional_info.get("recorded_at_iso") or additional_info.get("recorded_at")),
             )
             evidence_gate = output.pop("evidence_gate")
+            # Rhetoric gate (VER-462): the harmful-rhetoric score is not capped by the evidence gate, so it is kept
+            # only when its quote is in the transcription and its kind matches an assigned category.
+            output = apply_rhetoric_gate(output, output.get("transcription") or metadata.get("transcription"))
+            rhetoric_gate = output.pop("rhetoric_gate")
             grounding_metadata = dict(output.get("verification_evidence") or {})
             grounding_metadata["tool_usage"] = observed.tool_usage(output.get("verification_evidence"))
             if evidence_gate.get("applied"):
                 print(f"Evidence gate applied: {evidence_gate['note']}")
                 grounding_metadata["evidence_gate"] = evidence_gate
+            if rhetoric_gate.get("applied"):
+                print(f"Rhetoric gate dropped harmful_rhetoric: {'; '.join(rhetoric_gate['reasons'])}")
+                grounding_metadata["rhetoric_gate"] = rhetoric_gate
 
             return {
                 "response": output,

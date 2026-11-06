@@ -236,6 +236,41 @@
                             }
                         }
                     }
+                },
+                "harmful_rhetoric": {
+                    "type": "object",
+                    "nullable": true,
+                    "required": ["score", "kind", "quote", "harm"],
+                    "description": "Harmful-rhetoric score (Section H.2). Fill it only for the station speaker's own gender-based rhetoric (Category 22) or electioneering (Category 1); null when there is none. It measures harm, not falsity, and the evidence rules do not cap it.",
+                    "properties": {
+                        "score": {
+                            "type": "integer",
+                            "description": "How clearly the passage demeans women or restricts their rights or safety, or steers votes on false or dehumanizing premises, ranging from 0 to 100."
+                        },
+                        "kind": {
+                            "type": "string",
+                            "enum": ["gender", "electioneering"],
+                            "description": "'gender' requires Category 22 among disinformation_categories; 'electioneering' requires Category 1."
+                        },
+                        "quote": {
+                            "type": "string",
+                            "description": "Verbatim quote of the rhetoric, copied from your transcription in the original language."
+                        },
+                        "harm": {
+                            "type": "object",
+                            "required": ["english", "spanish"],
+                            "properties": {
+                                "english": {
+                                    "type": "string",
+                                    "description": "What the rhetoric does and to whom, in English. Do not call doctrine or opinion false."
+                                },
+                                "spanish": {
+                                    "type": "string",
+                                    "description": "What the rhetoric does and to whom, in Spanish."
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },

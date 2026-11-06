@@ -52,6 +52,13 @@ DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text,
 --   audio_file object still reads a.location_state and a.radio_station_code.
 -- - Rollback: supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql
 
+-- 2026-11-06 (VER-462, see supabase/migrations/20261106100000_research_view.sql):
+-- - opt-in research view: p_filter.view = 'research' also shows Processed snippets that carry a
+--   research label (labels.is_research) applied by an admin, or whose
+--   confidence_scores.harmful_rhetoric.score is >= 70.
+--   Without it the visibility predicate folds back to exactly status = 'Processed' AND overall >= 95.
+-- - Rollback: supabase/database/sql/rollback/2026-11-06_get_snippets_before.sql
+
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -99,6 +106,14 @@ DECLARE
     -- audio_files indexes (radio_station_code, id) / (location_state) can actually be used.
     state_codes TEXT[];
     source_codes TEXT[];
+    -- 2026-11-06 (VER-462): opt-in research view (p_filter.view = 'research'). FALSE unless the
+    -- caller asks, so the default feed is unchanged; see the visibility predicate in
+    -- filtered_snippets for how the planner folds it away.
+    research_view BOOLEAN := COALESCE(p_filter->>'view', '') = 'research';
+    -- Snippets carrying a research label (labels.is_research) applied by an admin, pre-extracted
+    -- like state_codes so "s.id = ANY(uuid[])" is a snippets_pkey index condition. Only filled in
+    -- the research view.
+    research_snippet_ids UUID[];
 BEGIN
     current_user_id := auth.uid();
     IF current_user_id IS NULL THEN
@@ -136,6 +151,19 @@ BEGIN
     END IF;
     IF p_filter IS NOT NULL AND p_filter ? 'sources' AND jsonb_array_length(p_filter->'sources') > 0 THEN
         source_codes := ARRAY(SELECT jsonb_array_elements_text(p_filter->'sources'));
+    END IF;
+    -- Trust boundary: any logged-in user can apply an existing label through
+    -- create_apply_and_upvote_label, so a research label only counts when an admin
+    -- (user_roles -> roles.name = 'admin', the same notion as user_is_admin above) applied it.
+    IF research_view THEN
+        research_snippet_ids := ARRAY(
+            SELECT DISTINCT sl.snippet
+            FROM snippet_labels sl
+            JOIN labels l ON l.id = sl.label
+            JOIN public.user_roles ur ON ur."user" = sl.applied_by
+            JOIN public.roles r ON r.id = ur.role
+            WHERE l.is_research AND r.name = 'admin'
+        );
     END IF;
 
     WITH
@@ -228,7 +256,30 @@ BEGIN
         -- location_state and radio_station_code are denormalized onto snippets and kept in sync by
         -- triggers (20260921000100), so the predicates below are served by the partial indexes
         -- idx_snippets_visible_state / idx_snippets_visible_station (20260921000300).
-        WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
+        -- 2026-11-06 (VER-462): visibility, in two branches split on the constant research_view.
+        -- Like via_search above, research_view is a plpgsql variable, so under force_custom_plan
+        -- it is a constant when the statement is planned and the dead branch folds away:
+        --  * research_view = FALSE (every caller that does not send view = 'research'): the
+        --    second branch is FALSE, NOT research_view is TRUE, and what remains is exactly the
+        --    previous predicate, status = 'Processed' AND overall >= 95. The partial indexes
+        --    (idx_snippets_visible_recorded_at / _cover / _state / _station) still match it, so
+        --    the default feed keeps its plan.
+        --  * research_view = TRUE: a snippet is also visible when an admin applied a research label
+        --    to it (research_snippet_ids, pkey) or its Stage 3/4 harmful_rhetoric.score is >= 70
+        --    (idx_snippets_research_rhetoric). Every arm of the OR has an index, so the planner
+        --    can BitmapOr them instead of scanning every Processed row. The score is compared
+        --    without COALESCE so the comparison matches that index's predicate; a missing score
+        --    is NULL, which is not >= 70.
+        -- These rows are research findings, not verified disinformation: the overall >= 95 rule
+        -- still decides the default feed, and the frontend labels the research view as such.
+        WHERE (
+            (NOT research_view AND s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95)
+            OR (research_view AND s.status = 'Processed' AND (
+                (s.confidence_scores->>'overall')::INTEGER >= 95
+                OR s.id = ANY(research_snippet_ids)
+                OR (s.confidence_scores->'harmful_rhetoric'->>'score')::INTEGER >= 70
+            ))
+        )
         -- Search guard: picks the candidate_snippets branch (see above) and, when searching,
         -- applies the full-text match in the same scan as the visibility predicates.
         AND (

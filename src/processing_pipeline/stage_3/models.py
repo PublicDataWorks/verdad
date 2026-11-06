@@ -85,6 +85,22 @@ class CategoryScore(BaseModel):
     score: int = Field(ge=0, le=100, description="Confidence score for this category, ranging from 0 to 100")
 
 
+class HarmText(BaseModel):
+    english: str = Field(description="What the rhetoric does and to whom, in English")
+    spanish: str = Field(description="What the rhetoric does and to whom, in Spanish")
+
+
+class HarmfulRhetoric(BaseModel):
+    """Harmful-rhetoric score (VER-462): how clearly the station speaker's own words demean or restrict women
+    (``gender``, Category 22) or steer votes on false or dehumanizing premises (``electioneering``, Category 1).
+    It measures harm, not falsity, so the evidence gate never caps it (see ``apply_rhetoric_gate``)."""
+
+    score: int = Field(description="How clearly the passage is harmful rhetoric, ranging from 0 to 100")
+    kind: Literal["gender", "electioneering"] = Field(description="Which kind of harmful rhetoric this is")
+    quote: str = Field(description="Verbatim quote of the rhetoric from the transcription, in the original language")
+    harm: HarmText
+
+
 class ConfidenceScores(BaseModel):
     overall: int = Field(ge=0, le=100, description="Overall confidence score of the analysis, ranging from 0 to 100")
     verification_status: Literal["verified_false", "verified_true", "uncertain", "insufficient_evidence"] = Field(
@@ -92,6 +108,13 @@ class ConfidenceScores(BaseModel):
     )
     analysis: Analysis
     categories: list[CategoryScore]
+    harmful_rhetoric: HarmfulRhetoric | None = Field(
+        default=None,
+        description=(
+            "Harmful-rhetoric score for the station speaker's own gender-based or electioneering rhetoric, or null "
+            "when there is none"
+        ),
+    )
 
 
 class EmotionText(BaseModel):
@@ -700,4 +723,107 @@ def apply_evidence_caps(
         "original_categories": original_categories,
         "note": note_en,
     }
+    return result
+
+
+# --- Deterministic rhetoric gate (VER-462) ---------------------------------------------------------
+#
+# ``confidence_scores.harmful_rhetoric`` scores harm, not falsity, so the evidence gate leaves it alone
+# (``cap_scores`` only clamps ``overall`` and ``categories[].score``). What keeps a model from inventing it is
+# this gate: the quote has to be in the snippet's transcription, and the kind has to match a category the
+# analysis actually assigned. The research view (get_snippets p_filter.view = 'research') shows clips whose
+# score is >= 70, so an ungrounded block would put a clip in front of researchers.
+
+RHETORIC_KIND_CATEGORY_MARKERS = {
+    # Category 22, "Gender-Based Harmful Rhetoric and Misogyny"
+    "gender": ("gender-based harmful rhetoric", "misogyn", "misogin", "retorica danina de genero"),
+    # Category 1, "Election Integrity and Voting Processes" (pulpit and host electioneering is subcategory 1.6)
+    "electioneering": ("election integrity", "integridad electoral", "integridad de las elecciones"),
+}
+
+
+def normalize_for_quote_match(text) -> str:
+    """Casefold, strip accents and punctuation, collapse whitespace: 'Sumisión, ¡mujer!' -> 'sumision mujer'."""
+    if not isinstance(text, str):
+        return ""
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    without_marks = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    # Punctuation (P*) and symbols (S*) become spaces so "palabra—otra" still splits into two words
+    spaced = "".join(" " if unicodedata.category(ch)[0] in "PS" else ch for ch in without_marks)
+    return " ".join(spaced.split())
+
+
+def _assigned_category_texts(analysis: dict) -> list[str]:
+    texts = []
+    for category in analysis.get("disinformation_categories") or []:
+        if isinstance(category, dict):
+            texts.extend(_fold(v) for v in (category.get("english"), category.get("spanish")) if isinstance(v, str))
+        elif isinstance(category, str):
+            texts.append(_fold(category))
+    return texts
+
+
+def kind_matches_categories(kind, analysis: dict) -> bool:
+    """Whether ``analysis`` assigned the category a harmful-rhetoric ``kind`` belongs to."""
+    markers = RHETORIC_KIND_CATEGORY_MARKERS.get(kind)
+    if not markers:
+        return False
+    return any(marker in text for text in _assigned_category_texts(analysis) for marker in markers)
+
+
+def apply_rhetoric_gate(analysis: dict, transcription: str | None) -> dict:
+    """Keep ``confidence_scores.harmful_rhetoric`` only when it is grounded.
+
+    Returns a deep copy of ``analysis`` whose ``confidence_scores.harmful_rhetoric`` is either the block (score
+    clamped to 0-100, as an int) or ``None``, so the stored shape is the same whichever path produced the analysis
+    (pydantic, the restructure fallback, or a Stage 4 reviewer that omitted the key). The block is dropped when:
+
+    1. it is not an object with a numeric ``score``, a known ``kind`` and a non-empty ``quote``;
+    2. the quote, normalized with ``normalize_for_quote_match``, does not occur in ``transcription``;
+    3. the kind does not match an assigned ``disinformation_categories`` entry (``gender`` needs Category 22,
+       ``electioneering`` needs Category 1, Election Integrity).
+
+    The copy carries a ``rhetoric_gate`` dict that callers store in ``grounding_metadata`` when it applied:
+    ``{"applied": True, "reasons": [...], "dropped": <original block>}``; otherwise ``{"applied": False}``.
+    """
+    result = copy.deepcopy(analysis)
+    confidence_scores = result.get("confidence_scores")
+    if not isinstance(confidence_scores, dict):
+        result["rhetoric_gate"] = {"applied": False}
+        return result
+
+    block = confidence_scores.get("harmful_rhetoric")
+    if block is None:
+        confidence_scores["harmful_rhetoric"] = None
+        result["rhetoric_gate"] = {"applied": False}
+        return result
+
+    reasons = []
+    if not isinstance(block, dict):
+        reasons.append("harmful_rhetoric is not an object")
+    else:
+        score = block.get("score")
+        kind = block.get("kind")
+        normalized_quote = normalize_for_quote_match(block.get("quote"))
+        if isinstance(score, bool) or not isinstance(score, (int, float)):
+            reasons.append("harmful_rhetoric.score is not a number")
+        if kind not in RHETORIC_KIND_CATEGORY_MARKERS:
+            reasons.append(f"harmful_rhetoric.kind '{kind}' is not 'gender' or 'electioneering'")
+        if not normalized_quote:
+            reasons.append("harmful_rhetoric.quote is empty")
+        elif normalized_quote not in normalize_for_quote_match(transcription):
+            reasons.append("harmful_rhetoric.quote does not occur in the snippet transcription")
+        if kind in RHETORIC_KIND_CATEGORY_MARKERS and not kind_matches_categories(kind, result):
+            required = (
+                "Category 22 (Gender-Based Harmful Rhetoric)" if kind == "gender" else "Category 1 (Election Integrity)"
+            )
+            reasons.append(f"harmful_rhetoric.kind is '{kind}' but {required} is not among disinformation_categories")
+
+    if reasons:
+        confidence_scores["harmful_rhetoric"] = None
+        result["rhetoric_gate"] = {"applied": True, "reasons": reasons, "dropped": block}
+        return result
+
+    block["score"] = int(min(max(round(block["score"]), 0), 100))
+    result["rhetoric_gate"] = {"applied": False}
     return result
