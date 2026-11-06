@@ -1,0 +1,50 @@
+{
+    "type": "object",
+    "required": ["flagged_snippets"],
+    "properties": {
+        "flagged_snippets": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "start_time",
+                    "end_time",
+                    "transcription",
+                    "explanation",
+                    "disinformation_categories",
+                    "keywords_detected"
+                ],
+                "properties": {
+                    "start_time": {
+                        "type": "string",
+                        "description": "The timestamp when the snippet begins, in MM:SS format, relative to the start of the audio clip."
+                    },
+                    "end_time": {
+                        "type": "string",
+                        "description": "The timestamp when the snippet ends, in MM:SS format, relative to the start of the audio clip."
+                    },
+                    "transcription": {
+                        "type": "string",
+                        "description": "Transcription of the snippet (without timestamps)."
+                    },
+                    "explanation": {
+                        "type": "string",
+                        "description": "Explain why this snippet was flagged (in English)."
+                    },
+                    "disinformation_categories": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "keywords_detected": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
