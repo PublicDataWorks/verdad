@@ -7,6 +7,7 @@ import uuid
 
 from google import genai
 from openai import OpenAI
+from prefect.runtime import flow_run
 
 from processing_pipeline.constants import ProcessingStatus
 from processing_pipeline.model_config import (
@@ -48,7 +49,7 @@ _GPU_THREAD = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gpu")
 
 @optional_task(log_prints=True, retries=3)
 def fetch_a_new_audio_file_from_supabase(supabase_client):
-    response = supabase_client.get_a_new_audio_file_and_reserve_it()
+    response = supabase_client.get_a_new_audio_file_and_reserve_it(flow_run.id)
     if response:
         print(f"Found a new audio file:\n{json.dumps(response, indent=2)}\n")
         return response

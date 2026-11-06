@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory, ThinkingLevel
+from prefect.states import Cancelling, Crashed
 from pydub import AudioSegment
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
@@ -31,7 +32,7 @@ from processing_pipeline.stage_1 import (
     transcribe_audio_file_with_timestamp_with_gemini,
     undo_disinformation_detection,
 )
-from processing_pipeline.stage_1.flows import _create_gemini_client
+from processing_pipeline.stage_1.flows import _create_gemini_client, reset_audio_file_status_hook
 
 SELECT_WITH_AUDIO_FILE = (
     "*, audio_file(radio_station_name, radio_station_code, location_state, location_city, "
@@ -123,6 +124,13 @@ class TestFetchFunctions:
 
         assert fetch_a_new_audio_file_from_supabase(mock_supabase_client) == expected_response
         mock_supabase_client.get_a_new_audio_file_and_reserve_it.assert_called_once()
+
+    def test_fetch_new_audio_file_claims_it_for_the_current_flow_run(self, mock_supabase_client):
+        with patch("processing_pipeline.stage_1.tasks.flow_run") as current_run:
+            current_run.id = "run-1"
+            fetch_a_new_audio_file_from_supabase(mock_supabase_client)
+
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.assert_called_once_with("run-1")
 
     def test_fetch_new_audio_file_none(self, mock_supabase_client):
         assert fetch_a_new_audio_file_from_supabase(mock_supabase_client) is None
@@ -685,6 +693,31 @@ class TestInitialDisinformationDetectionFlow:
 
         with pytest.raises(ValueError, match="OPENAI_API_KEY"):
             initial_disinformation_detection(audio_file_id=1, limit=1)
+
+
+class TestResetAudioFileStatusHook:
+    @staticmethod
+    def run(parameters, state):
+        reset_audio_file_status_hook(Mock(), Mock(id="run-1", parameters=parameters), state)
+
+    def test_cancelled_loop_run_releases_its_claims_without_counting_an_attempt(self, mock_supabase_client):
+        self.run({"audio_file_id": None, "limit": 1000}, Cancelling())
+
+        mock_supabase_client.release_flow_run_audio_files.assert_called_once_with("run-1", count_attempt=False)
+        mock_supabase_client.set_audio_file_status.assert_not_called()
+
+    def test_crashed_loop_run_counts_an_attempt(self, mock_supabase_client):
+        self.run({"audio_file_id": None, "limit": 1000}, Crashed())
+
+        mock_supabase_client.release_flow_run_audio_files.assert_called_once_with("run-1", count_attempt=True)
+
+    def test_by_id_run_resets_its_processing_file(self, mock_supabase_client):
+        mock_supabase_client.get_audio_file_by_id.return_value = {"id": 7, "status": ProcessingStatus.PROCESSING}
+
+        self.run({"audio_file_id": 7, "limit": 1}, Cancelling())
+
+        mock_supabase_client.set_audio_file_status.assert_called_once_with(7, ProcessingStatus.NEW, None)
+        mock_supabase_client.release_flow_run_audio_files.assert_not_called()
 
 
 class TestMaintenanceFlows:

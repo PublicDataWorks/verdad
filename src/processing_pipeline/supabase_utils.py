@@ -47,11 +47,12 @@ class SupabaseClient:
             supabase_key,
         )
 
-    def _reserve_work(self, rpc_name):
+    def _reserve_work(self, rpc_name, params=None):
         # VER-378: a transient DB error here used to fail the whole stage loop until the next 6-hourly
         # restart. Report "no work" instead; the loop sleeps 60 s and asks again.
         try:
-            response = self.client.rpc(rpc_name).execute()
+            request = self.client.rpc(rpc_name, params) if params else self.client.rpc(rpc_name)
+            response = request.execute()
         except (APIError, httpx.TransportError) as e:
             if not is_transient_db_error(e):
                 raise
@@ -59,8 +60,13 @@ class SupabaseClient:
             return None
         return response.data or None
 
-    def get_a_new_audio_file_and_reserve_it(self):
-        return self._reserve_work("fetch_a_new_audio_file_and_reserve_it")
+    def get_a_new_audio_file_and_reserve_it(self, flow_run_id=None):
+        params = {"p_flow_run_id": str(flow_run_id)} if flow_run_id else None
+        return self._reserve_work("fetch_a_new_audio_file_and_reserve_it", params)
+
+    def release_flow_run_audio_files(self, flow_run_id, count_attempt):
+        params = {"p_flow_run_id": str(flow_run_id), "p_count_attempt": count_attempt}
+        return self.client.rpc("release_flow_run_audio_files", params).execute().data
 
     def get_a_new_stage_1_llm_response_and_reserve_it(self):
         return self._reserve_work("fetch_a_new_stage_1_llm_response_and_reserve_it")
