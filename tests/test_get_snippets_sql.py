@@ -248,3 +248,17 @@ def test_label_write_path_loose_sql_matches_the_migration():
     assert function_definition(GET_SNIPPETS_MIGRATION, LABEL_START) == function_definition(
         LOOSE_LABEL_SQL, LABEL_START
     ), f"{LOOSE_LABEL_SQL.name} and {GET_SNIPPETS_MIGRATION.name} define different create_apply_and_upvote_label bodies"
+
+
+def test_research_labelled_snippets_get_a_location_backfill():
+    # Research rows below 95 written before 2026-09-21 have NULL location columns (20260921000200 only
+    # filled visible rows); without this, a states/sources filter hides them in the research view.
+    sql = GET_SNIPPETS_MIGRATION.read_text()
+    statements = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    backfill = statements[statements.index("UPDATE public.snippets s") : statements.index(START)]
+    assert "SET location_state = a.location_state," in backfill
+    assert "radio_station_code = a.radio_station_code" in backfill
+    assert "s.radio_station_code IS NULL" in backfill
+    for label_id in RESEARCH_LABEL_IDS:
+        assert f"'{label_id}'" in backfill
+    assert statements.index("RESET lock_timeout;") < statements.index("UPDATE public.snippets s")

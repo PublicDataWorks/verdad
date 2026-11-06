@@ -83,6 +83,28 @@ WHERE id IN ('ed57c3a2-d010-48f0-bf0b-9c1c1ca8d3ec',
 
 RESET lock_timeout;
 
+-- Location backfill for research-labelled snippets. 20260921000200 filled location_state /
+-- radio_station_code only for rows that were visible (overall >= 95) on 2026-09-21; the copy
+-- trigger fills every row written since. Research-labelled rows below 95 that were last written
+-- before then are still NULL, so a states or sources filter in the research view would silently
+-- drop them. On production on 2026-11-06 that was 150 of the 433 Processed research-labelled rows
+-- below 95. At the ~105 ms per row measured for 20260921000200 (pgroonga re-indexing), this is
+-- ~16 s, well inside the 2-minute statement_timeout. Rows with harmful_rhetoric >= 70 need no
+-- backfill: the Stage 3 write that adds the score fires the copy trigger.
+UPDATE public.snippets s
+SET location_state = a.location_state,
+    radio_station_code = a.radio_station_code
+FROM public.audio_files a
+WHERE s.audio_file = a.id
+  AND s.radio_station_code IS NULL
+  AND s.id IN (
+      SELECT sl.snippet
+      FROM public.snippet_labels sl
+      WHERE sl.label IN ('ed57c3a2-d010-48f0-bf0b-9c1c1ca8d3ec',
+                         '7e9fa7e4-b11c-45a8-9dc7-1acf1b307056',
+                         'ff87ca7f-ac26-4859-af93-a585c0acdaf8')
+  );
+
 CREATE OR REPLACE FUNCTION public.create_apply_and_upvote_label(snippet_id uuid, label_text text, p_language text DEFAULT 'english'::text)
  RETURNS jsonb
  LANGUAGE plpgsql
