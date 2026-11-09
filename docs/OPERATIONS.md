@@ -346,7 +346,7 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 | `STAGE1_FILE_WORKERS` | Stage 1 recordings one run keeps in flight at once (GPU worker, see below) | `1` | not stored |
 | `STAGE2_USE_WORD_TIMES` | Stage 2 clipping: cut snippets that carry `start_s`/`end_s` at millisecond precision around the words | `false` | `snippets.start_time`/`end_time`/`duration`/`recorded_at` |
 | `STAGE2_CONTEXT_BEFORE_S` / `STAGE2_CONTEXT_AFTER_S` | Stage 2 padding for the word-time cut, float seconds >= 0 | the flow's `context_before_seconds` / `context_after_seconds` (90 / 60 in `main.py`) | (the clip itself) |
-| `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop) | `gemini-2.5-pro` | `snippets.analyzed_by` |
+| `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop); the review and feed line is 90 for `gemini-3.*`, 95 for any other model (VER-466) | `gemini-2.5-pro` | `snippets.analyzed_by` |
 | `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-2.5-flash` | `snippets.analyzed_by` |
 | `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
 | `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-2.5-flash` | not stored |
