@@ -7,8 +7,8 @@ from google import genai
 from google.genai import errors
 
 from processing_pipeline.constants import (
-    CONFIDENCE_THRESHOLD,
     ProcessingStatus,
+    review_threshold,
 )
 from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
@@ -199,9 +199,8 @@ async def process_snippet(
             prompt_version=prompt_version,
         )
 
-        needs_review = (
-            not skip_review and analyzing_response["response"]["confidence_scores"]["overall"] >= CONFIDENCE_THRESHOLD
-        )
+        overall = analyzing_response["response"]["confidence_scores"]["overall"]
+        needs_review = not skip_review and overall >= review_threshold(analyzing_response["analyzed_by"])
         status = ProcessingStatus.READY_FOR_REVIEW if needs_review else ProcessingStatus.PROCESSED
 
         update_snippet_in_supabase(

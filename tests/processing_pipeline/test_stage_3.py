@@ -284,6 +284,43 @@ class TestStage3:
         assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == ProcessingStatus.PROCESSED
         mock_postprocess.assert_called_once()
 
+    @pytest.mark.parametrize(
+        "model, overall, expected",
+        [
+            ("gemini-3.8-flash", 90, ProcessingStatus.READY_FOR_REVIEW),
+            ("gemini-3.8-flash", 89, ProcessingStatus.PROCESSED),
+            ("gemini-3.1-flash-lite", 90, ProcessingStatus.READY_FOR_REVIEW),
+            ("gemini-2.5-pro", 94, ProcessingStatus.PROCESSED),
+            ("gemini-2.5-pro", 95, ProcessingStatus.READY_FOR_REVIEW),
+        ],
+    )
+    def test_process_snippet_review_line_depends_on_model(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch, model, overall, expected
+    ):
+        monkeypatch.setenv("STAGE3_MAIN_MODEL", model)
+        analysis_result["response"]["confidence_scores"]["overall"] = overall
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(return_value=analysis_result)
+        ), patch("processing_pipeline.stage_3.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet, skip_review=False)
+
+        assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == expected
+
+    def test_process_snippet_review_line_follows_the_fallback_model(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_MAIN_MODEL", "gemini-3.8-flash")
+        monkeypatch.setenv("STAGE3_FALLBACK_MODEL", "gemini-2.5-pro")
+        analysis_result["response"]["confidence_scores"]["overall"] = 92
+        server_error = errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async",
+            new=AsyncMock(side_effect=[server_error, analysis_result]),
+        ), patch("processing_pipeline.stage_3.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet, skip_review=False)
+
+        assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == ProcessingStatus.PROCESSED
+
     def test_process_snippet_no_disinformation_categories(self, mock_supabase_client, sample_snippet, analysis_result):
         analysis_result["response"]["disinformation_categories"] = []
         with patch(

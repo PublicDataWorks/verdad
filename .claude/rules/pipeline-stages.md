@@ -42,8 +42,10 @@ connection) into "no work" so the loop sleeps and retries instead of failing the
 - Prompts come from the `prompt_versions` table via `supabase_client.get_active_prompt(PromptStage, sub_stage)`,
   loaded once at flow start and threaded through tasks as a `prompt_version` dict
   (`system_instruction` / `user_prompt` / `output_schema`). Editing files in `prompts/` changes nothing.
-- `CONFIDENCE_THRESHOLD = 95` (`constants.py`): stage 3 sends a snippet to stage 4 only when
-  `confidence_scores.overall >= CONFIDENCE_THRESHOLD` and `skip_review` is false (`stage_3/tasks.py`).
+- `review_threshold(model)` (`constants.py`): stage 3 sends a snippet to stage 4 only when
+  `confidence_scores.overall` reaches the line of the model that analysed it (90 for `gemini-3.*`, else
+  `CONFIDENCE_THRESHOLD = 95`) and `skip_review` is false (`stage_3/tasks.py`). The feed SQL uses the same lines,
+  and shows a 90-94 `gemini-3.*` snippet only after stage 4 reviewed it (VER-466).
 - Executors are classes with a `run`/`run_async` `@classmethod` taking the client first
   (`gemini_client: genai.Client`, or `openai_client: OpenAI` in stage 5). Stage 3 and stage 4 flows are
   `async def` and call `gemini_client.aio.*`; stage 1, 2 and 5 are synchronous.
