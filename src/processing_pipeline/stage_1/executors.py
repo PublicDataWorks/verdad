@@ -134,6 +134,9 @@ class Stage1Executor:
         )
 
         if not result.parsed:
+            if not result.candidates:
+                block_reason = result.prompt_feedback.block_reason if result.prompt_feedback else None
+                raise ValueError(f"Gemini returned no candidates. Block reason: {block_reason}.")
             finish_reason = result.candidates[0].finish_reason
             if finish_reason == FinishReason.MAX_TOKENS:
                 raise ValueError("The response from Gemini was too long and was cut off.")

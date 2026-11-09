@@ -6,7 +6,15 @@ import uuid
 from unittest.mock import Mock, patch
 
 import pytest
-from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory, ThinkingLevel
+from google.genai.types import (
+    BlockedReason,
+    FinishReason,
+    GenerateContentResponse,
+    GenerateContentResponsePromptFeedback,
+    HarmBlockThreshold,
+    HarmCategory,
+    ThinkingLevel,
+)
 from prefect.states import Cancelling, Crashed
 from pydub import AudioSegment
 
@@ -290,6 +298,20 @@ class TestStage1Executor:
     def test_run_max_tokens(self):
         client = self._client(parsed=None, finish_reason=FinishReason.MAX_TOKENS)
         with pytest.raises(ValueError, match="too long"):
+            Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+    def test_run_blocked_prompt_names_block_reason(self):
+        client = Mock()
+        client.models.generate_content.return_value = GenerateContentResponse(
+            prompt_feedback=GenerateContentResponsePromptFeedback(block_reason=BlockedReason.PROHIBITED_CONTENT)
+        )
+        with pytest.raises(ValueError, match="PROHIBITED_CONTENT"):
+            Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+    def test_run_no_candidates_without_feedback(self):
+        client = Mock()
+        client.models.generate_content.return_value = GenerateContentResponse()
+        with pytest.raises(ValueError, match="no candidates"):
             Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
 
     def test_safety_settings_configuration(self):
