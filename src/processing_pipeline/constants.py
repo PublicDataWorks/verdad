@@ -3,7 +3,14 @@ from enum import StrEnum
 
 
 CONFIDENCE_THRESHOLD = 95
+# Gemini 3.x scores strong false claims lower than 2.5 Pro did; the feed SQL repeats this line (VER-466)
+GEMINI_3_PREFIX = "gemini-3."
+GEMINI_3_CONFIDENCE_THRESHOLD = 90
 KB_DEDUP_SIMILARITY_THRESHOLD = 0.92
+
+
+def review_threshold(model: str) -> int:
+    return GEMINI_3_CONFIDENCE_THRESHOLD if model.startswith(GEMINI_3_PREFIX) else CONFIDENCE_THRESHOLD
 
 
 class GeminiModel(StrEnum):
