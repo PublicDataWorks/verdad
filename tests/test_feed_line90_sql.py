@@ -25,13 +25,18 @@ def index_statements():
     return [stmt for stmt in INDEX_SQL.split(";") if "CREATE INDEX" in stmt]
 
 
-def function_predicate_count(sql):
+def function_predicates(sql):
+    """Each visible predicate in the SQL, from the status check (on its own line or the same one) to the OR arm"""
     lines = [line.strip() for line in sql.splitlines()]
-    return sum(
-        1
+    return [
+        re.search(r"s\.status = 'Processed'.*", " ".join(lines[i - 1 : i + 3])).group(0)
         for i, line in enumerate(lines)
         if line.endswith(FUNCTION_PREDICATE[0]) and tuple(lines[i + 1 : i + 3]) == FUNCTION_PREDICATE[1:]
-    )
+    ]
+
+
+def normalise(text):
+    return re.sub(r"\bs\.|::text|::processing_status|\s+|[()]", "", text).lower()
 
 
 def test_every_feed_index_carries_the_full_visible_predicate():
@@ -50,17 +55,11 @@ def test_index_migration_warns_about_transactions():
 
 def test_every_feed_function_predicate_is_the_per_model_line():
     # get_snippets 1, get_topic_details 3, get_trending_topics 1; no bare 95 line left
-    assert function_predicate_count(FUNCTIONS_SQL) == 5
+    predicates = function_predicates(FUNCTIONS_SQL)
+    assert len(predicates) == 5
     assert len(re.findall(r">= 95\b", FUNCTIONS_SQL)) == 5
-
-
-def test_function_and_index_predicates_match():
-    def normalise(text):
-        text = re.sub(r"\bs\.|::text|::processing_status|\s+|[()]", "", text)
-        return text.lower()
-
-    function_clause = "status = 'Processed' AND " + " ".join(FUNCTION_PREDICATE)
-    assert normalise(function_clause) == normalise(INDEX_PREDICATE.removeprefix("WHERE").rstrip(";"))
+    index_predicate = normalise(INDEX_PREDICATE.removeprefix("WHERE").rstrip(";"))
+    assert all(normalise(predicate) == index_predicate for predicate in predicates), predicates
 
 
 def test_both_get_snippets_branches_select_the_review_columns():

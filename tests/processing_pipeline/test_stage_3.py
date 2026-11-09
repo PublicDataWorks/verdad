@@ -306,11 +306,18 @@ class TestStage3:
 
         assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == expected
 
+    @pytest.mark.parametrize(
+        "main_model, fallback_model, expected",
+        [
+            ("gemini-3.8-flash", "gemini-2.5-pro", ProcessingStatus.PROCESSED),
+            ("gemini-2.5-pro", "gemini-3.5-flash", ProcessingStatus.READY_FOR_REVIEW),
+        ],
+    )
     def test_process_snippet_review_line_follows_the_fallback_model(
-        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch, main_model, fallback_model, expected
     ):
-        monkeypatch.setenv("STAGE3_MAIN_MODEL", "gemini-3.8-flash")
-        monkeypatch.setenv("STAGE3_FALLBACK_MODEL", "gemini-2.5-pro")
+        monkeypatch.setenv("STAGE3_MAIN_MODEL", main_model)
+        monkeypatch.setenv("STAGE3_FALLBACK_MODEL", fallback_model)
         analysis_result["response"]["confidence_scores"]["overall"] = 92
         server_error = errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
         with patch(
@@ -319,7 +326,9 @@ class TestStage3:
         ), patch("processing_pipeline.stage_3.tasks.postprocess_snippet"):
             self._process(mock_supabase_client, sample_snippet, skip_review=False)
 
-        assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == ProcessingStatus.PROCESSED
+        kwargs = mock_supabase_client.update_snippet.call_args.kwargs
+        assert kwargs["analyzed_by"] == fallback_model
+        assert kwargs["status"] == expected
 
     def test_process_snippet_no_disinformation_categories(self, mock_supabase_client, sample_snippet, analysis_result):
         analysis_result["response"]["disinformation_categories"] = []
