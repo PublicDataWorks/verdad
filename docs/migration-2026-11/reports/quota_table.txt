@@ -1,0 +1,192 @@
+
+=== pdw-gemini (prod key) ===
+gemini-2.5-flash         Generate content free tier input token count             1/min/p/m      default=   250000 eff=  1000000 <<OVERRIDE
+gemini-2.5-flash         Generate content requests per model (paid tier 2)        1/d/p/m        default=   100000 eff=       20 <<OVERRIDE
+gemini-2.5-flash         Generate content requests per model (paid tier 2)        1/min/p/m      default=     2000 eff=     2000
+gemini-2.5-flash         Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       20 <<OVERRIDE
+gemini-2.5-flash         Generate content requests per model (paid tier 3)        1/min/p/m      default=    20000 eff=    20000
+gemini-2.5-flash         Generate content requests per model (paid tier)          1/min/p/m      default=     1000 eff=     1000
+gemini-2.5-flash         Generate requests per model per day                      1/d/p/m        default=    10000 eff=       20 <<OVERRIDE
+gemini-2.5-flash         Number of requests made to a specific model, in the free 1/d/p/m        default=       20 eff=       20 <<OVERRIDE
+gemini-2.5-flash         Number of requests made to a specific model, in the free 1/min/p/m      default=        5 eff=       15 <<OVERRIDE
+gemini-2.5-pro           Generate content free tier input token count             1/d/p/m        default=     None eff=500000000 <<OVERRIDE
+gemini-2.5-pro           Generate content free tier input token count             1/min/p/m      default=     None eff=  1000000 <<OVERRIDE
+gemini-2.5-pro           Generate content requests per model (paid tier 2)        1/d/p/m        default=    50000 eff=     2000 <<OVERRIDE
+gemini-2.5-pro           Generate content requests per model (paid tier 2)        1/min/p/m      default=     1000 eff=       10 <<OVERRIDE
+gemini-2.5-pro           Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=     2000 <<OVERRIDE
+gemini-2.5-pro           Generate content requests per model (paid tier 3)        1/min/p/m      default=     2000 eff=       10 <<OVERRIDE
+gemini-2.5-pro           Generate content requests per model (paid tier)          1/min/p/m      default=      150 eff=       10 <<OVERRIDE
+gemini-2.5-pro           Generate requests per model per day                      1/d/p/m        default=     1000 eff=     2000 <<OVERRIDE
+gemini-2.5-pro           Number of requests made to a specific model, in the free 1/d/p/m        default=     None eff=     2000 <<OVERRIDE
+gemini-2.5-pro           Number of requests made to a specific model, in the free 1/min/p/m      default=     None eff=       10 <<OVERRIDE
+gemini-3.1-flash-lite    Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.1-flash-lite    Generate content requests per model (paid tier 2)        1/d/p/m        default=   350000 eff=   350000
+gemini-3.1-flash-lite    Generate content requests per model (paid tier 2)        1/min/p/m      default=    10000 eff=    10000
+gemini-3.1-flash-lite    Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.1-flash-lite    Generate content requests per model (paid tier 3)        1/min/p/m      default=    30000 eff=    30000
+gemini-3.1-flash-lite    Generate content requests per model (paid tier)          1/min/p/m      default=     4000 eff=     4000
+gemini-3.1-flash-lite    Generate requests per model per day                      1/d/p/m        default=   150000 eff=   150000
+gemini-3.1-flash-lite    Number of requests made to a specific model, in the free 1/d/p/m        default=      500 eff=      500
+gemini-3.1-flash-lite    Number of requests made to a specific model, in the free 1/min/p/m      default=       15 eff=       15
+gemini-3.5-flash         Generate content free tier input token count             1/d/p/m        default=       -1 eff=       -1
+gemini-3.5-flash         Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.5-flash         Generate content requests per model (paid tier 2)        1/d/p/m        default=   100000 eff=   100000
+gemini-3.5-flash         Generate content requests per model (paid tier 2)        1/min/p/m      default=     2000 eff=     2000
+gemini-3.5-flash         Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.5-flash         Generate content requests per model (paid tier 3)        1/min/p/m      default=    20000 eff=    20000
+gemini-3.5-flash         Generate content requests per model (paid tier)          1/min/p/m      default=     1000 eff=     1000
+gemini-3.5-flash         Generate requests per model per day                      1/d/p/m        default=    10000 eff=    10000
+gemini-3.5-flash         Number of requests made to a specific model, in the free 1/d/p/m        default=       20 eff=       20
+gemini-3.5-flash         Number of requests made to a specific model, in the free 1/min/p/m      default=        5 eff=        5
+gemini-3.5-flash-lite    Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.5-flash-lite    Generate content requests per model (paid tier 2)        1/d/p/m        default=   350000 eff=   350000
+gemini-3.5-flash-lite    Generate content requests per model (paid tier 2)        1/min/p/m      default=    10000 eff=    10000
+gemini-3.5-flash-lite    Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.5-flash-lite    Generate content requests per model (paid tier 3)        1/min/p/m      default=    30000 eff=    30000
+gemini-3.5-flash-lite    Generate content requests per model (paid tier)          1/min/p/m      default=     4000 eff=     4000
+gemini-3.5-flash-lite    Generate requests per model per day                      1/d/p/m        default=   150000 eff=   150000
+gemini-3.5-flash-lite    Number of requests made to a specific model, in the free 1/d/p/m        default=      500 eff=      500
+gemini-3.5-flash-lite    Number of requests made to a specific model, in the free 1/min/p/m      default=       15 eff=       15
+gemini-3.5-transcribe    Generate content free tier input token count             1/min/p/m      default=    10000 eff=    10000
+gemini-3.5-transcribe    Generate content requests per model (paid tier 2)        1/d/p/m        default=    10000 eff=    10000
+gemini-3.5-transcribe    Generate content requests per model (paid tier 2)        1/min/p/m      default=     1000 eff=     1000
+gemini-3.5-transcribe    Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.5-transcribe    Generate content requests per model (paid tier 3)        1/min/p/m      default=     1000 eff=     1000
+gemini-3.5-transcribe    Generate content requests per model (paid tier)          1/min/p/m      default=       10 eff=       10
+gemini-3.5-transcribe    Generate requests per model per day                      1/d/p/m        default=      100 eff=      100
+gemini-3.5-transcribe    Number of requests made to a specific model, in the free 1/d/p/m        default=       25 eff=       25
+gemini-3.5-transcribe    Number of requests made to a specific model, in the free 1/min/p/m      default=        3 eff=        3
+gemini-3.6-flash         Generate content free tier input token count             1/d/p/m        default=       -1 eff=       -1
+gemini-3.6-flash         Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.6-flash         Generate content requests per model (paid tier 2)        1/d/p/m        default=   100000 eff=   100000
+gemini-3.6-flash         Generate content requests per model (paid tier 2)        1/min/p/m      default=     2000 eff=     2000
+gemini-3.6-flash         Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.6-flash         Generate content requests per model (paid tier 3)        1/min/p/m      default=    20000 eff=    20000
+gemini-3.6-flash         Generate content requests per model (paid tier)          1/min/p/m      default=     1000 eff=     1000
+gemini-3.6-flash         Generate requests per model per day                      1/d/p/m        default=    10000 eff=    10000
+gemini-3.6-flash         Number of requests made to a specific model, in the free 1/d/p/m        default=       20 eff=       20
+gemini-3.6-flash         Number of requests made to a specific model, in the free 1/min/p/m      default=        5 eff=        5
+gemini-3.8-flash         Generate content free tier input token count             1/d/p/m        default=       -1 eff=       -1
+gemini-3.8-flash         Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.8-flash         Generate content requests per model (paid tier 2)        1/d/p/m        default=   100000 eff=   100000
+gemini-3.8-flash         Generate content requests per model (paid tier 2)        1/min/p/m      default=     2000 eff=     2000
+gemini-3.8-flash         Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.8-flash         Generate content requests per model (paid tier 3)        1/min/p/m      default=    20000 eff=    20000
+gemini-3.8-flash         Generate content requests per model (paid tier)          1/min/p/m      default=     1000 eff=     1000
+gemini-3.8-flash         Generate requests per model per day                      1/d/p/m        default=    10000 eff=    10000
+gemini-3.8-flash         Number of requests made to a specific model, in the free 1/d/p/m        default=       20 eff=       20
+gemini-3.8-flash         Number of requests made to a specific model, in the free 1/min/p/m      default=        5 eff=        5
+gemma-4-26b              Generate content free tier input token count             1/min/p/m      default=    16000 eff=    16000
+gemma-4-26b              Generate content requests per model (paid tier 2)        1/d/p/m        default=    14400 eff=    14400
+gemma-4-26b              Generate content requests per model (paid tier 2)        1/min/p/m      default=       30 eff=       30
+gemma-4-26b              Generate content requests per model (paid tier 3)        1/d/p/m        default=    14400 eff=    14400
+gemma-4-26b              Generate content requests per model (paid tier 3)        1/min/p/m      default=       30 eff=       30
+gemma-4-26b              Generate content requests per model (paid tier)          1/min/p/m      default=       30 eff=       30
+gemma-4-26b              Generate requests per model per day                      1/d/p/m        default=    14400 eff=    14400
+gemma-4-26b              Number of requests made to a specific model, in the free 1/d/p/m        default=    14400 eff=    14400
+gemma-4-26b              Number of requests made to a specific model, in the free 1/min/p/m      default=       30 eff=       30
+gemma-4-31b              Generate content free tier input token count             1/min/p/m      default=    16000 eff=    16000
+gemma-4-31b              Generate content requests per model (paid tier 2)        1/d/p/m        default=    14400 eff=    14400
+gemma-4-31b              Generate content requests per model (paid tier 2)        1/min/p/m      default=       30 eff=       30
+gemma-4-31b              Generate content requests per model (paid tier 3)        1/d/p/m        default=    14400 eff=    14400
+gemma-4-31b              Generate content requests per model (paid tier 3)        1/min/p/m      default=       30 eff=       30
+gemma-4-31b              Generate content requests per model (paid tier)          1/min/p/m      default=       30 eff=       30
+gemma-4-31b              Generate requests per model per day                      1/d/p/m        default=    14400 eff=    14400
+gemma-4-31b              Number of requests made to a specific model, in the free 1/d/p/m        default=    14400 eff=    14400
+gemma-4-31b              Number of requests made to a specific model, in the free 1/min/p/m      default=       30 eff=       30
+
+=== verdad-factchecking (billed, Tier 1) ===
+gemini-2.5-flash         Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-2.5-flash         Generate content requests per model (paid tier 2)        1/d/p/m        default=   100000 eff=   100000
+gemini-2.5-flash         Generate content requests per model (paid tier 2)        1/min/p/m      default=     2000 eff=     2000
+gemini-2.5-flash         Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-2.5-flash         Generate content requests per model (paid tier 3)        1/min/p/m      default=    20000 eff=    20000
+gemini-2.5-flash         Generate content requests per model (paid tier)          1/min/p/m      default=     1000 eff=     1000
+gemini-2.5-flash         Generate requests per model per day                      1/d/p/m        default=    10000 eff=    10000
+gemini-2.5-flash         Number of requests made to a specific model, in the free 1/d/p/m        default=       20 eff=       20
+gemini-2.5-flash         Number of requests made to a specific model, in the free 1/min/p/m      default=        5 eff=        5
+gemini-2.5-pro           Generate content free tier input token count             1/d/p/m        default=     None eff=     None
+gemini-2.5-pro           Generate content free tier input token count             1/min/p/m      default=     None eff=     None
+gemini-2.5-pro           Generate content requests per model (paid tier 2)        1/d/p/m        default=    50000 eff=    50000
+gemini-2.5-pro           Generate content requests per model (paid tier 2)        1/min/p/m      default=     1000 eff=     1000
+gemini-2.5-pro           Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-2.5-pro           Generate content requests per model (paid tier 3)        1/min/p/m      default=     2000 eff=     2000
+gemini-2.5-pro           Generate content requests per model (paid tier)          1/min/p/m      default=      150 eff=      150
+gemini-2.5-pro           Generate requests per model per day                      1/d/p/m        default=     1000 eff=     1000
+gemini-2.5-pro           Number of requests made to a specific model, in the free 1/d/p/m        default=     None eff=     None
+gemini-2.5-pro           Number of requests made to a specific model, in the free 1/min/p/m      default=     None eff=     None
+gemini-3.1-flash-lite    Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.1-flash-lite    Generate content requests per model (paid tier 2)        1/d/p/m        default=   350000 eff=   350000
+gemini-3.1-flash-lite    Generate content requests per model (paid tier 2)        1/min/p/m      default=    10000 eff=    10000
+gemini-3.1-flash-lite    Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.1-flash-lite    Generate content requests per model (paid tier 3)        1/min/p/m      default=    30000 eff=    30000
+gemini-3.1-flash-lite    Generate content requests per model (paid tier)          1/min/p/m      default=     4000 eff=     4000
+gemini-3.1-flash-lite    Generate requests per model per day                      1/d/p/m        default=   150000 eff=   150000
+gemini-3.1-flash-lite    Number of requests made to a specific model, in the free 1/d/p/m        default=      500 eff=      500
+gemini-3.1-flash-lite    Number of requests made to a specific model, in the free 1/min/p/m      default=       15 eff=       15
+gemini-3.5-flash         Generate content free tier input token count             1/d/p/m        default=       -1 eff=       -1
+gemini-3.5-flash         Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.5-flash         Generate content requests per model (paid tier 2)        1/d/p/m        default=   100000 eff=   100000
+gemini-3.5-flash         Generate content requests per model (paid tier 2)        1/min/p/m      default=     2000 eff=     2000
+gemini-3.5-flash         Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.5-flash         Generate content requests per model (paid tier 3)        1/min/p/m      default=    20000 eff=    20000
+gemini-3.5-flash         Generate content requests per model (paid tier)          1/min/p/m      default=     1000 eff=     1000
+gemini-3.5-flash         Generate requests per model per day                      1/d/p/m        default=    10000 eff=    10000
+gemini-3.5-flash         Number of requests made to a specific model, in the free 1/d/p/m        default=       20 eff=       20
+gemini-3.5-flash         Number of requests made to a specific model, in the free 1/min/p/m      default=        5 eff=        5
+gemini-3.5-flash-lite    Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.5-flash-lite    Generate content requests per model (paid tier 2)        1/d/p/m        default=   350000 eff=   350000
+gemini-3.5-flash-lite    Generate content requests per model (paid tier 2)        1/min/p/m      default=    10000 eff=    10000
+gemini-3.5-flash-lite    Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.5-flash-lite    Generate content requests per model (paid tier 3)        1/min/p/m      default=    30000 eff=    30000
+gemini-3.5-flash-lite    Generate content requests per model (paid tier)          1/min/p/m      default=     4000 eff=     4000
+gemini-3.5-flash-lite    Generate requests per model per day                      1/d/p/m        default=   150000 eff=   150000
+gemini-3.5-flash-lite    Number of requests made to a specific model, in the free 1/d/p/m        default=      500 eff=      500
+gemini-3.5-flash-lite    Number of requests made to a specific model, in the free 1/min/p/m      default=       15 eff=       15
+gemini-3.5-transcribe    Generate content free tier input token count             1/min/p/m      default=    10000 eff=    10000
+gemini-3.5-transcribe    Generate content requests per model (paid tier 2)        1/d/p/m        default=    10000 eff=    10000
+gemini-3.5-transcribe    Generate content requests per model (paid tier 2)        1/min/p/m      default=     1000 eff=     1000
+gemini-3.5-transcribe    Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.5-transcribe    Generate content requests per model (paid tier 3)        1/min/p/m      default=     1000 eff=     1000
+gemini-3.5-transcribe    Generate content requests per model (paid tier)          1/min/p/m      default=       10 eff=       10
+gemini-3.5-transcribe    Generate requests per model per day                      1/d/p/m        default=      100 eff=      100
+gemini-3.5-transcribe    Number of requests made to a specific model, in the free 1/d/p/m        default=       25 eff=       25
+gemini-3.5-transcribe    Number of requests made to a specific model, in the free 1/min/p/m      default=        3 eff=        3
+gemini-3.6-flash         Generate content free tier input token count             1/d/p/m        default=       -1 eff=       -1
+gemini-3.6-flash         Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.6-flash         Generate content requests per model (paid tier 2)        1/d/p/m        default=   100000 eff=   100000
+gemini-3.6-flash         Generate content requests per model (paid tier 2)        1/min/p/m      default=     2000 eff=     2000
+gemini-3.6-flash         Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.6-flash         Generate content requests per model (paid tier 3)        1/min/p/m      default=    20000 eff=    20000
+gemini-3.6-flash         Generate content requests per model (paid tier)          1/min/p/m      default=     1000 eff=     1000
+gemini-3.6-flash         Generate requests per model per day                      1/d/p/m        default=    10000 eff=    10000
+gemini-3.6-flash         Number of requests made to a specific model, in the free 1/d/p/m        default=       20 eff=       20
+gemini-3.6-flash         Number of requests made to a specific model, in the free 1/min/p/m      default=        5 eff=        5
+gemini-3.8-flash         Generate content free tier input token count             1/d/p/m        default=       -1 eff=       -1
+gemini-3.8-flash         Generate content free tier input token count             1/min/p/m      default=   250000 eff=   250000
+gemini-3.8-flash         Generate content requests per model (paid tier 2)        1/d/p/m        default=   100000 eff=   100000
+gemini-3.8-flash         Generate content requests per model (paid tier 2)        1/min/p/m      default=     2000 eff=     2000
+gemini-3.8-flash         Generate content requests per model (paid tier 3)        1/d/p/m        default=       -1 eff=       -1
+gemini-3.8-flash         Generate content requests per model (paid tier 3)        1/min/p/m      default=    20000 eff=    20000
+gemini-3.8-flash         Generate content requests per model (paid tier)          1/min/p/m      default=     1000 eff=     1000
+gemini-3.8-flash         Generate requests per model per day                      1/d/p/m        default=    10000 eff=    10000
+gemini-3.8-flash         Number of requests made to a specific model, in the free 1/d/p/m        default=       20 eff=       20
+gemini-3.8-flash         Number of requests made to a specific model, in the free 1/min/p/m      default=        5 eff=        5
+gemma-4-26b              Generate content free tier input token count             1/min/p/m      default=    16000 eff=    16000
+gemma-4-26b              Generate content requests per model (paid tier 2)        1/d/p/m        default=    14400 eff=    14400
+gemma-4-26b              Generate content requests per model (paid tier 2)        1/min/p/m      default=       30 eff=       30
+gemma-4-26b              Generate content requests per model (paid tier 3)        1/d/p/m        default=    14400 eff=    14400
+gemma-4-26b              Generate content requests per model (paid tier 3)        1/min/p/m      default=       30 eff=       30
+gemma-4-26b              Generate content requests per model (paid tier)          1/min/p/m      default=       30 eff=       30
+gemma-4-26b              Generate requests per model per day                      1/d/p/m        default=    14400 eff=    14400
+gemma-4-26b              Number of requests made to a specific model, in the free 1/d/p/m        default=    14400 eff=    14400
+gemma-4-26b              Number of requests made to a specific model, in the free 1/min/p/m      default=       30 eff=       30
+gemma-4-31b              Generate content free tier input token count             1/min/p/m      default=    16000 eff=    16000
+gemma-4-31b              Generate content requests per model (paid tier 2)        1/d/p/m        default=    14400 eff=    14400
+gemma-4-31b              Generate content requests per model (paid tier 2)        1/min/p/m      default=       30 eff=       30
+gemma-4-31b              Generate content requests per model (paid tier 3)        1/d/p/m        default=    14400 eff=    14400
+gemma-4-31b              Generate content requests per model (paid tier 3)        1/min/p/m      default=       30 eff=       30
+gemma-4-31b              Generate content requests per model (paid tier)          1/min/p/m      default=       30 eff=       30
+gemma-4-31b              Generate requests per model per day                      1/d/p/m        default=    14400 eff=    14400
+gemma-4-31b              Number of requests made to a specific model, in the free 1/d/p/m        default=    14400 eff=    14400
+gemma-4-31b              Number of requests made to a specific model, in the free 1/min/p/m      default=       30 eff=       30
