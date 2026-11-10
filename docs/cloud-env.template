@@ -40,6 +40,16 @@ SENTRY_ORG=verdad-nk
 # SEARXNG_URL=https://verdad-searxng.fly.dev
 # JINA_API_KEY=
 
+# ---- Decision-model pre-check eval (VER-475, src/scripts/precheck_eval); leave commented otherwise --------
+# Billable vendor keys; each provider needs only its own. docs/PRECHECK_EVALUATION.md.
+# TYPESAFE_API_KEY=
+# CLOUDFLARE_ACCOUNT_ID=
+# CLOUDFLARE_API_TOKEN=
+# PARALLEL_API_KEY=
+# OPENROUTER_API_KEY=
+# DECISION_BASE_URL=
+# DECISION_API_KEY=
+
 # ---- Optional overrides (not secrets; defaults are production's values, see the doc) -----------
 # SUPABASE_PROJECT_REF=
 # SUPABASE_MANAGEMENT_API_URL=
