@@ -32,11 +32,13 @@ stations:
     url: "https://securenetg.com/radio/8090/radio.aac"
     state: "Georgia"
     recorder: max
+  # Disabled 2026-11-09 (VER-469): no audio since 2026-11-07, provider reports "Stream is Offline".
   - code: "WPHE - 690 AM"
     name: "Radio Salvación"
     url: "https://sp.unoredcdn.net/8124/stream"
     state: "Pennsylvania"
     recorder: max
+    enabled: false
   - code: "WLCH - 91.3 FM"
     name: "Radio Centro"
     url: "http://streaming.live365.com/a37354"

@@ -30,10 +30,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_ROOT / "config" / "stations.yaml"
 
 # The 39 stations the max recorder served as radio_stations[:39], in order, minus the five disabled on
-# 2026-10-09 (KENO, KNNR, WURN, KFUE, WDJA).
+# 2026-10-09 (KENO, KNNR, WURN, KFUE, WDJA) and WPHE (2026-11-09).
 MAX_CODES = [
     "WLEL - 94.3 FM",
-    "WPHE - 690 AM",
     "WLCH - 91.3 FM",
     "WSDS - 1480 AM",
     "WOAP - 1080 AM",
@@ -137,7 +136,6 @@ PREFECT_RUNS = {
     "Audio Recording: Max Recorder/WLMV - 1480 AM",
     "Audio Recording: Max Recorder/WNMA - 1210 AM",
     "Audio Recording: Max Recorder/WOAP - 1080 AM",
-    "Audio Recording: Max Recorder/WPHE - 690 AM",
     "Audio Recording: Max Recorder/WRUM - 100.3 FM",
     "Audio Recording: Max Recorder/WRUM HD2 - 97.1 FM",
     "Audio Recording: Max Recorder/WSDS - 1480 AM",
@@ -187,7 +185,7 @@ class TestSnapshots:
 
     def test_max_recorder_stations(self):
         assert [s.code for s in stations_for("max")] == MAX_CODES
-        assert len(MAX_CODES) == 34
+        assert len(MAX_CODES) == 33
 
     def test_lite_recorder_stations(self):
         assert [s.code for s in stations_for("lite")] == LITE_CODES
@@ -199,7 +197,7 @@ class TestSnapshots:
 
     def test_station_dicts_match_the_legacy_shape_and_order(self):
         dicts = station_dicts()
-        assert len(dicts) == 48
+        assert len(dicts) == 47
         assert [d["code"] for d in dicts] == MAX_CODES + LITE_CODES
         assert all(set(d) == {"code", "url", "state", "name"} for d in dicts)
 
@@ -209,7 +207,7 @@ class TestSnapshots:
 
     def test_prefect_run_targets_match_the_old_arrays(self):
         assert set(prefect_run_targets()) == PREFECT_RUNS
-        assert len(prefect_run_targets()) == 54
+        assert len(prefect_run_targets()) == 53
 
     def test_flow_names_are_unchanged(self):
         assert FLOW_NAMES == {
@@ -248,6 +246,7 @@ class TestSnapshots:
             "WURN - 1040 AM",
             "KFUE - 106.7 FM",
             "WDJA - 1420 AM",
+            "WPHE - 690 AM",
         }
 
 
