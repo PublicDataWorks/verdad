@@ -227,6 +227,14 @@ class TestStage1FlowOptions:
         monkeypatch.setenv("STAGE1_ANCHOR_TIMESTAMPS", value)
         assert mc.stage1_anchor_timestamps() is expected
 
+    def test_stage3_repeat_dedup_is_off_by_default(self, monkeypatch):
+        monkeypatch.delenv("STAGE3_REPEAT_DEDUP", raising=False)
+        assert mc.stage3_repeat_dedup() is False
+
+    def test_stage3_repeat_dedup_on(self, monkeypatch):
+        monkeypatch.setenv("STAGE3_REPEAT_DEDUP", "true")
+        assert mc.stage3_repeat_dedup() is True
+
     def test_unknown_flag_value(self, monkeypatch):
         monkeypatch.setenv("STAGE1_ANCHOR_TIMESTAMPS", "maybe")
         with pytest.raises(ValueError, match="STAGE1_ANCHOR_TIMESTAMPS='maybe'"):

@@ -134,6 +134,80 @@ def __get_metadata(snippet):
     return metadata
 
 
+def stage_1_excerpt(snippet):
+    detection_result = (snippet.get("stage_1_llm_response") or {}).get("detection_result") or {}
+    for flagged_snippet in detection_result.get("flagged_snippets") or []:
+        if flagged_snippet.get("uuid") == snippet["id"]:
+            return flagged_snippet.get("transcription")
+    return None
+
+
+@optional_task(log_prints=True)
+def find_repeat_source(supabase_client, snippet, prompt_version_id):
+    # Only the Stage 1 excerpt exists before Stage 3; any failure means no repeat.
+    try:
+        excerpt = stage_1_excerpt(snippet)
+        if not excerpt or not snippet.get("radio_station_code"):
+            return None
+        source_id = supabase_client.find_stage3_repeat_source(
+            station=snippet["radio_station_code"],
+            recorded_at=snippet["recorded_at"],
+            excerpt=excerpt,
+            prompt_version_id=prompt_version_id,
+        )
+        source = supabase_client.get_snippet_by_id(id=source_id, select="*") if source_id else None
+    except Exception as e:
+        print(f"Repeat lookup failed for snippet {snippet['id']}, running Stage 3: {type(e).__name__}: {e}")
+        return None
+    if source:
+        print(f"Snippet {snippet['id']} repeats {source['id']}")
+    return source
+
+
+@optional_task(log_prints=True)
+def copy_repeat_analysis(supabase_client, snippet, source):
+    """Copy the source's final (post-review) analysis onto the snippet. False when nothing was written."""
+    try:
+        supabase_client.update_snippet(
+            id=snippet["id"],
+            transcription=source["transcription"],
+            translation=source["translation"],
+            title=source["title"],
+            summary=source["summary"],
+            explanation=source["explanation"],
+            disinformation_categories=source["disinformation_categories"],
+            keywords_detected=source["keywords_detected"],
+            language=source["language"],
+            confidence_scores=source["confidence_scores"],
+            emotional_tone=source["emotional_tone"],
+            context=source["context"],
+            political_leaning=source["political_leaning"],
+            grounding_metadata=source["grounding_metadata"],
+            thought_summaries=None,
+            analyzed_by=source["analyzed_by"],
+            status=ProcessingStatus.PROCESSED,
+            error_message=None,
+            stage_3_prompt_version_id=source["stage_3_prompt_version_id"],
+            reviewed_at=source["reviewed_at"],
+            reviewed_by=source["reviewed_by"],
+            repeat_of=source["id"],
+        )
+    except Exception as e:
+        print(f"Copying {source['id']} onto {snippet['id']} failed, running Stage 3: {type(e).__name__}: {e}")
+        return False
+
+    try:
+        postprocess_snippet(supabase_client, snippet["id"], source["disinformation_categories"] or [])
+    except Exception as e:
+        error_message = f"[Stage 3 repeat] {type(e).__name__}: {e}"
+        print(f"Snippet {snippet['id']}: {error_message}")
+        try:
+            supabase_client.set_snippet_status(snippet["id"], ProcessingStatus.ERROR, error_message)
+        except Exception as status_error:
+            print(f"Could not mark snippet {snippet['id']} as Error: {type(status_error).__name__}: {status_error}")
+    return True
+
+
 @optional_task(log_prints=True)
 async def analyze_snippet(gemini_client, audio_file, metadata, prompt_version: dict):
     return await with_retries(lambda: analyze_with_fallback(gemini_client, audio_file, metadata, prompt_version))

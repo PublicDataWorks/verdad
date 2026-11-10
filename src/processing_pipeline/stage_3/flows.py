@@ -9,10 +9,13 @@ from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import ProcessingStatus, PromptStage
 from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
+from processing_pipeline.model_config import stage3_repeat_dedup
 from processing_pipeline.stage_3.tasks import (
+    copy_repeat_analysis,
     download_audio_file_from_s3,
     fetch_a_new_snippet_from_supabase,
     fetch_a_specific_snippet_from_supabase,
+    find_repeat_source,
     process_snippet,
 )
 from processing_pipeline.supabase_utils import SupabaseClient
@@ -82,10 +85,16 @@ async def in_depth_analysis(snippet_ids, skip_review, repeat):
                 print(f"Delete the downloaded snippet clip: {local_file}")
                 os.remove(local_file)
     else:
+        repeat_dedup = stage3_repeat_dedup()
         while True:
             snippet = fetch_a_new_snippet_from_supabase(supabase_client)  # TODO: Retry failed snippets (status: Error)
 
-            if snippet:
+            copied = False
+            if snippet and repeat_dedup:
+                source = find_repeat_source(supabase_client, snippet, prompt_version["id"])
+                copied = bool(source) and copy_repeat_analysis(supabase_client, snippet, source)
+
+            if snippet and not copied:
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet
