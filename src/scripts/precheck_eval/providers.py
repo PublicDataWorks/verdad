@@ -69,9 +69,23 @@ def _clamp01(value) -> float | None:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    if math.isnan(number):
+    if not math.isfinite(number):
         return None
     return min(1.0, max(0.0, number))
+
+
+def _finite_probabilities(raw: Any) -> dict:
+    """Probabilities as finite floats, or {} when any entry is unusable.
+
+    One bad entry drops the whole distribution: scoring a partial one would read the dropped label as zero.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    try:
+        clean = {key: float(value) for key, value in raw.items()}
+    except (TypeError, ValueError, OverflowError):
+        return {}
+    return clean if all(math.isfinite(value) for value in clean.values()) else {}
 
 
 def _missing(qtype: str, refused: bool = False) -> dict:
@@ -92,7 +106,7 @@ def normalize_answer(raw: Any, question: dict) -> dict:
         return _missing(qtype)
     if raw.get("type") == "refusal":
         return _missing(qtype, refused=True)
-    probabilities = raw.get("probabilities") if isinstance(raw.get("probabilities"), dict) else {}
+    probabilities = _finite_probabilities(raw.get("probabilities"))
     answer = _missing(qtype)
     answer.update(missing=False, probabilities=probabilities, confidence=raw.get("confidence"))
     if qtype == "noul":
@@ -105,10 +119,16 @@ def normalize_answer(raw: Any, question: dict) -> dict:
         score = raw.get("score")
         if score is None and probabilities:
             try:
-                score = sum(float(k) * float(p) for k, p in probabilities.items())
+                score = sum(float(k) * prob for k, prob in probabilities.items())
             except (TypeError, ValueError):
                 score = None
-        answer["value"] = _clamp01(float(score) / (levels - 1)) if score is not None and levels > 1 else None
+        try:
+            score = float(score) if score is not None else None
+        except (TypeError, ValueError, OverflowError):
+            score = None
+        if score is not None and not math.isfinite(score):
+            score = None
+        answer["value"] = _clamp01(score / (levels - 1)) if score is not None and levels > 1 else None
     elif qtype == "choice":
         answer["choice"] = raw.get("choice")
         if answer["choice"] is None and not probabilities:
@@ -436,6 +456,9 @@ class McpDecisionClient(DecisionClient):
             await self._ensure_session()
         except RuntimeError as exc:
             result.error = str(exc)[:ERROR_TEXT_CHARS]
+            return result
+        except httpx.HTTPError as exc:
+            result.error = f"{type(exc).__name__}: {exc}"[:ERROR_TEXT_CHARS]
             return result
         call = self.rpc("tools/call", {"name": MCP_TOOL, "arguments": self.build_body(state, questions)})
         await self.limiter.wait()

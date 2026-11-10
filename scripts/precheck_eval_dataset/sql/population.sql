@@ -33,4 +33,6 @@ from snippets s
 where s.analyzed_by in ('gemini-3.5-flash', 'gemini-3.8-flash')
   and s.repeat_of is null
   and s.updated_at >= '2026-11-06'
-  and coalesce(s.previous_analysis->'confidence_scores'->>'overall', s.confidence_scores->>'overall') is not null;
+  and (case when s.previous_analysis is not null
+         then s.previous_analysis->'confidence_scores'->>'overall'
+         else s.confidence_scores->>'overall' end) is not null;

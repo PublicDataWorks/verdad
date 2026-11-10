@@ -257,6 +257,28 @@ def test_normalize_answer_types():
     assert p.normalize_answer({"type": "choice"}, q_choice)["missing"]
 
 
+def test_normalize_answer_rejects_unusable_numbers():
+    q_noul, q_score, q_choice = QUESTIONS["worth_analysis"], QUESTIONS["stage3_band"], QUESTIONS["content_type"]
+    # A score that is not a finite number is a missing answer, not a crash.
+    for bad in ("high", "nan", "inf", [3], {"x": 1}):
+        answer = p.normalize_answer({"type": "score", "score": bad}, q_score)
+        assert answer["missing"] and answer["value"] is None
+    assert p.normalize_answer({"type": "score", "score": "3"}, q_score)["value"] == pytest.approx(0.75)
+    assert p.normalize_answer({"type": "noul", "noul": "inf"}, q_noul)["missing"]
+    # One unusable probability drops the whole distribution.
+    for bad in ("x", "nan", None, float("inf")):
+        choice = p.normalize_answer({"type": "choice", "probabilities": {"other": 0.4, "advertising": bad}}, q_choice)
+        assert choice["probabilities"] == {} and choice["missing"]
+        kept = p.normalize_answer(
+            {"type": "choice", "choice": "other", "probabilities": {"other": 0.4, "advertising": bad}}, q_choice
+        )
+        assert kept["probabilities"] == {} and kept["choice"] == "other" and not kept["missing"]
+    clean = p.normalize_answer({"type": "choice", "probabilities": {"other": "0.4", "advertising": 0.6}}, q_choice)
+    assert clean["probabilities"] == {"other": 0.4, "advertising": 0.6}
+    assert p.normalize_answer({"type": "score", "probabilities": {"0": "nan", "4": 0.5}}, q_score)["missing"]
+    assert p.normalize_answer({"type": "noul", "probabilities": ["true"]}, q_noul)["missing"]
+
+
 def test_error_message_shapes():
     assert p.error_message({"detail": "bad state"}) == "bad state"
     assert p.error_message({"detail": {"message": "no key"}}) == "no key"
@@ -571,6 +593,19 @@ def test_mcp_initialize_failure_and_transport_error():
         return mcp_handler(jev_answers())[0](request)
 
     assert "ReadTimeout" in mcp_decide(flaky).error
+
+    # A transport error while opening the session is an error result too, not an exception.
+    def dead(request):
+        raise httpx.ConnectError("no route", request=request)
+
+    assert "ConnectError" in mcp_decide(dead).error
+
+    def dead_after_initialize(request):
+        if json.loads(request.content)["method"] == "notifications/initialized":
+            raise httpx.ReadTimeout("slow", request=request)
+        return mcp_handler(jev_answers())[0](request)
+
+    assert "ReadTimeout" in mcp_decide(dead_after_initialize).error
 
 
 def test_mcp_needs_context_manager_and_parses_plain_json():
