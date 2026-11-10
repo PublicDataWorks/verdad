@@ -304,7 +304,48 @@ class TestSupabaseClient:
         assert payload["previous_analysis"] is None
         assert payload["reviewed_at"] is None
         assert payload["reviewed_by"] is None
+        assert payload["repeat_of"] is None
         assert response == expected_response
+
+    def test_update_snippet_writes_copied_review_fields(self, supabase_client, mock_supabase):
+        fields = dict.fromkeys(
+            ["transcription", "translation", "title", "summary", "explanation", "disinformation_categories",
+             "keywords_detected", "language", "confidence_scores", "emotional_tone", "context", "political_leaning",
+             "grounding_metadata", "thought_summaries", "analyzed_by", "status", "error_message"]
+        )
+
+        supabase_client.update_snippet(
+            id="copy-id", **fields, reviewed_at="2026-11-09T10:00:00+00:00", reviewed_by="gemini-3.8-flash",
+            repeat_of="source-id",
+        )
+
+        payload = mock_supabase.table.return_value.update.call_args.args[0]
+        assert payload["reviewed_at"] == "2026-11-09T10:00:00+00:00"
+        assert payload["reviewed_by"] == "gemini-3.8-flash"
+        assert payload["repeat_of"] == "source-id"
+
+    def test_find_stage3_repeat_source(self, supabase_client, mock_supabase):
+        mock_supabase.rpc.return_value.execute.return_value.data = "source-id"
+
+        source_id = supabase_client.find_stage3_repeat_source(
+            station="WAXY - 790 AM", recorded_at="2026-11-10T01:00:00+00:00", excerpt="texto", prompt_version_id="pv-3"
+        )
+
+        mock_supabase.rpc.assert_called_once_with(
+            "find_stage3_repeat_source",
+            {
+                "p_station": "WAXY - 790 AM",
+                "p_recorded_at": "2026-11-10T01:00:00+00:00",
+                "p_excerpt": "texto",
+                "p_prompt_version_id": "pv-3",
+            },
+        )
+        assert source_id == "source-id"
+
+    def test_find_stage3_repeat_source_none(self, supabase_client, mock_supabase):
+        mock_supabase.rpc.return_value.execute.return_value.data = None
+
+        assert supabase_client.find_stage3_repeat_source("WAXY - 790 AM", "2026-11-10T01:00:00+00:00", "x", "pv-3") is None
 
     def test_reset_snippet(self, supabase_client, mock_supabase):
         """Test resetting snippet"""
@@ -730,6 +771,7 @@ class TestSupabaseClient:
                 "error_message": None,
                 "reviewed_at": ANY,
                 "reviewed_by": GeminiModel.GEMINI_2_5_PRO.value,
+                "repeat_of": None,
             }
         )
         assert response == expected_response

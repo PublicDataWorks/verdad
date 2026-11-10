@@ -349,6 +349,7 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 | `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop); the review and feed line is 90 for `gemini-3.*`, 95 for any other model (VER-466) | `gemini-2.5-pro` | `snippets.analyzed_by` |
 | `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-2.5-flash` | `snippets.analyzed_by` |
 | `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
+| `STAGE3_REPEAT_DEDUP` | Stage 3 queue loop: a snippet whose Stage 1 excerpt matches an earlier Processed snippet of the same station (trigram 0.85, 7 days, same Stage 3 prompt version) gets that analysis copied instead of a Gemini call (VER-465). A Stage 3 prompt bump finds no sources for up to 7 days | `false` | `snippets.repeat_of` |
 | `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-2.5-flash` | not stored |
 | `STAGE4_REVIEWER_MODEL` | Stage 4 `analysis_reviewer` | `gemini-2.5-pro` | `snippets.reviewed_by` |
 | `STAGE4_REVIEWER_THINKING` | Stage 4 `analysis_reviewer` thinking level (`minimal`/`low`/`medium`/`high`); 3.x defaults to `high`, whose thoughts count against the agent's 16k output cap and truncated review JSON | `medium` on Gemini 3.x, the model default on 2.5, nothing on Gemma | not stored |
@@ -540,7 +541,8 @@ refuses the production project unless `--allow-production` is passed.
   after `p_max_attempts` (default 3). **It is not scheduled by default**: `p_batch` is the Gemini-quota dial
   (VER-379). Enable with `SELECT cron.schedule('sweep_retryable_errors', '*/10 * * * *',
   $$SELECT public.sweep_retryable_errors(200)$$)`, pause with `cron.unschedule`, and run one batch by hand with
-  `SELECT public.sweep_retryable_errors(50)`, which returns counts by destination.
+  `SELECT public.sweep_retryable_errors(50)`, which returns counts by destination. It never matches
+  `[Stage 3 repeat]` rows (VER-465: the copied analysis was written but labelling failed); rerun those by id.
 - **Stage 1 audio `Error`s retry from pg_cron.** `public.sweep_retryable_audio_errors(p_batch, p_max_attempts)`
   (migrations `20261001100000` + `20261001160000`, VER-417; job `sweep_retryable_audio_errors` at :25 and :55, batch
   20) moves audio files that failed Stage 1 on a Gemini 503/429/empty reply or a statement timeout back to `New`:

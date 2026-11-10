@@ -285,6 +285,9 @@ class SupabaseClient:
         status,
         error_message,
         stage_3_prompt_version_id=None,
+        reviewed_at=None,
+        reviewed_by=None,
+        repeat_of=None,
     ):
         response = (
             self.client.table("snippets")
@@ -306,17 +309,27 @@ class SupabaseClient:
                     "thought_summaries": thought_summaries,
                     "analyzed_by": analyzed_by,
                     "previous_analysis": None,
-                    "reviewed_at": None,
-                    "reviewed_by": None,
+                    "reviewed_at": reviewed_at,
+                    "reviewed_by": reviewed_by,
                     "status": status,
                     "error_message": error_message,
                     "stage_3_prompt_version_id": stage_3_prompt_version_id,
+                    "repeat_of": repeat_of,
                 }
             )
             .eq("id", id)
             .execute()
         )
         return response.data
+
+    def find_stage3_repeat_source(self, station, recorded_at, excerpt, prompt_version_id):
+        params = {
+            "p_station": station,
+            "p_recorded_at": recorded_at,
+            "p_excerpt": excerpt,
+            "p_prompt_version_id": prompt_version_id,
+        }
+        return self.client.rpc("find_stage3_repeat_source", params).execute().data or None
 
     def update_snippet_previous_analysis(self, id, previous_analysis):
         response = (
@@ -361,6 +374,7 @@ class SupabaseClient:
                 "error_message": None,
                 "reviewed_at": datetime.now(timezone.utc).isoformat(),
                 "reviewed_by": reviewed_by,
+                "repeat_of": None,
             })
             .eq("id", id)
             .execute()
