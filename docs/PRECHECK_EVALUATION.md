@@ -124,3 +124,75 @@ the first option.
   logistic regression on the `full` state). They show whether a paid model beats a free classifier
   trained on the answer key.
 - Savings per day: clips per day times (skip rate times Stage 3 cost minus pre-check cost per clip).
+
+## Rebuilding the eval set
+
+The build lives in `scripts/precheck_eval_dataset/`. The SQL is read-only. `build_dataset.py` never connects to a
+database. It only reads saved query results. `ids.json` lists the 2,255 published clips with their split, stratum,
+weight and Stage 3 score. By default `build` keeps exactly those clips. Pass `--ids none` to draw a new sample (seed
+475). Keep the outputs outside the repo, because the JSONL holds transcripts.
+
+The population is non-copy snippets (`repeat_of is null`) scored by `gemini-3.5-flash` or `gemini-3.8-flash`, with
+`updated_at` on or after 2026-11-06. The detail query covers the whole population in 6 pages, split by the first hex
+digit of the snippet id (`0`, `1,2,3`, `4,5,6`, `7,8,9`, `a,b,c`, `d,e,f`).
+
+### (a) From saved Supabase MCP results
+
+This is how the published set was built. Run `sql/population.sql` through `mcp__Supabase__execute_sql`. Then run the
+detail query once per page. Print each page's SQL with:
+
+```bash
+B=scripts/precheck_eval_dataset/build_dataset.py
+python3 -I $B render-sql --prefixes 1,2,3
+```
+
+Each result is too large to show inline, so the harness saves it to a file under `tool-results/`. Copy those files to
+a directory outside the repo, for example `~/precheck_raw/population.txt` and `~/precheck_raw/details_123.txt`.
+Then run:
+
+```bash
+python3 -I $B build --population "$HOME/precheck_raw/population.txt" \
+  --details "$HOME/precheck_raw/details_*.txt" --out "$HOME/precheck_out"
+python3 -I scripts/precheck_eval_dataset/check_leakage.py "$HOME/precheck_out/precheck_eval.jsonl"
+```
+
+### (b) With psql
+
+Use this when `SUPABASE_DB_URL` is set. Each query returns one jsonb value, and `psql -At` writes it as plain JSON.
+The builder reads that format too.
+
+```bash
+Q=scripts/precheck_eval_dataset/sql; R="$HOME/precheck_raw"; mkdir -p "$R"
+psql "$SUPABASE_DB_URL" -At -f $Q/population.sql -o "$R/population.json"
+for p in 0 1,2,3 4,5,6 7,8,9 a,b,c d,e,f; do
+  psql "$SUPABASE_DB_URL" -At -v prefixes="$p" -f $Q/details.sql -o "$R/details_${p//,/}.json"
+done
+python3 -I scripts/precheck_eval_dataset/build_dataset.py build --population "$R/population.json" \
+  --details "$R/details_*.json" --out "$HOME/precheck_out"
+```
+
+Route (b) is untested against a live database, because there was no DB URL in the session that wrote it. The builder
+was checked on files in the `psql -At` format, which it parses the same way. Each detail page returns about 5 MB.
+
+### What `build_report.json` tells you
+
+- `drops`: clips that left the population, for example because they were re-analyzed.
+- `label_changed_vs_ids`: clips whose Stage 3 score no longer matches `ids.json`.
+- Band counts and excerpt lengths.
+
+The published build had no drops. It kept 2,255 of a 5,651-clip population, and the weighted band counts match the
+population exactly.
+
+### Caveats
+
+- **Model and traffic are confounded.** About 80% of 3.5-flash clips are backlog recorded Oct 24 to Nov 5. 3.8-flash
+  clips are almost all live (485 of 488). Report results per stratum and per `meta.live`.
+- **3.8-flash has few positives:** 24 clips at 90+ and 84 at 80-89. The 90+ bar is mostly tested on the 267 3.5-flash
+  clips.
+- **Stage 4 overwrites `confidence_scores`.** Before it does, it copies the row into `previous_analysis`. The label
+  comes from that copy, and `label.final_overall` keeps the current value. Stage 4 changed 28 of 291 scores, and 15
+  of those dropped below 90.
+- **Scores are lumpy.** 34% of the population scores exactly 0, and scores also pile up at 85, 20, 40 and 88.
+- **Languages:** 63% Spanish, 19% English and 15% Russian, plus some Vietnamese and Haitian Creole, but only 40 Arabic
+  clips. On the Arabic station ARAB, faster-whisper writes English text. `input.stage1_language` is a heuristic.
+- **Two Stage 1 detection prompt versions** are mixed in, recorded in `stage1_extra.detection_prompt_version_id`.
