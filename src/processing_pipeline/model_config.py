@@ -267,7 +267,7 @@ def stage3_restructure_model() -> ModelName:
 
 
 def stage3_repeat_dedup() -> bool:
-    """STAGE3_REPEAT_DEDUP: copy an earlier same-station airing's analysis instead of calling Gemini (VER-465)."""
+    """STAGE3_REPEAT_DEDUP: copy another same-station airing's analysis instead of calling Gemini (VER-465)."""
     return _env_flag(STAGE3_REPEAT_DEDUP_ENV)
 
 

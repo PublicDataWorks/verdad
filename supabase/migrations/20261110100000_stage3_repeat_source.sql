@@ -1,9 +1,10 @@
--- VER-465: Stage 3 copies an earlier same-station analysis onto a repeat airing (Stage 1 excerpt trigram match).
+-- VER-465: Stage 3 copies another same-station airing's analysis onto a repeat (Stage 1 excerpt trigram match).
 -- Apply before deploying the code: update_snippet writes repeat_of on every call.
 -- Rollback: deploy code without repeat_of, DROP FUNCTION public.find_stage3_repeat_source(text, timestamptz, text,
 -- uuid, real, interval), then DROP COLUMN repeat_of under the same lock_timeout.
 -- No foreign key: ON DELETE would scan the unindexed column per snippet delete; SET NULL would make copies originals.
--- No index: 57 ms for WAXY's 416 candidates via idx_snippets_processed_recorded_at_id + the prompt-version index.
+-- Window runs both ways: Stage 3 takes New newest first, so after a pause the later airing is analysed first.
+-- No index: WAXY 94 ms live / 139 ms backlog via idx_snippets_processed_recorded_at_id + the prompt-version index.
 
 SET lock_timeout = '3s';
 
@@ -37,8 +38,7 @@ AS $function$
             LIMIT 1
         ) f
         WHERE s.radio_station_code = p_station
-          AND s.recorded_at >= p_recorded_at - p_window
-          AND s.recorded_at < p_recorded_at
+          AND s.recorded_at BETWEEN p_recorded_at - p_window AND p_recorded_at + p_window
           AND s.status = 'Processed'
           AND s.stage_3_prompt_version_id = p_prompt_version_id
           AND s.repeat_of IS NULL

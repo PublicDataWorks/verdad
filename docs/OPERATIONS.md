@@ -349,7 +349,7 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 | `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop); the review and feed line is 90 for `gemini-3.*`, 95 for any other model (VER-466) | `gemini-2.5-pro` | `snippets.analyzed_by` |
 | `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-2.5-flash` | `snippets.analyzed_by` |
 | `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
-| `STAGE3_REPEAT_DEDUP` | Stage 3 queue loop: a snippet whose Stage 1 excerpt matches an earlier Processed snippet of the same station (trigram 0.85, 7 days, same Stage 3 prompt version) gets that analysis copied instead of a Gemini call (VER-465). A Stage 3 prompt bump finds no sources for up to 7 days | `false` | `snippets.repeat_of` |
+| `STAGE3_REPEAT_DEDUP` | Stage 3 queue loop: a snippet whose Stage 1 excerpt matches a Processed original of the same station (trigram 0.85, within 7 days either way, same Stage 3 prompt version) gets that analysis copied instead of a Gemini call (VER-465). A Stage 3 prompt bump finds no sources for up to 7 days | `false` | `snippets.repeat_of` |
 | `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-2.5-flash` | not stored |
 | `STAGE4_REVIEWER_MODEL` | Stage 4 `analysis_reviewer` | `gemini-2.5-pro` | `snippets.reviewed_by` |
 | `STAGE4_REVIEWER_THINKING` | Stage 4 `analysis_reviewer` thinking level (`minimal`/`low`/`medium`/`high`); 3.x defaults to `high`, whose thoughts count against the agent's 16k output cap and truncated review JSON | `medium` on Gemini 3.x, the model default on 2.5, nothing on Gemma | not stored |
