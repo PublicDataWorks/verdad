@@ -6,7 +6,16 @@ import uuid
 from unittest.mock import Mock, patch
 
 import pytest
-from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory, ThinkingLevel
+from google.genai.types import (
+    BlockedReason,
+    FinishReason,
+    GenerateContentResponse,
+    GenerateContentResponsePromptFeedback,
+    HarmBlockThreshold,
+    HarmCategory,
+    ThinkingLevel,
+)
+from prefect.states import Cancelling, Crashed
 from pydub import AudioSegment
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
@@ -31,7 +40,7 @@ from processing_pipeline.stage_1 import (
     transcribe_audio_file_with_timestamp_with_gemini,
     undo_disinformation_detection,
 )
-from processing_pipeline.stage_1.flows import _create_gemini_client
+from processing_pipeline.stage_1.flows import _create_gemini_client, reset_audio_file_status_hook
 
 SELECT_WITH_AUDIO_FILE = (
     "*, audio_file(radio_station_name, radio_station_code, location_state, location_city, "
@@ -123,6 +132,13 @@ class TestFetchFunctions:
 
         assert fetch_a_new_audio_file_from_supabase(mock_supabase_client) == expected_response
         mock_supabase_client.get_a_new_audio_file_and_reserve_it.assert_called_once()
+
+    def test_fetch_new_audio_file_claims_it_for_the_current_flow_run(self, mock_supabase_client):
+        with patch("processing_pipeline.stage_1.tasks.flow_run") as current_run:
+            current_run.id = "run-1"
+            fetch_a_new_audio_file_from_supabase(mock_supabase_client)
+
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.assert_called_once_with("run-1")
 
     def test_fetch_new_audio_file_none(self, mock_supabase_client):
         assert fetch_a_new_audio_file_from_supabase(mock_supabase_client) is None
@@ -282,6 +298,20 @@ class TestStage1Executor:
     def test_run_max_tokens(self):
         client = self._client(parsed=None, finish_reason=FinishReason.MAX_TOKENS)
         with pytest.raises(ValueError, match="too long"):
+            Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+    def test_run_blocked_prompt_names_block_reason(self):
+        client = Mock()
+        client.models.generate_content.return_value = GenerateContentResponse(
+            prompt_feedback=GenerateContentResponsePromptFeedback(block_reason=BlockedReason.PROHIBITED_CONTENT)
+        )
+        with pytest.raises(ValueError, match="PROHIBITED_CONTENT"):
+            Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+    def test_run_no_candidates_without_feedback(self):
+        client = Mock()
+        client.models.generate_content.return_value = GenerateContentResponse()
+        with pytest.raises(ValueError, match="no candidates"):
             Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
 
     def test_safety_settings_configuration(self):
@@ -687,6 +717,31 @@ class TestInitialDisinformationDetectionFlow:
             initial_disinformation_detection(audio_file_id=1, limit=1)
 
 
+class TestResetAudioFileStatusHook:
+    @staticmethod
+    def run(parameters, state):
+        reset_audio_file_status_hook(Mock(), Mock(id="run-1", parameters=parameters), state)
+
+    def test_cancelled_loop_run_releases_its_claims_without_counting_an_attempt(self, mock_supabase_client):
+        self.run({"audio_file_id": None, "limit": 1000}, Cancelling())
+
+        mock_supabase_client.release_flow_run_audio_files.assert_called_once_with("run-1", count_attempt=False)
+        mock_supabase_client.set_audio_file_status.assert_not_called()
+
+    def test_crashed_loop_run_counts_an_attempt(self, mock_supabase_client):
+        self.run({"audio_file_id": None, "limit": 1000}, Crashed())
+
+        mock_supabase_client.release_flow_run_audio_files.assert_called_once_with("run-1", count_attempt=True)
+
+    def test_by_id_run_resets_its_processing_file(self, mock_supabase_client):
+        mock_supabase_client.get_audio_file_by_id.return_value = {"id": 7, "status": ProcessingStatus.PROCESSING}
+
+        self.run({"audio_file_id": 7, "limit": 1}, Cancelling())
+
+        mock_supabase_client.set_audio_file_status.assert_called_once_with(7, ProcessingStatus.NEW, None)
+        mock_supabase_client.release_flow_run_audio_files.assert_not_called()
+
+
 class TestMaintenanceFlows:
     def test_undo_disinformation_detection(self, mock_supabase_client):
         undo_disinformation_detection([1, 2])
@@ -859,9 +914,14 @@ class TestModelSelection:
 
     @pytest.mark.parametrize(
         "model, level",
-        [(GeminiModel.GEMINI_3_5_FLASH_LITE, ThinkingLevel.MEDIUM), (GeminiModel.GEMMA_4_26B_A4B_IT, None)],
+        [
+            (GeminiModel.GEMINI_3_8_FLASH, ThinkingLevel.LOW),
+            (GeminiModel.GEMINI_3_5_FLASH_LITE, ThinkingLevel.LOW),
+            (GeminiModel.GEMMA_4_26B_A4B_IT, None),
+        ],
     )
     def test_main_detection_thinking(self, model, level):
+        # VER-453 E6: low re-flagged 67% of Oct >=95 snippets vs 54% at medium, at half the cost.
         client = self._client({"flagged_snippets": []})
 
         Stage1Executor.run(client, model, "T", {}, PROMPT_VERSION)

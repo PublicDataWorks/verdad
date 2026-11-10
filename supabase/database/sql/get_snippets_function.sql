@@ -52,6 +52,10 @@ DROP FUNCTION IF EXISTS public.get_snippets(text, jsonb, integer, integer, text,
 --   audio_file object still reads a.location_state and a.radio_station_code.
 -- - Rollback: supabase/database/sql/rollback/2026-09-21_get_snippets_before.sql
 
+-- 2026-11-09 (VER-466, see supabase/migrations/20261109120100_feed_line90_functions.sql):
+-- - visible at 95+, or at 90-94 when gemini-3.* analysed the snippet and Stage 4 reviewed it;
+--   served by the idx_snippets_feed* partial indexes (20261109120000)
+
 CREATE OR REPLACE FUNCTION public.get_snippets(p_language text, p_filter jsonb, page integer, page_size integer, p_order_by text, p_search_term text DEFAULT ''::text, p_include_count boolean DEFAULT true)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -179,7 +183,7 @@ BEGIN
     -- via_search is a constant and the search guard folds away:
     --  * no search term: only the via_search = FALSE branch survives (the other is planned
     --    away, or gated by a One-Time Filter in a generic plan); the 'latest' ORDER BY branch
-    --    walks idx_snippets_visible_recorded_at (recorded_at DESC, id DESC) WHERE visible and
+    --    walks idx_snippets_feed_recorded_at (recorded_at DESC, id DESC) WHERE visible and
     --    stops after page_size rows instead of counting/sorting every visible snippet.
     --  * search term: only the via_search = TRUE branch survives and the pgroonga OR is
     --    evaluated together with the visibility predicates in ONE bitmap scan of snippets
@@ -193,7 +197,7 @@ BEGIN
     candidate_snippets AS NOT MATERIALIZED (
         SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
                s.like_count, s.audio_file, s.language, s.political_leaning,
-               s.status, s.confidence_scores,
+               s.status, s.confidence_scores, s.analyzed_by, s.reviewed_at,
                s.location_state, s.radio_station_code,
                s.title, s.explanation, s.summary, s.transcription, s.translation,
                FALSE AS via_search
@@ -201,7 +205,7 @@ BEGIN
         UNION ALL
         SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
                s.like_count, s.audio_file, s.language, s.political_leaning,
-               s.status, s.confidence_scores,
+               s.status, s.confidence_scores, s.analyzed_by, s.reviewed_at,
                s.location_state, s.radio_station_code,
                s.title, s.explanation, s.summary, s.transcription, s.translation,
                TRUE AS via_search
@@ -209,7 +213,7 @@ BEGIN
     ),
     -- Lightweight filtered IDs (for count + pagination, no heavy columns).
     -- NOT MATERIALIZED so that each ORDER BY branch below is planned against the base
-    -- tables and can walk an index (idx_snippets_visible_recorded_at) for the top-N instead
+    -- tables and can walk an index (idx_snippets_feed_recorded_at) for the top-N instead
     -- of sorting a materialized copy of every visible snippet.
     filtered_snippets AS NOT MATERIALIZED (
         SELECT
@@ -227,8 +231,10 @@ BEGIN
         -- 2026-09-21 (VER-387): the states / sources filters no longer join audio_files at all.
         -- location_state and radio_station_code are denormalized onto snippets and kept in sync by
         -- triggers (20260921000100), so the predicates below are served by the partial indexes
-        -- idx_snippets_visible_state / idx_snippets_visible_station (20260921000300).
-        WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95
+        -- idx_snippets_feed_state / idx_snippets_feed_station (20261109120000).
+        WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 90
+          AND ((s.confidence_scores->>'overall')::INTEGER >= 95
+               OR (s.analyzed_by LIKE 'gemini-3.%' AND s.reviewed_at IS NOT NULL))
         -- Search guard: picks the candidate_snippets branch (see above) and, when searching,
         -- applies the full-text match in the same scan as the visibility predicates.
         AND (

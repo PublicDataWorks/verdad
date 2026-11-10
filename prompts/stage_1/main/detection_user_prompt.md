@@ -542,11 +542,15 @@ Flag a claim when a fact-checker would want to check it and it is likely false, 
 - Health or product claim without evidence: "Este té de moringa limpia la sangre, previene la diabetes y lo pueden tomar las embarazadas y los bebés sin ningún riesgo." Flag: unsubstantiated disease-prevention claim and an unsupported safety claim for pregnancy and infants.
 - Pseudoscience or folk belief stated as medical fact: "Si usted se baña con el estómago lleno le da una embolia, eso está comprobado por los médicos." Flag: a myth presented as established medicine.
 - False or distorted characterization of a party, group or policy stated as fact: "Los republicanos quieren quitarle el Seguro Social a todos los jubilados." Flag: presents an unsupported claim about a party's position as fact. Apply the same standard whichever side is targeted.
+- Faith healing presented as a cure for a diagnosed disease or as a replacement for medical care: "Si el médico te dijo que tienes diabetes, no te preocupes: el Señor ya te sanó, ya no necesitas la insulina." Flag: a health claim inside a religious message that can lead listeners away from treatment.
+- A supplement, device or test promoted as treating, preventing or diagnosing disease without evidence, including in ads: "Con este aparato de biorresonancia detectamos cualquier enfermedad en cinco minutos, sin análisis de sangre." Flag: unsupported diagnostic and medical claim.
+- Established science denied as fact, including in ads and sermons: "Está comprobado que el ser humano nunca llegó a la Luna." Flag: contradicts established evidence.
 
 Do NOT flag:
 
 - News about current events, office-holders or conflicts only because you do not recognize them. Treat the recording date as the present; events after your training data may be real. Flag news only when it contradicts the knowledge base, contradicts itself, or matches a disinformation narrative in the heuristics.
 - Opinions, prayers, or moral and religious teaching that make no factual claim about health, science, history, law or public affairs.
+  A religious message that says a disease is cured, or that medical treatment is not needed, does make a health claim and must be flagged.
 
 ---
 

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from collections import defaultdict
 from unittest import mock
 from unittest.mock import AsyncMock, Mock, call, patch
 
@@ -13,12 +14,15 @@ from processing_pipeline.constants import GeminiModel, ProcessingStatus
 from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
 from processing_pipeline.stage_3 import (
     Stage3Executor,
+    copy_repeat_analysis,
     download_audio_file_from_s3,
     fetch_a_new_snippet_from_supabase,
     fetch_a_specific_snippet_from_supabase,
+    find_repeat_source,
     get_metadata,
     in_depth_analysis,
     process_snippet,
+    stage_1_excerpt,
     update_snippet_in_supabase,
 )
 from processing_pipeline.stage_3.executors import USAGE_FIELDS
@@ -144,6 +148,33 @@ class TestStage3:
             "end_time": "00:01:30",
             "duration": "00:01:00",
             "recorded_at": "2024-01-01T00:00:00+00:00",
+            "radio_station_code": "TEST-FM",
+        }
+
+    @pytest.fixture
+    def source_snippet(self):
+        """An earlier Processed airing of the same content, as get_snippet_by_id(select="*") returns it"""
+        return {
+            "id": "source-id",
+            "transcription": "Source transcription",
+            "translation": "Source translation",
+            "title": {"english": "Source title"},
+            "summary": {"english": "Source summary"},
+            "explanation": {"english": "Source explanation"},
+            "disinformation_categories": [{"english": "Health", "spanish": "Salud"}],
+            "keywords_detected": ["cura"],
+            "language": {"primary_language": "es"},
+            "confidence_scores": {"overall": 92},
+            "emotional_tone": [],
+            "context": {"main": "Source context"},
+            "political_leaning": {"score": 0},
+            "grounding_metadata": "source grounding",
+            "thought_summaries": "source thoughts",
+            "analyzed_by": "gemini-3.8-flash",
+            "stage_3_prompt_version_id": "pv-3",
+            "reviewed_at": "2026-11-09T10:00:00+00:00",
+            "reviewed_by": "gemini-3.8-flash",
+            "status": "Processed",
         }
 
     # --- tasks ---------------------------------------------------------------
@@ -226,6 +257,138 @@ class TestStage3:
         assert result["additional_info"]["recorded_at"] == "January 1, 2024 12:00 AM"
         assert result["additional_info"]["recorded_at_iso"] == "2024-01-01T00:00:12.345000+00:00"
 
+    # --- repeat dedup (VER-465) -------------------------------------------------
+
+    def test_stage_1_excerpt(self, sample_snippet):
+        assert stage_1_excerpt(sample_snippet) == "Test transcription"
+        # Reading the excerpt must not consume the flagged snippet get_metadata needs later
+        assert get_metadata(sample_snippet)["transcription"] == "Test transcription"
+
+    def test_stage_1_excerpt_missing(self, sample_snippet):
+        sample_snippet["id"] = "other-id"
+        assert stage_1_excerpt(sample_snippet) is None
+
+    @pytest.mark.parametrize("stage_1", [None, {"detection_result": None}, {"detection_result": {}}])
+    def test_find_repeat_source_without_stage_1_result(self, mock_supabase_client, sample_snippet, stage_1):
+        sample_snippet["stage_1_llm_response"] = stage_1
+
+        assert find_repeat_source(mock_supabase_client, sample_snippet, "pv-3") is None
+        mock_supabase_client.find_stage3_repeat_source.assert_not_called()
+
+    def test_find_repeat_source(self, mock_supabase_client, sample_snippet, source_snippet):
+        mock_supabase_client.find_stage3_repeat_source.return_value = "source-id"
+        mock_supabase_client.get_snippet_by_id.return_value = source_snippet
+
+        assert find_repeat_source(mock_supabase_client, sample_snippet, "pv-3") == source_snippet
+        mock_supabase_client.find_stage3_repeat_source.assert_called_once_with(
+            station="TEST-FM", recorded_at="2024-01-01T00:00:00+00:00", excerpt="Test transcription", prompt_version_id="pv-3"
+        )
+        mock_supabase_client.get_snippet_by_id.assert_called_once_with(id="source-id", select="*")
+
+    def test_find_repeat_source_no_match(self, mock_supabase_client, sample_snippet):
+        mock_supabase_client.find_stage3_repeat_source.return_value = None
+
+        assert find_repeat_source(mock_supabase_client, sample_snippet, "pv-3") is None
+        mock_supabase_client.get_snippet_by_id.assert_not_called()
+
+    def test_find_repeat_source_without_excerpt_skips_the_lookup(self, mock_supabase_client, sample_snippet):
+        sample_snippet["stage_1_llm_response"]["detection_result"]["flagged_snippets"][0]["transcription"] = ""
+
+        assert find_repeat_source(mock_supabase_client, sample_snippet, "pv-3") is None
+        mock_supabase_client.find_stage3_repeat_source.assert_not_called()
+
+    def test_find_repeat_source_without_station_skips_the_lookup(self, mock_supabase_client, sample_snippet):
+        sample_snippet["radio_station_code"] = None
+
+        assert find_repeat_source(mock_supabase_client, sample_snippet, "pv-3") is None
+        mock_supabase_client.find_stage3_repeat_source.assert_not_called()
+
+    @pytest.mark.parametrize("failing", ["find_stage3_repeat_source", "get_snippet_by_id"])
+    def test_find_repeat_source_lookup_error_means_no_source(self, mock_supabase_client, sample_snippet, failing):
+        mock_supabase_client.find_stage3_repeat_source.return_value = "source-id"
+        getattr(mock_supabase_client, failing).side_effect = RuntimeError("db down")
+
+        assert find_repeat_source(mock_supabase_client, sample_snippet, "pv-3") is None
+
+    def test_find_repeat_source_vanished_source(self, mock_supabase_client, sample_snippet):
+        mock_supabase_client.find_stage3_repeat_source.return_value = "source-id"
+        mock_supabase_client.get_snippet_by_id.return_value = None
+
+        assert find_repeat_source(mock_supabase_client, sample_snippet, "pv-3") is None
+
+    def test_copy_repeat_analysis(self, mock_supabase_client, sample_snippet, source_snippet):
+        order = []
+        mock_supabase_client.update_snippet.side_effect = lambda **_: order.append("update")
+        with patch(
+            "processing_pipeline.stage_3.tasks.postprocess_snippet", side_effect=lambda *_: order.append("postprocess")
+        ) as mock_postprocess:
+            assert copy_repeat_analysis(mock_supabase_client, sample_snippet, source_snippet) is True
+
+        mock_supabase_client.update_snippet.assert_called_once_with(
+            id="test-id",
+            transcription="Source transcription",
+            translation="Source translation",
+            title={"english": "Source title"},
+            summary={"english": "Source summary"},
+            explanation={"english": "Source explanation"},
+            disinformation_categories=[{"english": "Health", "spanish": "Salud"}],
+            keywords_detected=["cura"],
+            language={"primary_language": "es"},
+            confidence_scores={"overall": 92},
+            emotional_tone=[],
+            context={"main": "Source context"},
+            political_leaning={"score": 0},
+            grounding_metadata="source grounding",
+            thought_summaries=None,
+            analyzed_by="gemini-3.8-flash",
+            status=ProcessingStatus.PROCESSED,
+            error_message=None,
+            stage_3_prompt_version_id="pv-3",
+            reviewed_at="2026-11-09T10:00:00+00:00",
+            reviewed_by="gemini-3.8-flash",
+            repeat_of="source-id",
+        )
+        mock_postprocess.assert_called_once_with(
+            mock_supabase_client, "test-id", [{"english": "Health", "spanish": "Salud"}]
+        )
+        assert order == ["update", "postprocess"]
+
+    def test_copy_repeat_analysis_copies_every_field_stage_3_writes(self, mock_supabase_client, mock_gemini_response):
+        update_snippet_in_supabase(
+            supabase_client=mock_supabase_client, snippet_id="x", gemini_response=mock_gemini_response,
+            grounding_metadata=None, thought_summaries=None, analyzed_by=None, status=None, error_message=None,
+        )
+        stage_3_fields = set(mock_supabase_client.update_snippet.call_args.kwargs)
+        mock_supabase_client.reset_mock()
+
+        with patch("processing_pipeline.stage_3.tasks.postprocess_snippet"):
+            copy_repeat_analysis(mock_supabase_client, {"id": "x"}, defaultdict(lambda: None, id="s"))
+
+        assert stage_3_fields <= set(mock_supabase_client.update_snippet.call_args.kwargs)
+
+    def test_copy_repeat_analysis_write_failure_falls_back(self, mock_supabase_client, sample_snippet, source_snippet):
+        mock_supabase_client.update_snippet.side_effect = RuntimeError("write failed")
+        with patch("processing_pipeline.stage_3.tasks.postprocess_snippet") as mock_postprocess:
+            assert copy_repeat_analysis(mock_supabase_client, sample_snippet, source_snippet) is False
+
+        mock_postprocess.assert_not_called()
+        mock_supabase_client.set_snippet_status.assert_not_called()
+
+    def test_copy_repeat_analysis_postprocess_failure_is_an_error(
+        self, mock_supabase_client, sample_snippet, source_snippet
+    ):
+        with patch("processing_pipeline.stage_3.tasks.postprocess_snippet", side_effect=RuntimeError("labels down")):
+            assert copy_repeat_analysis(mock_supabase_client, sample_snippet, source_snippet) is True
+
+        mock_supabase_client.set_snippet_status.assert_called_once_with(
+            "test-id", ProcessingStatus.ERROR, "[Stage 3 repeat] RuntimeError: labels down"
+        )
+
+    def test_copy_repeat_analysis_never_raises(self, mock_supabase_client, sample_snippet, source_snippet):
+        mock_supabase_client.set_snippet_status.side_effect = RuntimeError("db down")
+        with patch("processing_pipeline.stage_3.tasks.postprocess_snippet", side_effect=RuntimeError("labels down")):
+            assert copy_repeat_analysis(mock_supabase_client, sample_snippet, source_snippet) is True
+
     # --- process_snippet -------------------------------------------------------
 
     def _process(self, supabase_client, snippet, skip_review, gemini_client=None):
@@ -283,6 +446,52 @@ class TestStage3:
 
         assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == ProcessingStatus.PROCESSED
         mock_postprocess.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "model, overall, expected",
+        [
+            ("gemini-3.8-flash", 90, ProcessingStatus.READY_FOR_REVIEW),
+            ("gemini-3.8-flash", 89, ProcessingStatus.PROCESSED),
+            ("gemini-3.1-flash-lite", 90, ProcessingStatus.READY_FOR_REVIEW),
+            ("gemini-2.5-pro", 94, ProcessingStatus.PROCESSED),
+            ("gemini-2.5-pro", 95, ProcessingStatus.READY_FOR_REVIEW),
+        ],
+    )
+    def test_process_snippet_review_line_depends_on_model(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch, model, overall, expected
+    ):
+        monkeypatch.setenv("STAGE3_MAIN_MODEL", model)
+        analysis_result["response"]["confidence_scores"]["overall"] = overall
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(return_value=analysis_result)
+        ), patch("processing_pipeline.stage_3.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet, skip_review=False)
+
+        assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == expected
+
+    @pytest.mark.parametrize(
+        "main_model, fallback_model, expected",
+        [
+            ("gemini-3.8-flash", "gemini-2.5-pro", ProcessingStatus.PROCESSED),
+            ("gemini-2.5-pro", "gemini-3.5-flash", ProcessingStatus.READY_FOR_REVIEW),
+        ],
+    )
+    def test_process_snippet_review_line_follows_the_fallback_model(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch, main_model, fallback_model, expected
+    ):
+        monkeypatch.setenv("STAGE3_MAIN_MODEL", main_model)
+        monkeypatch.setenv("STAGE3_FALLBACK_MODEL", fallback_model)
+        analysis_result["response"]["confidence_scores"]["overall"] = 92
+        server_error = errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async",
+            new=AsyncMock(side_effect=[server_error, analysis_result]),
+        ), patch("processing_pipeline.stage_3.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet, skip_review=False)
+
+        kwargs = mock_supabase_client.update_snippet.call_args.kwargs
+        assert kwargs["analyzed_by"] == fallback_model
+        assert kwargs["status"] == expected
 
     def test_process_snippet_no_disinformation_categories(self, mock_supabase_client, sample_snippet, analysis_result):
         analysis_result["response"]["disinformation_categories"] = []
@@ -611,4 +820,92 @@ class TestStage3:
         # Short sleep after processing a snippet, long sleep when the queue is empty
         assert sleep_calls == [2, 60]
         assert mock_supabase_client.get_a_new_snippet_and_reserve_it.call_args_list == [call(), call()]
+        mock_flow_deps["process"].assert_awaited_once()
+
+    @pytest.fixture
+    def mock_dedup(self):
+        with patch("processing_pipeline.stage_3.flows.find_repeat_source") as mock_find, patch(
+            "processing_pipeline.stage_3.flows.copy_repeat_analysis"
+        ) as mock_copy:
+            yield {"find": mock_find, "copy": mock_copy}
+
+    def test_in_depth_analysis_copies_a_repeat(
+        self, mock_supabase_client, mock_s3_client, sample_snippet, source_snippet, mock_flow_deps, mock_dedup, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_REPEAT_DEDUP", "true")
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.return_value = sample_snippet
+        mock_dedup["find"].return_value = source_snippet
+        mock_dedup["copy"].return_value = True
+
+        asyncio.run(in_depth_analysis(snippet_ids=None, skip_review=False, repeat=False))
+
+        mock_dedup["find"].assert_called_once_with(mock_supabase_client, sample_snippet, "pv-3")
+        mock_dedup["copy"].assert_called_once_with(mock_supabase_client, sample_snippet, source_snippet)
+        mock_s3_client.download_file.assert_not_called()
+        mock_flow_deps["process"].assert_not_awaited()
+
+    def test_in_depth_analysis_runs_stage_3_without_a_repeat(
+        self, mock_supabase_client, mock_s3_client, sample_snippet, mock_flow_deps, mock_dedup, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_REPEAT_DEDUP", "true")
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.return_value = sample_snippet
+        mock_dedup["find"].return_value = None
+
+        asyncio.run(in_depth_analysis(snippet_ids=None, skip_review=False, repeat=False))
+
+        mock_dedup["copy"].assert_not_called()
+        mock_flow_deps["process"].assert_awaited_once()
+
+    def test_in_depth_analysis_runs_stage_3_when_the_copy_write_fails(
+        self, mock_supabase_client, mock_s3_client, sample_snippet, source_snippet, mock_flow_deps, mock_dedup, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_REPEAT_DEDUP", "true")
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.return_value = sample_snippet
+        mock_dedup["find"].return_value = source_snippet
+        mock_dedup["copy"].return_value = False
+
+        asyncio.run(in_depth_analysis(snippet_ids=None, skip_review=False, repeat=False))
+
+        mock_flow_deps["process"].assert_awaited_once()
+
+    def test_in_depth_analysis_keeps_looping_after_a_copy(
+        self, mock_supabase_client, mock_s3_client, sample_snippet, source_snippet, mock_flow_deps, mock_dedup, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_REPEAT_DEDUP", "true")
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.side_effect = [sample_snippet, None]
+        mock_dedup["find"].return_value = source_snippet
+        mock_dedup["copy"].return_value = True
+        sleep_calls = []
+
+        async def fake_sleep(seconds):
+            sleep_calls.append(seconds)
+            if len(sleep_calls) == 2:
+                raise StopLoop()
+
+        with patch("processing_pipeline.stage_3.flows.asyncio.sleep", new=fake_sleep), pytest.raises(StopLoop):
+            asyncio.run(in_depth_analysis(snippet_ids=None, skip_review=True, repeat=True))
+
+        assert sleep_calls == [2, 60]
+        mock_dedup["find"].assert_called_once()
+
+    def test_in_depth_analysis_dedup_off_by_default(
+        self, mock_supabase_client, mock_s3_client, sample_snippet, mock_flow_deps, mock_dedup, monkeypatch
+    ):
+        monkeypatch.delenv("STAGE3_REPEAT_DEDUP", raising=False)
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.return_value = sample_snippet
+
+        asyncio.run(in_depth_analysis(snippet_ids=None, skip_review=False, repeat=False))
+
+        mock_dedup["find"].assert_not_called()
+        mock_flow_deps["process"].assert_awaited_once()
+
+    def test_in_depth_analysis_by_id_never_dedups(
+        self, mock_supabase_client, mock_s3_client, sample_snippet, mock_flow_deps, mock_dedup, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_REPEAT_DEDUP", "true")
+        mock_supabase_client.get_snippet_by_id.return_value = sample_snippet
+
+        asyncio.run(in_depth_analysis(snippet_ids=["test-id"], skip_review=False, repeat=False))
+
+        mock_dedup["find"].assert_not_called()
         mock_flow_deps["process"].assert_awaited_once()

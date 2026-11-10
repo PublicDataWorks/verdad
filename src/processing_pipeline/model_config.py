@@ -72,6 +72,7 @@ STAGE2_CONTEXT_AFTER_S_ENV = "STAGE2_CONTEXT_AFTER_S"
 STAGE3_MAIN = ModelSetting("STAGE3_MAIN_MODEL", GeminiModel.GEMINI_2_5_PRO)
 STAGE3_FALLBACK = ModelSetting("STAGE3_FALLBACK_MODEL", GeminiModel.GEMINI_2_5_FLASH)
 STAGE3_RESTRUCTURE = ModelSetting("STAGE3_RESTRUCTURE_MODEL", GeminiModel.GEMINI_2_5_FLASH)
+STAGE3_REPEAT_DEDUP_ENV = "STAGE3_REPEAT_DEDUP"
 
 # Stage 4. Researchers stay on Flash: Pro invented citations several times more often (VER-391, PR #122)
 STAGE4_RESEARCHER = ModelSetting("STAGE4_RESEARCHER_MODEL", GeminiModel.GEMINI_2_5_FLASH)
@@ -263,6 +264,11 @@ def stage3_fallback_model() -> ModelName:
 
 def stage3_restructure_model() -> ModelName:
     return resolve_model(STAGE3_RESTRUCTURE)
+
+
+def stage3_repeat_dedup() -> bool:
+    """STAGE3_REPEAT_DEDUP: copy another same-station airing's analysis instead of calling Gemini (VER-465)."""
+    return _env_flag(STAGE3_REPEAT_DEDUP_ENV)
 
 
 def stage4_researcher_model() -> ModelName:

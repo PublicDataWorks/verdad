@@ -48,12 +48,15 @@ from utils import optional_flow
 
 
 def reset_audio_file_status_hook(flow: Flow, flow_run: FlowRun, state: State):
+    # Prefect may call this from the serve process after killing the run, so claims come from the DB (VER-461)
+    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
     audio_file_id = flow_run.parameters.get("audio_file_id", None)
 
     if not audio_file_id:
+        released = supabase_client.release_flow_run_audio_files(flow_run.id, count_attempt=state.is_crashed())
+        print(f"Released audio files claimed by flow run {flow_run.id}: {released}")
         return
 
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
     audio_file = supabase_client.get_audio_file_by_id(audio_file_id)
     if audio_file and audio_file.get("status") == ProcessingStatus.PROCESSING:
         set_audio_file_status(supabase_client, audio_file_id, ProcessingStatus.NEW)
