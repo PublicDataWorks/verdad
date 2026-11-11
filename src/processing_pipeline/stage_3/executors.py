@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from collections import Counter
 
 from google import genai
@@ -12,10 +13,12 @@ from google.genai.types import (
     FunctionDeclaration,
     GenerateContentConfig,
     Part,
+    ServiceTier,
     Tool,
 )
 from pydantic import ValidationError
 
+from processing_pipeline.gemini_retry import FLEX_HTTP_OPTIONS, is_transient
 from processing_pipeline.model_config import ModelName, stage3_restructure_model, thinking_config
 from processing_pipeline.processing_utils import get_safety_settings
 from processing_pipeline.kb_sources import parse_iso_date, url_key
@@ -55,6 +58,33 @@ USAGE_FIELDS = (
     "tool_use_prompt_token_count",
     "total_token_count",
 )
+
+
+class FlexBreaker:
+    """Process-wide: after MAX_DROPS Flex drops in a row, send analyses on standard for PAUSE_S."""
+
+    MAX_DROPS = 3
+    PAUSE_S = 1800
+
+    def __init__(self):
+        self.drops = 0
+        self.paused_until = 0.0
+
+    def allows(self) -> bool:
+        return time.monotonic() >= self.paused_until
+
+    def record(self, dropped: bool) -> None:
+        if not dropped:
+            self.drops = 0
+            return
+        self.drops += 1
+        if self.drops >= self.MAX_DROPS:
+            print(f"Flex dropped {self.drops} calls in a row; using the standard tier for {self.PAUSE_S} s")
+            self.paused_until = time.monotonic() + self.PAUSE_S
+            self.drops = 0
+
+
+FLEX_BREAKER = FlexBreaker()
 
 
 def offered_tools() -> dict:
@@ -115,6 +145,7 @@ class Stage3Executor:
         audio_file: str,
         metadata: dict,
         prompt_version: dict,
+        service_tier: ServiceTier | None = None,
     ):
         """
         Main execution method for Stage 3 analysis.
@@ -169,6 +200,7 @@ class Stage3Executor:
                 uploaded_audio_file=uploaded_audio_file,
                 user_prompt=user_prompt,
                 system_instruction=prompt_version["system_instruction"],
+                service_tier=service_tier,
             )
 
             # Validate with Pydantic, fall back to schema restructuring
@@ -222,6 +254,7 @@ class Stage3Executor:
         uploaded_audio_file: File,
         user_prompt: str,
         system_instruction: str,
+        service_tier: ServiceTier | None = None,
     ):
         """
         Analyze using the GenAI SDK with web search tools.
@@ -235,11 +268,18 @@ class Stage3Executor:
 
         Returns:
             tuple: (analysis_text, thought_summaries, usage, observed) where usage is the token
-            accounting summed over every model turn as a plain dict (see ``usage_metadata_to_dict``) and
+            accounting summed over every model turn as a plain dict (see ``usage_metadata_to_dict``), plus
+            ``flex_turns``/``flex_drops`` when ``service_tier`` asked for Flex, and
             observed is an ``ObservedToolOutput`` with the ``url_key`` of every URL the tools returned and
             the publication dates the search tool reported for them (see ``__call_tool``)
         """
         print("Analyzing with SDK + web search tools...")
+
+        usage = dict.fromkeys(USAGE_FIELDS, 0)  # every turn is billed, so sum them
+        if service_tier:
+            usage |= {"flex_turns": 0, "flex_drops": 0}
+            if not FLEX_BREAKER.allows():
+                service_tier = None
 
         tools = offered_tools()
         config = GenerateContentConfig(
@@ -255,6 +295,8 @@ class Stage3Executor:
             automatic_function_calling=AutomaticFunctionCallingConfig(disable=True),
             thinking_config=thinking_config(model_name, budget=4096, include_thoughts=True),
             safety_settings=get_safety_settings(),
+            service_tier=service_tier,
+            http_options=FLEX_HTTP_OPTIONS if service_tier else None,
         )
         contents = [
             Content(
@@ -268,15 +310,28 @@ class Stage3Executor:
 
         response = None
         function_calls = []
-        usage = dict.fromkeys(USAGE_FIELDS, 0)  # every turn is billed, so sum them
         observed = ObservedToolOutput()
         called: set[str] = set()
         for _ in range(MAX_MODEL_TURNS):
-            response = await gemini_client.aio.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=config,
-            )
+            try:
+                response = await gemini_client.aio.models.generate_content(
+                    model=model_name, contents=contents, config=config
+                )
+                if config.service_tier:
+                    usage["flex_turns"] += 1
+                    FLEX_BREAKER.record(dropped=False)
+            except Exception as e:
+                # is_transient also counts ValueError, which here is our bug or the SDK's, not a Flex drop.
+                if not config.service_tier or isinstance(e, ValueError) or not is_transient(e):
+                    raise
+                # Flex is best-effort; one drop moves the rest of this analysis to standard so it can't stall.
+                print(f"Flex call dropped ({type(e).__name__}: {e}); continuing on the standard tier")
+                usage["flex_drops"] += 1
+                FLEX_BREAKER.record(dropped=True)
+                config = config.model_copy(update={"service_tier": None, "http_options": None})
+                response = await gemini_client.aio.models.generate_content(
+                    model=model_name, contents=contents, config=config
+                )
             for field, count in usage_metadata_to_dict(response.usage_metadata).items():
                 usage[field] += count
             function_calls = cls.__function_calls(response)

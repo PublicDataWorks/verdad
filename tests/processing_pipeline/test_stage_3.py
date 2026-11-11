@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 import httpx
 import pytest
 from google.genai import errors
-from google.genai.types import FinishReason, GenerateContentResponseUsageMetadata, ThinkingLevel
+from google.genai.types import FinishReason, GenerateContentResponseUsageMetadata, ServiceTier, ThinkingLevel
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
 from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
@@ -416,6 +416,7 @@ class TestStage3:
             audio_file="test.mp3",
             metadata=mock.ANY,
             prompt_version=PROMPT_VERSION,
+            service_tier=None,
         )
         kwargs = mock_supabase_client.update_snippet.call_args.kwargs
         assert kwargs["status"] == ProcessingStatus.READY_FOR_REVIEW
@@ -532,6 +533,20 @@ class TestStage3:
         assert mock_run.await_args_list[1].kwargs["model_name"] is GeminiModel.GEMINI_3_5_FLASH
         # analyzed_by records the model that actually produced the analysis
         assert mock_supabase_client.update_snippet.call_args.kwargs["analyzed_by"] == "gemini-3.5-flash"
+
+    def test_process_snippet_flex_applies_to_the_main_model_only(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_SERVICE_TIER", "flex")
+        bad_request = errors.ClientError(400, {"error": {"message": "invalid", "status": "INVALID_ARGUMENT"}})
+        with patch(
+            "processing_pipeline.stage_3.tasks.Stage3Executor.run_async",
+            new=AsyncMock(side_effect=[bad_request, analysis_result]),
+        ) as mock_run, patch("processing_pipeline.stage_3.tasks.postprocess_snippet"):
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        assert mock_run.await_args_list[0].kwargs["service_tier"] is ServiceTier.FLEX
+        assert mock_run.await_args_list[1].kwargs["service_tier"] is None
 
     def test_process_snippet_auth_error_is_not_retried(self, mock_supabase_client, sample_snippet):
         auth_error = errors.ClientError(401, {"error": {"message": "bad key", "status": "UNAUTHENTICATED"}})

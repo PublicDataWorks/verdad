@@ -12,7 +12,7 @@ from processing_pipeline.constants import (
 )
 from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
-from processing_pipeline.model_config import stage3_fallback_model, stage3_main_model
+from processing_pipeline.model_config import stage3_fallback_model, stage3_main_model, stage3_service_tier
 from processing_pipeline.stage_3.executors import Stage3Executor
 from processing_pipeline.supabase_utils import SupabaseClient
 from utils import optional_task
@@ -224,6 +224,7 @@ async def analyze_with_fallback(gemini_client, audio_file, metadata, prompt_vers
             audio_file=audio_file,
             metadata=metadata,
             prompt_version=prompt_version,
+            service_tier=stage3_service_tier(),
         )
     except (errors.ServerError, errors.ClientError) as e:
         if e.code in [HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN]:
@@ -243,6 +244,7 @@ async def analyze_with_fallback(gemini_client, audio_file, metadata, prompt_vers
             audio_file=audio_file,
             metadata=metadata,
             prompt_version=prompt_version,
+            service_tier=None,
         )
 
     return {
