@@ -609,6 +609,21 @@ class TestStage3:
         mock_sleep.assert_not_awaited()
         assert mock_supabase_client.set_snippet_status.call_args.args[1] == ProcessingStatus.ERROR
 
+    def test_process_snippet_bad_service_tier_fails_without_retries(
+        self, mock_supabase_client, sample_snippet, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_SERVICE_TIER", "flexx")
+        with patch("processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock()) as mock_run, patch(
+            "processing_pipeline.gemini_retry.asyncio.sleep", new=AsyncMock()
+        ) as mock_sleep:
+            self._process(mock_supabase_client, sample_snippet, skip_review=True)
+
+        mock_run.assert_not_awaited()
+        mock_sleep.assert_not_awaited()
+        snippet_id, status, error_message = mock_supabase_client.set_snippet_status.call_args.args
+        assert (snippet_id, status) == ("test-id", ProcessingStatus.ERROR)
+        assert "STAGE3_SERVICE_TIER='flexx'" in error_message
+
     def test_process_snippet_error(self, mock_supabase_client, sample_snippet):
         with patch(
             "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(side_effect=RuntimeError("Test error"))
