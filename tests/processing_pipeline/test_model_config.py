@@ -1,5 +1,5 @@
 import pytest
-from google.genai.types import ThinkingLevel
+from google.genai.types import ServiceTier, ThinkingLevel
 
 from processing_pipeline import model_config as mc
 from processing_pipeline.constants import GeminiModel
@@ -234,6 +234,27 @@ class TestStage1FlowOptions:
     def test_stage3_repeat_dedup_on(self, monkeypatch):
         monkeypatch.setenv("STAGE3_REPEAT_DEDUP", "true")
         assert mc.stage3_repeat_dedup() is True
+
+
+class TestStage3ServiceTier:
+    @pytest.mark.parametrize("value", [None, "", "standard", " Standard "])
+    def test_standard_unless_flex(self, monkeypatch, value):
+        if value is None:
+            monkeypatch.delenv("STAGE3_SERVICE_TIER", raising=False)
+        else:
+            monkeypatch.setenv("STAGE3_SERVICE_TIER", value)
+        assert mc.stage3_service_tier() is None
+
+    @pytest.mark.parametrize("value", ["flex", "FLEX"])
+    def test_flex(self, monkeypatch, value):
+        monkeypatch.setenv("STAGE3_SERVICE_TIER", value)
+        assert mc.stage3_service_tier() is ServiceTier.FLEX
+
+    @pytest.mark.parametrize("value", ["priority", "batch"])
+    def test_other_values_raise(self, monkeypatch, value):
+        monkeypatch.setenv("STAGE3_SERVICE_TIER", value)
+        with pytest.raises(ValueError, match=f"STAGE3_SERVICE_TIER='{value}'"):
+            mc.stage3_service_tier()
 
     def test_unknown_flag_value(self, monkeypatch):
         monkeypatch.setenv("STAGE1_ANCHOR_TIMESTAMPS", "maybe")

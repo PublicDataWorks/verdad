@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
-from google.genai.types import ThinkingConfig, ThinkingLevel
+from google.genai.types import ServiceTier, ThinkingConfig, ThinkingLevel
 
 from processing_pipeline.constants import GeminiModel
 
@@ -73,6 +73,7 @@ STAGE3_MAIN = ModelSetting("STAGE3_MAIN_MODEL", GeminiModel.GEMINI_2_5_PRO)
 STAGE3_FALLBACK = ModelSetting("STAGE3_FALLBACK_MODEL", GeminiModel.GEMINI_2_5_FLASH)
 STAGE3_RESTRUCTURE = ModelSetting("STAGE3_RESTRUCTURE_MODEL", GeminiModel.GEMINI_2_5_FLASH)
 STAGE3_REPEAT_DEDUP_ENV = "STAGE3_REPEAT_DEDUP"
+STAGE3_SERVICE_TIER_ENV = "STAGE3_SERVICE_TIER"
 
 # Stage 4. Researchers stay on Flash: Pro invented citations several times more often (VER-391, PR #122)
 STAGE4_RESEARCHER = ModelSetting("STAGE4_RESEARCHER_MODEL", GeminiModel.GEMINI_2_5_FLASH)
@@ -269,6 +270,16 @@ def stage3_restructure_model() -> ModelName:
 def stage3_repeat_dedup() -> bool:
     """STAGE3_REPEAT_DEDUP: copy another same-station airing's analysis instead of calling Gemini (VER-465)."""
     return _env_flag(STAGE3_REPEAT_DEDUP_ENV)
+
+
+def stage3_service_tier() -> ServiceTier | None:
+    """STAGE3_SERVICE_TIER=flex: half-price, slower main-model calls (VER-476); unset or standard means None."""
+    value = (_env(STAGE3_SERVICE_TIER_ENV) or "standard").lower()
+    if value == "standard":
+        return None
+    if value == ServiceTier.FLEX.value:
+        return ServiceTier.FLEX
+    raise ValueError(f"{STAGE3_SERVICE_TIER_ENV}={value!r}; expected flex or standard")
 
 
 def stage4_researcher_model() -> ModelName:

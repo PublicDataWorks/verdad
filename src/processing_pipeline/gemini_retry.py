@@ -10,6 +10,8 @@ RETRY_DELAYS = (30, 120, 300)
 
 # In ms. Without it a dropped connection hangs forever; the longest normal call seen was 316 s (VER-456).
 GEMINI_HTTP_OPTIONS = types.HttpOptions(timeout=600_000)
+# Flex targets 1-15 min per call; cutting one at 10 min would pay it again on standard.
+FLEX_HTTP_OPTIONS = types.HttpOptions(timeout=960_000)
 
 TRANSIENT_HTTP = {
     HTTPStatus.REQUEST_TIMEOUT,

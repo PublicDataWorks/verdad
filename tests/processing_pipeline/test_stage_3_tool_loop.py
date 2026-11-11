@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from google.genai import errors
 from google.genai.types import (
     Candidate,
     Content,
@@ -16,9 +17,11 @@ from google.genai.types import (
     GenerateContentResponse,
     GenerateContentResponseUsageMetadata,
     Part,
+    ServiceTier,
 )
 
 from processing_pipeline.constants import GeminiModel
+from processing_pipeline.gemini_retry import FLEX_HTTP_OPTIONS, GEMINI_HTTP_OPTIONS
 from processing_pipeline.stage_3 import executors
 from processing_pipeline.stage_3.executors import Stage3Executor
 from processing_pipeline.stage_3.models import cited_url_keys
@@ -200,6 +203,164 @@ def test_usage_is_summed_over_every_turn():
     assert usage["cached_content_token_count"] == 90
     assert usage["total_token_count"] == 320
     assert usage["thoughts_token_count"] == 0
+    assert "flex_turns" not in usage
+
+
+def run_flex(client):
+    return asyncio.run(
+        analyze(
+            gemini_client=client,
+            model_name=GeminiModel.GEMINI_3_8_FLASH,
+            uploaded_audio_file=uploaded_file(),
+            user_prompt="analyze this",
+            system_instruction="be careful",
+            service_tier=ServiceTier.FLEX,
+        )
+    )
+
+
+def tiers(client):
+    return [call.kwargs["config"].service_tier for call in client.aio.models.generate_content.await_args_list]
+
+
+def timeouts(client):
+    return [
+        (call.kwargs["config"].http_options or SimpleNamespace(timeout=None)).timeout
+        for call in client.aio.models.generate_content.await_args_list
+    ]
+
+
+@pytest.fixture(autouse=True)
+def fresh_flex_breaker(monkeypatch):
+    monkeypatch.setattr(executors, "FLEX_BREAKER", executors.FlexBreaker())
+
+
+def test_standard_tier_by_default():
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    run(client)
+
+    assert tiers(client) == [None]
+    assert timeouts(client) == [None]
+
+
+def test_flex_tier_is_sent_on_every_turn():
+    client = fake_client(model_turn(tool_call("run", cmd="q")), model_turn(Part.from_text(text="done")))
+
+    _, _, usage, _ = run_flex(client)
+
+    assert tiers(client) == [ServiceTier.FLEX, ServiceTier.FLEX]
+    assert usage["flex_turns"] == 2
+    assert usage["flex_drops"] == 0
+
+
+def test_flex_calls_get_a_longer_timeout_than_the_client_default():
+    client = fake_client(
+        model_turn(tool_call("run", cmd="q")),
+        TimeoutError(),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    run_flex(client)
+
+    assert timeouts(client) == [FLEX_HTTP_OPTIONS.timeout, FLEX_HTTP_OPTIONS.timeout, None]
+    assert FLEX_HTTP_OPTIONS.timeout > GEMINI_HTTP_OPTIONS.timeout
+
+
+def test_breaker_opens_after_drops_in_a_row_and_closes_after_the_pause(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(executors.time, "monotonic", lambda: now[0])
+    breaker = executors.FlexBreaker()
+
+    for _ in range(executors.FlexBreaker.MAX_DROPS - 1):
+        breaker.record(dropped=True)
+    assert breaker.allows()
+    breaker.record(dropped=True)
+    assert not breaker.allows()
+
+    now[0] += executors.FlexBreaker.PAUSE_S
+    assert breaker.allows()
+
+
+def test_breaker_success_resets_the_drop_count():
+    breaker = executors.FlexBreaker()
+
+    for _ in range(executors.FlexBreaker.MAX_DROPS - 1):
+        breaker.record(dropped=True)
+    breaker.record(dropped=False)
+    breaker.record(dropped=True)
+
+    assert breaker.allows()
+
+
+def test_open_breaker_sends_the_analysis_on_standard():
+    for _ in range(executors.FlexBreaker.MAX_DROPS):
+        executors.FLEX_BREAKER.record(dropped=True)
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    _, _, usage, _ = run_flex(client)
+
+    assert tiers(client) == [None]
+    assert usage["flex_turns"] == 0
+    assert usage["flex_drops"] == 0
+
+
+def test_drops_across_analyses_open_the_breaker():
+    overloaded = errors.ServerError(503, {"error": {"message": "busy", "status": "UNAVAILABLE"}})
+    for _ in range(executors.FlexBreaker.MAX_DROPS):
+        run_flex(fake_client(overloaded, model_turn(Part.from_text(text="done"))))
+
+    assert not executors.FLEX_BREAKER.allows()
+
+
+@pytest.mark.parametrize(
+    "drop",
+    [
+        errors.ServerError(503, {"error": {"message": "busy", "status": "UNAVAILABLE"}}),
+        errors.ClientError(429, {"error": {"message": "busy", "status": "RESOURCE_EXHAUSTED"}}),
+        TimeoutError(),
+    ],
+    ids=["503", "429", "timeout"],
+)
+def test_flex_drop_redoes_the_turn_on_standard_and_stays_there(drop):
+    client = fake_client(
+        model_turn(tool_call("run", cmd="q")),
+        drop,
+        model_turn(tool_call("run", cmd="q2")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    text, _, usage, _ = run_flex(client)
+
+    assert text == "done"
+    assert tiers(client) == [ServiceTier.FLEX, ServiceTier.FLEX, None, None]
+    assert usage["flex_turns"] == 1
+    assert usage["flex_drops"] == 1
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        errors.ClientError(400, {"error": {"message": "invalid", "status": "INVALID_ARGUMENT"}}),
+        ValueError("bad config"),
+    ],
+    ids=["400", "value_error"],
+)
+def test_flex_error_that_is_not_a_drop_is_raised(error):
+    client = fake_client(error, model_turn(Part.from_text(text="done")))
+
+    with pytest.raises(type(error)):
+        run_flex(client)
+
+    assert client.aio.models.generate_content.await_count == 1
+    assert executors.FLEX_BREAKER.drops == 0
+
+
+def test_standard_tier_error_is_raised():
+    overloaded = errors.ServerError(503, {"error": {"message": "busy", "status": "UNAVAILABLE"}})
+
+    with pytest.raises(errors.ServerError):
+        run(fake_client(overloaded))
 
 
 def declared_tools(client):
