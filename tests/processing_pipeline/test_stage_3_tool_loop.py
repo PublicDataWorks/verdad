@@ -14,6 +14,7 @@ from google.genai.types import (
     Candidate,
     Content,
     FunctionCall,
+    FunctionCallingConfigMode,
     GenerateContentResponse,
     GenerateContentResponseUsageMetadata,
     Part,
@@ -189,6 +190,37 @@ def test_endless_tool_calls_stop_at_the_turn_budget():
     assert client.aio.models.generate_content.await_count == executors.MAX_MODEL_TURNS
 
 
+def tool_modes(client):
+    return [
+        call.kwargs["config"].tool_config and call.kwargs["config"].tool_config.function_calling_config.mode
+        for call in client.aio.models.generate_content.await_args_list
+    ]
+
+
+def test_last_turn_switches_tools_off_and_asks_for_the_answer(monkeypatch):
+    monkeypatch.setattr(executors, "MAX_MODEL_TURNS", 3)
+    client = fake_client(
+        model_turn(tool_call("run", cmd="a")),
+        model_turn(tool_call("run", cmd="b")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    text, *_ = run(client)
+
+    assert text == "done"
+    assert tool_modes(client) == [None, None, FunctionCallingConfigMode.NONE]
+    last_call = client.aio.models.generate_content.await_args_list[-1]
+    assert last_call.kwargs["contents"][-1].parts[-1].text == executors.FINAL_TURN_NOTICE
+
+
+def test_forced_final_answer_is_logged(monkeypatch, capsys):
+    monkeypatch.setattr(executors, "MAX_MODEL_TURNS", 2)
+
+    run(fake_client(model_turn(tool_call("run", cmd="a")), model_turn(Part.from_text(text="done"))))
+
+    assert "Turn budget of 2 reached; asking for the final answer with tools off" in capsys.readouterr().out
+
+
 def test_usage_is_summed_over_every_turn():
     first = model_turn(tool_call("run", cmd="q"))
     first.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=100, total_token_count=120)
@@ -336,6 +368,21 @@ def test_flex_drop_redoes_the_turn_on_standard_and_stays_there(drop):
     assert tiers(client) == [ServiceTier.FLEX, ServiceTier.FLEX, None, None]
     assert usage["flex_turns"] == 1
     assert usage["flex_drops"] == 1
+
+
+def test_flex_drop_on_the_last_turn_keeps_tools_off(monkeypatch):
+    monkeypatch.setattr(executors, "MAX_MODEL_TURNS", 2)
+    client = fake_client(
+        model_turn(tool_call("run", cmd="a")),
+        TimeoutError(),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    text, *_ = run_flex(client)
+
+    assert text == "done"
+    assert tiers(client) == [ServiceTier.FLEX, ServiceTier.FLEX, None]
+    assert tool_modes(client) == [None, FunctionCallingConfigMode.NONE, FunctionCallingConfigMode.NONE]
 
 
 @pytest.mark.parametrize(

@@ -52,6 +52,7 @@ connection) into "no work" so the loop sleeps and retries instead of failing the
 - Stage 3 runs its own tool-calling loop (`WEB_TOOLS`, `MAX_MODEL_TURNS` in `stage_3/executors.py`) with the SDK's
   automatic function calling disabled, so a hallucinated tool name runs the tool its arguments match (`query` =
   search, `url` = read) or is answered with a function-response error instead of failing the analysis;
+  the last turn has tools switched off (`FINAL_TURN_NOTICE`) so a long search still ends in an answer;
   `run_async` returns the token `usage` summed over every model turn.
 - Stage 4 is a Google ADK pipeline (`LlmAgent`/`ParallelAgent`/`SequentialAgent` in `agents.py`) with MCP
   tools; it sets `GOOGLE_API_KEY` from `GOOGLE_GEMINI_KEY` at flow start.
