@@ -49,6 +49,7 @@ MAX_MODEL_TURNS = 20
 
 USAGE_FIELDS = (
     "prompt_token_count",
+    "cached_content_token_count",
     "candidates_token_count",
     "thoughts_token_count",
     "tool_use_prompt_token_count",
@@ -193,6 +194,8 @@ class Stage3Executor:
             evidence_gate = output.pop("evidence_gate")
             grounding_metadata = dict(output.get("verification_evidence") or {})
             grounding_metadata["tool_usage"] = observed.tool_usage(output.get("verification_evidence"))
+            # The analysis model's tokens only, not the restructure call's (VER-476 cost per clip).
+            grounding_metadata["token_usage"] = usage
             if evidence_gate.get("applied"):
                 print(f"Evidence gate applied: {evidence_gate['note']}")
                 grounding_metadata["evidence_gate"] = evidence_gate

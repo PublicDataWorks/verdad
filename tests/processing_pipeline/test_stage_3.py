@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 import httpx
 import pytest
 from google.genai import errors
-from google.genai.types import FinishReason, ThinkingLevel
+from google.genai.types import FinishReason, GenerateContentResponseUsageMetadata, ThinkingLevel
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
 from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
@@ -641,7 +641,10 @@ class TestStage3:
 
         assert result["response"] == {"test": "response", "is_convertible": True}
         # no verification_evidence in the output, no tool ran
-        assert json.loads(result["grounding_metadata"]) == {"tool_usage": {"calls": {}, "sources_by_tool": {}}}
+        assert json.loads(result["grounding_metadata"]) == {
+            "tool_usage": {"calls": {}, "sources_by_tool": {}},
+            "token_usage": dict.fromkeys(USAGE_FIELDS, 0),
+        }
         assert result["thought_summaries"] is None
         assert result["usage"] == dict.fromkeys(USAGE_FIELDS, 0)  # the response double reports no usage
         assert mock_gemini_client.aio.models.generate_content.await_count == 2
@@ -704,6 +707,21 @@ class TestStage3:
         result = self._run_executor(mock_gemini_client)
 
         assert result["thought_summaries"] == "thinking..."
+
+    def test_stage_3_executor_stores_token_usage_in_grounding_metadata(self, mock_gemini_client):
+        analysis_response = model_response('{"test": "response"}')
+        analysis_response.usage_metadata = GenerateContentResponseUsageMetadata(
+            prompt_token_count=40_000, cached_content_token_count=32_000, candidates_token_count=900
+        )
+        restructure_response = Mock(parsed={"test": "response", "is_convertible": True})
+        mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
+
+        result = self._run_executor(mock_gemini_client)
+
+        token_usage = json.loads(result["grounding_metadata"])["token_usage"]
+        assert token_usage == result["usage"]
+        assert token_usage["cached_content_token_count"] == 32_000
+        assert token_usage["prompt_token_count"] == 40_000
 
     def test_stage_3_executor_keeps_result_when_delete_fails(self, mock_gemini_client):
         mock_gemini_client.aio.models.generate_content.side_effect = [

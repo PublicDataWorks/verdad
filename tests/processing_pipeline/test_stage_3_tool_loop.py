@@ -190,11 +190,14 @@ def test_usage_is_summed_over_every_turn():
     first = model_turn(tool_call("run", cmd="q"))
     first.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=100, total_token_count=120)
     second = model_turn(Part.from_text(text="done"))
-    second.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=150, total_token_count=200)
+    second.usage_metadata = GenerateContentResponseUsageMetadata(
+        prompt_token_count=150, cached_content_token_count=90, total_token_count=200
+    )
 
     _, _, usage, _ = run(fake_client(first, second))
 
     assert usage["prompt_token_count"] == 250
+    assert usage["cached_content_token_count"] == 90
     assert usage["total_token_count"] == 320
     assert usage["thoughts_token_count"] == 0
 
