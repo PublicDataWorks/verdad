@@ -133,6 +133,11 @@ class Stage1Executor:
             ),
         )
 
+        usage = result.usage_metadata
+        prompt_tokens = getattr(usage, "prompt_token_count", None) or 0
+        cached_tokens = getattr(usage, "cached_content_token_count", None) or 0
+        print(f"Detection token usage: prompt={prompt_tokens} cached={cached_tokens}")
+
         if not result.parsed:
             if not result.candidates:
                 block_reason = result.prompt_feedback.block_reason if result.prompt_feedback else None
