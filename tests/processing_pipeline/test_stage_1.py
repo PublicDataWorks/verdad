@@ -11,6 +11,7 @@ from google.genai.types import (
     FinishReason,
     GenerateContentResponse,
     GenerateContentResponsePromptFeedback,
+    GenerateContentResponseUsageMetadata,
     HarmBlockThreshold,
     HarmCategory,
     ThinkingLevel,
@@ -329,6 +330,39 @@ class TestStage1Executor:
             HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
         }
         assert all(setting.threshold == HarmBlockThreshold.BLOCK_NONE for setting in safety_settings)
+
+    def test_run_logs_prompt_and_cached_token_counts(self, capsys):
+        client = self._client(parsed={"flagged_snippets": []})
+        client.models.generate_content.return_value.usage_metadata = GenerateContentResponseUsageMetadata(
+            prompt_token_count=10455, cached_content_token_count=5400
+        )
+
+        Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+        assert "Detection token usage: prompt=10455 cached=5400" in capsys.readouterr().out
+
+    def test_run_logs_zero_cached_tokens_when_gemini_reports_none(self, capsys):
+        client = self._client(parsed={"flagged_snippets": []})
+        client.models.generate_content.return_value.usage_metadata = GenerateContentResponseUsageMetadata(
+            prompt_token_count=9543
+        )
+
+        Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+        assert "Detection token usage: prompt=9543 cached=0" in capsys.readouterr().out
+
+    def test_run_logs_token_counts_of_a_call_that_returns_no_candidates(self, capsys):
+        client = Mock()
+        client.models.generate_content.return_value = GenerateContentResponse(
+            usage_metadata=GenerateContentResponseUsageMetadata(
+                prompt_token_count=11237, cached_content_token_count=6100
+            )
+        )
+
+        with pytest.raises(ValueError, match="no candidates"):
+            Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+        assert "Detection token usage: prompt=11237 cached=6100" in capsys.readouterr().out
 
 
 class TestGeminiTimestampTranscriptionGenerator:
