@@ -417,6 +417,7 @@ class TestStage3:
             metadata=mock.ANY,
             prompt_version=PROMPT_VERSION,
             service_tier=None,
+            prefetched_sources=None,
         )
         kwargs = mock_supabase_client.update_snippet.call_args.kwargs
         assert kwargs["status"] == ProcessingStatus.READY_FOR_REVIEW
@@ -624,6 +625,81 @@ class TestStage3:
         assert (snippet_id, status) == ("test-id", ProcessingStatus.ERROR)
         assert "STAGE3_SERVICE_TIER='flexx'" in error_message
 
+    PREFETCHED = [{"title": "AP story", "url": "https://apnews.com/article/x", "excerpts": ["first"]}]
+
+    def _process_with_prefetch(self, supabase_client, snippet, run, parallel):
+        with (
+            patch("processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=run),
+            patch("processing_pipeline.stage_3.tasks.parallel_sources", new=parallel),
+            patch("processing_pipeline.gemini_retry.asyncio.sleep", new=AsyncMock()),
+            patch("processing_pipeline.stage_3.tasks.postprocess_snippet"),
+        ):
+            self._process(supabase_client, snippet, skip_review=True)
+
+    def test_process_snippet_prefetch_is_off_by_default(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
+    ):
+        monkeypatch.delenv("STAGE3_PREFETCH_SOURCES", raising=False)
+        run = AsyncMock(return_value=analysis_result)
+        parallel = AsyncMock(return_value=self.PREFETCHED)
+
+        self._process_with_prefetch(mock_supabase_client, sample_snippet, run, parallel)
+
+        parallel.assert_not_awaited()
+        assert run.await_args.kwargs["prefetched_sources"] is None
+
+    def test_process_snippet_prefetches_sources_for_the_stage_1_explanation(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_PREFETCH_SOURCES", "true")
+        run = AsyncMock(return_value=analysis_result)
+        parallel = AsyncMock(return_value=self.PREFETCHED)
+
+        self._process_with_prefetch(mock_supabase_client, sample_snippet, run, parallel)
+
+        parallel.assert_awaited_once_with("Test explanation")
+        assert run.await_args.kwargs["prefetched_sources"] == self.PREFETCHED
+        assert "explanation" not in run.await_args.kwargs["metadata"]
+
+    def test_process_snippet_prefetch_failure_runs_the_analysis_without_sources(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_PREFETCH_SOURCES", "true")
+        run = AsyncMock(return_value=analysis_result)
+
+        self._process_with_prefetch(mock_supabase_client, sample_snippet, run, AsyncMock(side_effect=TimeoutError()))
+
+        assert run.await_args.kwargs["prefetched_sources"] is None
+        mock_supabase_client.set_snippet_status.assert_not_called()
+        assert mock_supabase_client.update_snippet.call_args.kwargs["status"] == ProcessingStatus.PROCESSED
+
+    def test_process_snippet_prefetches_once_for_the_fallback_and_the_retries(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_PREFETCH_SOURCES", "true")
+        overloaded = errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
+        run = AsyncMock(side_effect=[overloaded, overloaded, analysis_result])
+        parallel = AsyncMock(return_value=self.PREFETCHED)
+
+        self._process_with_prefetch(mock_supabase_client, sample_snippet, run, parallel)
+
+        # attempt 1: main 503 -> fallback 503; attempt 2: main ok
+        assert [c.kwargs["prefetched_sources"] for c in run.await_args_list] == [self.PREFETCHED] * 3
+        assert parallel.await_count == 1
+
+    def test_process_snippet_without_a_stage_1_explanation_skips_the_prefetch(
+        self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
+    ):
+        monkeypatch.setenv("STAGE3_PREFETCH_SOURCES", "true")
+        sample_snippet["stage_1_llm_response"]["detection_result"]["flagged_snippets"][0]["explanation"] = ""
+        run = AsyncMock(return_value=analysis_result)
+        parallel = AsyncMock(return_value=self.PREFETCHED)
+
+        self._process_with_prefetch(mock_supabase_client, sample_snippet, run, parallel)
+
+        parallel.assert_not_awaited()
+        assert run.await_args.kwargs["prefetched_sources"] is None
+
     def test_process_snippet_error(self, mock_supabase_client, sample_snippet):
         with patch(
             "processing_pipeline.stage_3.tasks.Stage3Executor.run_async", new=AsyncMock(side_effect=RuntimeError("Test error"))
@@ -651,7 +727,7 @@ class TestStage3:
 
     # --- Stage3Executor ------------------------------------------------------------
 
-    def _run_executor(self, gemini_client, metadata=None):
+    def _run_executor(self, gemini_client, metadata=None, **kwargs):
         return asyncio.run(
             Stage3Executor.run_async(
                 gemini_client=gemini_client,
@@ -659,6 +735,7 @@ class TestStage3:
                 audio_file="test.mp3",
                 metadata=metadata or {"additional_info": {"recorded_at": "January 1, 2024 12:00 AM"}},
                 prompt_version=PROMPT_VERSION,
+                **kwargs,
             )
         )
 
@@ -752,6 +829,59 @@ class TestStage3:
         assert token_usage == result["usage"]
         assert token_usage["cached_content_token_count"] == 32_000
         assert token_usage["prompt_token_count"] == 40_000
+
+    @pytest.mark.parametrize(
+        "prefetched_sources, overall",
+        [
+            (None, 40),  # capped: no tool returned the contradicting URL
+            ([{"title": "AP", "url": "https://www.apnews.com/article/x/", "excerpts": ["..."]}], 95),
+        ],
+    )
+    def test_stage_3_executor_evidence_gate_accepts_a_prefetched_url(
+        self, mock_gemini_client, prefetched_sources, overall
+    ):
+        verdict = {
+            "explanation": {"english": "The claim is false.", "spanish": "La afirmación es falsa."},
+            "confidence_scores": {"overall": 95, "verification_status": "verified_false", "categories": []},
+            "verification_evidence": {
+                "searches_performed": [
+                    {
+                        "query": "q",
+                        "results": [
+                            {
+                                "url": "https://apnews.com/article/x",
+                                "relevance_to_claim": "contradicts_claim",
+                                "publication_date": "2023-12-01",
+                            }
+                        ],
+                    }
+                ],
+                "verification_summary": {},
+            },
+            "is_convertible": True,
+        }
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            model_response('{"test": "response"}'),
+            Mock(parsed=verdict),
+        ]
+
+        result = self._run_executor(mock_gemini_client, prefetched_sources=prefetched_sources)
+
+        assert result["response"]["confidence_scores"]["overall"] == overall
+
+    def test_stage_3_executor_records_the_prefetched_source_count(self, mock_gemini_client):
+        mock_gemini_client.aio.models.generate_content.side_effect = [
+            model_response('{"test": "response"}'),
+            Mock(parsed={"test": "response", "is_convertible": True}),
+        ]
+        sources = [
+            {"title": "AP", "url": "https://apnews.com/article/x", "excerpts": ["..."]},
+            {"title": "UN", "url": "https://news.un.org/a", "excerpts": []},
+        ]
+
+        result = self._run_executor(mock_gemini_client, prefetched_sources=sources)
+
+        assert json.loads(result["grounding_metadata"])["prefetched_sources"] == 2
 
     def test_stage_3_executor_keeps_result_when_delete_fails(self, mock_gemini_client):
         mock_gemini_client.aio.models.generate_content.side_effect = [

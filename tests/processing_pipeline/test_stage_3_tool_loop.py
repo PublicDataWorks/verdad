@@ -48,7 +48,7 @@ def fake_client(*turns):
     return client
 
 
-def run(client):
+def run(client, **kwargs):
     return asyncio.run(
         analyze(
             gemini_client=client,
@@ -56,6 +56,7 @@ def run(client):
             uploaded_audio_file=uploaded_file(),
             user_prompt="analyze this",
             system_instruction="be careful",
+            **kwargs,
         )
     )
 
@@ -531,6 +532,45 @@ def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypa
 
     assert observed.urls == set()
     assert observed.dates == {}
+
+
+PREFETCHED = [
+    {"title": "AP story", "url": "https://www.apnews.com/article/x/", "excerpts": ["first", "second"]},
+    {"title": "", "url": "https://example.org/bare", "excerpts": []},
+]
+
+
+def test_prefetched_sources_follow_the_audio_in_the_first_request(monkeypatch):
+    monkeypatch.delenv("JINA_API_KEY", raising=False)
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    run(client, prefetched_sources=PREFETCHED)
+
+    _, audio, sources = client.aio.models.generate_content.await_args.kwargs["contents"][0].parts
+    assert audio.file_data.file_uri == "https://files.example/abc"
+    assert sources.text.startswith("## Pre-fetched search results\n\n")
+    assert sources.text.endswith(
+        "\n\n[1] AP story\nURL: https://www.apnews.com/article/x/\nExcerpt: first\nExcerpt: second\n"
+        "\n[2] \nURL: https://example.org/bare\n"
+    )
+    assert declared_tools(client) == ["searxng_web_search", "web_url_read"]
+
+
+def test_prefetched_source_urls_count_as_returned_by_a_tool():
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    _, _, _, observed = run(client, prefetched_sources=PREFETCHED)
+
+    assert observed.urls == {"apnews.com/article/x", "example.org/bare"}
+    assert observed.calls == {}
+
+
+def test_an_empty_prefetch_adds_nothing_to_the_request():
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    run(client, prefetched_sources=[])
+
+    assert len(client.aio.models.generate_content.await_args.kwargs["contents"][0].parts) == 2
 
 
 def cited(url, relevance="supports_claim"):

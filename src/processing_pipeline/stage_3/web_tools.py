@@ -17,6 +17,17 @@ JINA_TIMEOUT = aiohttp.ClientTimeout(total=20)
 JINA_CONTENT_CHARS = 1500
 _RELATIVE_DATE = re.compile(r"^(\d+)\s+(minute|hour|day|week)s?\s+ago$", re.IGNORECASE)
 
+PARALLEL_DECISIONS_URL = "https://api.parallel.ai/v1/decisions"
+PARALLEL_TIMEOUT = aiohttp.ClientTimeout(total=20)
+# Plain wording on purpose: "false", "misleading" and the like pull in generic fact-checking pages (VER-475).
+PARALLEL_QUESTIONS = {
+    "accurate": {
+        "type": "noul",
+        "instructions": "The speaker's statements about people, events and numbers in this text are accurate.",
+        "criteria": {"true": "They are accurate.", "false": "At least one of them is not accurate."},
+    }
+}
+
 # SSL context using certifi's CA bundle for environments where the system
 # certificate store may be incomplete (e.g., macOS Python without Homebrew certs)
 _ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -155,6 +166,24 @@ def jina_date(value, now: datetime) -> str | None:
         except ValueError:
             pass
     return None
+
+
+async def parallel_sources(state: str) -> list[dict]:
+    """The web sources (title, url, excerpts) Parallel's Decisions API cites for ``state``; raises on any failure."""
+    headers = {"x-api-key": os.environ["PARALLEL_API_KEY"]}
+    body = {"state": state, "questions": PARALLEL_QUESTIONS, "mode": "fast"}
+    async with aiohttp.ClientSession(
+        timeout=PARALLEL_TIMEOUT, connector=aiohttp.TCPConnector(ssl=_ssl_context)
+    ) as session:
+        async with session.post(PARALLEL_DECISIONS_URL, json=body, headers=headers) as response:
+            response.raise_for_status()
+            data = await response.json()
+
+    return [
+        {"title": c.get("title") or "", "url": c["url"], "excerpts": c.get("excerpts") or []}
+        for c in data.get("citations") or []
+        if c.get("url")
+    ]
 
 
 async def web_url_read(

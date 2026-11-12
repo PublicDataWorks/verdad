@@ -235,6 +235,14 @@ class TestStage1FlowOptions:
         monkeypatch.setenv("STAGE3_REPEAT_DEDUP", "true")
         assert mc.stage3_repeat_dedup() is True
 
+    def test_stage3_prefetch_sources_is_off_by_default(self, monkeypatch):
+        monkeypatch.delenv("STAGE3_PREFETCH_SOURCES", raising=False)
+        assert mc.stage3_prefetch_sources() is False
+
+    def test_stage3_prefetch_sources_on(self, monkeypatch):
+        monkeypatch.setenv("STAGE3_PREFETCH_SOURCES", "true")
+        assert mc.stage3_prefetch_sources() is True
+
 
 class TestStage3ServiceTier:
     @pytest.mark.parametrize("value", [None, "", "standard", " Standard "])

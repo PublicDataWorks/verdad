@@ -12,8 +12,14 @@ from processing_pipeline.constants import (
 )
 from processing_pipeline.gemini_retry import with_retries
 from processing_pipeline.processing_utils import postprocess_snippet
-from processing_pipeline.model_config import stage3_fallback_model, stage3_main_model, stage3_service_tier
+from processing_pipeline.model_config import (
+    stage3_fallback_model,
+    stage3_main_model,
+    stage3_prefetch_sources,
+    stage3_service_tier,
+)
 from processing_pipeline.stage_3.executors import Stage3Executor
+from processing_pipeline.stage_3.web_tools import parallel_sources
 from processing_pipeline.supabase_utils import SupabaseClient
 from utils import optional_task
 
@@ -134,12 +140,32 @@ def __get_metadata(snippet):
     return metadata
 
 
-def stage_1_excerpt(snippet):
+def stage_1_flagged(snippet) -> dict:
     detection_result = (snippet.get("stage_1_llm_response") or {}).get("detection_result") or {}
     for flagged_snippet in detection_result.get("flagged_snippets") or []:
         if flagged_snippet.get("uuid") == snippet["id"]:
-            return flagged_snippet.get("transcription")
-    return None
+            return flagged_snippet
+    return {}
+
+
+def stage_1_excerpt(snippet):
+    return stage_1_flagged(snippet).get("transcription")
+
+
+async def prefetch_sources(snippet) -> list[dict] | None:
+    """Parallel's web sources for the clip (VER-481); None when off, on any failure or with no Stage 1 explanation."""
+    if not stage3_prefetch_sources():
+        return None
+    try:
+        explanation = stage_1_flagged(snippet).get("explanation")
+        if not explanation:
+            return None
+        sources = await parallel_sources(explanation)
+    except Exception as e:
+        print(f"Source pre-fetch failed for snippet {snippet['id']}, analyzing without: {type(e).__name__}: {e}")
+        return None
+    print(f"Pre-fetched {len(sources)} sources for snippet {snippet['id']}")
+    return sources
 
 
 @optional_task(log_prints=True)
@@ -209,15 +235,19 @@ def copy_repeat_analysis(supabase_client, snippet, source):
 
 
 @optional_task(log_prints=True)
-async def analyze_snippet(gemini_client, audio_file, metadata, prompt_version: dict):
+async def analyze_snippet(gemini_client, audio_file, metadata, prompt_version: dict, prefetched_sources=None):
     # Read outside with_retries: a bad value raises ValueError, which it would retry as transient.
     service_tier = stage3_service_tier()
     return await with_retries(
-        lambda: analyze_with_fallback(gemini_client, audio_file, metadata, prompt_version, service_tier)
+        lambda: analyze_with_fallback(
+            gemini_client, audio_file, metadata, prompt_version, service_tier, prefetched_sources
+        )
     )
 
 
-async def analyze_with_fallback(gemini_client, audio_file, metadata, prompt_version: dict, service_tier=None):
+async def analyze_with_fallback(
+    gemini_client, audio_file, metadata, prompt_version: dict, service_tier=None, prefetched_sources=None
+):
     model = stage3_main_model()
 
     try:
@@ -229,6 +259,7 @@ async def analyze_with_fallback(gemini_client, audio_file, metadata, prompt_vers
             metadata=metadata,
             prompt_version=prompt_version,
             service_tier=service_tier,
+            prefetched_sources=prefetched_sources,
         )
     except (errors.ServerError, errors.ClientError) as e:
         if e.code in [HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN]:
@@ -249,6 +280,7 @@ async def analyze_with_fallback(gemini_client, audio_file, metadata, prompt_vers
             metadata=metadata,
             prompt_version=prompt_version,
             service_tier=None,
+            prefetched_sources=prefetched_sources,
         )
 
     return {
@@ -269,6 +301,7 @@ async def process_snippet(
     print(f"Processing snippet: {local_file}")
 
     try:
+        prefetched_sources = await prefetch_sources(snippet)  # before get_metadata drops the Stage 1 explanation
         metadata = get_metadata(snippet)
         print(f"Metadata:\n{json.dumps(metadata, indent=2, ensure_ascii=False)}")
 
@@ -277,6 +310,7 @@ async def process_snippet(
             audio_file=local_file,
             metadata=metadata,
             prompt_version=prompt_version,
+            prefetched_sources=prefetched_sources,
         )
 
         overall = analyzing_response["response"]["confidence_scores"]["overall"]
