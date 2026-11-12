@@ -54,6 +54,13 @@ MAX_MODEL_TURNS = 20
 FINAL_TURN_NOTICE = "Tool budget used up. Give your final analysis now with the evidence you have."
 NO_TOOLS = ToolConfig(function_calling_config=FunctionCallingConfig(mode=FunctionCallingConfigMode.NONE))
 
+# Wording as evaluated in VER-481.
+PREFETCHED_SOURCES_HEADER = (
+    "## Pre-fetched search results\n\n"
+    "These web search results were fetched before this analysis for the claims flagged in this clip; treat them "
+    "like results from your search tool, and still search when they do not settle a claim.\n"
+)
+
 
 USAGE_FIELDS = (
     "prompt_token_count",
@@ -97,6 +104,15 @@ def offered_tools() -> dict:
     return {
         name: tool for name, tool in WEB_TOOLS.items() if name != jina_web_search.__name__ or jina_search_available()
     }
+
+
+def prefetched_sources_text(sources: list[dict]) -> str:
+    lines = [PREFETCHED_SOURCES_HEADER]
+    for number, source in enumerate(sources, 1):
+        lines.append(f"[{number}] {source['title']}\nURL: {source['url']}")
+        lines.extend(f"Excerpt: {excerpt}" for excerpt in source["excerpts"])
+        lines.append("")
+    return "\n".join(lines)
 
 
 def usage_metadata_to_dict(usage_metadata) -> dict:
@@ -151,6 +167,7 @@ class Stage3Executor:
         metadata: dict,
         prompt_version: dict,
         service_tier: ServiceTier | None = None,
+        prefetched_sources: list[dict] | None = None,
     ):
         """
         Main execution method for Stage 3 analysis.
@@ -206,6 +223,7 @@ class Stage3Executor:
                 user_prompt=user_prompt,
                 system_instruction=prompt_version["system_instruction"],
                 service_tier=service_tier,
+                prefetched_sources=prefetched_sources,
             )
 
             # Validate with Pydantic, fall back to schema restructuring
@@ -233,6 +251,8 @@ class Stage3Executor:
             grounding_metadata["tool_usage"] = observed.tool_usage(output.get("verification_evidence"))
             # The analysis model's tokens only, not the restructure call's (VER-476 cost per clip).
             grounding_metadata["token_usage"] = usage
+            if prefetched_sources:
+                grounding_metadata["prefetched_sources"] = len(prefetched_sources)
             if evidence_gate.get("applied"):
                 print(f"Evidence gate applied: {evidence_gate['note']}")
                 grounding_metadata["evidence_gate"] = evidence_gate
@@ -260,6 +280,7 @@ class Stage3Executor:
         user_prompt: str,
         system_instruction: str,
         service_tier: ServiceTier | None = None,
+        prefetched_sources: list[dict] | None = None,
     ):
         """
         Analyze using the GenAI SDK with web search tools.
@@ -316,6 +337,10 @@ class Stage3Executor:
         response = None
         function_calls = []
         observed = ObservedToolOutput()
+        if prefetched_sources:
+            contents[0].parts.append(Part.from_text(text=prefetched_sources_text(prefetched_sources)))
+            # Shown to the model, so the evidence gate counts them like URLs a tool returned.
+            observed.urls.update(filter(None, (url_key(source["url"]) for source in prefetched_sources)))
         called: set[str] = set()
         for turn in range(MAX_MODEL_TURNS):
             if turn == MAX_MODEL_TURNS - 1:

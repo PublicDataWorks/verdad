@@ -74,6 +74,7 @@ STAGE3_FALLBACK = ModelSetting("STAGE3_FALLBACK_MODEL", GeminiModel.GEMINI_2_5_F
 STAGE3_RESTRUCTURE = ModelSetting("STAGE3_RESTRUCTURE_MODEL", GeminiModel.GEMINI_2_5_FLASH)
 STAGE3_REPEAT_DEDUP_ENV = "STAGE3_REPEAT_DEDUP"
 STAGE3_SERVICE_TIER_ENV = "STAGE3_SERVICE_TIER"
+STAGE3_PREFETCH_SOURCES_ENV = "STAGE3_PREFETCH_SOURCES"
 
 # Stage 4. Researchers stay on Flash: Pro invented citations several times more often (VER-391, PR #122)
 STAGE4_RESEARCHER = ModelSetting("STAGE4_RESEARCHER_MODEL", GeminiModel.GEMINI_2_5_FLASH)
@@ -280,6 +281,11 @@ def stage3_service_tier() -> ServiceTier | None:
     if value == ServiceTier.FLEX.value:
         return ServiceTier.FLEX
     raise ValueError(f"{STAGE3_SERVICE_TIER_ENV}={value!r}; expected flex or standard")
+
+
+def stage3_prefetch_sources() -> bool:
+    """STAGE3_PREFETCH_SOURCES: hand each analysis Parallel's web sources for the clip up front (VER-481)."""
+    return _env_flag(STAGE3_PREFETCH_SOURCES_ENV)
 
 
 def stage4_researcher_model() -> ModelName:
