@@ -10,11 +10,14 @@ from google.genai.types import (
     File,
     FinishReason,
     FunctionCall,
+    FunctionCallingConfig,
+    FunctionCallingConfigMode,
     FunctionDeclaration,
     GenerateContentConfig,
     Part,
     ServiceTier,
     Tool,
+    ToolConfig,
 )
 from pydantic import ValidationError
 
@@ -46,8 +49,10 @@ WEB_TOOLS = {tool.__name__: tool for tool in (searxng_web_search, web_url_read, 
 # Jina tokens are prepaid (VER-415).
 ONCE_PER_ANALYSIS = {jina_web_search.__name__}
 
-# Upper bound on model turns per analysis (one final answer plus up to 19 rounds of tool calls).
+# Upper bound on model turns per analysis; the last turn has tools switched off so it has to answer.
 MAX_MODEL_TURNS = 20
+FINAL_TURN_NOTICE = "Tool budget used up. Give your final analysis now with the evidence you have."
+NO_TOOLS = ToolConfig(function_calling_config=FunctionCallingConfig(mode=FunctionCallingConfigMode.NONE))
 
 
 USAGE_FIELDS = (
@@ -312,7 +317,11 @@ class Stage3Executor:
         function_calls = []
         observed = ObservedToolOutput()
         called: set[str] = set()
-        for _ in range(MAX_MODEL_TURNS):
+        for turn in range(MAX_MODEL_TURNS):
+            if turn == MAX_MODEL_TURNS - 1:
+                print(f"Turn budget of {MAX_MODEL_TURNS} reached; asking for the final answer with tools off")
+                config = config.model_copy(update={"tool_config": NO_TOOLS})
+                contents[-1].parts.append(Part.from_text(text=FINAL_TURN_NOTICE))
             try:
                 response = await gemini_client.aio.models.generate_content(
                     model=model_name, contents=contents, config=config
