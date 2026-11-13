@@ -45,15 +45,27 @@ Below are detailed heuristics for each disinformation category, including cultur
 **Description**:
 Disinformation that falsely claims election fraud or manipulation in cases where no credible evidence exists. Note: Claims about the 2024 Presidential Election outcome should be evaluated against the official results showing Donald Trump's victory with 312 electoral votes and approximately 77.2 million individual votes (49.9%).
 
+This category also covers content that misleads voters about how, when or whether they can vote, or that steers their vote with false or dehumanizing premises: wrong election dates, places or requirements; claims that an election will be cancelled or suspended; telling listeners not to vote by mail because ballots are destroyed; claims that noncitizens or "illegals" vote in meaningful numbers; and pulpit or host electioneering that tells listeners a vote for a party or candidate is a vote for the devil or against God, built on false or dehumanizing claims about that party or its voters.
+
 **Heuristics**:
 - Claims of widespread voter fraud without evidence
 - False claims that Kamala Harris won the 2024 election
 - Unfounded allegations about voting systems being manipulated to favor Harris
+- Voter confusion: wrong election dates, polling places, hours, eligibility or ID requirements stated to listeners, or false voting methods (by phone, by text), even when the speaker hedges ("creo que", "si no me equivoco")
+- Claims that an upcoming election will be cancelled, suspended or postponed, or that votes will not be counted
+- Telling listeners not to vote by mail, or not to vote at all, because ballots are shredded, thrown away or never counted
+- Claims that noncitizens, "illegals" or the dead vote in numbers that change outcomes, or that a party wants immigration in order to harvest votes
+- Pulpit or host electioneering that frames a vote for a party or candidate as a vote for the devil, against God, or as complicity in murder, when it rests on false premises (e.g., "they castrate children", "they want to kill babies up to nine months") or demonizes the other side's voters
 - Note: Statements accurately reporting Trump's 2024 victory (312 electoral votes and winning the popular vote) should NOT be flagged as disinformation
+- Note: Do NOT flag ordinary endorsements, policy arguments, religious moral teaching that makes no false claims about a party or its voters, get-out-the-vote reminders with correct information, or accurate reporting on election rules, candidates and results
 
 **Examples**:
 - *Spanish*: "Harris ganó el voto popular por millones, pero Trump robó la elección" (FALSE claim to flag)
 - *Arabic*: "هاريس فازت بالتصويت الشعبي بالملايين ، لكن ترامب سرق الانتخابات" (FALSE claim to flag)
+- *Spanish*: "Si usted vota por los demócratas, está votando por el diablo, porque votan para que a los niños los castren." (pulpit electioneering on a false premise: flag)
+- *Arabic*: "إذا صوّتّ للديمقراطيين فأنت تصوّت للشيطان، لأنك تصوّت لإخصاء الأطفال." (pulpit electioneering on a false premise: flag)
+- *Spanish*: "No mande su voto por correo; adentro los trituran y la mitad nunca llega a contarse." (mail-ballot discouragement: flag)
+- *Arabic*: "لا ترسل صوتك بالبريد؛ في الداخل يمزقونها ونصفها لا يُحسب أبداً." (mail-ballot discouragement: flag)
 
 ---
 
@@ -471,6 +483,31 @@ Disinformation targeting children's health including vaccines, fever management,
 
 ---
 
+### **22. Gender-Based Harmful Rhetoric and Misogyny**
+
+**Description**:
+
+Rhetoric by the station's own speakers that demeans women, prescribes their subordination, restricts their rights or safety, or minimizes violence against them. Unlike most categories, this one applies even when there is no single checkable false fact: a sermon telling wives that citing their rights is rebellion against God, or a host saying a wife's "no" does not mean no, is flagged for the rhetoric itself. False health claims about women, contraception and pregnancy belong to Category 20 (Women's Health and Reproductive Care) and political framing of abortion to Category 6 (Abortion and Reproductive Rights); add Category 22 alongside them when the claim also demeans women or steers them away from care. Content about transgender and LGBTQ+ people belongs to Category 5.
+
+**Heuristics**:
+
+- Prescribing women's subordination, silence or obedience as a requirement for listeners today, especially with threats (God will punish her, she will lose authority over her children) or by calling women who claim rights fools or rebels
+- Sweeping statements that women by nature cause disorder, are vain, dissatisfied or dangerous, or that men's crimes and sins are women's fault
+- Minimizing or excusing violence against women: "no" does not mean no in marriage, rape framed as promiscuity, a sexual-assault survivor dismissed as a liar without basis, women told to endure abuse
+- Framing feminism or women's rights as satanic, occult, communist, a deception that strips men of authority, or a plot deadlier than genocides
+- Gendered attacks on women in public life that target their bodies, sexuality, motherhood or name rather than their record, or that blame women as a group for social ills
+- Calling women who have abortions possessed or vain, and women's health claims that steer women away from care (also tag Category 20 or 6)
+- Do NOT flag: ordinary religious teaching on marriage or ordination that does not demean women or restrict their rights or safety; neutral news about women officials; emotional-support or suicide-prevention segments; song lyrics; sin lists addressed to men and women alike; pro-life advocacy or prayer with no false claim and no statement about women's roles; segments that quote such rhetoric in order to criticize it
+
+**Examples**:
+
+- *Spanish*: "Las mujeres dicen 'conozco mis derechos', pero el que habla de derechos es un necio. La esposa debe someterse a su marido en todo, y la que no, está en rebelión contra Dios."
+- *Arabic*: "تقول النساء 'أعرف حقوقي'، لكن من يتحدث عن الحقوق أحمق. يجب على الزوجة أن تخضع لزوجها في كل شيء، والتي لا تفعل فهي متمردة على الله."
+- *Spanish*: "Cuando la esposa dice que no, no significa no; ella solo quiere ser deseada y es el esposo quien debe tomar la iniciativa."
+- *Arabic*: "عندما تقول الزوجة لا، فهي لا تعني لا؛ إنها تريد فقط أن تكون مرغوبة، والزوج هو من يجب أن يبادر."
+
+---
+
 ## Additional Instructions
 
 - **Maximize Reliability**: Carefully apply the heuristics to ensure accurate identification of potential disinformation.
@@ -551,6 +588,8 @@ Do NOT flag:
 - News about current events, office-holders or conflicts only because you do not recognize them. Treat the recording date as the present; events after your training data may be real. Flag news only when it contradicts the knowledge base, contradicts itself, or matches a disinformation narrative in the heuristics.
 - Opinions, prayers, or moral and religious teaching that make no factual claim about health, science, history, law or public affairs.
   A religious message that says a disease is cured, or that medical treatment is not needed, does make a health claim and must be flagged.
+  Also flag teaching or commentary that prescribes women's subordination, demeans women, or excuses violence against them (Category 22), and pulpit or host electioneering that tells listeners how to vote on false or dehumanizing premises (Category 1), even without a single checkable fact.
+- A clip or quote played to criticize, fact-check, debunk or report on it. Flag claims made or endorsed by the station's own speakers (host, guest, preacher, advertiser); flag a caller's claim only when the host endorses it or does not challenge it.
 
 ---
 
@@ -562,6 +601,7 @@ Before finalizing your output, complete this validation checklist:
    - Have I gone through the whole transcription, including advertisements, call-ins, interviews and sermons?
    - Have I flagged every claim that is plausibly false, unsubstantiated, or misleading under the heuristics, even when I cannot prove it false from the transcription alone? A later stage fact-checks every flag, so a missed claim costs more than a flag that turns out to be accurate.
    - Health and product claims without evidence (cures, disease prevention, safety for pregnancy or infants), pseudoscience stated as fact, and false or distorted characterizations of parties, groups or policies all count.
+   - Gender-based harmful rhetoric (Category 22) and voter confusion or pulpit electioneering (Category 1) count even when no single fact can be checked.
    - If the answer to any of these is "no," go back and add the missing snippets.
 
 2. **Context Review**
@@ -571,10 +611,11 @@ Before finalizing your output, complete this validation checklist:
 
 3. **Final Verification**
    Answer each with "yes" before proceeding:
-   - [ ] Each flagged snippet contains at least one specific claim that is plausibly false, unsubstantiated, or misleading
+   - [ ] Each flagged snippet contains at least one specific claim that is plausibly false, unsubstantiated, or misleading, or is Category 22 / Category 1 rhetoric that meets the Calibration exception
    - [ ] Timestamps are accurate and properly formatted
-   - [ ] Explanations name the specific claim and why it is likely false or misleading
-   - [ ] I have not flagged pure opinion, or statements of faith that make no factual claim
+   - [ ] Explanations name the specific claim and why it is likely false or misleading; for rhetoric-only snippets, quote the rhetoric and state the harm, without calling religious doctrine "false"
+   - [ ] I have not flagged pure opinion, or statements of faith that make no factual claim, except Category 22 rhetoric and Category 1 electioneering as described under Calibration
+   - [ ] Each flagged snippet is the station speaker's own claim, not a clip or quote being criticized or debunked
    - [ ] I have not skipped a claim only because it is not demonstrably false
 
 If any verification fails, revise your analysis accordingly.
