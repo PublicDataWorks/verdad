@@ -97,8 +97,8 @@ module, which is gone in 3.13.
 Use **Custom**, keep "include the default allowlist" on, and add the hosts below. The default Trusted list
 already covers PyPI, npm, Ubuntu archives, `*.googleapis.com` (Gemini), `*.r2.cloudflarestorage.com` and the
 GitHub release hosts (`objects.githubusercontent.com`, `release-assets.githubusercontent.com`). It does **not**
-cover Fly, Supabase, Sentry, OpenAI or Jina. "Full" also works but gives the session unrestricted egress with
-production credentials in its environment.
+cover Fly, Supabase, Sentry, OpenAI, Jina or Parallel. "Full" also works but gives the session unrestricted egress
+with production credentials in its environment.
 
 ```
 api.machines.dev
@@ -114,6 +114,7 @@ sentry.io
 downloads.sentry-cdn.com
 api.openai.com
 s.jina.ai
+api.parallel.ai
 ppa.launchpadcontent.net
 ```
 
@@ -128,6 +129,7 @@ ppa.launchpadcontent.net
 | `downloads.sentry-cdn.com` | sentry-cli's binary download when the npm optional dependency is not used |
 | `api.openai.com` | embeddings (stage 5, KB retrieval) in `run_stage.py` / `evaluate_prompt.py` runs |
 | `s.jina.ai` | stage 3 `jina_web_search` fallback (only when `JINA_API_KEY` is set) |
+| `api.parallel.ai` | stage 3 source pre-fetch (only when `STAGE3_PREFETCH_SOURCES` is on, VER-481) |
 | `ppa.launchpadcontent.net` | deadsnakes PPA, only if the image lacks Python 3.11 and uv cannot download one |
 
 Notes:
@@ -206,6 +208,7 @@ importer writes the `prompt_versions` table, which CI normally does on merge.
 | `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | audio download/upload in stages 1-3 | Cloudflare dashboard > R2 > Manage API tokens. A token with Object Read only on the bucket is enough for analysis runs. | write access can overwrite or delete recordings |
 | `SEARXNG_URL` | stage 3 tools, stage 4 web researcher | `https://verdad-searxng.fly.dev` | none |
 | `JINA_API_KEY` | optional stage 3 Jina fallback (VER-415) | Jina dashboard | spends prepaid tokens |
+| `PARALLEL_API_KEY` | optional stage 3 source pre-fetch, read only when `STAGE3_PREFETCH_SOURCES` is on (VER-481) | Parallel dashboard | billable: 0.001 USD per analyzed clip |
 
 ### Optional overrides (not secrets)
 
@@ -237,7 +240,7 @@ which lists names and digests, never values:
 
 | App | Secrets the code reads |
 |---|---|
-| `processing-worker` | `SUPABASE_URL`, `SUPABASE_KEY`, `R2_*`, `GOOGLE_GEMINI_KEY`, `OPENAI_API_KEY`, `SEARXNG_URL`, `JINA_API_KEY`, `SENTRY_DSN`, `PREFECT_API_AUTH_STRING` |
+| `processing-worker` | `SUPABASE_URL`, `SUPABASE_KEY`, `R2_*`, `GOOGLE_GEMINI_KEY`, `OPENAI_API_KEY`, `SEARXNG_URL`, `JINA_API_KEY`, `PARALLEL_API_KEY`, `SENTRY_DSN`, `PREFECT_API_AUTH_STRING` |
 | `recording-worker`, `generic-recording-worker` | `SUPABASE_URL`, `SUPABASE_KEY`, `R2_*`, `SENTRY_DSN`, `PREFECT_API_AUTH_STRING` |
 | `prefect` | `PREFECT_SERVER_API_AUTH_STRING`, `PREFECT_API_AUTH_STRING`, `FLY_MACHINE_IDS`, `STAGE_{1..5}_FLOW_RUNS`, `BATCH_SIZE`, `DELAY_BETWEEN_BATCHES`, flyctl auth for `restart_all.sh` (how it is provided is unknown, see docs/OPERATIONS.md) |
 | `verdad-server` | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LIVEBLOCKS_SECRET_KEY`, `LIVEBLOCKS_WEBHOOK_SECRET`, `RESEND_API_KEY`, `SLACK_NOTIFICATION_EMAIL` (none needed for `npm test` / `tsc`) |

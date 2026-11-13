@@ -39,6 +39,7 @@ SENTRY_ORG=verdad-nk
 # R2_BUCKET_NAME=
 # SEARXNG_URL=https://verdad-searxng.fly.dev
 # JINA_API_KEY=
+# PARALLEL_API_KEY=
 
 # ---- Optional overrides (not secrets; defaults are production's values, see the doc) -----------
 # SUPABASE_PROJECT_REF=
