@@ -978,7 +978,7 @@ class TestStage3:
         asyncio.run(in_depth_analysis(snippet_ids=["test-id"], skip_review=False, repeat=False))
 
         mock_supabase_client.get_snippet_by_id.assert_called_once_with(id="test-id", select=SNIPPET_SELECT)
-        mock_supabase_client.set_snippet_status.assert_called_once_with("test-id", ProcessingStatus.PROCESSING)
+        mock_supabase_client.claim_snippet_by_id.assert_called_once_with("test-id")
         mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_not_called()
         mock_s3_client.download_file.assert_called_once()
         mock_flow_deps["process"].assert_awaited_once()

@@ -86,6 +86,15 @@ class TestSupabaseClient:
         )
         assert response == {"requeued": 2, "errored": 0}
 
+    def test_claim_snippet_by_id_clears_the_previous_flow_run_claim(self, supabase_client, mock_supabase):
+        supabase_client.claim_snippet_by_id("test-id")
+
+        mock_supabase.table.assert_called_once_with("snippets")
+        mock_supabase.table.return_value.update.assert_called_once_with(
+            {"status": "Processing", "claimed_by_flow_run": None}
+        )
+        mock_supabase.table.return_value.update.return_value.eq.assert_called_once_with("id", "test-id")
+
     def test_get_snippet_by_id(self, supabase_client, mock_supabase):
         """Test getting snippet by ID"""
         expected_response = [{"id": "test-id", "status": "New"}]

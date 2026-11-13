@@ -4,7 +4,7 @@ import httpx
 from postgrest.exceptions import APIError
 from supabase import create_client
 from datetime import datetime, timezone
-from processing_pipeline.constants import PromptStage
+from processing_pipeline.constants import ProcessingStatus, PromptStage
 
 # SQLSTATEs that clear on their own (statement/lock timeouts, deadlocks, serialization, server shutdown or
 # restart, dropped connections), the PostgREST codes for "cannot reach Postgres" / "schema cache reloading"
@@ -78,6 +78,11 @@ class SupabaseClient:
     def release_flow_run_snippets(self, flow_run_id, count_attempt):
         params = {"p_flow_run_id": str(flow_run_id), "p_count_attempt": count_attempt}
         return self.client.rpc("release_flow_run_snippets", params).execute().data
+
+    def claim_snippet_by_id(self, id):
+        # Drops the last loop run's claim, or that run's cancel hook would requeue the clip under a by-id run
+        update = {"status": ProcessingStatus.PROCESSING, "claimed_by_flow_run": None}
+        return self.client.table("snippets").update(update).eq("id", id).execute().data
 
     def get_a_ready_for_review_snippet_and_reserve_it(self):
         return self._reserve_work("fetch_a_ready_for_review_snippet_and_reserve_it")
