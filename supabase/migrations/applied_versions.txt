@@ -1,4 +1,4 @@
-# supabase_migrations.schema_migrations in production, fetched 2026-11-10; regenerate with `make migrations-manifest`.
+# supabase_migrations.schema_migrations in production, fetched 2026-11-13; regenerate with `make migrations-manifest`.
 # version<TAB>name
 20241029135243	remote_schema
 20241029135348	remote_schema
@@ -69,3 +69,4 @@
 20261109120000	feed_line90_indexes
 20261109120100	feed_line90_functions
 20261110100000	stage3_repeat_source
+20261113100000	snippet_flow_run_claims
