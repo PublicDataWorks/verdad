@@ -5,6 +5,7 @@ import os
 
 from google import genai
 from google.genai import errors
+from prefect.runtime import flow_run
 
 from processing_pipeline.constants import (
     ProcessingStatus,
@@ -43,7 +44,7 @@ def fetch_a_new_snippet_from_supabase(supabase_client):
 
 
 def __fetch_a_new_snippet_from_supabase(supabase_client):
-    response = supabase_client.get_a_new_snippet_and_reserve_it()
+    response = supabase_client.get_a_new_snippet_and_reserve_it(flow_run.id)
     if response:
         print(f"Found a new snippet: {response['id']}")
         return response

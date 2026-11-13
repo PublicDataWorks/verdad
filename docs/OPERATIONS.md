@@ -515,9 +515,13 @@ refuses the production project unless `--allow-production` is passed.
 - **OOM leaves zombie runs.** When a worker machine is OOM-killed (`exit_code=137` in `fly machine status`) the
   process restarts but its Prefect runs never resume and keep showing `Running`. Check `fly logs`, not Prefect
   state. The stage 3 machine runs 4 GB for this reason (5 loop runs plus targeted by-id runs).
-- **Every restart strands in-flight rows** in `Processing`/`Reviewing`. The stage 3 `on_crashed` hook resets
-  only rows named in `snippet_ids`; the pg_cron job `sweep_stuck_snippets` (hourly at :05, migration
-  `20260917080000`) puts rows older than 2 h back to `New` / `Ready for review`. `cron.job_run_details` shows
+- **Every restart strands in-flight rows** in `Processing`/`Reviewing`. A cancelled or crashed Stage 3 run frees
+  its own clip first (VER-479, migration `20261113100000`): its hook calls `release_flow_run_snippets` for
+  `Processing` rows whose `claimed_by_flow_run` is the run (a by-id run resets the rows named in `snippet_ids`).
+  Only a crash counts toward `snippets.analysis_attempts` (shared with the error sweep); once that is 3, the next
+  crash sends the clip to `Error`, so it cannot loop.
+  The pg_cron job `sweep_stuck_snippets` (hourly at :05, migration `20260917080000`) covers the rest: it puts
+  rows older than 2 h back to `New` / `Ready for review`. `cron.job_run_details` shows
   the runs; `SELECT public.sweep_stuck_snippets()` by hand returns how many rows it moved. Stage 1 audio files get
   the same from `sweep_stuck_audio_files` (hourly at :35, migration `20261103120000`, VER-452): `Processing` rows
   stuck 2 h to 7 days, with no `stage_1_llm_responses` row, go back to `New`; older ones are left for a backlog

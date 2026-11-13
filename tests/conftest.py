@@ -38,3 +38,11 @@ def production_default_models(monkeypatch):
     for setting in model_config.ALL_SETTINGS:
         monkeypatch.delenv(setting.env_var, raising=False)
     monkeypatch.delenv(model_config.STAGE1_TRANSCRIPTION_METHOD_ENV, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def prefetch_switch_off(monkeypatch):
+    """A shell that sets the switch would send Stage 3 tests to the real Parallel API."""
+    from processing_pipeline import model_config
+
+    monkeypatch.delenv(model_config.STAGE3_PREFETCH_SOURCES_ENV, raising=False)

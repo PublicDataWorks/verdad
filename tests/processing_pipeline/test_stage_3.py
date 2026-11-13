@@ -9,6 +9,7 @@ import httpx
 import pytest
 from google.genai import errors
 from google.genai.types import FinishReason, GenerateContentResponseUsageMetadata, ServiceTier, ThinkingLevel
+from prefect.states import Cancelling, Crashed
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
 from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
@@ -26,6 +27,7 @@ from processing_pipeline.stage_3 import (
     update_snippet_in_supabase,
 )
 from processing_pipeline.stage_3.executors import USAGE_FIELDS
+from processing_pipeline.stage_3.flows import reset_snippet_status_hook
 
 SNIPPET_SELECT = (
     "*, audio_file(radio_station_name, radio_station_code, location_state, location_city, recorded_at, "
@@ -195,6 +197,13 @@ class TestStage3:
 
         assert fetch_a_new_snippet_from_supabase(mock_supabase_client) == expected_response
         mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_called_once()
+
+    def test_fetch_new_snippet_claims_it_for_the_current_flow_run(self, mock_supabase_client):
+        with patch("processing_pipeline.stage_3.tasks.flow_run") as current_run:
+            current_run.id = "run-1"
+            fetch_a_new_snippet_from_supabase(mock_supabase_client)
+
+        mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_called_once_with("run-1")
 
     def test_download_audio_file(self, mock_s3_client):
         assert download_audio_file_from_s3(mock_s3_client, "test-bucket", "test/path.mp3") == "path.mp3"
@@ -969,7 +978,7 @@ class TestStage3:
         asyncio.run(in_depth_analysis(snippet_ids=["test-id"], skip_review=False, repeat=False))
 
         mock_supabase_client.get_snippet_by_id.assert_called_once_with(id="test-id", select=SNIPPET_SELECT)
-        mock_supabase_client.set_snippet_status.assert_called_once_with("test-id", ProcessingStatus.PROCESSING)
+        mock_supabase_client.claim_snippet_by_id.assert_called_once_with("test-id")
         mock_supabase_client.get_a_new_snippet_and_reserve_it.assert_not_called()
         mock_s3_client.download_file.assert_called_once()
         mock_flow_deps["process"].assert_awaited_once()
@@ -994,7 +1003,7 @@ class TestStage3:
 
         # Short sleep after processing a snippet, long sleep when the queue is empty
         assert sleep_calls == [2, 60]
-        assert mock_supabase_client.get_a_new_snippet_and_reserve_it.call_args_list == [call(), call()]
+        assert mock_supabase_client.get_a_new_snippet_and_reserve_it.call_args_list == [call(None), call(None)]
         mock_flow_deps["process"].assert_awaited_once()
 
     @pytest.fixture
@@ -1084,3 +1093,36 @@ class TestStage3:
 
         mock_dedup["find"].assert_not_called()
         mock_flow_deps["process"].assert_awaited_once()
+
+    @staticmethod
+    def run_reset_hook(parameters, state):
+        reset_snippet_status_hook(Mock(), Mock(id="run-1", parameters=parameters), state)
+
+    def test_reset_hook_releases_the_clips_of_a_cancelled_loop_run(self, mock_supabase_client):
+        self.run_reset_hook({"snippet_ids": [], "skip_review": False, "repeat": True}, Cancelling())
+
+        mock_supabase_client.release_flow_run_snippets.assert_called_once_with("run-1", count_attempt=False)
+        mock_supabase_client.set_snippet_status.assert_not_called()
+
+    def test_reset_hook_counts_an_attempt_for_a_crashed_loop_run(self, mock_supabase_client):
+        self.run_reset_hook({"snippet_ids": [], "skip_review": False, "repeat": True}, Crashed())
+
+        mock_supabase_client.release_flow_run_snippets.assert_called_once_with("run-1", count_attempt=True)
+
+    def test_reset_hook_puts_a_by_id_run_processing_clip_back_to_new(self, mock_supabase_client):
+        mock_supabase_client.get_snippet_by_id.return_value = {"id": "test-id", "status": ProcessingStatus.PROCESSING}
+
+        self.run_reset_hook({"snippet_ids": ["test-id"], "skip_review": False, "repeat": False}, Cancelling())
+
+        mock_supabase_client.set_snippet_status.assert_called_once_with("test-id", ProcessingStatus.NEW)
+        mock_supabase_client.release_flow_run_snippets.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "status", [ProcessingStatus.PROCESSED, ProcessingStatus.ERROR, ProcessingStatus.READY_FOR_REVIEW]
+    )
+    def test_reset_hook_leaves_a_finished_by_id_clip_alone(self, mock_supabase_client, status):
+        mock_supabase_client.get_snippet_by_id.return_value = {"id": "test-id", "status": status}
+
+        self.run_reset_hook({"snippet_ids": ["test-id"], "skip_review": False, "repeat": False}, Cancelling())
+
+        mock_supabase_client.set_snippet_status.assert_not_called()
