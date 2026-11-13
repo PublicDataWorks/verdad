@@ -23,12 +23,15 @@ from utils import optional_flow
 
 
 def reset_snippet_status_hook(flow: Flow, flow_run: FlowRun, state: State):
+    # Prefect may call this from the serve process after killing the run, so claims come from the DB (VER-479)
+    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
     snippet_ids = flow_run.parameters.get("snippet_ids", None)
 
     if not snippet_ids:
+        released = supabase_client.release_flow_run_snippets(flow_run.id, count_attempt=state.is_crashed())
+        print(f"Released snippets claimed by flow run {flow_run.id}: {released}")
         return
 
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
     for snippet_id in snippet_ids:
         snippet = fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id)
         if snippet and snippet["status"] == ProcessingStatus.PROCESSING:

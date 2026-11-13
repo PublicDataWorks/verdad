@@ -71,6 +71,21 @@ class TestSupabaseClient:
         mock_supabase.rpc.assert_called_once_with("fetch_a_new_snippet_and_reserve_it")
         assert response == expected_response
 
+    def test_get_a_new_snippet_and_reserve_it_stamps_the_flow_run(self, supabase_client, mock_supabase):
+        supabase_client.get_a_new_snippet_and_reserve_it("run-1")
+
+        mock_supabase.rpc.assert_called_once_with("fetch_a_new_snippet_and_reserve_it", {"p_flow_run_id": "run-1"})
+
+    def test_release_flow_run_snippets(self, supabase_client, mock_supabase):
+        mock_supabase.rpc.return_value.execute.return_value.data = {"requeued": 2, "errored": 0}
+
+        response = supabase_client.release_flow_run_snippets("run-1", count_attempt=True)
+
+        mock_supabase.rpc.assert_called_once_with(
+            "release_flow_run_snippets", {"p_flow_run_id": "run-1", "p_count_attempt": True}
+        )
+        assert response == {"requeued": 2, "errored": 0}
+
     def test_get_snippet_by_id(self, supabase_client, mock_supabase):
         """Test getting snippet by ID"""
         expected_response = [{"id": "test-id", "status": "New"}]
