@@ -485,18 +485,6 @@ By meticulously following these instructions and applying the heuristics across 
 
 ---
 
-# Knowledge Base: Verified Facts
-
-The following are verified facts from our knowledge base. Use them to:
-1. Better detect content that contradicts these verified facts (likely disinformation)
-2. Avoid flagging content that aligns with these verified facts as disinformation
-3. If a claim in the transcription matches a verified fact below, do NOT flag it
-
-Found related knowledge entries:
-{kb_context}
-
----
-
 # Example of Output (Hypothetical)
 
 ```json
@@ -578,6 +566,18 @@ Before finalizing your output, complete this validation checklist:
    - [ ] I have not skipped a claim only because it is not demonstrably false
 
 If any verification fails, revise your analysis accordingly.
+
+---
+
+# Knowledge Base: Verified Facts
+
+The following are verified facts from our knowledge base. Use them to:
+1. Better detect content that contradicts these verified facts (likely disinformation)
+2. Avoid flagging content that aligns with these verified facts as disinformation
+3. If a claim in the transcription matches a verified fact below, do NOT flag it
+
+Found related knowledge entries:
+{kb_context}
 
 ---
 
