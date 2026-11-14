@@ -2,7 +2,8 @@
 
 How a Stage 3 prompt change gets measured, reviewed and deployed. Companion to
 `docs/PROMPT_MANAGEMENT.md` (PR #70), which covers the `prompt_versions` table, the
-`import_prompts_to_db.py diff` drift check and day-to-day prompt management.
+`import_prompts_to_db.py diff` drift check and day-to-day prompt management. Evaluating a cheap
+pre-check that would skip Stage 3 for some clips is a separate harness: `docs/PRECHECK_EVALUATION.md`.
 
 ## The loop, end to end
 
