@@ -243,6 +243,14 @@ class TestStage1FlowOptions:
         monkeypatch.setenv("STAGE3_PREFETCH_SOURCES", "true")
         assert mc.stage3_prefetch_sources() is True
 
+    def test_stage1_detection_cache_is_off_by_default(self, monkeypatch):
+        monkeypatch.delenv("STAGE1_DETECTION_CACHE", raising=False)
+        assert mc.stage1_detection_cache() is False
+
+    def test_stage1_detection_cache_on(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_DETECTION_CACHE", "true")
+        assert mc.stage1_detection_cache() is True
+
 
 class TestStage3ServiceTier:
     @pytest.mark.parametrize("value", [None, "", "standard", " Standard "])

@@ -1,7 +1,7 @@
 {
   "stage_1/disinformation_detection": {
-    "version": "3.1.0",
-    "description": "Recall-first detection prompt tuned for Gemini 3.x and Gemma 4 (VER-441), plus faith-healing, supplement/device and science-denial calibration examples (VER-453); not for gemini-2.5-flash",
+    "version": "3.2.0",
+    "description": "Knowledge-base facts block moved below the fixed text, so system instruction plus fixed text is one unchanging prefix for caching (VER-482); wording unchanged; not for gemini-2.5-flash",
     "files": {
       "system_instruction": "prompts/stage_1/main/detection_system_instruction.md",
       "user_prompt": "prompts/stage_1/main/detection_user_prompt.md",
