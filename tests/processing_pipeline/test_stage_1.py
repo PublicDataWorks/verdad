@@ -6,6 +6,7 @@ import uuid
 from unittest.mock import Mock, patch
 
 import pytest
+from google.genai import errors
 from google.genai.types import (
     BlockedReason,
     FinishReason,
@@ -22,6 +23,7 @@ from pydub import AudioSegment
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
 from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
 from processing_pipeline.model_config import TranscriptionMethod
+from processing_pipeline.stage_1 import executors as stage_1_executors
 from processing_pipeline.stage_1 import (
     GeminiTimestampTranscriptionGenerator,
     Stage1Executor,
@@ -363,6 +365,118 @@ class TestStage1Executor:
             Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
 
         assert "Detection token usage: prompt=11237 cached=6100" in capsys.readouterr().out
+
+
+CACHEABLE_PROMPT_VERSION = {
+    **PROMPT_VERSION,
+    "user_prompt": 'fixed {{"a": 1}}\n\n---\n\nKB: {kb_context}\n\n---\n\n{metadata}|{timestamped_transcription}',
+}
+
+
+class TestStage1DetectionCache:
+    HEAD = 'fixed {"a": 1}\n'
+    TAIL = "\n---\n\nKB: KB\n\n---\n\n{}|T"
+    WHOLE = HEAD + TAIL
+
+    @pytest.fixture(autouse=True)
+    def _switch_on(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_DETECTION_CACHE", "true")
+        stage_1_executors._DETECTION_CACHES.clear()
+
+    @staticmethod
+    def _client():
+        client = Mock()
+        client.models.generate_content.return_value = Mock(parsed={"flagged_snippets": []}, candidates=[Mock()])
+        client.caches.create.return_value.name = "cachedContents/abc"
+        return client
+
+    @staticmethod
+    def _run(client):
+        return Stage1Executor.run(client, GeminiModel.GEMINI_3_8_FLASH, "T", {}, CACHEABLE_PROMPT_VERSION, kb_context="KB")
+
+    def test_switch_off_sends_the_whole_prompt_and_creates_no_cache(self, monkeypatch):
+        monkeypatch.delenv("STAGE1_DETECTION_CACHE")
+        client = self._client()
+
+        self._run(client)
+
+        client.caches.create.assert_not_called()
+        _, kwargs = client.models.generate_content.call_args
+        assert kwargs["contents"] == [self.WHOLE]
+        assert kwargs["config"].system_instruction == "system"
+        assert kwargs["config"].cached_content is None
+
+    def test_switch_on_caches_the_fixed_part_and_sends_the_rest(self):
+        client = self._client()
+
+        assert self._run(client) == {"flagged_snippets": []}
+
+        _, cache_kwargs = client.caches.create.call_args
+        assert cache_kwargs["model"] == GeminiModel.GEMINI_3_8_FLASH
+        assert cache_kwargs["config"].system_instruction == "system"
+        assert cache_kwargs["config"].contents[0].parts[0].text == self.HEAD
+        _, kwargs = client.models.generate_content.call_args
+        assert kwargs["contents"] == [self.TAIL]
+        assert kwargs["config"].cached_content == "cachedContents/abc"
+        assert kwargs["config"].system_instruction is None
+
+    def test_cache_is_created_once_and_reused(self):
+        client = self._client()
+
+        self._run(client)
+        self._run(client)
+
+        assert client.caches.create.call_count == 1
+        assert client.models.generate_content.call_count == 2
+
+    def test_cache_is_rebuilt_before_it_expires(self):
+        client = self._client()
+        with patch.object(stage_1_executors.time, "monotonic", return_value=0):
+            self._run(client)
+        with patch.object(stage_1_executors.time, "monotonic", return_value=3400):
+            self._run(client)
+
+        assert client.caches.create.call_count == 2
+
+    def test_cache_create_failure_runs_uncached_and_waits_before_the_next_try(self):
+        client = self._client()
+        client.caches.create.side_effect = errors.ClientError(400, {"error": {"message": "too small"}})
+
+        assert self._run(client) == {"flagged_snippets": []}
+        self._run(client)
+
+        assert client.caches.create.call_count == 1
+        _, kwargs = client.models.generate_content.call_args
+        assert kwargs["contents"] == [self.WHOLE]
+        assert kwargs["config"].system_instruction == "system"
+        assert kwargs["config"].cached_content is None
+
+    def test_cached_call_failure_runs_uncached_and_waits_before_the_next_try(self):
+        client = self._client()
+        ok = client.models.generate_content.return_value
+        client.models.generate_content.side_effect = [
+            errors.ClientError(403, {"error": {"message": "CachedContent not found (or permission denied)"}}),
+            ok,
+            ok,
+        ]
+
+        assert self._run(client) == {"flagged_snippets": []}
+        self._run(client)
+
+        assert client.caches.create.call_count == 1
+        for _, kwargs in client.models.generate_content.call_args_list[1:]:
+            assert kwargs["contents"] == [self.WHOLE]
+            assert kwargs["config"].cached_content is None
+
+    def test_prompt_with_no_fixed_part_before_the_placeholders_runs_uncached(self):
+        client = self._client()
+
+        Stage1Executor.run(client, GeminiModel.GEMINI_3_8_FLASH, "T", {}, PROMPT_VERSION)
+
+        client.caches.create.assert_not_called()
+        _, kwargs = client.models.generate_content.call_args
+        assert kwargs["contents"] == ["prompt"]
+        assert kwargs["config"].system_instruction == "system"
 
 
 class TestGeminiTimestampTranscriptionGenerator:

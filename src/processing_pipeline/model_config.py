@@ -61,6 +61,7 @@ STAGE1_TRANSCRIPTION_METHOD_ENV = "STAGE1_TRANSCRIPTION_METHOD"
 STAGE1_TRANSCRIBE_FIRST_ENV = "STAGE1_TRANSCRIBE_FIRST"
 STAGE1_DETECTION_PASSES_ENV = "STAGE1_DETECTION_PASSES"
 STAGE1_ANCHOR_TIMESTAMPS_ENV = "STAGE1_ANCHOR_TIMESTAMPS"
+STAGE1_DETECTION_CACHE_ENV = "STAGE1_DETECTION_CACHE"
 STAGE1_FILE_WORKERS_ENV = "STAGE1_FILE_WORKERS"
 
 # Stage 2 clipping (not models, but read and checked the same way)
@@ -192,6 +193,11 @@ def stage1_flow_options() -> Stage1FlowOptions:
 def stage1_anchor_timestamps() -> bool:
     """STAGE1_ANCHOR_TIMESTAMPS alone, for callers that only anchor (main detection, the redo flow)."""
     return _env_flag(STAGE1_ANCHOR_TIMESTAMPS_ENV)
+
+
+def stage1_detection_cache() -> bool:
+    """STAGE1_DETECTION_CACHE: main detection reads its fixed prompt part from a Gemini explicit cache (VER-482)."""
+    return _env_flag(STAGE1_DETECTION_CACHE_ENV)
 
 
 def stage1_file_workers() -> int:

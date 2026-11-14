@@ -1,10 +1,14 @@
 import json
 import os
 import pathlib
+import threading
 import time
 
 from google import genai
+from google.genai import errors
 from google.genai.types import (
+    Content,
+    CreateCachedContentConfig,
     FinishReason,
     GenerateContentConfig,
     Part,
@@ -12,9 +16,59 @@ from google.genai.types import (
 from prefect.tasks import exponential_backoff
 from pydub import AudioSegment
 
-from processing_pipeline.model_config import ModelName, thinking_config
+from processing_pipeline.model_config import ModelName, stage1_detection_cache, thinking_config
 from processing_pipeline.processing_utils import get_safety_settings
 from utils import optional_task
+
+_DETECTION_PLACEHOLDERS = ("{kb_context}", "{metadata}", "{timestamped_transcription}")
+_DETECTION_CACHE_TTL_S = 3600
+_DETECTION_CACHE_RENEW_BEFORE_S = 300
+# (model, system instruction, fixed head) -> (cache name or None after a failed create, monotonic time to rebuild)
+_DETECTION_CACHES: dict[tuple, tuple[str | None, float]] = {}
+_DETECTION_CACHE_LOCK = threading.Lock()
+
+
+def _split_detection_prompt(template: str) -> tuple[str, str] | None:
+    """(fixed head, per-recording tail), cut at the last '---' line before the first placeholder."""
+    positions = [i for i in (template.find(p) for p in _DETECTION_PLACEHOLDERS) if i >= 0]
+    cut = template.rfind("\n---\n", 0, min(positions)) if positions else -1
+    return (template[:cut], template[cut:]) if cut > 0 else None
+
+
+def _detection_cache(gemini_client: genai.Client, model_name: ModelName, prompt_version: dict) -> tuple[str, str] | None:
+    """(cache name, tail template) when the fixed prompt part sits in a live explicit cache, else None."""
+    parts = _split_detection_prompt(prompt_version["user_prompt"])
+    if not parts:
+        return None
+    head, tail = parts
+    key = (model_name, prompt_version["system_instruction"], head)
+    with _DETECTION_CACHE_LOCK:
+        name, rebuild_at = _DETECTION_CACHES.get(key, (None, 0.0))
+        if time.monotonic() >= rebuild_at:
+            try:
+                name = gemini_client.caches.create(
+                    model=model_name,
+                    config=CreateCachedContentConfig(
+                        system_instruction=prompt_version["system_instruction"],
+                        contents=[Content(role="user", parts=[Part(text=head.format())])],
+                        ttl=f"{_DETECTION_CACHE_TTL_S}s",
+                    ),
+                ).name
+                print(f"Detection cache created: {name}")
+            except Exception as e:
+                name = None
+                print(f"Detection cache not created ({type(e).__name__}: {e}); running uncached")
+            rebuild_at = time.monotonic() + _DETECTION_CACHE_TTL_S - _DETECTION_CACHE_RENEW_BEFORE_S
+            _DETECTION_CACHES[key] = (name, rebuild_at)
+    return (name, tail) if name else None
+
+
+def _stop_using_detection_cache(name: str):
+    """Uncached until the usual rebuild time, so a failing cache is not rebuilt on every call."""
+    with _DETECTION_CACHE_LOCK:
+        for key, (cached_name, rebuild_at) in _DETECTION_CACHES.items():
+            if cached_name == name:
+                _DETECTION_CACHES[key] = (None, rebuild_at)
 
 
 class Stage1PreprocessTranscriptionExecutor:
@@ -113,25 +167,36 @@ class Stage1Executor:
         prompt_version: dict,
         kb_context: str | None = None,
     ):
-        # Prepare the user prompt from template
-        user_prompt = prompt_version["user_prompt"].format(
+        values = dict(
             kb_context=kb_context,
             metadata=json.dumps(metadata, indent=2),
             timestamped_transcription=timestamped_transcription,
         )
 
-        result = gemini_client.models.generate_content(
-            model=model_name,
-            contents=[user_prompt],
-            config=GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=prompt_version["output_schema"],
-                max_output_tokens=16384,
-                system_instruction=prompt_version["system_instruction"],
-                thinking_config=thinking_config(model_name, budget=4096, level="low"),
-                safety_settings=get_safety_settings(),
-            ),
-        )
+        def generate(template: str, **prefix):
+            return gemini_client.models.generate_content(
+                model=model_name,
+                contents=[template.format(**values)],
+                config=GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=prompt_version["output_schema"],
+                    max_output_tokens=16384,
+                    thinking_config=thinking_config(model_name, budget=4096, level="low"),
+                    safety_settings=get_safety_settings(),
+                    **prefix,
+                ),
+            )
+
+        result = None
+        cached = _detection_cache(gemini_client, model_name, prompt_version) if stage1_detection_cache() else None
+        if cached:
+            try:
+                result = generate(cached[1], cached_content=cached[0])
+            except errors.APIError as e:
+                print(f"Detection call on the cache failed ({type(e).__name__}: {e}); running uncached")
+                _stop_using_detection_cache(cached[0])
+        if result is None:
+            result = generate(prompt_version["user_prompt"], system_instruction=prompt_version["system_instruction"])
 
         usage = result.usage_metadata
         prompt_tokens = getattr(usage, "prompt_token_count", None) or 0
