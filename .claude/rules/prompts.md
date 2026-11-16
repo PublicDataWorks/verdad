@@ -62,6 +62,11 @@ Since `stage_1/disinformation_detection` 3.0.0 the Stage 1 user prompt carries o
 **Examples** per category (no keyword lists, no subcategories), and its recall-first wording is tuned for Gemini 3.x and
 Gemma 4, not `gemini-2.5-flash`. Stage 3 and the reference `heuristics.md` files keep the full format below.
 
+Since 3.2.0 `{kb_context}`, `{metadata}` and `{timestamped_transcription}` sit below all fixed text in that prompt.
+With `STAGE1_DETECTION_CACHE=true` everything above the last `---` line before the first placeholder is read from a
+Gemini explicit cache (`_split_detection_prompt` in `stage_1/executors.py`), so a placeholder moved higher shrinks the
+cached part, and under the model's minimum cache size detection runs uncached with only a log line.
+
 Format (21 numbered categories, identical numbering in both stages): `### **N. Title**`, then
 **Description**, **Common Narratives**, **Cultural/Regional Variations** with separate
 *Spanish-Speaking Communities* and *Arabic-Speaking Communities* bullet lists (each with the in-language
