@@ -1,8 +1,9 @@
 name: Prompt evaluation
 
-# Runs the Stage 3 evaluation harness for every PR that touches prompts on a one-off Fly Machine
-# in the processing-worker app (its image, its secrets) and posts the evidence report as a
-# single, updated PR comment. GitHub holds only FLY_API_TOKEN. Read-only against Supabase.
+# Runs the Stage 3 evaluation harness for every PR that changes what it measures (a Stage 3 prompt
+# file, an eval set or a script the job runs) on a one-off Fly Machine in the processing-worker
+# app (its image, its secrets) and posts the evidence report as a single, updated PR comment.
+# GitHub holds only FLY_API_TOKEN. Read-only against Supabase.
 
 on:
   pull_request:
@@ -46,6 +47,8 @@ jobs:
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the PR merge commit and its base, for the scope check
 
       - name: Check Fly token
         id: fly
@@ -59,9 +62,27 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check the PR changes what the harness measures
+        id: scope
+        if: steps.fly.outputs.available == 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          # The paths filter cannot tell a Stage 3 prompt from the others. HEAD is the PR merge commit.
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            reasons=$(PYTHONPATH=. python3 scripts/ci/eval_needed.py HEAD^1)
+            if [ -z "$reasons" ]; then
+              echo "::notice::Prompt evaluation skipped; this PR changes no Stage 3 prompt file, eval set or script the evaluation job runs"
+              echo "needed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            printf 'Evaluating because this PR changes:\n%s\n' "$reasons"
+          fi
+          echo "needed=true" >> "$GITHUB_OUTPUT"
+
       - name: Resolve eval sets
         id: sets
-        if: steps.fly.outputs.available == 'true'
+        if: steps.fly.outputs.available == 'true' && steps.scope.outputs.needed == 'true'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           INPUT_SETS: ${{ github.event.inputs.eval_set }}

@@ -47,7 +47,8 @@ Bump the entry's `version` in `prompts/manifest.json` in the same PR as the file
 `description`; `.github/workflows/prompts-check.yml` (`scripts/ci/check_manifest_bump.py`) fails the PR
 otherwise. For Stage 3, `prompt-evaluation.yml` runs `src/scripts/evaluate_prompt.py` against the active DB
 version on the eval sets in `prompts/eval/*.json` (or those named by `Eval-set: <name>` lines in the PR body)
-and posts one report comment. Merging to `main` is the deploy: `prompts-deploy.yml` runs
+and posts one report comment; it skips a PR that changes nothing the harness measures
+(`scripts/ci/eval_needed.py`). Merging to `main` is the deploy: `prompts-deploy.yml` runs
 `import --from-manifest`. Both jobs execute on a one-off Fly Machine in the `processing-worker` app
 (`scripts/ci/fly_prompt_job.sh`), not on the runner. Details and metric definitions: `docs/PROMPT_EVALUATION.md`.
 
