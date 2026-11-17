@@ -421,7 +421,7 @@ class TestStage3:
 
         mock_run.assert_awaited_once_with(
             gemini_client=gemini_client,
-            model_name=GeminiModel.GEMINI_2_5_PRO,
+            model_name=GeminiModel.GEMINI_3_8_FLASH,
             audio_file="test.mp3",
             metadata=mock.ANY,
             prompt_version=PROMPT_VERSION,
@@ -430,7 +430,7 @@ class TestStage3:
         )
         kwargs = mock_supabase_client.update_snippet.call_args.kwargs
         assert kwargs["status"] == ProcessingStatus.READY_FOR_REVIEW
-        assert kwargs["analyzed_by"] == GeminiModel.GEMINI_2_5_PRO
+        assert kwargs["analyzed_by"] == GeminiModel.GEMINI_3_8_FLASH
         assert kwargs["grounding_metadata"] == "test_grounding_metadata"
         assert kwargs["thought_summaries"] == "test thoughts"
         assert kwargs["stage_3_prompt_version_id"] == "pv-3"
@@ -523,9 +523,9 @@ class TestStage3:
             self._process(mock_supabase_client, sample_snippet, skip_review=True)
 
         assert mock_run.await_count == 2
-        assert mock_run.await_args_list[0].kwargs["model_name"] == GeminiModel.GEMINI_2_5_PRO
-        assert mock_run.await_args_list[1].kwargs["model_name"] == GeminiModel.GEMINI_2_5_FLASH
-        assert mock_supabase_client.update_snippet.call_args.kwargs["analyzed_by"] == GeminiModel.GEMINI_2_5_FLASH
+        assert mock_run.await_args_list[0].kwargs["model_name"] == GeminiModel.GEMINI_3_8_FLASH
+        assert mock_run.await_args_list[1].kwargs["model_name"] == GeminiModel.GEMINI_3_5_FLASH
+        assert mock_supabase_client.update_snippet.call_args.kwargs["analyzed_by"] == GeminiModel.GEMINI_3_5_FLASH
 
     def test_process_snippet_models_come_from_env(
         self, mock_supabase_client, sample_snippet, analysis_result, monkeypatch
@@ -583,12 +583,12 @@ class TestStage3:
         ):
             self._process(mock_supabase_client, sample_snippet, skip_review=True)
 
-        # attempt 1: pro 503 -> flash 503; attempt 2: pro empty; attempt 3: pro ok
+        # attempt 1: main 503 -> fallback 503; attempt 2: main empty; attempt 3: main ok
         assert [c.kwargs["model_name"] for c in mock_run.await_args_list] == [
-            GeminiModel.GEMINI_2_5_PRO,
-            GeminiModel.GEMINI_2_5_FLASH,
-            GeminiModel.GEMINI_2_5_PRO,
-            GeminiModel.GEMINI_2_5_PRO,
+            GeminiModel.GEMINI_3_8_FLASH,
+            GeminiModel.GEMINI_3_5_FLASH,
+            GeminiModel.GEMINI_3_8_FLASH,
+            GeminiModel.GEMINI_3_8_FLASH,
         ]
         assert mock_sleep.await_args_list == [call(30), call(120)]
         mock_supabase_client.set_snippet_status.assert_not_called()
@@ -772,7 +772,7 @@ class TestStage3:
         assert audio_part.file_data.file_uri == "https://files.example/test-audio"
         assert first_call["config"].automatic_function_calling.disable is True
         second_call = mock_gemini_client.aio.models.generate_content.await_args_list[1].kwargs
-        assert second_call["model"] == GeminiModel.GEMINI_2_5_FLASH
+        assert second_call["model"] == GeminiModel.GEMINI_3_8_FLASH
         assert second_call["config"].response_schema is not None
         mock_gemini_client.files.upload.assert_called_once_with(file="test.mp3")
         mock_gemini_client.files.delete.assert_called_once_with(name="files/test-audio")
@@ -801,7 +801,8 @@ class TestStage3:
         assert second_call["model"] is GeminiModel.GEMINI_3_5_FLASH_LITE
         assert second_call["config"].thinking_config.thinking_level == ThinkingLevel.MINIMAL
 
-    def test_stage_3_executor_default_thinking_on_2_5(self, mock_gemini_client):
+    def test_stage_3_executor_thinking_on_2_5(self, mock_gemini_client, monkeypatch):
+        monkeypatch.setenv("STAGE3_RESTRUCTURE_MODEL", "gemini-2.5-flash")
         analysis_response = model_response('{"test": "response"}')
         restructure_response = Mock(parsed={"test": "response", "is_convertible": True})
         mock_gemini_client.aio.models.generate_content.side_effect = [analysis_response, restructure_response]
