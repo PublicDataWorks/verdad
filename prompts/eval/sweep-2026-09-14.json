@@ -1,0 +1,20 @@
+{
+  "description": "Mistranscribed proper names (e.g. 'Newsom' heard as 'Nelson') get scored as evidence of a fabricated or fictional person instead of being checked against a phonetically similar real public figure holding the stated role.",
+  "reported": [
+    "18c44b72-2c9f-43c4-84a9-62fc363bd15a"
+  ],
+  "control": [
+    "aa5589c2-1d53-4813-871c-5ebc1734e3b6",
+    "366ead97-603a-4321-8f6a-62e70b711f2e",
+    "30f6299e-aaef-49b9-a76a-39230633347c",
+    "8be878a8-e4a7-4042-b5a6-55106bd8b83a",
+    "f5ae0624-abc8-47fc-992c-c1d25b791ae2",
+    "f36c91d1-6e48-4e54-abdf-beb2a503b5a0",
+    "795ede6c-4871-4dd3-8f44-a9ec9d18ed4a",
+    "90fd0845-31ea-40b7-a8ff-d2f475513b09",
+    "868a9d63-1a95-453d-8fd8-7342fc81605b",
+    "cbe7a9ff-840d-4969-a453-80b23880f8f0",
+    "35f88a22-d945-4e45-9edb-0b9a2114c7e4",
+    "fa9ccac2-2334-45fb-a26b-b89b919182bf"
+  ]
+}
