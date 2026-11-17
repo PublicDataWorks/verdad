@@ -12,15 +12,15 @@ class TestDefaults:
     @pytest.mark.parametrize(
         "resolver, expected",
         [
-            (mc.stage1_transcription_model, GeminiModel.GEMINI_2_5_FLASH),
-            (mc.stage1_detection_model, GeminiModel.GEMINI_2_5_FLASH),
-            (mc.stage1_timestamp_model, GeminiModel.GEMINI_2_5_FLASH),
-            (mc.stage3_main_model, GeminiModel.GEMINI_2_5_PRO),
-            (mc.stage3_fallback_model, GeminiModel.GEMINI_2_5_FLASH),
-            (mc.stage3_restructure_model, GeminiModel.GEMINI_2_5_FLASH),
-            (mc.stage4_researcher_model, GeminiModel.GEMINI_2_5_FLASH),
-            (mc.stage4_reviewer_model, GeminiModel.GEMINI_2_5_PRO),
-            (mc.stage4_kb_writer_model, GeminiModel.GEMINI_2_5_FLASH),
+            (mc.stage1_transcription_model, GeminiModel.GEMINI_3_5_FLASH_LITE),
+            (mc.stage1_detection_model, GeminiModel.GEMINI_3_8_FLASH),
+            (mc.stage1_timestamp_model, GeminiModel.GEMINI_3_5_FLASH_LITE),
+            (mc.stage3_main_model, GeminiModel.GEMINI_3_8_FLASH),
+            (mc.stage3_fallback_model, GeminiModel.GEMINI_3_5_FLASH),
+            (mc.stage3_restructure_model, GeminiModel.GEMINI_3_8_FLASH),
+            (mc.stage4_researcher_model, GeminiModel.GEMINI_3_8_FLASH),
+            (mc.stage4_reviewer_model, GeminiModel.GEMINI_3_8_FLASH),
+            (mc.stage4_kb_writer_model, GeminiModel.GEMINI_3_8_FLASH),
         ],
     )
     def test_production_defaults(self, resolver, expected):
@@ -52,7 +52,7 @@ class TestEnvOverride:
     def test_empty_means_default(self, monkeypatch, value):
         # .env.sample leaves optional settings empty; empty is "use the default", as for the other optional vars
         monkeypatch.setenv("STAGE3_MAIN_MODEL", value)
-        assert mc.stage3_main_model() is GeminiModel.GEMINI_2_5_PRO
+        assert mc.stage3_main_model() is GeminiModel.GEMINI_3_8_FLASH
 
     @pytest.mark.parametrize("value", ["gemini-2.5-flash # comment", "gemini 2.5", "-x", "gemini;rm"])
     def test_malformed_id_is_rejected(self, monkeypatch, value):
@@ -65,7 +65,7 @@ class TestEnvOverride:
         assert mc.stage3_fallback_model() == "models/gemini-3.5-flash"
 
     def test_settings_are_read_at_call_time(self, monkeypatch):
-        assert mc.stage4_researcher_model() is GeminiModel.GEMINI_2_5_FLASH
+        assert mc.stage4_researcher_model() is GeminiModel.GEMINI_3_8_FLASH
         monkeypatch.setenv("STAGE4_RESEARCHER_MODEL", "gemini-3.6-flash")
         assert mc.stage4_researcher_model() is GeminiModel.GEMINI_3_6_FLASH
 
@@ -88,7 +88,7 @@ class TestTranscriptionMethod:
     def test_timestamp_model_default_follows_method(self, monkeypatch):
         monkeypatch.setenv("STAGE1_TRANSCRIPTION_METHOD", "transcribe")
         assert mc.stage1_timestamp_model() is GeminiModel.GEMINI_3_5_TRANSCRIBE
-        assert mc.stage1_timestamp_model(TranscriptionMethod.SEGMENTS) is GeminiModel.GEMINI_2_5_FLASH
+        assert mc.stage1_timestamp_model(TranscriptionMethod.SEGMENTS) is GeminiModel.GEMINI_3_5_FLASH_LITE
 
     def test_timestamp_model_override_applies_to_either_method(self, monkeypatch):
         monkeypatch.setenv("STAGE1_TIMESTAMP_MODEL", "gemini-3.5-flash")

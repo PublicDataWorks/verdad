@@ -336,10 +336,10 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 
 | Variable | Call sites | Default | Persisted as |
 |---|---|---|---|
-| `STAGE1_TRANSCRIPTION_MODEL` | Stage 1 initial (untimed) transcription | `gemini-2.5-flash` | not stored |
-| `STAGE1_DETECTION_MODEL` | Stage 1 initial and main detection, also in `redo_main_detection` / `regenerate_timestamped_transcript` | `gemini-2.5-flash` | not stored |
+| `STAGE1_TRANSCRIPTION_MODEL` | Stage 1 initial (untimed) transcription | `gemini-3.5-flash-lite` | not stored |
+| `STAGE1_DETECTION_MODEL` | Stage 1 initial and main detection, also in `redo_main_detection` / `regenerate_timestamped_transcript` | `gemini-3.8-flash` | not stored |
 | `STAGE1_TRANSCRIPTION_METHOD` | Stage 1 timestamped transcription: `segments`, `transcribe` or `open_model` (GPU worker only, see below) | `segments` | (see `transcriptor`) |
-| `STAGE1_TIMESTAMP_MODEL` | Stage 1 timestamped transcription | `gemini-2.5-flash` with `segments`, `gemini-3.5-transcribe` with `transcribe` | `stage_1_llm_responses.transcriptor` |
+| `STAGE1_TIMESTAMP_MODEL` | Stage 1 timestamped transcription | `gemini-3.5-flash-lite` with `segments`, `gemini-3.5-transcribe` with `transcribe` | `stage_1_llm_responses.transcriptor` |
 | `STAGE1_TRANSCRIBE_FIRST` | Stage 1 flow shape: one transcription per recording supplies every transcript (needs `STAGE1_TRANSCRIPTION_METHOD=transcribe` or `open_model`) | `false` | `transcriptor` on every row |
 | `STAGE1_DETECTION_PASSES` | Stage 1 detection: `two` (initial, then main when flagged) or `one` (main only, every recording; needs `STAGE1_TRANSCRIBE_FIRST=true`) | `two` | `initial_detection_result` is null with `one` |
 | `STAGE1_ANCHOR_TIMESTAMPS` | Stage 1 main detection: flagged snippet times from word timestamps where the row has them | `false` | per snippet in `detection_result` |
@@ -347,16 +347,16 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 | `STAGE1_FILE_WORKERS` | Stage 1 recordings one run keeps in flight at once (GPU worker, see below) | `1` | not stored |
 | `STAGE2_USE_WORD_TIMES` | Stage 2 clipping: cut snippets that carry `start_s`/`end_s` at millisecond precision around the words | `false` | `snippets.start_time`/`end_time`/`duration`/`recorded_at` |
 | `STAGE2_CONTEXT_BEFORE_S` / `STAGE2_CONTEXT_AFTER_S` | Stage 2 padding for the word-time cut, float seconds >= 0 | the flow's `context_before_seconds` / `context_after_seconds` (90 / 60 in `main.py`) | (the clip itself) |
-| `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop); the review and feed line is 90 for `gemini-3.*`, 95 for any other model (VER-466) | `gemini-2.5-pro` | `snippets.analyzed_by` |
-| `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-2.5-flash` | `snippets.analyzed_by` |
-| `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
+| `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop); the review and feed line is 90 for `gemini-3.*`, 95 for any other model (VER-466) | `gemini-3.8-flash` | `snippets.analyzed_by` |
+| `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-3.5-flash` | `snippets.analyzed_by` |
+| `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-3.8-flash` | not stored |
 | `STAGE3_REPEAT_DEDUP` | Stage 3 queue loop: a snippet whose Stage 1 excerpt matches a Processed original of the same station (trigram 0.85, within 7 days either way, same Stage 3 prompt version) gets that analysis copied instead of a Gemini call (VER-465). A Stage 3 prompt bump finds no sources for up to 7 days | `false` | `snippets.repeat_of` |
 | `STAGE3_SERVICE_TIER` | Stage 3 main-model analysis tier: `flex` is half price but slower (up to 15 min per call). Flex calls time out after 16 min instead of 10. A Flex 429/503/timeout redoes that turn on standard, and the rest of that analysis stays on standard; after 3 drops in a row the process skips Flex for 30 min. The fallback model always runs on standard (VER-476) | `standard` | `flex_turns`/`flex_drops` in `grounding_metadata.token_usage` |
 | `STAGE3_PREFETCH_SOURCES` | Stage 3: one Parallel Decisions call per clip (the Stage 1 explanation as input, 0.001 USD) before the analysis; its cited sources (title, URL, excerpts) follow the audio in the first request and count as tool-returned URLs for the evidence gate. The web tools stay on. Needs the `PARALLEL_API_KEY` secret; a failed or timed-out call (20 s) leaves the clip analyzed without sources (VER-481) | `false` | `grounding_metadata.prefetched_sources` (source count; absent when the clip had none) |
-| `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-2.5-flash` | not stored |
-| `STAGE4_REVIEWER_MODEL` | Stage 4 `analysis_reviewer` | `gemini-2.5-pro` | `snippets.reviewed_by` |
+| `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-3.8-flash` | not stored |
+| `STAGE4_REVIEWER_MODEL` | Stage 4 `analysis_reviewer` | `gemini-3.8-flash` | `snippets.reviewed_by` |
 | `STAGE4_REVIEWER_THINKING` | Stage 4 `analysis_reviewer` thinking level (`minimal`/`low`/`medium`/`high`); 3.x defaults to `high`, whose thoughts count against the agent's 16k output cap and truncated review JSON | `medium` on Gemini 3.x, the model default on 2.5, nothing on Gemma | not stored |
-| `STAGE4_KB_WRITER_MODEL` | Stage 4 `kb_updater` (off: `KB_UPDATER_ENABLED = False`) | `gemini-2.5-flash` | `kb_entries.created_by_model` |
+| `STAGE4_KB_WRITER_MODEL` | Stage 4 `kb_updater` (off: `KB_UPDATER_ENABLED = False`) | `gemini-3.8-flash` | `kb_entries.created_by_model` |
 
 ```bash
 fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_MODEL=gemini-3.5-flash-lite \
@@ -364,8 +364,10 @@ fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_MODEL=gemini-3.5-flash
 fly secrets unset -a processing-worker STAGE1_TRANSCRIPTION_MODEL STAGE1_DETECTION_MODEL STAGE1_TRANSCRIPTION_METHOD  # back
 ```
 
-Any variable left unset stays on its 2.5 default. When leaving 2.5 entirely, set every row of the table, including
-`STAGE3_RESTRUCTURE_MODEL`, which is easy to miss because it only runs when an analysis fails validation.
+Any variable left unset stays on its default. No default names `gemini-2.5-pro` or `gemini-2.5-flash`: Google
+routes requests for them to other models from December 1, 2026 (VER-486). When moving every call to another model,
+set every row of the table, including `STAGE3_RESTRUCTURE_MODEL`, which is easy to miss because it only runs when an
+analysis fails validation.
 
 `fly secrets set` restarts the app's machines, which orphans in-flight runs and leaves the workers idle until runs
 are recreated (see "Workers idle after any deploy" in the gotchas below). The variables apply to every process group of the app, so the second Stage 1 and Stage 4 workers
