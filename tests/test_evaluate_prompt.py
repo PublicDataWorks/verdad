@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+from datetime import date
 
 import pytest
 
@@ -179,8 +180,17 @@ def test_aggregate_counts_fixed_and_lost():
     assert agg["mean_confidence_shift"] < 0
     assert agg["runs_total"] == 20 and agg["runs_failed"] == 0
     assert agg["usage"]["prompt_token_count"] == 20_000
-    # 20 calls * (1000 input * 0.75 + 150 output * 3.75) / 1M
-    assert agg["estimated_cost_usd"] == pytest.approx(20 * (1000 * 0.75 + 150 * 3.75) / 1_000_000)
+    assert agg["estimated_cost_usd"] == ep.estimate_cost(agg["usage"], "gemini-3.8-flash")
+
+
+@pytest.mark.parametrize(
+    "on, input_price, output_price",
+    [(date(2026, 12, 31), 0.75, 3.75), (date(2027, 1, 1), 1.50, 7.50)],
+)
+def test_estimate_cost_uses_the_rates_in_force_on_the_day(on, input_price, output_price):
+    usage = {"prompt_token_count": 1000, "candidates_token_count": 100, "thoughts_token_count": 50}
+    expected = (1000 * input_price + 150 * output_price) / 1_000_000
+    assert ep.estimate_cost(usage, "gemini-3.8-flash", on) == pytest.approx(expected)
 
 
 def test_estimate_cost_unknown_model():
