@@ -3,9 +3,9 @@
 import re
 from pathlib import Path
 
-MIGRATION = (
-    Path(__file__).resolve().parent.parent / "supabase" / "migrations" / "20261117100000_stage1_stall_alert.sql"
-)
+MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "supabase" / "migrations"
+MIGRATION = MIGRATIONS_DIR / "20261117100000_stage1_stall_alert.sql"
+PREFIX_MIGRATION = MIGRATIONS_DIR / "20261117120000_stage1_stall_alert_prefix.sql"
 SIGNATURE = "public.check_stage1_stall(integer, integer, boolean)"
 
 
@@ -13,10 +13,15 @@ def sql():
     return MIGRATION.read_text()
 
 
-def function_body():
-    text = sql()
+def function_body(path=PREFIX_MIGRATION):
+    text = path.read_text()
     start = text.index("CREATE OR REPLACE FUNCTION public.check_stage1_stall(")
     return text[start : text.index("$function$;", start)]
+
+
+def test_alert_starts_with_a_cross_and_nothing_else_changed():
+    assert function_body().replace("format('❌ Stage 1", "format('Stage 1") == function_body(MIGRATION)
+    assert "v_text := format('❌ Stage 1 monitor: no recording finished" in function_body()
 
 
 def test_window_is_the_last_24_hours_of_recordings():
