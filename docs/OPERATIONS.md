@@ -581,9 +581,10 @@ refuses the production project unless `--allow-production` is passed.
   arriving does not alert (the recording monitors own that), and the 6-hourly restart pause (about 35 min) stays
   under the line. Nothing watches the job itself: the reply from Slack is not read. Dry run
   `SELECT public.check_stage1_stall(p_alert => false)`; test the post with `SELECT public.check_stage1_stall(0, 0)`,
-  the next run posts the recovery. Pause with `cron.unschedule('check_stage1_stall')`. Remove it all with that, then
-  `DROP FUNCTION public.check_stage1_stall(integer, integer, boolean)` and `DROP TABLE public.stage1_stall_alerts`;
-  to drop only the ❌ prefix, re-run the function from `20261117100000`.
+  the next run posts the recovery. Stop it with `SELECT cron.unschedule('check_stage1_stall')`, which deletes the job;
+  resume with `SELECT cron.schedule('check_stage1_stall', '4,19,34,49 * * * *', 'SELECT public.check_stage1_stall()')`.
+  Remove it all with the unschedule, then `DROP FUNCTION public.check_stage1_stall(integer, integer, boolean)` and
+  `DROP TABLE public.stage1_stall_alerts`; to drop only the ❌ prefix, re-run the function from `20261117100000`.
 - **`cron.job_run_details` keeps 7 days.** pg_cron job `prune_cron_job_run_details` (`20 3 * * *`, VER-410,
   migration `20260925100000`) deletes older runs, and failed runs with no end time by their start time; pg_cron
   never prunes on its own.
