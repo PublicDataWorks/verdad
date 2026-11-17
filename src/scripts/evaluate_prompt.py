@@ -76,11 +76,11 @@ REQUIRED_ENV = (
     "SEARXNG_URL",
 )
 
-# USD per 1M tokens for the paid tier, prompts <= 200k tokens. Output includes thinking tokens.
+# USD per 1M tokens for the paid tier, standard. Output includes thinking tokens.
 # UPDATE THESE when Google changes pricing: https://ai.google.dev/gemini-api/docs/pricing
 MODEL_PRICES_PER_M_TOKENS = {
-    "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
-    "gemini-2.5-flash": {"input": 0.30, "output": 2.50},
+    # 1.50 / 7.50 from 2027-01-01
+    "gemini-3.8-flash": {"input": 0.75, "output": 3.75},
 }
 
 REPORTED = "reported"
