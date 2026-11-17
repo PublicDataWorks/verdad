@@ -574,6 +574,14 @@ refuses the production project unless `--allow-production` is passed.
   channels with `vault.update_secret`. Backfill with `SELECT public.record_search_hit_stats(h, p_alert => false)
   FROM generate_series(<from>, <to>, interval '1 hour') h`; test the alert with `p_min_share => 1.01` on the last
   hour, then re-run it with the defaults. Pause with `cron.unschedule('record_search_hit_stats')`.
+- **Stage 1 stalls post to Slack** (VER-487, migration `20261117100000`). pg_cron job `check_stage1_stall`
+  (`4,19,34,49 * * * *`) looks at recordings of the last 24 h: when at least one has waited in `New` or
+  `Processing` for over 60 min and none finished in 60 min, it posts once to the same `ops_alerts_slack_webhook`,
+  then once more when a recording finishes again. Each stall is a row in `public.stage1_stall_alerts`. No audio
+  arriving does not alert (the recording monitors own that), and the 6-hourly restart pause (about 35 min) stays
+  under the line. Nothing watches the job itself: the reply from Slack is not read. Dry run
+  `SELECT public.check_stage1_stall(p_alert => false)`; test the post with `SELECT public.check_stage1_stall(0, 0)`,
+  the next run posts the recovery. Pause with `cron.unschedule('check_stage1_stall')`.
 - **`cron.job_run_details` keeps 7 days.** pg_cron job `prune_cron_job_run_details` (`20 3 * * *`, VER-410,
   migration `20260925100000`) deletes older runs, and failed runs with no end time by their start time; pg_cron
   never prunes on its own.
