@@ -28,6 +28,9 @@ mis/disinformation. Results land in Supabase (Postgres + pgvector) and are revie
   (`import --from-manifest` or `import --version`, `list`, `diff`); `src/scripts/evaluate_prompt.py` measures a
   Stage 3 change on the eval sets in `prompts/eval/`. See `docs/PROMPT_MANAGEMENT.md`, `docs/PROMPT_EVALUATION.md`
   and `.claude/rules/prompts.md`.
+- `src/scripts/precheck_eval/`: eval-only harness (VER-475) that scores decision models (Jev, Clef, Parallel) as a
+  cheap skip gate before Stage 3, against the Stage 3 score as answer key. Not imported by the pipeline. Vendor facts
+  live in its `config.py`; usage, keys and the leakage rule: `docs/PRECHECK_EVALUATION.md`.
 - `supabase/`: `migrations/` is the source of truth (generated baseline of the live schema + one file per
   applied version); `supabase/database/sql/` is historical hand-applied SQL, see its README and the
   "Database schema and migrations" section of `docs/OPERATIONS.md`. `server/`: separate
