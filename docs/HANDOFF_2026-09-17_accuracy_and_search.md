@@ -15,12 +15,12 @@ run 35295378105. CodeRabbit's second review (9 findings) is addressed in the sta
 `claude/pr98-review-followups`, which also adds `14_seed_corrections.sql` for production.
 
 Applied to production: #73 steps 1 to 4 with #100's operator (PR #100 merged into #73), `13_hide` (73 rows),
-`12_kb_deactivate` (10 rows), `11_seed` (14 rows, no embeddings yet), and the 36 Fulton/Georgia snippets
+`12_kb_deactivate` (10 rows), `11_seed` (14 rows, embedded the same evening), and the 36 Fulton/Georgia snippets
 were re-queued. Verified: "georgia elections" 0 to 39 results, "stolen election" 0 to 87, "candidate campaign"
-0 to 63. Still open: a state filter with no search term and the count takes 11 to 27 s (PR #101 adds the
-`audio_files(location_state, id)` index); #73 step 5 index not applied; merge #73 to main and record
-`applied_versions.txt`; verdad-frontend #262; `10_unhide_after_reprocess.sql` for the 36; VER-375 (seed
-embeddings, gate new pipeline KB writes); VER-374 (Georgia stations).
+0 to 63. Since then: PR #101's index and #73 step 5 applied and merged (a state-only filter with the count is
+still 9 to 19 s, structural options on VER-373); #73 and verdad-frontend #262 merged. Still open as of 2026-09-18:
+`10_unhide_after_reprocess.sql` for the 36 once reprocessed; `14_seed_corrections.sql` plus the paged embedding
+backfill; VER-375 (gate new pipeline KB writes); VER-374 (Georgia stations).
 
 ## 1. The problem in one paragraph
 
