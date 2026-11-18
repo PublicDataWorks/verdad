@@ -47,7 +47,8 @@ Bump the entry's `version` in `prompts/manifest.json` in the same PR as the file
 `description`; `.github/workflows/prompts-check.yml` (`scripts/ci/check_manifest_bump.py`) fails the PR
 otherwise. For Stage 3, `prompt-evaluation.yml` runs `src/scripts/evaluate_prompt.py` against the active DB
 version on the eval sets in `prompts/eval/*.json` (or those named by `Eval-set: <name>` lines in the PR body)
-and posts one report comment. Merging to `main` is the deploy: `prompts-deploy.yml` runs
+and posts one report comment; it skips a PR that changes nothing the harness measures
+(`scripts/ci/eval_needed.py`). Merging to `main` is the deploy: `prompts-deploy.yml` runs
 `import --from-manifest`. Both jobs execute on a one-off Fly Machine in the `processing-worker` app
 (`scripts/ci/fly_prompt_job.sh`), not on the runner. Details and metric definitions: `docs/PROMPT_EVALUATION.md`.
 
@@ -61,6 +62,11 @@ has to land in both the reference file and the user prompt, for both stages.
 Since `stage_1/disinformation_detection` 3.0.0 the Stage 1 user prompt carries only **Description**, **Heuristics** and
 **Examples** per category (no keyword lists, no subcategories), and its recall-first wording is tuned for Gemini 3.x and
 Gemma 4, not `gemini-2.5-flash`. Stage 3 and the reference `heuristics.md` files keep the full format below.
+
+Since 3.2.0 `{kb_context}`, `{metadata}` and `{timestamped_transcription}` sit below all fixed text in that prompt.
+With `STAGE1_DETECTION_CACHE=true` everything above the last `---` line before the first placeholder is read from a
+Gemini explicit cache (`_split_detection_prompt` in `stage_1/executors.py`), so a placeholder moved higher shrinks the
+cached part, and under the model's minimum cache size detection runs uncached with only a log line.
 
 Format (21 numbered categories, identical numbering in both stages): `### **N. Title**`, then
 **Description**, **Common Narratives**, **Cultural/Regional Variations** with separate

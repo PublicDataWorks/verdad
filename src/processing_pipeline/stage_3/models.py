@@ -236,8 +236,8 @@ class Stage3Output(BaseModel):
 
 # --- Deterministic evidence gate -------------------------------------------------------------------
 #
-# The analyst feed only shows snippets with confidence_scores.overall >= 95, and the model's `overall`
-# is otherwise unconstrained. These caps make sure that an analysis which admits it has no evidence
+# The analyst feed only shows snippets with confidence_scores.overall >= 95 (90 for reviewed gemini-3.*), and the
+# model's `overall` is otherwise unconstrained. These caps make sure that an analysis which admits it has no evidence
 # (or asserts that something is fabricated without a single contradicting source) can never reach it.
 
 EVIDENCE_CAP_MAX_SCORE = 40

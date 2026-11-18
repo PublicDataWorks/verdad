@@ -20,7 +20,8 @@ How a Stage 3 prompt change gets measured, reviewed and deployed. Companion to
      eval set in `prompts/eval/` (or the sets named in the PR body with `Eval-set: <name>` lines),
      then posts one PR comment containing the report and updates it on every push. The harness
      itself runs on a one-off Fly Machine (see below); the workflow log carries the machine's
-     output.
+     output. A PR that changes no Stage 3 prompt file, eval set or script the job runs
+     (`scripts/ci/eval_needed.py` has the list) starts no machine: the job ends green with a notice.
 4. **Review the evidence comment.** The summary table gives "false positives fixed" on the reported
    snippets and "true positives lost" on the control snippets; the Evidence section quotes the
    candidate's explanation for every fixed case, and Regressions quotes it for every lost one.

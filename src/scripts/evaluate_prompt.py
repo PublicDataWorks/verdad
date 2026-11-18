@@ -36,7 +36,7 @@ import tempfile
 import time
 import traceback
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from itertools import combinations
 
 from dotenv import load_dotenv
@@ -76,11 +76,13 @@ REQUIRED_ENV = (
     "SEARXNG_URL",
 )
 
-# USD per 1M tokens for the paid tier, prompts <= 200k tokens. Output includes thinking tokens.
+# USD per 1M tokens for the paid tier, standard, as (first day, prices), oldest first. Output includes thinking tokens.
 # UPDATE THESE when Google changes pricing: https://ai.google.dev/gemini-api/docs/pricing
 MODEL_PRICES_PER_M_TOKENS = {
-    "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
-    "gemini-2.5-flash": {"input": 0.30, "output": 2.50},
+    "gemini-3.8-flash": [
+        (date.min, {"input": 0.75, "output": 3.75}),
+        (date(2027, 1, 1), {"input": 1.50, "output": 7.50}),
+    ],
 }
 
 REPORTED = "reported"
@@ -278,11 +280,13 @@ def sum_usage(runs: list[RunResult]) -> dict:
     return totals
 
 
-def estimate_cost(usage: dict, model: str) -> float | None:
-    """USD estimate from token totals; None when the model has no price entry."""
-    prices = MODEL_PRICES_PER_M_TOKENS.get(str(model))
-    if not prices:
+def estimate_cost(usage: dict, model: str, on: date | None = None) -> float | None:
+    """USD estimate from token totals at the prices of day ``on`` (default today); None when the model has none."""
+    on = on or date.today()
+    in_force = [prices for first_day, prices in MODEL_PRICES_PER_M_TOKENS.get(str(model), ()) if first_day <= on]
+    if not in_force:
         return None
+    prices = in_force[-1]
     input_tokens = usage.get("prompt_token_count", 0) + usage.get("tool_use_prompt_token_count", 0)
     output_tokens = usage.get("candidates_token_count", 0) + usage.get("thoughts_token_count", 0)
     return (input_tokens * prices["input"] + output_tokens * prices["output"]) / 1_000_000

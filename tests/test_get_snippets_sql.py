@@ -14,6 +14,7 @@ MIGRATIONS_DIR = REPO_ROOT / "supabase" / "migrations"
 LOOSE_SQL = REPO_ROOT / "supabase" / "database" / "sql" / "get_snippets_function.sql"
 
 GET_SNIPPETS_MIGRATION = MIGRATIONS_DIR / "20260921000400_get_snippets_denormalized_location.sql"
+LATEST_GET_SNIPPETS_MIGRATION = MIGRATIONS_DIR / "20261109120100_feed_line90_functions.sql"
 
 VER_387_MIGRATIONS = [
     MIGRATIONS_DIR / "20260921000100_snippets_location_columns_and_triggers.sql",
@@ -40,10 +41,10 @@ def test_ver_387_migration_files_exist():
 
 
 def test_migration_and_loose_sql_define_the_same_function():
-    from_migration = function_definition(GET_SNIPPETS_MIGRATION)
+    from_migration = function_definition(LATEST_GET_SNIPPETS_MIGRATION)
     from_loose = function_definition(LOOSE_SQL)
     assert from_migration == from_loose, (
-        f"{GET_SNIPPETS_MIGRATION.name} and {LOOSE_SQL.name} define different get_snippets bodies; "
+        f"{LATEST_GET_SNIPPETS_MIGRATION.name} and {LOOSE_SQL.name} define different get_snippets bodies; "
         "change both (see .claude/rules/supabase-sql.md)"
     )
 

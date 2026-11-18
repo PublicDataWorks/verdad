@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
-from google.genai.types import ThinkingConfig, ThinkingLevel
+from google.genai.types import ServiceTier, ThinkingConfig, ThinkingLevel
 
 from processing_pipeline.constants import GeminiModel
 
@@ -52,15 +52,16 @@ class ModelSetting:
 
 
 # Stage 1
-STAGE1_TRANSCRIPTION = ModelSetting("STAGE1_TRANSCRIPTION_MODEL", GeminiModel.GEMINI_2_5_FLASH)  # initial, untimed
-STAGE1_DETECTION = ModelSetting("STAGE1_DETECTION_MODEL", GeminiModel.GEMINI_2_5_FLASH)  # initial and main detection
+STAGE1_TRANSCRIPTION = ModelSetting("STAGE1_TRANSCRIPTION_MODEL", GeminiModel.GEMINI_3_5_FLASH_LITE)  # initial, untimed
+STAGE1_DETECTION = ModelSetting("STAGE1_DETECTION_MODEL", GeminiModel.GEMINI_3_8_FLASH)  # initial and main detection
 # Timestamped transcription; the default depends on STAGE1_TRANSCRIPTION_METHOD (see stage1_timestamp_model)
-STAGE1_TIMESTAMP_SEGMENTS = ModelSetting("STAGE1_TIMESTAMP_MODEL", GeminiModel.GEMINI_2_5_FLASH)
+STAGE1_TIMESTAMP_SEGMENTS = ModelSetting("STAGE1_TIMESTAMP_MODEL", GeminiModel.GEMINI_3_5_FLASH_LITE)
 STAGE1_TIMESTAMP_TRANSCRIBE = ModelSetting("STAGE1_TIMESTAMP_MODEL", GeminiModel.GEMINI_3_5_TRANSCRIBE)
 STAGE1_TRANSCRIPTION_METHOD_ENV = "STAGE1_TRANSCRIPTION_METHOD"
 STAGE1_TRANSCRIBE_FIRST_ENV = "STAGE1_TRANSCRIBE_FIRST"
 STAGE1_DETECTION_PASSES_ENV = "STAGE1_DETECTION_PASSES"
 STAGE1_ANCHOR_TIMESTAMPS_ENV = "STAGE1_ANCHOR_TIMESTAMPS"
+STAGE1_DETECTION_CACHE_ENV = "STAGE1_DETECTION_CACHE"
 STAGE1_FILE_WORKERS_ENV = "STAGE1_FILE_WORKERS"
 
 # Stage 2 clipping (not models, but read and checked the same way)
@@ -69,15 +70,18 @@ STAGE2_CONTEXT_BEFORE_S_ENV = "STAGE2_CONTEXT_BEFORE_S"
 STAGE2_CONTEXT_AFTER_S_ENV = "STAGE2_CONTEXT_AFTER_S"
 
 # Stage 3
-STAGE3_MAIN = ModelSetting("STAGE3_MAIN_MODEL", GeminiModel.GEMINI_2_5_PRO)
-STAGE3_FALLBACK = ModelSetting("STAGE3_FALLBACK_MODEL", GeminiModel.GEMINI_2_5_FLASH)
-STAGE3_RESTRUCTURE = ModelSetting("STAGE3_RESTRUCTURE_MODEL", GeminiModel.GEMINI_2_5_FLASH)
+STAGE3_MAIN = ModelSetting("STAGE3_MAIN_MODEL", GeminiModel.GEMINI_3_8_FLASH)
+STAGE3_FALLBACK = ModelSetting("STAGE3_FALLBACK_MODEL", GeminiModel.GEMINI_3_5_FLASH)
+STAGE3_RESTRUCTURE = ModelSetting("STAGE3_RESTRUCTURE_MODEL", GeminiModel.GEMINI_3_8_FLASH)
+STAGE3_REPEAT_DEDUP_ENV = "STAGE3_REPEAT_DEDUP"
+STAGE3_SERVICE_TIER_ENV = "STAGE3_SERVICE_TIER"
+STAGE3_PREFETCH_SOURCES_ENV = "STAGE3_PREFETCH_SOURCES"
 
 # Stage 4. Researchers stay on Flash: Pro invented citations several times more often (VER-391, PR #122)
-STAGE4_RESEARCHER = ModelSetting("STAGE4_RESEARCHER_MODEL", GeminiModel.GEMINI_2_5_FLASH)
-STAGE4_REVIEWER = ModelSetting("STAGE4_REVIEWER_MODEL", GeminiModel.GEMINI_2_5_PRO)
+STAGE4_RESEARCHER = ModelSetting("STAGE4_RESEARCHER_MODEL", GeminiModel.GEMINI_3_8_FLASH)
+STAGE4_REVIEWER = ModelSetting("STAGE4_REVIEWER_MODEL", GeminiModel.GEMINI_3_8_FLASH)
 # kb_updater; every KB entry it writes is labelled with it (kb_entries.created_by_model)
-STAGE4_KB_WRITER = ModelSetting("STAGE4_KB_WRITER_MODEL", GeminiModel.GEMINI_2_5_FLASH)
+STAGE4_KB_WRITER = ModelSetting("STAGE4_KB_WRITER_MODEL", GeminiModel.GEMINI_3_8_FLASH)
 
 ALL_SETTINGS = (
     STAGE1_TRANSCRIPTION,
@@ -191,6 +195,11 @@ def stage1_anchor_timestamps() -> bool:
     return _env_flag(STAGE1_ANCHOR_TIMESTAMPS_ENV)
 
 
+def stage1_detection_cache() -> bool:
+    """STAGE1_DETECTION_CACHE: main detection reads its fixed prompt part from a Gemini explicit cache (VER-482)."""
+    return _env_flag(STAGE1_DETECTION_CACHE_ENV)
+
+
 def stage1_file_workers() -> int:
     """STAGE1_FILE_WORKERS: recordings one Stage 1 run keeps in flight at once (the GPU worker); default 1."""
     value = _env(STAGE1_FILE_WORKERS_ENV)
@@ -263,6 +272,26 @@ def stage3_fallback_model() -> ModelName:
 
 def stage3_restructure_model() -> ModelName:
     return resolve_model(STAGE3_RESTRUCTURE)
+
+
+def stage3_repeat_dedup() -> bool:
+    """STAGE3_REPEAT_DEDUP: copy another same-station airing's analysis instead of calling Gemini (VER-465)."""
+    return _env_flag(STAGE3_REPEAT_DEDUP_ENV)
+
+
+def stage3_service_tier() -> ServiceTier | None:
+    """STAGE3_SERVICE_TIER=flex: half-price, slower main-model calls (VER-476); unset or standard means None."""
+    value = (_env(STAGE3_SERVICE_TIER_ENV) or "standard").lower()
+    if value == "standard":
+        return None
+    if value == ServiceTier.FLEX.value:
+        return ServiceTier.FLEX
+    raise ValueError(f"{STAGE3_SERVICE_TIER_ENV}={value!r}; expected flex or standard")
+
+
+def stage3_prefetch_sources() -> bool:
+    """STAGE3_PREFETCH_SOURCES: hand each analysis Parallel's web sources for the clip up front (VER-481)."""
+    return _env_flag(STAGE3_PREFETCH_SOURCES_ENV)
 
 
 def stage4_researcher_model() -> ModelName:

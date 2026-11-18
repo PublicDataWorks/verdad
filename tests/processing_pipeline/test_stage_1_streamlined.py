@@ -113,7 +113,7 @@ class TestTranscribeFirstTwoPasses:
             timestamped_transcription=TRANSCRIPT.timestamped_transcription,
             metadata=get_audio_file_metadata(AUDIO_FILE),
             prompt_version={**PROMPT_VERSION, "id": "pv-dd"},
-            model_name=GeminiModel.GEMINI_2_5_FLASH,
+            model_name=GeminiModel.GEMINI_3_8_FLASH,
             kb_context="kb context",
             words=WORDS,
         )
