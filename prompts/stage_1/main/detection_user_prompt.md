@@ -603,7 +603,7 @@ Before finalizing your output, complete this validation checklist:
    - [ ] Timestamps are accurate and properly formatted
    - [ ] Explanations name the specific claim and why it is likely false or misleading; for rhetoric-only snippets, quote the rhetoric and state the harm, without calling religious doctrine "false"
    - [ ] I have not flagged pure opinion, or statements of faith that make no factual claim, except Category 22 rhetoric and Category 1 electioneering as described under Calibration
-   - [ ] Each flagged snippet is the station speaker's own claim, not a clip or quote being criticized or debunked
+   - [ ] Each flagged snippet is a claim made or endorsed by the station's own speakers, or a caller's claim the host endorses or does not challenge, not a clip or quote being criticized or debunked
    - [ ] I have not skipped a claim only because it is not demonstrably false
 
 If any verification fails, revise your analysis accordingly.

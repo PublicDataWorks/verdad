@@ -757,7 +757,7 @@ Before finalizing your output, complete this validation checklist:
    - If every answer is "yes," flag it even though it has no checkable false claim.
 
 3. **Speaker Stance**
-   - Is each flagged snippet the station speaker's own claim, rather than a clip or quote played in order to criticize, fact-check, debunk or report on it?
+   - Is each flagged snippet a claim the station's own speakers make or endorse (including a caller's claim the host does not challenge), rather than a clip or quote played in order to criticize, fact-check, debunk or report on it?
    - If not, do not flag it.
 
 4. **Context Review**
@@ -767,7 +767,7 @@ Before finalizing your output, complete this validation checklist:
 5. **Final Verification**
    Answer each with "yes" before proceeding:
    - [ ] Each flagged snippet contains demonstrably false claims, or Category 22 / Category 1 electioneering rhetoric that meets item 2
-   - [ ] Each flagged snippet is the station speaker's own claim, not a quoted claim being criticized or debunked
+   - [ ] Each flagged snippet is a claim the station's own speakers make or endorse, or a caller's claim the host does not challenge, not a quoted claim being criticized or debunked
    - [ ] Text excerpts accurately represent the flagged content
    - [ ] Explanations clearly identify specific false claims (for rhetoric: quote it and state the harm)
    - [ ] I have distinguished between controversial content and actual disinformation
