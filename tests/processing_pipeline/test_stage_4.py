@@ -206,7 +206,7 @@ class TestStage4:
             recorded_at="2024-01-01T00:00:00+00:00",
             current_time=mock.ANY,
             prompt_versions=PROMPT_VERSIONS,
-            reviewer_model=GeminiModel.GEMINI_2_5_PRO,
+            reviewer_model=GeminiModel.GEMINI_3_8_FLASH,
         )
         assert mock_run.await_args.kwargs["analysis_json"]["translation"] == "Test translation"
         mock_supabase_client.submit_snippet_review.assert_called_once()
@@ -218,7 +218,7 @@ class TestStage4:
         assert grounding_metadata["kb_research"] == "kb findings"
         assert grounding_metadata["stage_4_citation_check"]["applied"] is False
         assert "evidence_gate" not in grounding_metadata
-        assert kwargs["reviewed_by"] == GeminiModel.GEMINI_2_5_PRO.value
+        assert kwargs["reviewed_by"] == GeminiModel.GEMINI_3_8_FLASH.value
         mock_postprocess.assert_called_once_with(
             mock_supabase_client, "test-id", review_result["disinformation_categories"]
         )
@@ -738,10 +738,10 @@ class TestBuildReviewPipeline:
         models = {a.name: a.model for a in [*research.sub_agents, reviewer, kb_updater]}
         assert all(isinstance(m, Gemini) and m.retry_options is RETRY_OPTIONS for m in models.values())
         assert {name: m.model for name, m in models.items()} == {
-            "kb_researcher": "gemini-2.5-flash",
-            "web_researcher": "gemini-2.5-flash",
+            "kb_researcher": "gemini-3.8-flash",
+            "web_researcher": "gemini-3.8-flash",
             "analysis_reviewer": "gemini-2.5-pro",
-            "kb_updater": "gemini-2.5-flash",
+            "kb_updater": "gemini-3.8-flash",
         }
 
     def test_agent_models_come_from_env(self, kb_updater_enabled, monkeypatch):

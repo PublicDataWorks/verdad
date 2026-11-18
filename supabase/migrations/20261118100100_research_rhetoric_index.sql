@@ -1,11 +1,11 @@
 -- Partial index for the get_snippets research view's harmful-rhetoric arm (VER-462).
 --
--- Second of two (20261106100000_research_view.sql, then this). In the research view a snippet is
--- visible when overall >= 95 OR it carries a research label OR
+-- Second of two (20261118100000_research_view.sql, then this). In the research view a snippet is
+-- visible when it clears the VER-466 feed line OR it carries a research label OR
 -- (confidence_scores->'harmful_rhetoric'->>'score')::int >= 70. The first arm is served by the
--- existing visible partial indexes and the second by snippets_pkey (s.id = ANY(uuid[])); this
+-- existing idx_snippets_feed* partial indexes (20261109120000) and the second by snippets_pkey (s.id = ANY(uuid[])); this
 -- index serves the third, so the planner can BitmapOr all three instead of filtering every
--- Processed row. Key shape mirrors idx_snippets_visible_recorded_at: (recorded_at DESC, id DESC).
+-- Processed row. Key shape mirrors the feed's (recorded_at DESC, id DESC) indexes: (recorded_at DESC, id DESC).
 -- The predicate must stay textually identical to the one in get_snippets (no COALESCE), or the
 -- planner cannot prove the index applies.
 --
@@ -18,7 +18,7 @@
 -- *** Management API, and a plain CREATE INDEX would take a SHARE lock on snippets for the whole
 -- *** heap scan, stalling the pipeline. The postgres role's 2-minute statement_timeout is too short
 -- *** for a scan of snippets that detoasts confidence_scores; see
--- *** README_2026-11-06_research_view_apply_order.md.
+-- *** README_2026-11-18_research_view_apply_order.md.
 -- Verify: SELECT indisvalid FROM pg_index WHERE indexrelid = 'public.idx_snippets_research_rhetoric'::regclass;
 -- An interrupted build leaves an INVALID index behind: drop it with the rollback line and build again.
 -- Rollback (also outside a transaction):

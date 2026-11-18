@@ -9,7 +9,7 @@ from processing_pipeline.constants import GeminiModel
 from processing_pipeline.stage_4.constants import OBSERVED_URLS_STATE_KEY
 
 # STAGE4_KB_WRITER_MODEL is unset in tests, so entries carry the production default
-KB_WRITER_MODEL = GeminiModel.GEMINI_2_5_FLASH
+KB_WRITER_MODEL = GeminiModel.GEMINI_3_8_FLASH
 
 VALID = dict(
     fact="The 2024 election results were certified by all 50 states.",

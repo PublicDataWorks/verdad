@@ -3,7 +3,8 @@
 -- ============================================================================================
 -- Why
 -- ============================================================================================
--- The feed shows only snippets with confidence_scores.overall >= 95, and the evidence gate caps
+-- The feed shows only snippets at overall >= 95 (or 90-94 when gemini-3.* analysed and Stage 4
+-- reviewed them, VER-466), and the evidence gate caps
 -- every analysis it cannot fact-check at 40. VER-430 confirmed 534 findings on Texas stations,
 -- 464 of them reachable only by direct link, and the gender-based harmful rhetoric (Category 22)
 -- and pulpit electioneering that VER-431 teaches the prompts to detect will also stay <= 40.
@@ -20,8 +21,8 @@
 --    logged-in user can create a label with any text (create_apply_and_upvote_label), so a text
 --    prefix must never grant research status. RLS on labels allows SELECT only, so the flag can
 --    only be set by a migration or the service role.
--- 2. get_snippets, starting from 20260921000400 (== supabase/database/sql/get_snippets_function.sql
---    before this change):
+-- 2. get_snippets, starting from the VER-466 feed function in 20261109120100_feed_line90_functions.sql
+--    (== supabase/database/sql/get_snippets_function.sql before this change):
 --    * DECLARE research_view := coalesce(p_filter->>'view', '') = 'research', and
 --      research_snippet_ids uuid[], filled (only when research_view) with every snippet that
 --      carries an is_research label APPLIED BY AN ADMIN (snippet_labels.applied_by in user_roles
@@ -30,14 +31,16 @@
 --      put any clip into the research view. On production on 2026-11-06 all 769 applications of
 --      the three labels were made by one admin, so the filter drops none of them;
 --    * the visibility predicate in filtered_snippets becomes two branches on research_view:
---        NOT research_view AND status = 'Processed' AND overall >= 95            -- unchanged
---        OR research_view AND status = 'Processed' AND (overall >= 95
+--        NOT research_view AND status = 'Processed' AND <feed line>              -- unchanged
+--        OR research_view AND status = 'Processed' AND (<feed line>
 --                                                       OR s.id = ANY(research_snippet_ids)
 --                                                       OR harmful_rhetoric.score >= 70)
+--      where <feed line> is VER-466's: overall >= 90 AND (overall >= 95 OR (analyzed_by LIKE
+--      'gemini-3.%' AND reviewed_at IS NOT NULL)).
 --      Under force_custom_plan research_view is a constant at plan time, so when the caller does
 --      not ask for the research view the second branch folds to FALSE and the predicate is the
---      old one: the default feed keeps idx_snippets_visible_recorded_at / _cover / _state /
---      _station exactly as before (same mechanism as via_search and state_codes).
+--      VER-466 one: the default feed keeps the idx_snippets_feed* partial indexes (20261109120000)
+--      exactly as before (same mechanism as via_search and state_codes).
 --    Everything else is byte-identical; the signature and the returned shape do not change
 --    (harmful_rhetoric rides inside the confidence_scores object that is already returned).
 --    Deviation from the first sketch (EXISTS over snippet_labels inside the OR): an EXISTS arm
@@ -49,15 +52,15 @@
 --    definition because CREATE OR REPLACE would drop it.
 --
 -- ============================================================================================
--- Apply order -- see supabase/migrations/README_2026-11-06_research_view_apply_order.md
+-- Apply order -- see supabase/migrations/README_2026-11-18_research_view_apply_order.md
 -- ============================================================================================
 -- 1. This file (safe in one transaction).
--- 2. 20261106100100_research_rhetoric_index.sql (CREATE INDEX CONCURRENTLY, outside a transaction).
+-- 2. 20261118100100_research_rhetoric_index.sql (CREATE INDEX CONCURRENTLY, outside a transaction).
 -- The research view works without step 2, only slower; nothing changes for the default feed
 -- either way. Neither file is in applied_versions.txt yet.
 --
--- Rollback: supabase/database/sql/rollback/2026-11-06_get_snippets_before.sql and
--- 2026-11-06_create_apply_and_upvote_label_before.sql (run as is), then optionally
+-- Rollback: supabase/database/sql/rollback/2026-11-18_get_snippets_before.sql and
+-- 2026-11-18_create_apply_and_upvote_label_before.sql (run as is), then optionally
 -- ALTER TABLE public.labels DROP COLUMN IF EXISTS is_research; (only after both function
 -- rollbacks: the new bodies read the column).
 
@@ -218,7 +221,7 @@ DECLARE
     -- audio_files indexes (radio_station_code, id) / (location_state) can actually be used.
     state_codes TEXT[];
     source_codes TEXT[];
-    -- 2026-11-06 (VER-462): opt-in research view (p_filter.view = 'research'). FALSE unless the
+    -- 2026-11-18 (VER-462): opt-in research view (p_filter.view = 'research'). FALSE unless the
     -- caller asks, so the default feed is unchanged; see the visibility predicate in
     -- filtered_snippets for how the planner folds it away.
     research_view BOOLEAN := COALESCE(p_filter->>'view', '') = 'research';
@@ -319,7 +322,7 @@ BEGIN
     -- via_search is a constant and the search guard folds away:
     --  * no search term: only the via_search = FALSE branch survives (the other is planned
     --    away, or gated by a One-Time Filter in a generic plan); the 'latest' ORDER BY branch
-    --    walks idx_snippets_visible_recorded_at (recorded_at DESC, id DESC) WHERE visible and
+    --    walks idx_snippets_feed_recorded_at (recorded_at DESC, id DESC) WHERE visible and
     --    stops after page_size rows instead of counting/sorting every visible snippet.
     --  * search term: only the via_search = TRUE branch survives and the pgroonga OR is
     --    evaluated together with the visibility predicates in ONE bitmap scan of snippets
@@ -333,7 +336,7 @@ BEGIN
     candidate_snippets AS NOT MATERIALIZED (
         SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
                s.like_count, s.audio_file, s.language, s.political_leaning,
-               s.status, s.confidence_scores,
+               s.status, s.confidence_scores, s.analyzed_by, s.reviewed_at,
                s.location_state, s.radio_station_code,
                s.title, s.explanation, s.summary, s.transcription, s.translation,
                FALSE AS via_search
@@ -341,7 +344,7 @@ BEGIN
         UNION ALL
         SELECT s.id, s.recorded_at, s.user_last_activity, s.upvote_count, s.comment_count,
                s.like_count, s.audio_file, s.language, s.political_leaning,
-               s.status, s.confidence_scores,
+               s.status, s.confidence_scores, s.analyzed_by, s.reviewed_at,
                s.location_state, s.radio_station_code,
                s.title, s.explanation, s.summary, s.transcription, s.translation,
                TRUE AS via_search
@@ -349,7 +352,7 @@ BEGIN
     ),
     -- Lightweight filtered IDs (for count + pagination, no heavy columns).
     -- NOT MATERIALIZED so that each ORDER BY branch below is planned against the base
-    -- tables and can walk an index (idx_snippets_visible_recorded_at) for the top-N instead
+    -- tables and can walk an index (idx_snippets_feed_recorded_at) for the top-N instead
     -- of sorting a materialized copy of every visible snippet.
     filtered_snippets AS NOT MATERIALIZED (
         SELECT
@@ -367,27 +370,31 @@ BEGIN
         -- 2026-09-21 (VER-387): the states / sources filters no longer join audio_files at all.
         -- location_state and radio_station_code are denormalized onto snippets and kept in sync by
         -- triggers (20260921000100), so the predicates below are served by the partial indexes
-        -- idx_snippets_visible_state / idx_snippets_visible_station (20260921000300).
-        -- 2026-11-06 (VER-462): visibility, in two branches split on the constant research_view.
+        -- idx_snippets_feed_state / idx_snippets_feed_station (20261109120000).
+        -- 2026-11-18 (VER-462): visibility, in two branches split on the constant research_view.
         -- Like via_search above, research_view is a plpgsql variable, so under force_custom_plan
         -- it is a constant when the statement is planned and the dead branch folds away:
         --  * research_view = FALSE (every caller that does not send view = 'research'): the
         --    second branch is FALSE, NOT research_view is TRUE, and what remains is exactly the
-        --    previous predicate, status = 'Processed' AND overall >= 95. The partial indexes
-        --    (idx_snippets_visible_recorded_at / _cover / _state / _station) still match it, so
-        --    the default feed keeps its plan.
+        --    VER-466 feed predicate (95+, or 90-94 analysed by gemini-3.* and reviewed by Stage 4).
+        --    The idx_snippets_feed* partial indexes (20261109120000) still match it, so the
+        --    default feed keeps its plan.
         --  * research_view = TRUE: a snippet is also visible when an admin applied a research label
         --    to it (research_snippet_ids, pkey) or its Stage 3/4 harmful_rhetoric.score is >= 70
         --    (idx_snippets_research_rhetoric). Every arm of the OR has an index, so the planner
         --    can BitmapOr them instead of scanning every Processed row. The score is compared
         --    without COALESCE so the comparison matches that index's predicate; a missing score
         --    is NULL, which is not >= 70.
-        -- These rows are research findings, not verified disinformation: the overall >= 95 rule
-        -- still decides the default feed, and the frontend labels the research view as such.
+        -- These rows are research findings, not verified disinformation: the feed predicate still
+        -- decides the default feed, and the frontend labels the research view as such.
         WHERE (
-            (NOT research_view AND s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95)
+            (NOT research_view AND s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 90
+              AND ((s.confidence_scores->>'overall')::INTEGER >= 95
+                   OR (s.analyzed_by LIKE 'gemini-3.%' AND s.reviewed_at IS NOT NULL)))
             OR (research_view AND s.status = 'Processed' AND (
-                (s.confidence_scores->>'overall')::INTEGER >= 95
+                ((s.confidence_scores->>'overall')::INTEGER >= 90
+                  AND ((s.confidence_scores->>'overall')::INTEGER >= 95
+                       OR (s.analyzed_by LIKE 'gemini-3.%' AND s.reviewed_at IS NOT NULL)))
                 OR s.id = ANY(research_snippet_ids)
                 OR (s.confidence_scores->'harmful_rhetoric'->>'score')::INTEGER >= 70
             ))

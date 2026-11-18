@@ -33,7 +33,7 @@ Env vars the environment may provide (all optional; the hook reports which are s
   (the variable reads `proxy-injected`). `gh pr` / `gh issue` use GraphQL, which the proxy rejects with 403
   whatever token is set; use the built-in GitHub tools or `gh api` REST calls instead.
 - Pipeline only: `SUPABASE_URL`, `SUPABASE_KEY` (service role), `R2_*`, `GOOGLE_GEMINI_KEY`, `OPENAI_API_KEY`,
-  `SEARXNG_URL`, `JINA_API_KEY` (see `.env.sample`). Never `SENTRY_DSN`.
+  `SEARXNG_URL`, `JINA_API_KEY`, `PARALLEL_API_KEY` (see `.env.sample`). Never `SENTRY_DSN`.
 
 The hook's probe table at session start is the access check: `OK`, `DENIED` (token wrong or lacks scope),
 `BLOCKED` (proxy `CONNECT` 403: the host is not in the environment's network allowlist, not an outage), `SKIP`

@@ -6,12 +6,24 @@ import uuid
 from unittest.mock import Mock, patch
 
 import pytest
-from google.genai.types import FinishReason, HarmBlockThreshold, HarmCategory, ThinkingLevel
+from google.genai import errors
+from google.genai.types import (
+    BlockedReason,
+    FinishReason,
+    GenerateContentResponse,
+    GenerateContentResponsePromptFeedback,
+    GenerateContentResponseUsageMetadata,
+    HarmBlockThreshold,
+    HarmCategory,
+    ThinkingLevel,
+)
+from prefect.states import Cancelling, Crashed
 from pydub import AudioSegment
 
 from processing_pipeline.constants import GeminiModel, ProcessingStatus
 from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
 from processing_pipeline.model_config import TranscriptionMethod
+from processing_pipeline.stage_1 import executors as stage_1_executors
 from processing_pipeline.stage_1 import (
     GeminiTimestampTranscriptionGenerator,
     Stage1Executor,
@@ -31,7 +43,7 @@ from processing_pipeline.stage_1 import (
     transcribe_audio_file_with_timestamp_with_gemini,
     undo_disinformation_detection,
 )
-from processing_pipeline.stage_1.flows import _create_gemini_client
+from processing_pipeline.stage_1.flows import _create_gemini_client, reset_audio_file_status_hook
 
 SELECT_WITH_AUDIO_FILE = (
     "*, audio_file(radio_station_name, radio_station_code, location_state, location_city, "
@@ -123,6 +135,13 @@ class TestFetchFunctions:
 
         assert fetch_a_new_audio_file_from_supabase(mock_supabase_client) == expected_response
         mock_supabase_client.get_a_new_audio_file_and_reserve_it.assert_called_once()
+
+    def test_fetch_new_audio_file_claims_it_for_the_current_flow_run(self, mock_supabase_client):
+        with patch("processing_pipeline.stage_1.tasks.flow_run") as current_run:
+            current_run.id = "run-1"
+            fetch_a_new_audio_file_from_supabase(mock_supabase_client)
+
+        mock_supabase_client.get_a_new_audio_file_and_reserve_it.assert_called_once_with("run-1")
 
     def test_fetch_new_audio_file_none(self, mock_supabase_client):
         assert fetch_a_new_audio_file_from_supabase(mock_supabase_client) is None
@@ -284,6 +303,20 @@ class TestStage1Executor:
         with pytest.raises(ValueError, match="too long"):
             Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
 
+    def test_run_blocked_prompt_names_block_reason(self):
+        client = Mock()
+        client.models.generate_content.return_value = GenerateContentResponse(
+            prompt_feedback=GenerateContentResponsePromptFeedback(block_reason=BlockedReason.PROHIBITED_CONTENT)
+        )
+        with pytest.raises(ValueError, match="PROHIBITED_CONTENT"):
+            Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+    def test_run_no_candidates_without_feedback(self):
+        client = Mock()
+        client.models.generate_content.return_value = GenerateContentResponse()
+        with pytest.raises(ValueError, match="no candidates"):
+            Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
     def test_safety_settings_configuration(self):
         client = self._client(parsed={"flagged_snippets": []})
 
@@ -299,6 +332,151 @@ class TestStage1Executor:
             HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
         }
         assert all(setting.threshold == HarmBlockThreshold.BLOCK_NONE for setting in safety_settings)
+
+    def test_run_logs_prompt_and_cached_token_counts(self, capsys):
+        client = self._client(parsed={"flagged_snippets": []})
+        client.models.generate_content.return_value.usage_metadata = GenerateContentResponseUsageMetadata(
+            prompt_token_count=10455, cached_content_token_count=5400
+        )
+
+        Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+        assert "Detection token usage: prompt=10455 cached=5400" in capsys.readouterr().out
+
+    def test_run_logs_zero_cached_tokens_when_gemini_reports_none(self, capsys):
+        client = self._client(parsed={"flagged_snippets": []})
+        client.models.generate_content.return_value.usage_metadata = GenerateContentResponseUsageMetadata(
+            prompt_token_count=9543
+        )
+
+        Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+        assert "Detection token usage: prompt=9543 cached=0" in capsys.readouterr().out
+
+    def test_run_logs_token_counts_of_a_call_that_returns_no_candidates(self, capsys):
+        client = Mock()
+        client.models.generate_content.return_value = GenerateContentResponse(
+            usage_metadata=GenerateContentResponseUsageMetadata(
+                prompt_token_count=11237, cached_content_token_count=6100
+            )
+        )
+
+        with pytest.raises(ValueError, match="no candidates"):
+            Stage1Executor.run(client, GeminiModel.GEMINI_2_5_FLASH, "T", {}, PROMPT_VERSION)
+
+        assert "Detection token usage: prompt=11237 cached=6100" in capsys.readouterr().out
+
+
+CACHEABLE_PROMPT_VERSION = {
+    **PROMPT_VERSION,
+    "user_prompt": 'fixed {{"a": 1}}\n\n---\n\nKB: {kb_context}\n\n---\n\n{metadata}|{timestamped_transcription}',
+}
+
+
+class TestStage1DetectionCache:
+    HEAD = 'fixed {"a": 1}\n'
+    TAIL = "\n---\n\nKB: KB\n\n---\n\n{}|T"
+    WHOLE = HEAD + TAIL
+
+    @pytest.fixture(autouse=True)
+    def _switch_on(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_DETECTION_CACHE", "true")
+        stage_1_executors._DETECTION_CACHES.clear()
+
+    @staticmethod
+    def _client():
+        client = Mock()
+        client.models.generate_content.return_value = Mock(parsed={"flagged_snippets": []}, candidates=[Mock()])
+        client.caches.create.return_value.name = "cachedContents/abc"
+        return client
+
+    @staticmethod
+    def _run(client):
+        return Stage1Executor.run(client, GeminiModel.GEMINI_3_8_FLASH, "T", {}, CACHEABLE_PROMPT_VERSION, kb_context="KB")
+
+    def test_switch_off_sends_the_whole_prompt_and_creates_no_cache(self, monkeypatch):
+        monkeypatch.delenv("STAGE1_DETECTION_CACHE")
+        client = self._client()
+
+        self._run(client)
+
+        client.caches.create.assert_not_called()
+        _, kwargs = client.models.generate_content.call_args
+        assert kwargs["contents"] == [self.WHOLE]
+        assert kwargs["config"].system_instruction == "system"
+        assert kwargs["config"].cached_content is None
+
+    def test_switch_on_caches_the_fixed_part_and_sends_the_rest(self):
+        client = self._client()
+
+        assert self._run(client) == {"flagged_snippets": []}
+
+        _, cache_kwargs = client.caches.create.call_args
+        assert cache_kwargs["model"] == GeminiModel.GEMINI_3_8_FLASH
+        assert cache_kwargs["config"].system_instruction == "system"
+        assert cache_kwargs["config"].contents[0].parts[0].text == self.HEAD
+        _, kwargs = client.models.generate_content.call_args
+        assert kwargs["contents"] == [self.TAIL]
+        assert kwargs["config"].cached_content == "cachedContents/abc"
+        assert kwargs["config"].system_instruction is None
+
+    def test_cache_is_created_once_and_reused(self):
+        client = self._client()
+
+        self._run(client)
+        self._run(client)
+
+        assert client.caches.create.call_count == 1
+        assert client.models.generate_content.call_count == 2
+
+    def test_cache_is_rebuilt_before_it_expires(self):
+        client = self._client()
+        with patch.object(stage_1_executors.time, "monotonic", return_value=0):
+            self._run(client)
+        with patch.object(stage_1_executors.time, "monotonic", return_value=3400):
+            self._run(client)
+
+        assert client.caches.create.call_count == 2
+
+    def test_cache_create_failure_runs_uncached_and_waits_before_the_next_try(self):
+        client = self._client()
+        client.caches.create.side_effect = errors.ClientError(400, {"error": {"message": "too small"}})
+
+        assert self._run(client) == {"flagged_snippets": []}
+        self._run(client)
+
+        assert client.caches.create.call_count == 1
+        _, kwargs = client.models.generate_content.call_args
+        assert kwargs["contents"] == [self.WHOLE]
+        assert kwargs["config"].system_instruction == "system"
+        assert kwargs["config"].cached_content is None
+
+    def test_cached_call_failure_runs_uncached_and_waits_before_the_next_try(self):
+        client = self._client()
+        ok = client.models.generate_content.return_value
+        client.models.generate_content.side_effect = [
+            errors.ClientError(403, {"error": {"message": "CachedContent not found (or permission denied)"}}),
+            ok,
+            ok,
+        ]
+
+        assert self._run(client) == {"flagged_snippets": []}
+        self._run(client)
+
+        assert client.caches.create.call_count == 1
+        for _, kwargs in client.models.generate_content.call_args_list[1:]:
+            assert kwargs["contents"] == [self.WHOLE]
+            assert kwargs["config"].cached_content is None
+
+    def test_prompt_with_no_fixed_part_before_the_placeholders_runs_uncached(self):
+        client = self._client()
+
+        Stage1Executor.run(client, GeminiModel.GEMINI_3_8_FLASH, "T", {}, PROMPT_VERSION)
+
+        client.caches.create.assert_not_called()
+        _, kwargs = client.models.generate_content.call_args
+        assert kwargs["contents"] == ["prompt"]
+        assert kwargs["config"].system_instruction == "system"
 
 
 class TestGeminiTimestampTranscriptionGenerator:
@@ -457,7 +635,7 @@ class TestProcessAudioFile:
             gemini_client=gemini_client,
             audio_file="test.mp3",
             prompt_version={**PROMPT_VERSION, "id": "pv-tt"},
-            model_name=GeminiModel.GEMINI_2_5_FLASH,
+            model_name=GeminiModel.GEMINI_3_5_FLASH_LITE,
             method=TranscriptionMethod.SEGMENTS,
         )
         mock_tasks["detect"].assert_called_once_with(
@@ -465,14 +643,14 @@ class TestProcessAudioFile:
             timestamped_transcription="[00:00] text",
             metadata=get_audio_file_metadata(AUDIO_FILE),
             prompt_version={**PROMPT_VERSION, "id": "pv-dd"},
-            model_name=GeminiModel.GEMINI_2_5_FLASH,
+            model_name=GeminiModel.GEMINI_3_8_FLASH,
             kb_context="kb context",
         )
         mock_supabase_client.insert_stage_1_llm_response.assert_called_once_with(
             audio_file_id=1,
             initial_transcription="initial transcription",
             initial_detection_result={"flagged_snippets": [{"transcription": "maybe"}]},
-            transcriptor=GeminiModel.GEMINI_2_5_FLASH,
+            transcriptor=GeminiModel.GEMINI_3_5_FLASH_LITE,
             timestamped_transcription={"timestamped_transcription": "[00:00] text"},
             detection_result={"flagged_snippets": [{"uuid": "u1"}]},
             status="New",
@@ -687,6 +865,31 @@ class TestInitialDisinformationDetectionFlow:
             initial_disinformation_detection(audio_file_id=1, limit=1)
 
 
+class TestResetAudioFileStatusHook:
+    @staticmethod
+    def run(parameters, state):
+        reset_audio_file_status_hook(Mock(), Mock(id="run-1", parameters=parameters), state)
+
+    def test_cancelled_loop_run_releases_its_claims_without_counting_an_attempt(self, mock_supabase_client):
+        self.run({"audio_file_id": None, "limit": 1000}, Cancelling())
+
+        mock_supabase_client.release_flow_run_audio_files.assert_called_once_with("run-1", count_attempt=False)
+        mock_supabase_client.set_audio_file_status.assert_not_called()
+
+    def test_crashed_loop_run_counts_an_attempt(self, mock_supabase_client):
+        self.run({"audio_file_id": None, "limit": 1000}, Crashed())
+
+        mock_supabase_client.release_flow_run_audio_files.assert_called_once_with("run-1", count_attempt=True)
+
+    def test_by_id_run_resets_its_processing_file(self, mock_supabase_client):
+        mock_supabase_client.get_audio_file_by_id.return_value = {"id": 7, "status": ProcessingStatus.PROCESSING}
+
+        self.run({"audio_file_id": 7, "limit": 1}, Cancelling())
+
+        mock_supabase_client.set_audio_file_status.assert_called_once_with(7, ProcessingStatus.NEW, None)
+        mock_supabase_client.release_flow_run_audio_files.assert_not_called()
+
+
 class TestMaintenanceFlows:
     def test_undo_disinformation_detection(self, mock_supabase_client):
         undo_disinformation_detection([1, 2])
@@ -763,11 +966,11 @@ class TestMaintenanceFlows:
             gemini_client=mock_gemini_client,
             audio_file="test.mp3",
             prompt_version=PROMPT_VERSION,
-            model_name=GeminiModel.GEMINI_2_5_FLASH,
+            model_name=GeminiModel.GEMINI_3_5_FLASH_LITE,
             method=TranscriptionMethod.SEGMENTS,
         )
         mock_supabase_client.update_stage_1_llm_response_timestamped_transcription.assert_called_once_with(
-            1, {"timestamped_transcription": "[00:00] regenerated"}, GeminiModel.GEMINI_2_5_FLASH
+            1, {"timestamped_transcription": "[00:00] regenerated"}, GeminiModel.GEMINI_3_5_FLASH_LITE
         )
         mock_supabase_client.update_stage_1_llm_response_detection_result.assert_called_once()
         mock_supabase_client.reset_stage_1_llm_response_status.assert_called_once_with(1)
@@ -817,20 +1020,20 @@ class TestModelSelection:
         assert initial_transcription_with_gemini(client, "a.mp3", PROMPT_VERSION) == "hola"
 
         kwargs = client.models.generate_content.call_args.kwargs
-        assert kwargs["model"] is GeminiModel.GEMINI_2_5_FLASH
-        assert kwargs["config"].thinking_config.thinking_budget == 1024
+        assert kwargs["model"] is GeminiModel.GEMINI_3_5_FLASH_LITE
+        assert kwargs["config"].thinking_config.thinking_level == ThinkingLevel.LOW
+        assert kwargs["config"].thinking_config.thinking_budget is None
         client.files.delete.assert_called_once()
 
-    def test_initial_transcription_on_gemini_3(self, monkeypatch):
-        monkeypatch.setenv("STAGE1_TRANSCRIPTION_MODEL", "gemini-3.5-flash-lite")
+    def test_initial_transcription_on_gemini_2_5(self, monkeypatch):
+        monkeypatch.setenv("STAGE1_TRANSCRIPTION_MODEL", "gemini-2.5-flash")
         client = self._client({"transcription": "hola"})
 
         initial_transcription_with_gemini(client, "a.mp3", PROMPT_VERSION)
 
         kwargs = client.models.generate_content.call_args.kwargs
-        assert kwargs["model"] is GeminiModel.GEMINI_3_5_FLASH_LITE
-        assert kwargs["config"].thinking_config.thinking_level == ThinkingLevel.LOW
-        assert kwargs["config"].thinking_config.thinking_budget is None
+        assert kwargs["model"] is GeminiModel.GEMINI_2_5_FLASH
+        assert kwargs["config"].thinking_config.thinking_budget == 1024
 
     @pytest.mark.parametrize(
         "model, budget, level, has_config",

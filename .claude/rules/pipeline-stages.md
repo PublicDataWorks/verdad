@@ -42,14 +42,17 @@ connection) into "no work" so the loop sleeps and retries instead of failing the
 - Prompts come from the `prompt_versions` table via `supabase_client.get_active_prompt(PromptStage, sub_stage)`,
   loaded once at flow start and threaded through tasks as a `prompt_version` dict
   (`system_instruction` / `user_prompt` / `output_schema`). Editing files in `prompts/` changes nothing.
-- `CONFIDENCE_THRESHOLD = 95` (`constants.py`): stage 3 sends a snippet to stage 4 only when
-  `confidence_scores.overall >= CONFIDENCE_THRESHOLD` and `skip_review` is false (`stage_3/tasks.py`).
+- `review_threshold(model)` (`constants.py`): stage 3 sends a snippet to stage 4 only when
+  `confidence_scores.overall` reaches the line of the model that analysed it (90 for `gemini-3.*`, else
+  `CONFIDENCE_THRESHOLD = 95`) and `skip_review` is false (`stage_3/tasks.py`). The feed SQL uses the same lines,
+  and shows a 90-94 `gemini-3.*` snippet only after stage 4 reviewed it (VER-466).
 - Executors are classes with a `run`/`run_async` `@classmethod` taking the client first
   (`gemini_client: genai.Client`, or `openai_client: OpenAI` in stage 5). Stage 3 and stage 4 flows are
   `async def` and call `gemini_client.aio.*`; stage 1, 2 and 5 are synchronous.
 - Stage 3 runs its own tool-calling loop (`WEB_TOOLS`, `MAX_MODEL_TURNS` in `stage_3/executors.py`) with the SDK's
   automatic function calling disabled, so a hallucinated tool name runs the tool its arguments match (`query` =
   search, `url` = read) or is answered with a function-response error instead of failing the analysis;
+  the last turn has tools switched off (`FINAL_TURN_NOTICE`) so a long search still ends in an answer;
   `run_async` returns the token `usage` summed over every model turn.
 - Stage 4 is a Google ADK pipeline (`LlmAgent`/`ParallelAgent`/`SequentialAgent` in `agents.py`) with MCP
   tools; it sets `GOOGLE_API_KEY` from `GOOGLE_GEMINI_KEY` at flow start.

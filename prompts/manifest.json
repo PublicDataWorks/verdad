@@ -1,7 +1,7 @@
 {
   "stage_1/disinformation_detection": {
-    "version": "3.2.0",
-    "description": "Recall-first detection prompt tuned for Gemini 3.x and Gemma 4 (VER-441), plus faith-healing, supplement/device and science-denial calibration examples (VER-453); not for gemini-2.5-flash; plus Category 22 Gender-Based Harmful Rhetoric, expanded Category 1 (voter confusion, pulpit electioneering), speaker-stance rule and a rhetoric exception to the opinion/religious-teaching exclusion (VER-431)",
+    "version": "3.3.0",
+    "description": "Recall-first detection prompt for Gemini 3.x and Gemma 4 (VER-441), with faith-healing, supplement/device and science-denial calibration examples (VER-453); knowledge-base block moved below the fixed text for caching (VER-482); plus Category 22 Gender-Based Harmful Rhetoric, expanded Category 1 (voter confusion, pulpit electioneering), a speaker-stance rule and a rhetoric exception to the opinion/religious-teaching exclusion (VER-431); not for gemini-2.5-flash",
     "files": {
       "system_instruction": "prompts/stage_1/main/detection_system_instruction.md",
       "user_prompt": "prompts/stage_1/main/detection_user_prompt.md",

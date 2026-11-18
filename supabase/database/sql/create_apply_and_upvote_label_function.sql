@@ -1,6 +1,6 @@
--- Current definition: supabase/migrations/20261106100000_research_view.sql (VER-462 research-label
+-- Current definition: supabase/migrations/20261118100000_research_view.sql (VER-462 research-label
 -- guard); tests/test_get_snippets_sql.py checks that this file matches it.
--- Rollback: supabase/database/sql/rollback/2026-11-06_create_apply_and_upvote_label_before.sql
+-- Rollback: supabase/database/sql/rollback/2026-11-18_create_apply_and_upvote_label_before.sql
 
 CREATE OR REPLACE FUNCTION public.create_apply_and_upvote_label(snippet_id uuid, label_text text, p_language text DEFAULT 'english'::text)
  RETURNS jsonb

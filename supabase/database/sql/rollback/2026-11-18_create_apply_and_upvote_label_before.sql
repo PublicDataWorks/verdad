@@ -1,5 +1,5 @@
 -- Rollback capture (2026-11-06, VER-462): public.create_apply_and_upvote_label before
--- 20261106100000_research_view.sql added the research-label guard. Body from the baseline
+-- 20261118100000_research_view.sql added the research-label guard. Body from the baseline
 -- (20260915000000); production also carries `SET search_path = public, extensions, pg_temp`
 -- (ALTER in 20260918053000), which is written into the definition below. Safe to run as is:
 -- CREATE OR REPLACE, same signature, existing grants are kept.

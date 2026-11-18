@@ -9,16 +9,20 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from google.genai import errors
 from google.genai.types import (
     Candidate,
     Content,
     FunctionCall,
+    FunctionCallingConfigMode,
     GenerateContentResponse,
     GenerateContentResponseUsageMetadata,
     Part,
+    ServiceTier,
 )
 
 from processing_pipeline.constants import GeminiModel
+from processing_pipeline.gemini_retry import FLEX_HTTP_OPTIONS, GEMINI_HTTP_OPTIONS
 from processing_pipeline.stage_3 import executors
 from processing_pipeline.stage_3.executors import Stage3Executor
 from processing_pipeline.stage_3.models import cited_url_keys
@@ -44,7 +48,7 @@ def fake_client(*turns):
     return client
 
 
-def run(client):
+def run(client, **kwargs):
     return asyncio.run(
         analyze(
             gemini_client=client,
@@ -52,6 +56,7 @@ def run(client):
             uploaded_audio_file=uploaded_file(),
             user_prompt="analyze this",
             system_instruction="be careful",
+            **kwargs,
         )
     )
 
@@ -186,17 +191,224 @@ def test_endless_tool_calls_stop_at_the_turn_budget():
     assert client.aio.models.generate_content.await_count == executors.MAX_MODEL_TURNS
 
 
+def tool_modes(client):
+    return [
+        call.kwargs["config"].tool_config and call.kwargs["config"].tool_config.function_calling_config.mode
+        for call in client.aio.models.generate_content.await_args_list
+    ]
+
+
+def test_last_turn_switches_tools_off_and_asks_for_the_answer(monkeypatch):
+    monkeypatch.setattr(executors, "MAX_MODEL_TURNS", 3)
+    client = fake_client(
+        model_turn(tool_call("run", cmd="a")),
+        model_turn(tool_call("run", cmd="b")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    text, *_ = run(client)
+
+    assert text == "done"
+    assert tool_modes(client) == [None, None, FunctionCallingConfigMode.NONE]
+    last_call = client.aio.models.generate_content.await_args_list[-1]
+    assert last_call.kwargs["contents"][-1].parts[-1].text == executors.FINAL_TURN_NOTICE
+
+
+def test_forced_final_answer_is_logged(monkeypatch, capsys):
+    monkeypatch.setattr(executors, "MAX_MODEL_TURNS", 2)
+
+    run(fake_client(model_turn(tool_call("run", cmd="a")), model_turn(Part.from_text(text="done"))))
+
+    assert "Turn budget of 2 reached; asking for the final answer with tools off" in capsys.readouterr().out
+
+
 def test_usage_is_summed_over_every_turn():
     first = model_turn(tool_call("run", cmd="q"))
     first.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=100, total_token_count=120)
     second = model_turn(Part.from_text(text="done"))
-    second.usage_metadata = GenerateContentResponseUsageMetadata(prompt_token_count=150, total_token_count=200)
+    second.usage_metadata = GenerateContentResponseUsageMetadata(
+        prompt_token_count=150, cached_content_token_count=90, total_token_count=200
+    )
 
     _, _, usage, _ = run(fake_client(first, second))
 
     assert usage["prompt_token_count"] == 250
+    assert usage["cached_content_token_count"] == 90
     assert usage["total_token_count"] == 320
     assert usage["thoughts_token_count"] == 0
+    assert "flex_turns" not in usage
+
+
+def run_flex(client):
+    return asyncio.run(
+        analyze(
+            gemini_client=client,
+            model_name=GeminiModel.GEMINI_3_8_FLASH,
+            uploaded_audio_file=uploaded_file(),
+            user_prompt="analyze this",
+            system_instruction="be careful",
+            service_tier=ServiceTier.FLEX,
+        )
+    )
+
+
+def tiers(client):
+    return [call.kwargs["config"].service_tier for call in client.aio.models.generate_content.await_args_list]
+
+
+def timeouts(client):
+    return [
+        (call.kwargs["config"].http_options or SimpleNamespace(timeout=None)).timeout
+        for call in client.aio.models.generate_content.await_args_list
+    ]
+
+
+@pytest.fixture(autouse=True)
+def fresh_flex_breaker(monkeypatch):
+    monkeypatch.setattr(executors, "FLEX_BREAKER", executors.FlexBreaker())
+
+
+def test_standard_tier_by_default():
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    run(client)
+
+    assert tiers(client) == [None]
+    assert timeouts(client) == [None]
+
+
+def test_flex_tier_is_sent_on_every_turn():
+    client = fake_client(model_turn(tool_call("run", cmd="q")), model_turn(Part.from_text(text="done")))
+
+    _, _, usage, _ = run_flex(client)
+
+    assert tiers(client) == [ServiceTier.FLEX, ServiceTier.FLEX]
+    assert usage["flex_turns"] == 2
+    assert usage["flex_drops"] == 0
+
+
+def test_flex_calls_get_a_longer_timeout_than_the_client_default():
+    client = fake_client(
+        model_turn(tool_call("run", cmd="q")),
+        TimeoutError(),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    run_flex(client)
+
+    assert timeouts(client) == [FLEX_HTTP_OPTIONS.timeout, FLEX_HTTP_OPTIONS.timeout, None]
+    assert FLEX_HTTP_OPTIONS.timeout > GEMINI_HTTP_OPTIONS.timeout
+
+
+def test_breaker_opens_after_drops_in_a_row_and_closes_after_the_pause(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(executors.time, "monotonic", lambda: now[0])
+    breaker = executors.FlexBreaker()
+
+    for _ in range(executors.FlexBreaker.MAX_DROPS - 1):
+        breaker.record(dropped=True)
+    assert breaker.allows()
+    breaker.record(dropped=True)
+    assert not breaker.allows()
+
+    now[0] += executors.FlexBreaker.PAUSE_S
+    assert breaker.allows()
+
+
+def test_breaker_success_resets_the_drop_count():
+    breaker = executors.FlexBreaker()
+
+    for _ in range(executors.FlexBreaker.MAX_DROPS - 1):
+        breaker.record(dropped=True)
+    breaker.record(dropped=False)
+    breaker.record(dropped=True)
+
+    assert breaker.allows()
+
+
+def test_open_breaker_sends_the_analysis_on_standard():
+    for _ in range(executors.FlexBreaker.MAX_DROPS):
+        executors.FLEX_BREAKER.record(dropped=True)
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    _, _, usage, _ = run_flex(client)
+
+    assert tiers(client) == [None]
+    assert usage["flex_turns"] == 0
+    assert usage["flex_drops"] == 0
+
+
+def test_drops_across_analyses_open_the_breaker():
+    overloaded = errors.ServerError(503, {"error": {"message": "busy", "status": "UNAVAILABLE"}})
+    for _ in range(executors.FlexBreaker.MAX_DROPS):
+        run_flex(fake_client(overloaded, model_turn(Part.from_text(text="done"))))
+
+    assert not executors.FLEX_BREAKER.allows()
+
+
+@pytest.mark.parametrize(
+    "drop",
+    [
+        errors.ServerError(503, {"error": {"message": "busy", "status": "UNAVAILABLE"}}),
+        errors.ClientError(429, {"error": {"message": "busy", "status": "RESOURCE_EXHAUSTED"}}),
+        TimeoutError(),
+    ],
+    ids=["503", "429", "timeout"],
+)
+def test_flex_drop_redoes_the_turn_on_standard_and_stays_there(drop):
+    client = fake_client(
+        model_turn(tool_call("run", cmd="q")),
+        drop,
+        model_turn(tool_call("run", cmd="q2")),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    text, _, usage, _ = run_flex(client)
+
+    assert text == "done"
+    assert tiers(client) == [ServiceTier.FLEX, ServiceTier.FLEX, None, None]
+    assert usage["flex_turns"] == 1
+    assert usage["flex_drops"] == 1
+
+
+def test_flex_drop_on_the_last_turn_keeps_tools_off(monkeypatch):
+    monkeypatch.setattr(executors, "MAX_MODEL_TURNS", 2)
+    client = fake_client(
+        model_turn(tool_call("run", cmd="a")),
+        TimeoutError(),
+        model_turn(Part.from_text(text="done")),
+    )
+
+    text, *_ = run_flex(client)
+
+    assert text == "done"
+    assert tiers(client) == [ServiceTier.FLEX, ServiceTier.FLEX, None]
+    assert tool_modes(client) == [None, FunctionCallingConfigMode.NONE, FunctionCallingConfigMode.NONE]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        errors.ClientError(400, {"error": {"message": "invalid", "status": "INVALID_ARGUMENT"}}),
+        ValueError("bad config"),
+    ],
+    ids=["400", "value_error"],
+)
+def test_flex_error_that_is_not_a_drop_is_raised(error):
+    client = fake_client(error, model_turn(Part.from_text(text="done")))
+
+    with pytest.raises(type(error)):
+        run_flex(client)
+
+    assert client.aio.models.generate_content.await_count == 1
+    assert executors.FLEX_BREAKER.drops == 0
+
+
+def test_standard_tier_error_is_raised():
+    overloaded = errors.ServerError(503, {"error": {"message": "busy", "status": "UNAVAILABLE"}})
+
+    with pytest.raises(errors.ServerError):
+        run(fake_client(overloaded))
 
 
 def declared_tools(client):
@@ -320,6 +532,45 @@ def test_urls_returned_by_the_tools_are_collected_for_the_evidence_gate(monkeypa
 
     assert observed.urls == set()
     assert observed.dates == {}
+
+
+PREFETCHED = [
+    {"title": "AP story", "url": "https://www.apnews.com/article/x/", "excerpts": ["first", "second"]},
+    {"title": "", "url": "https://example.org/bare", "excerpts": []},
+]
+
+
+def test_prefetched_sources_follow_the_audio_in_the_first_request(monkeypatch):
+    monkeypatch.delenv("JINA_API_KEY", raising=False)
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    run(client, prefetched_sources=PREFETCHED)
+
+    _, audio, sources = client.aio.models.generate_content.await_args.kwargs["contents"][0].parts
+    assert audio.file_data.file_uri == "https://files.example/abc"
+    assert sources.text.startswith("## Pre-fetched search results\n\n")
+    assert sources.text.endswith(
+        "\n\n[1] AP story\nURL: https://www.apnews.com/article/x/\nExcerpt: first\nExcerpt: second\n"
+        "\n[2] \nURL: https://example.org/bare\n"
+    )
+    assert declared_tools(client) == ["searxng_web_search", "web_url_read"]
+
+
+def test_prefetched_source_urls_count_as_returned_by_a_tool():
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    _, _, _, observed = run(client, prefetched_sources=PREFETCHED)
+
+    assert observed.urls == {"apnews.com/article/x", "example.org/bare"}
+    assert observed.calls == {}
+
+
+def test_an_empty_prefetch_adds_nothing_to_the_request():
+    client = fake_client(model_turn(Part.from_text(text="done")))
+
+    run(client, prefetched_sources=[])
+
+    assert len(client.aio.models.generate_content.await_args.kwargs["contents"][0].parts) == 2
 
 
 def cited(url, relevance="supports_claim"):

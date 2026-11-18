@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from collections import Counter
 
 from google import genai
@@ -9,13 +10,18 @@ from google.genai.types import (
     File,
     FinishReason,
     FunctionCall,
+    FunctionCallingConfig,
+    FunctionCallingConfigMode,
     FunctionDeclaration,
     GenerateContentConfig,
     Part,
+    ServiceTier,
     Tool,
+    ToolConfig,
 )
 from pydantic import ValidationError
 
+from processing_pipeline.gemini_retry import FLEX_HTTP_OPTIONS, is_transient
 from processing_pipeline.model_config import ModelName, stage3_restructure_model, thinking_config
 from processing_pipeline.processing_utils import get_safety_settings
 from processing_pipeline.kb_sources import parse_iso_date, url_key
@@ -44,12 +50,22 @@ WEB_TOOLS = {tool.__name__: tool for tool in (searxng_web_search, web_url_read, 
 # Jina tokens are prepaid (VER-415).
 ONCE_PER_ANALYSIS = {jina_web_search.__name__}
 
-# Upper bound on model turns per analysis (one final answer plus up to 19 rounds of tool calls).
+# Upper bound on model turns per analysis; the last turn has tools switched off so it has to answer.
 MAX_MODEL_TURNS = 20
+FINAL_TURN_NOTICE = "Tool budget used up. Give your final analysis now with the evidence you have."
+NO_TOOLS = ToolConfig(function_calling_config=FunctionCallingConfig(mode=FunctionCallingConfigMode.NONE))
+
+# Wording as evaluated in VER-481.
+PREFETCHED_SOURCES_HEADER = (
+    "## Pre-fetched search results\n\n"
+    "These web search results were fetched before this analysis for the claims flagged in this clip; treat them "
+    "like results from your search tool, and still search when they do not settle a claim.\n"
+)
 
 
 USAGE_FIELDS = (
     "prompt_token_count",
+    "cached_content_token_count",
     "candidates_token_count",
     "thoughts_token_count",
     "tool_use_prompt_token_count",
@@ -57,11 +73,47 @@ USAGE_FIELDS = (
 )
 
 
+class FlexBreaker:
+    """Process-wide: after MAX_DROPS Flex drops in a row, send analyses on standard for PAUSE_S."""
+
+    MAX_DROPS = 3
+    PAUSE_S = 1800
+
+    def __init__(self):
+        self.drops = 0
+        self.paused_until = 0.0
+
+    def allows(self) -> bool:
+        return time.monotonic() >= self.paused_until
+
+    def record(self, dropped: bool) -> None:
+        if not dropped:
+            self.drops = 0
+            return
+        self.drops += 1
+        if self.drops >= self.MAX_DROPS:
+            print(f"Flex dropped {self.drops} calls in a row; using the standard tier for {self.PAUSE_S} s")
+            self.paused_until = time.monotonic() + self.PAUSE_S
+            self.drops = 0
+
+
+FLEX_BREAKER = FlexBreaker()
+
+
 def offered_tools() -> dict:
     """The web tools declared to the model: Jina only when its API key is set."""
     return {
         name: tool for name, tool in WEB_TOOLS.items() if name != jina_web_search.__name__ or jina_search_available()
     }
+
+
+def prefetched_sources_text(sources: list[dict]) -> str:
+    lines = [PREFETCHED_SOURCES_HEADER]
+    for number, source in enumerate(sources, 1):
+        lines.append(f"[{number}] {source['title']}\nURL: {source['url']}")
+        lines.extend(f"Excerpt: {excerpt}" for excerpt in source["excerpts"])
+        lines.append("")
+    return "\n".join(lines)
 
 
 def usage_metadata_to_dict(usage_metadata) -> dict:
@@ -115,6 +167,8 @@ class Stage3Executor:
         audio_file: str,
         metadata: dict,
         prompt_version: dict,
+        service_tier: ServiceTier | None = None,
+        prefetched_sources: list[dict] | None = None,
     ):
         """
         Main execution method for Stage 3 analysis.
@@ -169,6 +223,8 @@ class Stage3Executor:
                 uploaded_audio_file=uploaded_audio_file,
                 user_prompt=user_prompt,
                 system_instruction=prompt_version["system_instruction"],
+                service_tier=service_tier,
+                prefetched_sources=prefetched_sources,
             )
 
             # Validate with Pydantic, fall back to schema restructuring
@@ -198,6 +254,10 @@ class Stage3Executor:
             rhetoric_gate = output.pop("rhetoric_gate")
             grounding_metadata = dict(output.get("verification_evidence") or {})
             grounding_metadata["tool_usage"] = observed.tool_usage(output.get("verification_evidence"))
+            # The analysis model's tokens only, not the restructure call's (VER-476 cost per clip).
+            grounding_metadata["token_usage"] = usage
+            if prefetched_sources:
+                grounding_metadata["prefetched_sources"] = len(prefetched_sources)
             if evidence_gate.get("applied"):
                 print(f"Evidence gate applied: {evidence_gate['note']}")
                 grounding_metadata["evidence_gate"] = evidence_gate
@@ -227,6 +287,8 @@ class Stage3Executor:
         uploaded_audio_file: File,
         user_prompt: str,
         system_instruction: str,
+        service_tier: ServiceTier | None = None,
+        prefetched_sources: list[dict] | None = None,
     ):
         """
         Analyze using the GenAI SDK with web search tools.
@@ -240,11 +302,18 @@ class Stage3Executor:
 
         Returns:
             tuple: (analysis_text, thought_summaries, usage, observed) where usage is the token
-            accounting summed over every model turn as a plain dict (see ``usage_metadata_to_dict``) and
+            accounting summed over every model turn as a plain dict (see ``usage_metadata_to_dict``), plus
+            ``flex_turns``/``flex_drops`` when ``service_tier`` asked for Flex, and
             observed is an ``ObservedToolOutput`` with the ``url_key`` of every URL the tools returned and
             the publication dates the search tool reported for them (see ``__call_tool``)
         """
         print("Analyzing with SDK + web search tools...")
+
+        usage = dict.fromkeys(USAGE_FIELDS, 0)  # every turn is billed, so sum them
+        if service_tier:
+            usage |= {"flex_turns": 0, "flex_drops": 0}
+            if not FLEX_BREAKER.allows():
+                service_tier = None
 
         tools = offered_tools()
         config = GenerateContentConfig(
@@ -260,6 +329,8 @@ class Stage3Executor:
             automatic_function_calling=AutomaticFunctionCallingConfig(disable=True),
             thinking_config=thinking_config(model_name, budget=4096, include_thoughts=True),
             safety_settings=get_safety_settings(),
+            service_tier=service_tier,
+            http_options=FLEX_HTTP_OPTIONS if service_tier else None,
         )
         contents = [
             Content(
@@ -273,15 +344,36 @@ class Stage3Executor:
 
         response = None
         function_calls = []
-        usage = dict.fromkeys(USAGE_FIELDS, 0)  # every turn is billed, so sum them
         observed = ObservedToolOutput()
+        if prefetched_sources:
+            contents[0].parts.append(Part.from_text(text=prefetched_sources_text(prefetched_sources)))
+            # Shown to the model, so the evidence gate counts them like URLs a tool returned.
+            observed.urls.update(filter(None, (url_key(source["url"]) for source in prefetched_sources)))
         called: set[str] = set()
-        for _ in range(MAX_MODEL_TURNS):
-            response = await gemini_client.aio.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=config,
-            )
+        for turn in range(MAX_MODEL_TURNS):
+            if turn == MAX_MODEL_TURNS - 1:
+                print(f"Turn budget of {MAX_MODEL_TURNS} reached; asking for the final answer with tools off")
+                config = config.model_copy(update={"tool_config": NO_TOOLS})
+                contents[-1].parts.append(Part.from_text(text=FINAL_TURN_NOTICE))
+            try:
+                response = await gemini_client.aio.models.generate_content(
+                    model=model_name, contents=contents, config=config
+                )
+                if config.service_tier:
+                    usage["flex_turns"] += 1
+                    FLEX_BREAKER.record(dropped=False)
+            except Exception as e:
+                # is_transient also counts ValueError, which here is our bug or the SDK's, not a Flex drop.
+                if not config.service_tier or isinstance(e, ValueError) or not is_transient(e):
+                    raise
+                # Flex is best-effort; one drop moves the rest of this analysis to standard so it can't stall.
+                print(f"Flex call dropped ({type(e).__name__}: {e}); continuing on the standard tier")
+                usage["flex_drops"] += 1
+                FLEX_BREAKER.record(dropped=True)
+                config = config.model_copy(update={"service_tier": None, "http_options": None})
+                response = await gemini_client.aio.models.generate_content(
+                    model=model_name, contents=contents, config=config
+                )
             for field, count in usage_metadata_to_dict(response.usage_metadata).items():
                 usage[field] += count
             function_calls = cls.__function_calls(response)

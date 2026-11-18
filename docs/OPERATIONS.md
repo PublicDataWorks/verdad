@@ -336,23 +336,27 @@ model id (spaces, a swallowed `# comment`) raises `ValueError` when the call run
 
 | Variable | Call sites | Default | Persisted as |
 |---|---|---|---|
-| `STAGE1_TRANSCRIPTION_MODEL` | Stage 1 initial (untimed) transcription | `gemini-2.5-flash` | not stored |
-| `STAGE1_DETECTION_MODEL` | Stage 1 initial and main detection, also in `redo_main_detection` / `regenerate_timestamped_transcript` | `gemini-2.5-flash` | not stored |
+| `STAGE1_TRANSCRIPTION_MODEL` | Stage 1 initial (untimed) transcription | `gemini-3.5-flash-lite` | not stored |
+| `STAGE1_DETECTION_MODEL` | Stage 1 initial and main detection, also in `redo_main_detection` / `regenerate_timestamped_transcript` | `gemini-3.8-flash` | not stored |
 | `STAGE1_TRANSCRIPTION_METHOD` | Stage 1 timestamped transcription: `segments`, `transcribe` or `open_model` (GPU worker only, see below) | `segments` | (see `transcriptor`) |
-| `STAGE1_TIMESTAMP_MODEL` | Stage 1 timestamped transcription | `gemini-2.5-flash` with `segments`, `gemini-3.5-transcribe` with `transcribe` | `stage_1_llm_responses.transcriptor` |
+| `STAGE1_TIMESTAMP_MODEL` | Stage 1 timestamped transcription | `gemini-3.5-flash-lite` with `segments`, `gemini-3.5-transcribe` with `transcribe` | `stage_1_llm_responses.transcriptor` |
 | `STAGE1_TRANSCRIBE_FIRST` | Stage 1 flow shape: one transcription per recording supplies every transcript (needs `STAGE1_TRANSCRIPTION_METHOD=transcribe` or `open_model`) | `false` | `transcriptor` on every row |
 | `STAGE1_DETECTION_PASSES` | Stage 1 detection: `two` (initial, then main when flagged) or `one` (main only, every recording; needs `STAGE1_TRANSCRIBE_FIRST=true`) | `two` | `initial_detection_result` is null with `one` |
 | `STAGE1_ANCHOR_TIMESTAMPS` | Stage 1 main detection: flagged snippet times from word timestamps where the row has them | `false` | per snippet in `detection_result` |
+| `STAGE1_DETECTION_CACHE` | Stage 1 main detection: the system instruction and the fixed prompt text (everything above the knowledge-base block) sit in one Gemini explicit cache per worker process (1 h TTL, rebuilt 5 min before it ends) and bill at the cached rate; the call sends only the knowledge-base block, metadata and transcript. If the cache cannot be created or a call on it fails, detection runs uncached until the next rebuild. Needs detection prompt 3.2.0 or later and a model with explicit caching (VER-482) | `false` | `Detection token usage: prompt=… cached=…` in the run log |
 | `STAGE1_FILE_WORKERS` | Stage 1 recordings one run keeps in flight at once (GPU worker, see below) | `1` | not stored |
 | `STAGE2_USE_WORD_TIMES` | Stage 2 clipping: cut snippets that carry `start_s`/`end_s` at millisecond precision around the words | `false` | `snippets.start_time`/`end_time`/`duration`/`recorded_at` |
 | `STAGE2_CONTEXT_BEFORE_S` / `STAGE2_CONTEXT_AFTER_S` | Stage 2 padding for the word-time cut, float seconds >= 0 | the flow's `context_before_seconds` / `context_after_seconds` (90 / 60 in `main.py`) | (the clip itself) |
-| `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop) | `gemini-2.5-pro` | `snippets.analyzed_by` |
-| `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-2.5-flash` | `snippets.analyzed_by` |
-| `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-2.5-flash` | not stored |
-| `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-2.5-flash` | not stored |
-| `STAGE4_REVIEWER_MODEL` | Stage 4 `analysis_reviewer` | `gemini-2.5-pro` | `snippets.reviewed_by` |
+| `STAGE3_MAIN_MODEL` | Stage 3 analysis (tool loop); the review and feed line is 90 for `gemini-3.*`, 95 for any other model (VER-466) | `gemini-3.8-flash` | `snippets.analyzed_by` |
+| `STAGE3_FALLBACK_MODEL` | Stage 3 analysis after any non-auth API error from the main model | `gemini-3.5-flash` | `snippets.analyzed_by` |
+| `STAGE3_RESTRUCTURE_MODEL` | Stage 3 JSON restructuring when the analysis fails validation | `gemini-3.8-flash` | not stored |
+| `STAGE3_REPEAT_DEDUP` | Stage 3 queue loop: a snippet whose Stage 1 excerpt matches a Processed original of the same station (trigram 0.85, within 7 days either way, same Stage 3 prompt version) gets that analysis copied instead of a Gemini call (VER-465). A Stage 3 prompt bump finds no sources for up to 7 days | `false` | `snippets.repeat_of` |
+| `STAGE3_SERVICE_TIER` | Stage 3 main-model analysis tier: `flex` is half price but slower (up to 15 min per call). Flex calls time out after 16 min instead of 10. A Flex 429/503/timeout redoes that turn on standard, and the rest of that analysis stays on standard; after 3 drops in a row the process skips Flex for 30 min. The fallback model always runs on standard (VER-476) | `standard` | `flex_turns`/`flex_drops` in `grounding_metadata.token_usage` |
+| `STAGE3_PREFETCH_SOURCES` | Stage 3: one Parallel Decisions call per clip (the Stage 1 explanation as input, 0.001 USD) before the analysis; its cited sources (title, URL, excerpts) follow the audio in the first request and count as tool-returned URLs for the evidence gate. The web tools stay on. Needs the `PARALLEL_API_KEY` secret; a failed or timed-out call (20 s) leaves the clip analyzed without sources (VER-481) | `false` | `grounding_metadata.prefetched_sources` (source count; absent when the clip had none) |
+| `STAGE4_RESEARCHER_MODEL` | Stage 4 `kb_researcher` and `web_researcher` | `gemini-3.8-flash` | not stored |
+| `STAGE4_REVIEWER_MODEL` | Stage 4 `analysis_reviewer` | `gemini-3.8-flash` | `snippets.reviewed_by` |
 | `STAGE4_REVIEWER_THINKING` | Stage 4 `analysis_reviewer` thinking level (`minimal`/`low`/`medium`/`high`); 3.x defaults to `high`, whose thoughts count against the agent's 16k output cap and truncated review JSON | `medium` on Gemini 3.x, the model default on 2.5, nothing on Gemma | not stored |
-| `STAGE4_KB_WRITER_MODEL` | Stage 4 `kb_updater` (off: `KB_UPDATER_ENABLED = False`) | `gemini-2.5-flash` | `kb_entries.created_by_model` |
+| `STAGE4_KB_WRITER_MODEL` | Stage 4 `kb_updater` (off: `KB_UPDATER_ENABLED = False`) | `gemini-3.8-flash` | `kb_entries.created_by_model` |
 
 ```bash
 fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_MODEL=gemini-3.5-flash-lite \
@@ -360,8 +364,10 @@ fly secrets set -a processing-worker STAGE1_TRANSCRIPTION_MODEL=gemini-3.5-flash
 fly secrets unset -a processing-worker STAGE1_TRANSCRIPTION_MODEL STAGE1_DETECTION_MODEL STAGE1_TRANSCRIPTION_METHOD  # back
 ```
 
-Any variable left unset stays on its 2.5 default. When leaving 2.5 entirely, set every row of the table, including
-`STAGE3_RESTRUCTURE_MODEL`, which is easy to miss because it only runs when an analysis fails validation.
+Any variable left unset stays on its default. No default names `gemini-2.5-pro` or `gemini-2.5-flash`: Google
+routes requests for them to other models from December 1, 2026 (VER-486). When moving every call to another model,
+set every row of the table, including `STAGE3_RESTRUCTURE_MODEL`, which is easy to miss because it only runs when an
+analysis fails validation.
 
 `fly secrets set` restarts the app's machines, which orphans in-flight runs and leaves the workers idle until runs
 are recreated (see "Workers idle after any deploy" in the gotchas below). The variables apply to every process group of the app, so the second Stage 1 and Stage 4 workers
@@ -512,15 +518,23 @@ refuses the production project unless `--allow-production` is passed.
 - **OOM leaves zombie runs.** When a worker machine is OOM-killed (`exit_code=137` in `fly machine status`) the
   process restarts but its Prefect runs never resume and keep showing `Running`. Check `fly logs`, not Prefect
   state. The stage 3 machine runs 4 GB for this reason (5 loop runs plus targeted by-id runs).
-- **Every restart strands in-flight rows** in `Processing`/`Reviewing`. The stage 3 `on_crashed` hook resets
-  only rows named in `snippet_ids`; the pg_cron job `sweep_stuck_snippets` (hourly at :05, migration
-  `20260917080000`) puts rows older than 2 h back to `New` / `Ready for review`. `cron.job_run_details` shows
+- **Every restart strands in-flight rows** in `Processing`/`Reviewing`. A cancelled or crashed Stage 3 run frees
+  its own clip first (VER-479, migration `20261113100000`): its hook calls `release_flow_run_snippets` for
+  `Processing` rows whose `claimed_by_flow_run` is the run (a by-id run resets the rows named in `snippet_ids`).
+  Only a crash counts toward `snippets.analysis_attempts` (shared with the error sweep); once that is 3, the next
+  crash sends the clip to `Error`, so it cannot loop.
+  The pg_cron job `sweep_stuck_snippets` (hourly at :05, migration `20260917080000`) covers the rest: it puts
+  rows older than 2 h back to `New` / `Ready for review`. `cron.job_run_details` shows
   the runs; `SELECT public.sweep_stuck_snippets()` by hand returns how many rows it moved. Stage 1 audio files get
   the same from `sweep_stuck_audio_files` (hourly at :35, migration `20261103120000`, VER-452): `Processing` rows
   stuck 2 h to 7 days, with no `stage_1_llm_responses` row, go back to `New`; older ones are left for a backlog
   decision. Each requeue counts in `audio_files.retry_attempts` (shared with the error sweep); at 3 the row goes to
-  `Error` ("Stage 1 run died 3 times in Processing"), so a file that kills its run cannot loop. Queue depth for
-  watching the Stage 1 fleet:
+  `Error` ("Stage 1 run died 3 times in Processing"), so a file that kills its run cannot loop. A cancelled or
+  crashed Stage 1 loop run frees its own files first (VER-461, migration `20261106100000`): its hook calls
+  `release_flow_run_audio_files` for rows whose `claimed_by_flow_run` is the run; rows with a Stage 1 response go
+  to `Processed`, the rest to `New`, and only a crash counts toward `retry_attempts`. The sweep still covers runs
+  whose serve process died with them, and also sets `Processing` rows stuck over 2 h with a Stage 1 response
+  to `Processed`, at any age. Queue depth for watching the Stage 1 fleet:
 
   ```sql
   SELECT status, count(*), min(recorded_at), max(recorded_at) FROM public.audio_files
@@ -536,7 +550,8 @@ refuses the production project unless `--allow-production` is passed.
   after `p_max_attempts` (default 3). **It is not scheduled by default**: `p_batch` is the Gemini-quota dial
   (VER-379). Enable with `SELECT cron.schedule('sweep_retryable_errors', '*/10 * * * *',
   $$SELECT public.sweep_retryable_errors(200)$$)`, pause with `cron.unschedule`, and run one batch by hand with
-  `SELECT public.sweep_retryable_errors(50)`, which returns counts by destination.
+  `SELECT public.sweep_retryable_errors(50)`, which returns counts by destination. It never matches
+  `[Stage 3 repeat]` rows (VER-465: the copied analysis was written but labelling failed); rerun those by id.
 - **Stage 1 audio `Error`s retry from pg_cron.** `public.sweep_retryable_audio_errors(p_batch, p_max_attempts)`
   (migrations `20261001100000` + `20261001160000`, VER-417; job `sweep_retryable_audio_errors` at :25 and :55, batch
   20) moves audio files that failed Stage 1 on a Gemini 503/429/empty reply or a statement timeout back to `New`:
@@ -559,6 +574,17 @@ refuses the production project unless `--allow-production` is passed.
   channels with `vault.update_secret`. Backfill with `SELECT public.record_search_hit_stats(h, p_alert => false)
   FROM generate_series(<from>, <to>, interval '1 hour') h`; test the alert with `p_min_share => 1.01` on the last
   hour, then re-run it with the defaults. Pause with `cron.unschedule('record_search_hit_stats')`.
+- **Stage 1 stalls post to Slack** (VER-487, migrations `20261117100000`, `20261117120000`). pg_cron job `check_stage1_stall`
+  (`4,19,34,49 * * * *`) looks at recordings of the last 24 h: when at least one has waited in `New` or
+  `Processing` for over 60 min and none finished in 60 min, it posts once to the same `ops_alerts_slack_webhook`,
+  then once more when a recording finishes again. Each stall is a row in `public.stage1_stall_alerts`. No audio
+  arriving does not alert (the recording monitors own that), and the 6-hourly restart pause (about 35 min) stays
+  under the line. Nothing watches the job itself: the reply from Slack is not read. Dry run
+  `SELECT public.check_stage1_stall(p_alert => false)`; test the post with `SELECT public.check_stage1_stall(0, 0)`,
+  the next run posts the recovery. Stop it with `SELECT cron.unschedule('check_stage1_stall')`, which deletes the job;
+  resume with `SELECT cron.schedule('check_stage1_stall', '4,19,34,49 * * * *', 'SELECT public.check_stage1_stall()')`.
+  Remove it all with the unschedule, then `DROP FUNCTION public.check_stage1_stall(integer, integer, boolean)` and
+  `DROP TABLE public.stage1_stall_alerts`; to drop only the ❌ prefix, re-run the function from `20261117100000`.
 - **`cron.job_run_details` keeps 7 days.** pg_cron job `prune_cron_job_run_details` (`20 3 * * *`, VER-410,
   migration `20260925100000`) deletes older runs, and failed runs with no end time by their start time; pg_cron
   never prunes on its own.

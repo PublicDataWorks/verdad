@@ -1,4 +1,4 @@
-# 2026-11-06 VER-462 (research view) — apply order
+# 2026-11-18 VER-462 (research view) — apply order
 
 Run the files **by hand**, in this order, one file per run. Neither version is in `applied_versions.txt`
 yet; add both (and record them in `supabase_migrations.schema_migrations`) once they are applied.
@@ -24,14 +24,14 @@ SECURITY DEFINER function is the only user write path). Therefore:
   a new `snippet_labels` row for an `is_research` label. Upvoting an already-applied research label is unchanged.
 
 **Visibility caveat.** The research view is opt-in and never shown by default. Research-view rows are research
-findings, not verified disinformation: most score below 95 because the evidence gate caps anything it cannot
+findings, not verified disinformation: most fall below the feed line (95, or 90 for reviewed gemini-3.* analyses) because the evidence gate caps anything it cannot
 fact-check at 40. The frontend marks the view with a banner and a "Harmful rhetoric" badge; trending, filtering
 options and the public pages are unchanged.
 
 | # | File | Transaction | Duration | Verify after |
 |---|------|-------------|----------|--------------|
-| 1 | `20261106100000_research_view.sql` | Safe in one transaction: catalog-only `ADD COLUMN` on `labels` under `lock_timeout = '3s'` (on "canceling statement due to lock timeout" nothing changed, run it again), a 3-row `UPDATE` by id, a ~150-row location backfill for research-labelled snippets (about 16 s: rows below 95 written before 2026-09-21 still have NULL `location_state`/`radio_station_code`), two `CREATE OR REPLACE FUNCTION` (`create_apply_and_upvote_label`, `get_snippets`; same signatures, search_path pins restated), `GRANT`, `NOTIFY pgrst` | under a minute | `SELECT id, text FROM public.labels WHERE is_research;` → exactly the three "Texas research 2026:" labels. `SELECT count(*) FROM public.snippets s JOIN public.snippet_labels sl ON sl.snippet = s.id JOIN public.labels l ON l.id = sl.label WHERE l.is_research AND s.radio_station_code IS NULL;` → 0. `SELECT proconfig FROM pg_proc WHERE proname = 'create_apply_and_upvote_label';` → still `search_path=public, extensions, pg_temp`. Then the default-feed check and the research-view smoke test below |
-| 2 | `20261106100100_research_rhetoric_index.sql` | **MUST run outside a transaction** (`CREATE INDEX CONCURRENTLY`). Not through the Management API or a runner that wraps statements in `BEGIN`/`COMMIT` | a few minutes on ~563k rows (the 2026-09-21 visible indexes took 4-5 min each) | `SELECT indisvalid FROM pg_index WHERE indexrelid = 'public.idx_snippets_research_rhetoric'::regclass;` → `true` |
+| 1 | `20261118100000_research_view.sql` | Safe in one transaction: catalog-only `ADD COLUMN` on `labels` under `lock_timeout = '3s'` (on "canceling statement due to lock timeout" nothing changed, run it again), a 3-row `UPDATE` by id, a ~150-row location backfill for research-labelled snippets (about 16 s: rows below 95 written before 2026-09-21 still have NULL `location_state`/`radio_station_code`), two `CREATE OR REPLACE FUNCTION` (`create_apply_and_upvote_label`, `get_snippets`; same signatures, search_path pins restated), `GRANT`, `NOTIFY pgrst` | under a minute | `SELECT id, text FROM public.labels WHERE is_research;` → exactly the three "Texas research 2026:" labels. `SELECT count(*) FROM public.snippets s JOIN public.snippet_labels sl ON sl.snippet = s.id JOIN public.labels l ON l.id = sl.label WHERE l.is_research AND s.radio_station_code IS NULL;` → 0. `SELECT proconfig FROM pg_proc WHERE proname = 'create_apply_and_upvote_label';` → still `search_path=public, extensions, pg_temp`. Then the default-feed check and the research-view smoke test below |
+| 2 | `20261118100100_research_rhetoric_index.sql` | **MUST run outside a transaction** (`CREATE INDEX CONCURRENTLY`). Not through the Management API or a runner that wraps statements in `BEGIN`/`COMMIT` | a few minutes on ~563k rows (the 2026-09-21 visible indexes took 4-5 min each) | `SELECT indisvalid FROM pg_index WHERE indexrelid = 'public.idx_snippets_research_rhetoric'::regclass;` → `true` |
 
 Step 2 can also run first; the order only matters for how the research view is planned (without the index the
 rhetoric arm is a filter, so the research view is slower). Build it before Stage 3 1.8.0 has written many
@@ -71,7 +71,7 @@ SELECT r->>'num_of_snippets' AS n,
 FROM (SELECT get_snippets('spanish', '{}'::jsonb, 0, 10, 'latest', '', true) AS r) t;
 ```
 
-The plan must still walk `idx_snippets_visible_cover` / `idx_snippets_visible_recorded_at` with no reference to
+The plan must still walk the same `idx_snippets_feed*` index as before the change (VER-466, 20261109120000) with no reference to
 `labels`, `research_snippet_ids` or `harmful_rhetoric`; the ids and count must be identical. With
 `force_custom_plan`, `research_view` is a constant and the research branch folds to FALSE, exactly as
 `state_codes IS NULL` does for the states filter. If the plan changed, roll back step 1 (below): the fold did
@@ -84,9 +84,9 @@ EXPLAIN (ANALYZE, BUFFERS) SELECT get_snippets('english', '{"view":"research"}':
 SELECT r->>'num_of_snippets' FROM (SELECT get_snippets('english', '{"view":"research"}'::jsonb, 0, 10, 'latest', '', true) AS r) t;
 ```
 
-Expect `num_of_snippets` = the default count plus the research-labeled snippets below 95 (VER-430: 464 Texas
+Expect `num_of_snippets` = the default count plus the research-labeled snippets below the feed line (VER-430: 464 Texas
 findings were reachable only by direct link) plus any snippet with `harmful_rhetoric.score >= 70`. Expected plan:
-a `BitmapOr` of the visible partial index, `snippets_pkey` (`id = ANY(...)`) and, after step 2,
+a `BitmapOr` of the feed partial index, `snippets_pkey` (`id = ANY(...)`) and, after step 2,
 `idx_snippets_research_rhetoric`, then a top-N Sort; it must stay well under the authenticated 8 s
 statement_timeout. Combine with `'{"view":"research","states":["Texas"]}'` and with a label filter as well.
 
@@ -95,14 +95,14 @@ statement_timeout. Combine with `'{"view":"research","states":["Texas"]}'` and w
 | Step | Rollback |
 |---|---|
 | 2 | `DROP INDEX CONCURRENTLY IF EXISTS public.idx_snippets_research_rhetoric;` — outside a transaction |
-| 1 | Run `supabase/database/sql/rollback/2026-11-06_get_snippets_before.sql` and `supabase/database/sql/rollback/2026-11-06_create_apply_and_upvote_label_before.sql` as is (`CREATE OR REPLACE`, same signatures, search_path pin written in). Then, optionally, `ALTER TABLE public.labels DROP COLUMN IF EXISTS is_research;` — **only after** both function rollbacks, the new bodies read the column |
+| 1 | Run `supabase/database/sql/rollback/2026-11-18_get_snippets_before.sql` and `supabase/database/sql/rollback/2026-11-18_create_apply_and_upvote_label_before.sql` as is (`CREATE OR REPLACE`, same signatures, search_path pin written in). Then, optionally, `ALTER TABLE public.labels DROP COLUMN IF EXISTS is_research;` — **only after** both function rollbacks, the new bodies read the column |
 
 ## Files changed in the repo
 
 - `supabase/database/sql/get_snippets_function.sql` — updated to the new definition (`tests/test_get_snippets_sql.py`
   enforces that it matches the migration).
-- `supabase/database/sql/rollback/2026-11-06_get_snippets_before.sql` — the definition before this change.
+- `supabase/database/sql/rollback/2026-11-18_get_snippets_before.sql` — the definition before this change.
 - `supabase/database/sql/create_apply_and_upvote_label_function.sql` — updated to the guarded definition (same
   test enforces the match).
-- `supabase/database/sql/rollback/2026-11-06_create_apply_and_upvote_label_before.sql` — its definition before
+- `supabase/database/sql/rollback/2026-11-18_create_apply_and_upvote_label_before.sql` — its definition before
   this change.

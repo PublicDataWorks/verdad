@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+from datetime import date
 
 import pytest
 
@@ -168,7 +169,7 @@ def test_aggregate_counts_fixed_and_lost():
         make_result("c1", ep.CONTROL, [95, 95], [40, 30], cand_cats=(), usage=usage),  # lost
         make_result("c2", ep.CONTROL, [95, 95], [90, 95], usage=usage),  # kept
     ]
-    agg = ep.aggregate(results, "gemini-2.5-pro")
+    agg = ep.aggregate(results, "gemini-3.8-flash")
     assert agg["reported_total"] == 3 and agg["control_total"] == 2
     assert agg["false_positives_fixed"] == 1
     assert agg["reported_unchanged"] == 1
@@ -179,8 +180,17 @@ def test_aggregate_counts_fixed_and_lost():
     assert agg["mean_confidence_shift"] < 0
     assert agg["runs_total"] == 20 and agg["runs_failed"] == 0
     assert agg["usage"]["prompt_token_count"] == 20_000
-    # 20 calls * (1000 input * 1.25 + 150 output * 10.0) / 1M
-    assert agg["estimated_cost_usd"] == pytest.approx(20 * (1000 * 1.25 + 150 * 10.0) / 1_000_000)
+    assert agg["estimated_cost_usd"] == ep.estimate_cost(agg["usage"], "gemini-3.8-flash")
+
+
+@pytest.mark.parametrize(
+    "on, input_price, output_price",
+    [(date(2026, 12, 31), 0.75, 3.75), (date(2027, 1, 1), 1.50, 7.50)],
+)
+def test_estimate_cost_uses_the_rates_in_force_on_the_day(on, input_price, output_price):
+    usage = {"prompt_token_count": 1000, "candidates_token_count": 100, "thoughts_token_count": 50}
+    expected = (1000 * input_price + 150 * output_price) / 1_000_000
+    assert ep.estimate_cost(usage, "gemini-3.8-flash", on) == pytest.approx(expected)
 
 
 def test_estimate_cost_unknown_model():
@@ -193,11 +203,11 @@ def test_render_report_contains_tables_and_evidence():
         make_result("22222222-bbbb", ep.CONTROL, [95, 95], [90, 95]),
     ]
     results[0].title = "A | title with pipe"
-    agg = ep.aggregate(results, "gemini-2.5-pro")
+    agg = ep.aggregate(results, "gemini-3.8-flash")
     config = {
         "baseline": "b",
         "candidate": "c",
-        "model": "gemini-2.5-pro",
+        "model": "gemini-3.8-flash",
         "runs": 2,
         "threshold": 70,
         "flag_on": "overall",
@@ -228,7 +238,7 @@ def test_cap_histogram_counts_runs_per_reason_and_arm():
 def test_render_report_capped_runs_table_and_results_json_carry_cap_reasons():
     results = [make_result("11111111-aaaa", ep.REPORTED, [90, 85], [30, 20])]
     results[0].candidate_runs[0].cap_reasons = ["reason | with pipe"]
-    agg = ep.aggregate(results, "gemini-2.5-pro")
+    agg = ep.aggregate(results, "gemini-3.8-flash")
     config = {"baseline": "b", "candidate": "c", "model": "m", "runs": 2, "threshold": 70, "flag_on": "overall"}
 
     report = ep.render_report(results, agg, config)
@@ -265,20 +275,20 @@ def test_render_report_failures_section():
     config = {
         "baseline": "b",
         "candidate": "c",
-        "model": "gemini-2.5-pro",
+        "model": "gemini-3.8-flash",
         "runs": 2,
         "threshold": 70,
         "flag_on": "overall",
     }
     clean = [make_result("11111111-aaaa", ep.REPORTED, [90, 85], [30, 20], cand_cats=())]
-    report = ep.render_report(clean, ep.aggregate(clean, "gemini-2.5-pro"), config)
+    report = ep.render_report(clean, ep.aggregate(clean, "gemini-3.8-flash"), config)
     assert "## Failures" not in report
 
     r = ep.SnippetResult(snippet_id="33333333-cccc", kind=ep.REPORTED)
     r.baseline_runs = [run(90), run(error="ServerError: 503 UNAVAILABLE | overloaded")]
     r.candidate_runs = [run(error="ClientError: 429 RESOURCE_EXHAUSTED"), run(error="ClientError: 429 again")]
     r.finalize(threshold=70, flag_on="overall")
-    report = ep.render_report([r], ep.aggregate([r], "gemini-2.5-pro"), config, notes=["a note"])
+    report = ep.render_report([r], ep.aggregate([r], "gemini-3.8-flash"), config, notes=["a note"])
     failures = report.split("## Failures")[1]
     assert "3 of 4 model calls failed" in failures
     assert "| `ClientError` | 2 | `33333333` candidate: ClientError: 429 RESOURCE_EXHAUSTED |" in failures
@@ -477,7 +487,7 @@ def test_evaluate_snippets_end_to_end_with_fakes(capsys):
     # get_metadata was applied: Stage 3 metadata shape reaches the runner unchanged across runs
     assert {uuid for _, uuid, _ in runner.calls} == {"rep-1", "ctl-1", "ctl-2"}
 
-    agg = ep.aggregate(results, "gemini-2.5-pro")
+    agg = ep.aggregate(results, "gemini-3.8-flash")
     assert agg["false_positives_fixed"] == 1 and agg["true_positives_lost"] == 1 and agg["no_data"] == 1
     payload = ep.results_to_json(results, agg, {"model": "m"}, [])
     json.dumps(payload)  # serializable

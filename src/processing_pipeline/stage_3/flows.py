@@ -9,10 +9,13 @@ from prefect.task_runners import ConcurrentTaskRunner
 
 from processing_pipeline.constants import ProcessingStatus, PromptStage
 from processing_pipeline.gemini_retry import GEMINI_HTTP_OPTIONS
+from processing_pipeline.model_config import stage3_repeat_dedup
 from processing_pipeline.stage_3.tasks import (
+    copy_repeat_analysis,
     download_audio_file_from_s3,
     fetch_a_new_snippet_from_supabase,
     fetch_a_specific_snippet_from_supabase,
+    find_repeat_source,
     process_snippet,
 )
 from processing_pipeline.supabase_utils import SupabaseClient
@@ -20,12 +23,15 @@ from utils import optional_flow
 
 
 def reset_snippet_status_hook(flow: Flow, flow_run: FlowRun, state: State):
+    # Prefect may call this from the serve process after killing the run, so claims come from the DB (VER-479)
+    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
     snippet_ids = flow_run.parameters.get("snippet_ids", None)
 
     if not snippet_ids:
+        released = supabase_client.release_flow_run_snippets(flow_run.id, count_attempt=state.is_crashed())
+        print(f"Released snippets claimed by flow run {flow_run.id}: {released}")
         return
 
-    supabase_client = SupabaseClient(supabase_url=os.getenv("SUPABASE_URL"), supabase_key=os.getenv("SUPABASE_KEY"))
     for snippet_id in snippet_ids:
         snippet = fetch_a_specific_snippet_from_supabase(supabase_client, snippet_id)
         if snippet and snippet["status"] == ProcessingStatus.PROCESSING:
@@ -65,7 +71,7 @@ async def in_depth_analysis(snippet_ids, skip_review, repeat):
         for id in snippet_ids:
             snippet = fetch_a_specific_snippet_from_supabase(supabase_client, id)
             if snippet:
-                supabase_client.set_snippet_status(snippet["id"], ProcessingStatus.PROCESSING)
+                supabase_client.claim_snippet_by_id(snippet["id"])
                 print(f"Found the snippet: {snippet['id']}")
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
@@ -82,10 +88,16 @@ async def in_depth_analysis(snippet_ids, skip_review, repeat):
                 print(f"Delete the downloaded snippet clip: {local_file}")
                 os.remove(local_file)
     else:
+        repeat_dedup = stage3_repeat_dedup()
         while True:
             snippet = fetch_a_new_snippet_from_supabase(supabase_client)  # TODO: Retry failed snippets (status: Error)
 
-            if snippet:
+            copied = False
+            if snippet and repeat_dedup:
+                source = find_repeat_source(supabase_client, snippet, prompt_version["id"])
+                copied = bool(source) and copy_repeat_analysis(supabase_client, snippet, source)
+
+            if snippet and not copied:
                 local_file = download_audio_file_from_s3(s3_client, R2_BUCKET_NAME, snippet["file_path"])
 
                 # Process the snippet

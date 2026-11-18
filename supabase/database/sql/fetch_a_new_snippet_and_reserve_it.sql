@@ -1,5 +1,5 @@
--- Needs snippets.priority: apply migration 20261104100000_stage3_snippet_priority.sql first.
-CREATE OR REPLACE FUNCTION public.fetch_a_new_snippet_and_reserve_it()
+-- Needs snippets.claimed_by_flow_run: apply migration 20261113100000_snippet_flow_run_claims.sql first.
+CREATE OR REPLACE FUNCTION public.fetch_a_new_snippet_and_reserve_it(p_flow_run_id uuid DEFAULT NULL)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY INVOKER
@@ -8,7 +8,7 @@ DECLARE
     snippet_record jsonb;
 BEGIN
     UPDATE public.snippets
-    SET status = 'Processing'
+    SET status = 'Processing', claimed_by_flow_run = p_flow_run_id
     WHERE id = (
         SELECT id
         FROM public.snippets

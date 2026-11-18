@@ -15,9 +15,12 @@ LOOSE_SQL = REPO_ROOT / "supabase" / "database" / "sql" / "get_snippets_function
 LOOSE_LABEL_SQL = REPO_ROOT / "supabase" / "database" / "sql" / "create_apply_and_upvote_label_function.sql"
 
 # The latest migration that defines get_snippets; the loose file must match it.
-GET_SNIPPETS_MIGRATION = MIGRATIONS_DIR / "20261106100000_research_view.sql"
+GET_SNIPPETS_MIGRATION = MIGRATIONS_DIR / "20261118100000_research_view.sql"
+LATEST_GET_SNIPPETS_MIGRATION = GET_SNIPPETS_MIGRATION
 VER_387_GET_SNIPPETS_MIGRATION = MIGRATIONS_DIR / "20260921000400_get_snippets_denormalized_location.sql"
-RESEARCH_INDEX_MIGRATION = MIGRATIONS_DIR / "20261106100100_research_rhetoric_index.sql"
+# VER-466 feed line (95+, or 90-94 analysed by gemini-3.* and reviewed): the body the research view starts from.
+FEED_LINE90_GET_SNIPPETS_MIGRATION = MIGRATIONS_DIR / "20261109120100_feed_line90_functions.sql"
+RESEARCH_INDEX_MIGRATION = MIGRATIONS_DIR / "20261118100100_research_rhetoric_index.sql"
 APPLIED_VERSIONS = MIGRATIONS_DIR / "applied_versions.txt"
 
 VER_387_MIGRATIONS = [
@@ -27,7 +30,12 @@ VER_387_MIGRATIONS = [
     VER_387_GET_SNIPPETS_MIGRATION,
 ]
 
-OLD_VISIBILITY = "WHERE s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95"
+# The VER-466 feed predicate, as function_definition() returns it (one stripped line per source line).
+FEED_LINE = (
+    "s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 90",
+    "AND ((s.confidence_scores->>'overall')::INTEGER >= 95",
+    "OR (s.analyzed_by LIKE 'gemini-3.%' AND s.reviewed_at IS NOT NULL))",
+)
 RHETORIC_SCORE = "(s.confidence_scores->'harmful_rhetoric'->>'score')::INTEGER >= 70"
 RESEARCH_LABEL_IDS = (
     "ed57c3a2-d010-48f0-bf0b-9c1c1ca8d3ec",
@@ -54,10 +62,10 @@ def test_ver_387_migration_files_exist():
 
 
 def test_migration_and_loose_sql_define_the_same_function():
-    from_migration = function_definition(GET_SNIPPETS_MIGRATION)
+    from_migration = function_definition(LATEST_GET_SNIPPETS_MIGRATION)
     from_loose = function_definition(LOOSE_SQL)
     assert from_migration == from_loose, (
-        f"{GET_SNIPPETS_MIGRATION.name} and {LOOSE_SQL.name} define different get_snippets bodies; "
+        f"{LATEST_GET_SNIPPETS_MIGRATION.name} and {LOOSE_SQL.name} define different get_snippets bodies; "
         "change both (see .claude/rules/supabase-sql.md)"
     )
 
@@ -117,50 +125,50 @@ def test_concurrent_index_migration_warns_about_transactions():
 
 
 def test_research_view_changes_nothing_but_the_visibility_predicate_and_its_inputs():
-    # Diff against the VER-387 body: only additions, plus the one visibility line that became two branches.
-    import difflib
+    # Diff against the VER-466 body it starts from: the feed WHERE is rewritten into two branches and the research
+    # inputs are added; nothing else moves. Compared as multisets so difflib's alignment of repeated lines
+    # ("END IF;", the feed line that now appears in both branches) cannot change the result.
+    from collections import Counter
 
-    before = function_definition(VER_387_GET_SNIPPETS_MIGRATION)
-    after = function_definition(GET_SNIPPETS_MIGRATION)
-    removed, added = [], []
-    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(a=before, b=after, autojunk=False).get_opcodes():
-        if tag in ("replace", "delete"):
-            removed += before[i1:i2]
-        if tag in ("replace", "insert"):
-            added += after[j1:j2]
-    assert [line for line in removed if line] == [OLD_VISIBILITY]
-    # Compared as a sorted list: difflib may align a repeated line such as "END IF;" with either copy.
-    code = sorted(line for line in added if line and not line.startswith("--"))
-    assert code == sorted([
-        "research_view BOOLEAN := COALESCE(p_filter->>'view', '') = 'research';",
-        "research_snippet_ids UUID[];",
-        "IF research_view THEN",
-        "research_snippet_ids := ARRAY(",
-        "SELECT DISTINCT sl.snippet",
-        "FROM snippet_labels sl",
-        "JOIN labels l ON l.id = sl.label",
-        'JOIN public.user_roles ur ON ur."user" = sl.applied_by',
-        "JOIN public.roles r ON r.id = ur.role",
-        "WHERE l.is_research AND r.name = 'admin'",
-        ");",
-        "END IF;",
-        "WHERE (",
-        "(NOT research_view AND s.status = 'Processed' AND (s.confidence_scores->>'overall')::INTEGER >= 95)",
-        "OR (research_view AND s.status = 'Processed' AND (",
-        "(s.confidence_scores->>'overall')::INTEGER >= 95",
-        "OR s.id = ANY(research_snippet_ids)",
-        f"OR {RHETORIC_SCORE}",
-        "))",
-        ")",
-    ])
+    before = Counter(line for line in function_definition(FEED_LINE90_GET_SNIPPETS_MIGRATION) if line)
+    after = Counter(line for line in function_definition(GET_SNIPPETS_MIGRATION) if line)
+    removed = before - after
+    added = Counter({line: n for line, n in (after - before).items() if not line.startswith("--")})
+    assert removed == Counter([f"WHERE {FEED_LINE[0]}", FEED_LINE[2]])
+    assert added == Counter(
+        [
+            "research_view BOOLEAN := COALESCE(p_filter->>'view', '') = 'research';",
+            "research_snippet_ids UUID[];",
+            "IF research_view THEN",
+            "research_snippet_ids := ARRAY(",
+            "SELECT DISTINCT sl.snippet",
+            "FROM snippet_labels sl",
+            "JOIN labels l ON l.id = sl.label",
+            'JOIN public.user_roles ur ON ur."user" = sl.applied_by',
+            "JOIN public.roles r ON r.id = ur.role",
+            "WHERE l.is_research AND r.name = 'admin'",
+            ");",
+            "END IF;",
+            "WHERE (",
+            f"(NOT research_view AND {FEED_LINE[0]}",
+            f"{FEED_LINE[2]})",
+            "OR (research_view AND s.status = 'Processed' AND (",
+            "((s.confidence_scores->>'overall')::INTEGER >= 90",
+            FEED_LINE[1],
+            f"{FEED_LINE[2]})",
+            "OR s.id = ANY(research_snippet_ids)",
+            f"OR {RHETORIC_SCORE}",
+            "))",
+            ")",
+        ]
+    )
 
 
-def test_default_branch_is_the_old_predicate_gated_on_research_view():
-    # With research_view = FALSE the first branch must reduce to exactly the old predicate, so the
-    # visible partial indexes keep matching the default feed.
+def test_default_branch_is_the_feed_predicate_gated_on_research_view():
+    # With research_view = FALSE the first branch must reduce to exactly the VER-466 feed predicate, so the
+    # idx_snippets_feed* partial indexes keep matching the default feed.
     definition = "\n".join(function_definition(GET_SNIPPETS_MIGRATION))
-    old = OLD_VISIBILITY.removeprefix("WHERE ")
-    assert f"(NOT research_view AND {old})" in definition
+    assert f"(NOT research_view AND {FEED_LINE[0]}\n{FEED_LINE[1]}\n{FEED_LINE[2]})" in definition
     assert "OR (research_view AND s.status = 'Processed' AND (" in definition
     # research_view is only ever set from p_filter.view, and only the literal 'research' turns it on
     assert definition.count("research_view :=") == 0
