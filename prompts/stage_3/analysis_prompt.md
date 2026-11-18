@@ -351,6 +351,32 @@ Some harmful content has no single checkable claim: rhetoric that demeans women 
 - Verify the factual premises the rhetoric rests on (statistics, legal claims, health claims, what a party or person actually said) with web search, document them in `verification_evidence`, and score those premises under Section H like any other claim.
 - Never invent falsity, fabricate sources, or cite a source you did not retrieve with a tool in order to raise the score. If nothing checkable is false, the score stays low under the rules above. The pipeline caps analyses whose status is `uncertain` or `insufficient_evidence` at 40, so a rhetoric-only segment will score 40 or less even when it is correctly labeled; that is expected, and the label still records it.
 
+**The `confidence_scores.harmful_rhetoric` field.** Because the falsity score stays low for rhetoric, record how harmful the rhetoric is in this separate field. It measures harm, not falsity, and the evidence rules do not cap it.
+
+- Fill it only when the station's own speaker (host, preacher, guest the host endorses or leaves unchallenged) delivers Category 22 rhetoric or electioneering in this clip. A clip played in order to criticize or debunk it, a caller the host pushes back on, or news reporting about such rhetoric does not count (Section B). Otherwise set it to `null`.
+- `kind`: `"gender"` for Category 22 rhetoric, `"electioneering"` for pulpit or host electioneering (Category 1, subcategory 1.6). The matching category must also be in `disinformation_categories`; the pipeline drops the field otherwise.
+- `quote`: the single most representative passage, copied verbatim from your `transcription` in the original language. The pipeline drops the field when the quote is not found in the transcription, so do not paraphrase, translate or stitch passages together.
+- `score` (0-100): how clearly the passage demeans women or restricts their rights or safety, or steers votes on false or dehumanizing premises (a party's voters as demonic, a vote as a sin that damns the listener).
+  - 80-100: explicit and direct, e.g. tells wives to obey or submit under threat of punishment, denies marital consent, calls women's rights or a party's voters satanic, tells listeners a vote for a party is a vote for the devil.
+  - 50-79: clear but less direct, e.g. prescribes silence and endurance in an abusive marriage, frames women's independence as the cause of social ruin, implies God punishes a vote for a party.
+  - 1-49: mild or ambiguous framing, e.g. traditional gender roles stated as personal preference without demeaning women or restricting their rights.
+- `harm`: one or two sentences in English and in Spanish on what the passage does and to whom. Describe the effect; do not call doctrine, belief or opinion "false" or "fabricated".
+- Mainstream religious teaching, a call to vote or pray, and policy criticism of a party or candidate are not harmful rhetoric on their own; use `null` unless the passage demeans, restricts or demonizes.
+
+Example, for a preacher whose transcription contains "La mujer que no se somete a su marido se está rebelando contra Dios, y la rebeldía se castiga." with Category 22 in `disinformation_categories`:
+
+```json
+"harmful_rhetoric": {
+    "score": 85,
+    "kind": "gender",
+    "quote": "La mujer que no se somete a su marido se está rebelando contra Dios, y la rebeldía se castiga.",
+    "harm": {
+        "english": "Tells wives that not submitting to their husbands is rebellion against God that deserves punishment, which frames obedience as compulsory and punishment as legitimate.",
+        "spanish": "Dice a las esposas que no someterse a su marido es rebeldía contra Dios que merece castigo, lo que presenta la obediencia como obligatoria y el castigo como legítimo."
+    }
+}
+```
+
 ##### **I. Required Self-Review Process**
 
 After completing your initial analysis, perform this structured review:
@@ -373,6 +399,7 @@ After completing your initial analysis, perform this structured review:
    - [ ] For uncertain claims: Did I score them 0-40 maximum?
    - [ ] Is every scored claim the station speaker's own, not a clip quoted in order to criticize or debunk it?
    - [ ] For Category 22 or pulpit electioneering: did I describe the rhetoric accurately, without calling opinion false, and verify only its factual premises (Section H.2)?
+   - [ ] If I filled `harmful_rhetoric`: is the quote copied verbatim from my transcription, is it the station speaker's own rhetoric, and is the matching category (22 for `gender`, 1 for `electioneering`) in `disinformation_categories`? Otherwise it is `null`.
 
 3. **Score Adjustment Protocol**
    If any validation fails:
@@ -882,6 +909,41 @@ Ensure your output strictly adheres to this schema.
                             "score": {
                                 "type": "integer",
                                 "description": "Confidence score for this category, ranging from 0 to 100."
+                            }
+                        }
+                    }
+                },
+                "harmful_rhetoric": {
+                    "type": "object",
+                    "nullable": true,
+                    "required": ["score", "kind", "quote", "harm"],
+                    "description": "Harmful-rhetoric score (Section H.2). Fill it only for the station speaker's own gender-based rhetoric (Category 22) or electioneering (Category 1); null when there is none. It measures harm, not falsity, and the evidence rules do not cap it.",
+                    "properties": {
+                        "score": {
+                            "type": "integer",
+                            "description": "How clearly the passage demeans women or restricts their rights or safety, or steers votes on false or dehumanizing premises, ranging from 0 to 100."
+                        },
+                        "kind": {
+                            "type": "string",
+                            "enum": ["gender", "electioneering"],
+                            "description": "'gender' requires Category 22 among disinformation_categories; 'electioneering' requires Category 1."
+                        },
+                        "quote": {
+                            "type": "string",
+                            "description": "Verbatim quote of the rhetoric, copied from your transcription in the original language."
+                        },
+                        "harm": {
+                            "type": "object",
+                            "required": ["english", "spanish"],
+                            "properties": {
+                                "english": {
+                                    "type": "string",
+                                    "description": "What the rhetoric does and to whom, in English. Do not call doctrine or opinion false."
+                                },
+                                "spanish": {
+                                    "type": "string",
+                                    "description": "What the rhetoric does and to whom, in Spanish."
+                                }
                             }
                         }
                     }
@@ -2930,7 +2992,8 @@ Below is a complete example showing all required fields:
         "category": "Conspiracy Theories",
         "score": 90
       }
-    ]
+    ],
+    "harmful_rhetoric": null
   },
   "emotional_tone": [
     {

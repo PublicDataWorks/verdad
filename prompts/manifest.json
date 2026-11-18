@@ -36,8 +36,8 @@
     }
   },
   "stage_3": {
-    "version": "1.7.0",
-    "description": "Category 22 and expanded Category 1 with subcategories; speaker-stance rule (B) and H.2 scoring guidance for rhetoric without a checkable claim (VER-431)",
+    "version": "1.8.0",
+    "description": "Category 22 and expanded Category 1 with subcategories; speaker-stance rule (B) and H.2 scoring guidance for rhetoric without a checkable claim (VER-431); optional confidence_scores.harmful_rhetoric score for the station speaker's own gender or electioneering rhetoric, not capped by the evidence gate (VER-462)",
     "files": {
       "system_instruction": "prompts/stage_3/system_instruction.md",
       "user_prompt": "prompts/stage_3/analysis_prompt.md",

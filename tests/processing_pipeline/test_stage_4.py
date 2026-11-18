@@ -277,6 +277,60 @@ class TestStage4:
         }
         return snippet
 
+    def test_review_carries_the_stage_3_harmful_rhetoric_ver_462(
+        self, mock_supabase_client, sample_snippet, review_result
+    ):
+        """The reviewer prompt does not ask for harmful_rhetoric; a review must not erase Stage 3's score"""
+        rhetoric = {
+            "score": 85,
+            "kind": "gender",
+            "quote": "Test transcription",
+            "harm": {"english": "e", "spanish": "s"},
+        }
+        sample_snippet["confidence_scores"] = {"overall": 30, "harmful_rhetoric": rhetoric}
+        review_result["disinformation_categories"] = [
+            {"english": "Gender-Based Harmful Rhetoric and Misogyny", "spanish": "Misoginia"}
+        ]
+
+        with (
+            patch(
+                "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+                new=AsyncMock(return_value=(review_result, None)),
+            ),
+            patch("processing_pipeline.stage_4.tasks.postprocess_snippet"),
+        ):
+            self._process(mock_supabase_client, sample_snippet)
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["harmful_rhetoric"] == rhetoric
+        assert "rhetoric_gate" not in json.loads(kwargs["grounding_metadata"])
+
+    def test_review_that_drops_category_22_drops_the_carried_rhetoric(
+        self, mock_supabase_client, sample_snippet, review_result
+    ):
+        rhetoric = {
+            "score": 85,
+            "kind": "gender",
+            "quote": "Test transcription",
+            "harm": {"english": "e", "spanish": "s"},
+        }
+        sample_snippet["confidence_scores"] = {"overall": 30, "harmful_rhetoric": rhetoric}
+
+        with (
+            patch(
+                "processing_pipeline.stage_4.tasks.Stage4Executor.run_async",
+                new=AsyncMock(return_value=(review_result, None)),
+            ),
+            patch("processing_pipeline.stage_4.tasks.postprocess_snippet"),
+        ):
+            self._process(mock_supabase_client, sample_snippet)
+
+        kwargs = mock_supabase_client.submit_snippet_review.call_args.kwargs
+        assert kwargs["confidence_scores"]["harmful_rhetoric"] is None
+        gate = json.loads(kwargs["grounding_metadata"])["rhetoric_gate"]
+        assert gate["applied"] is True
+        assert gate["dropped"] == rhetoric
+
     def test_review_with_zero_contradicting_urls_cannot_exceed_40(
         self, mock_supabase_client, sample_snippet, review_result
     ):
